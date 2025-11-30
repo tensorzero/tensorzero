@@ -1021,10 +1021,10 @@ impl Config {
                 // Get mutable access to templates - this is safe because we just created the Arc
                 // and haven't shared it yet
                 let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
-                                    Error::from(ErrorDetails::Config {
-                                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                                    })
-                                })?;
+                    Error::from(ErrorDetails::Config {
+                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?;
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         templates.add_template(

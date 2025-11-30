@@ -102,7 +102,6 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let postgres_connection_info = PostgresConnectionInfo::Disabled;

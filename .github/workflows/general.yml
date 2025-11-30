@@ -358,6 +358,7 @@ jobs:
         run: |
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
+
   validate-python:
     permissions:
       contents: read
@@ -446,6 +447,7 @@ jobs:
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
+
 
   validate-node:
     permissions:
@@ -578,6 +580,7 @@ jobs:
           TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
         run: |
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
+
 
   validate:
     permissions:

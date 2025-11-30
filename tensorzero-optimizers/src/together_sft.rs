@@ -29,10 +29,11 @@ use tensorzero_core::{
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
-        together::prepare_together_messages,
-        together::{TogetherCredentials, PROVIDER_TYPE},
+        openai::{
+            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
+            OpenAITool,
+        },
+        together::{prepare_together_messages, TogetherCredentials, PROVIDER_TYPE},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };

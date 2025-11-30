@@ -38,11 +38,13 @@ use tensorzero_core::{
         OptimizationJobInfo, OptimizerOutput,
     },
     providers::{
-        fireworks::prepare_fireworks_messages,
-        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
+        fireworks::{
+            prepare_fireworks_messages, FireworksCredentials, FireworksTool, PROVIDER_TYPE,
+        },
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage},
+        openai::{
+            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
+        },
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };

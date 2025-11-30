@@ -676,6 +676,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -789,6 +795,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let new_updated_at = datapoint
         .as_object_mut()
@@ -904,6 +916,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1865,6 +1883,14 @@ async fn test_datapoint_insert_output_inherit_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1981,6 +2007,14 @@ async fn test_datapoint_insert_output_none_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2096,6 +2130,14 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2405,6 +2447,14 @@ async fn test_datapoint_insert_missing_output_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     datapoint
         .as_object_mut()
@@ -2478,7 +2528,13 @@ async fn test_datapoint_insert_null_output_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-
+    // Remove the snapshot hash because it is hard to assert on and check it's a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
@@ -3004,6 +3060,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse

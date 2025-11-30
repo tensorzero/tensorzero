@@ -24,6 +24,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
@@ -151,6 +152,7 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
+    pub snapshot_hash: SnapshotHash,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -623,6 +625,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             fetch_and_encode_input_files_before_inference: config
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
+            snapshot_hash: config.hash.clone(),
         };
 
         let stream = create_stream(
@@ -665,6 +668,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 tags: tags.clone(),
                 extra_body,
                 extra_headers,
+                snapshot_hash: config.hash.clone(),
             };
 
             let async_writes = config.gateway.observability.async_writes;
@@ -891,6 +895,7 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
+                snapshot_hash,
             } = metadata;
 
             let config = config.clone();
@@ -937,6 +942,7 @@ fn create_stream(
                         ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
+                        snapshot_hash: snapshot_hash.clone(),
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1027,6 +1033,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub snapshot_hash: SnapshotHash,
 }
 
 async fn write_inference(
@@ -1036,7 +1043,9 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences().await;
+    let model_responses: Vec<serde_json::Value> = result
+        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
+        .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
     // Write the model responses to the ModelInference table
@@ -1597,6 +1606,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1652,6 +1662,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
+            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

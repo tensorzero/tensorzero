@@ -40,7 +40,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
-    config::Config,
+    config::{snapshot::SnapshotHash, Config},
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{
@@ -253,6 +253,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+                snapshot_hash: Some(config.hash.clone()),
 
                 // Ignored during insert.
                 is_deleted: false,
@@ -298,6 +299,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+                snapshot_hash: Some(config.hash.clone()),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -466,6 +468,7 @@ pub async fn update_datapoint_handler(
                 is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
                 staled_at: chat.staled_at,
+                snapshot_hash: Some(app_state.config.hash.clone()),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -555,6 +558,7 @@ pub async fn update_datapoint_handler(
                 is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
                 staled_at: json.staled_at,
+                snapshot_hash: Some(app_state.config.hash.clone()),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -1252,6 +1256,7 @@ impl ChatInferenceDatapoint {
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         fetch_context: &FetchContext<'_>,
+        snapshot_hash: SnapshotHash,
     ) -> Result<StoredChatInferenceDatapoint, Error> {
         let tool_params = function_config
             .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
@@ -1277,6 +1282,7 @@ impl ChatInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: Some(snapshot_hash),
         })
     }
 
@@ -1287,6 +1293,7 @@ impl ChatInferenceDatapoint {
         self,
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+        snapshot_hash: &SnapshotHash,
     ) -> Result<StoredChatInferenceDatapoint, Error> {
         let tool_params = function_config
             .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
@@ -1309,6 +1316,7 @@ impl ChatInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: Some(snapshot_hash.clone()),
         })
     }
 }
@@ -1321,6 +1329,7 @@ impl JsonInferenceDatapoint {
     pub async fn into_storage(
         self,
         fetch_context: Option<&FetchContext<'_>>,
+        snapshot_hash: SnapshotHash,
     ) -> Result<StoredJsonInferenceDatapoint, Error> {
         let stored_input = match fetch_context {
             Some(fetch_context) => {
@@ -1348,6 +1357,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: Some(snapshot_hash),
         })
     }
 
@@ -1373,6 +1383,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: None,
         })
     }
 }
@@ -1709,6 +1720,9 @@ pub struct StoredChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatapoint {
@@ -1734,6 +1748,7 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
+            snapshot_hash: datapoint.snapshot_hash,
         }
     }
 }
@@ -1847,6 +1862,10 @@ pub struct StoredJsonInferenceDatapoint {
     /// Human-readable name of the datapoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+
+    /// Config snapshot hash when the datapoint was created.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
@@ -1865,6 +1884,7 @@ impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
+            snapshot_hash: datapoint.snapshot_hash,
         }
     }
 }

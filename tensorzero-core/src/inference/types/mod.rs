@@ -78,6 +78,7 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::snapshot::SnapshotHash;
 use crate::config::ObjectStoreInfo;
 use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
@@ -1663,6 +1664,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1687,6 +1690,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1713,6 +1718,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub ttft_ms: Option<u32>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    pub snapshot_hash: SnapshotHash,
 }
 
 #[cfg(test)]
@@ -1836,6 +1842,7 @@ impl ModelInferenceDatabaseInsert {
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1895,6 +1902,7 @@ impl ModelInferenceDatabaseInsert {
             cached: result.cached,
             finish_reason: result.finish_reason,
             input_messages: serialize_or_log(&stored_input_messages),
+            snapshot_hash,
         })
     }
 }
@@ -1936,32 +1944,43 @@ impl InferenceResult {
         }
     }
 
-    pub async fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+    pub async fn get_serialized_model_inferences(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
         };
-        join_all(model_inference_responses.iter().map(|r| async {
-            let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id).await;
-            let model_inference = match model_inference {
-                Ok(model_inference) => model_inference,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to construct ModelInferenceDatabaseInsert: {e:?}"),
+        join_all(model_inference_responses.iter().map(|r| {
+            let snapshot_hash = snapshot_hash.clone();
+            async move {
+                let model_inference =
+                    ModelInferenceDatabaseInsert::new(r.clone(), inference_id, snapshot_hash).await;
+                let model_inference = match model_inference {
+                    Ok(model_inference) => model_inference,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to construct ModelInferenceDatabaseInsert: {e:?}"
+                            ),
+                        }
+                        .log();
+                        return Default::default();
                     }
-                    .log();
-                    return Default::default();
-                }
-            };
-            match serde_json::to_value(model_inference) {
-                Ok(v) => v,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to serialize ModelInferenceDatabaseInsert: {e:?}"),
+                };
+                match serde_json::to_value(model_inference) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
+                            ),
+                        }
+                        .log();
+                        Default::default()
                     }
-                    .log();
-                    Default::default()
                 }
             }
         }))
@@ -2144,6 +2163,7 @@ impl ChatInferenceDatabaseInsert {
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -2181,6 +2201,7 @@ impl JsonInferenceDatabaseInsert {
             tags: metadata.tags,
             extra_body: metadata.extra_body,
             ttft_ms: metadata.ttft_ms,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
