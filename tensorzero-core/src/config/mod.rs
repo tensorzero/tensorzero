@@ -38,7 +38,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::endpoints::status::TENSORZERO_VERSION;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
@@ -992,7 +992,7 @@ impl Config {
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates: Arc::new(TemplateConfig::new()), // Will be populated below
+            templates: Arc::new(templates),
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
@@ -1026,6 +1026,13 @@ impl Config {
                     }
                     .into());
                 }
+                // Get mutable access to templates - this is safe because we just created the Arc
+                // and haven't shared it yet
+                let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
+                    Error::from(ErrorDetails::Config {
+                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?;
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         templates.add_template(
@@ -1039,7 +1046,7 @@ impl Config {
                         &config.tools,
                         &config.models,
                         &config.embedding_models,
-                        &templates,
+                        &config.templates,
                         &evaluation_function_name,
                         &config.gateway.global_outbound_http_timeout,
                     )
@@ -1061,7 +1068,6 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
-        config.templates = Arc::new(templates);
 
         Ok(UnwrittenConfig::new(config, snapshot))
     }
