@@ -493,20 +493,23 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                    Config::load_from_path_optional_verify_credentials(&glob, *verify_credentials)
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
-                            error: TensorZeroError::Other { source: e.into() },
-                            glob,
-                        })?
+                    Box::pin(Config::load_from_path_optional_verify_credentials(
+                        &glob,
+                        *verify_credentials,
+                    ))
+                    .await
+                    .map_err(|e| ClientBuilderError::ConfigParsing {
+                        error: TensorZeroError::Other { source: e.into() },
+                        glob,
+                    })?
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Config::new_empty()
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                    Box::pin(Config::new_empty()).await.map_err(|e| {
+                        ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob: ConfigFileGlob::new_empty(),
-                        })?
+                        }
+                    })?
                 };
                 let clickhouse_connection_info =
                     setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
@@ -641,7 +644,7 @@ impl ClientBuilder {
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
         // Load config from snapshot
-        let config_load_info = Config::load_from_snapshot(snapshot, verify_credentials)
+        let config_load_info = Box::pin(Config::load_from_snapshot(snapshot, verify_credentials))
             .await
             .map_err(|e| ClientBuilderError::ConfigParsing {
                 error: TensorZeroError::Other { source: e.into() },
@@ -687,7 +690,7 @@ impl ClientBuilder {
             timeout,
         });
 
-        builder.build().await
+        Box::pin(builder.build()).await
     }
 
     /// Validates configuration for embedded gateway mode.
@@ -1033,14 +1036,14 @@ pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
 ) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
-        Some(path) => Config::load_from_path_optional_verify_credentials(
+        Some(path) => Box::pin(Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
                 .map_err(|e| TensorZeroError::Other { source: e.into() })?,
             false,
-        )
+        ))
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::new_empty()
+        None => Ok(Box::pin(Config::new_empty())
             .await
             .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }

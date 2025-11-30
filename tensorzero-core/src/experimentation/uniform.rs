@@ -63,7 +63,7 @@ pub(crate) fn sample_uniform(
     Err(ErrorDetails::NoFallbackVariantsRemaining.into())
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct UniformConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]

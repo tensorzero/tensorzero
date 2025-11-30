@@ -21,7 +21,7 @@ async fn test_config_from_toml_table_valid() {
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
-    let config = Config::load_from_toml(config)
+    let config = Config::load_from_toml(ConfigInput::Fresh(config))
         .await
         .expect("Failed to load config");
 
@@ -572,7 +572,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         .remove("output_schema");
 
     let result = Config::load_from_toml(ConfigInput::Fresh(config)).await;
-    let ConfigLoadInfo { config, .. } = result.unwrap();
+    let config = result.unwrap();
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
@@ -1263,7 +1263,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 #[tokio::test]
 async fn test_get_all_templates() {
     let config_table = get_sample_valid_config();
-    let config = Config::load_from_toml(config_table)
+    let config = Config::load_from_toml(ConfigInput::Fresh(config_table))
         .await
         .expect("Failed to load config");
 

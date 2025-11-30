@@ -282,7 +282,12 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Box::pin(Config::new_empty()).await?,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
@@ -494,9 +499,12 @@ pub async fn start_openai_compatible_gateway(
         })
     })?;
     let config_load_info = if let Some(config_file) = config_file {
-        Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?
+        Box::pin(Config::load_and_verify_from_path(&ConfigFileGlob::new(
+            config_file,
+        )?))
+        .await?
     } else {
-        Config::new_empty().await?
+        Box::pin(Config::new_empty()).await?
     };
     let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
         config_load_info,

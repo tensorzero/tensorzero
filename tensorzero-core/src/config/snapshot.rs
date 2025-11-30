@@ -94,16 +94,14 @@ impl SnapshotHash {
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
         SnapshotHash(Arc::from(big_int.to_string()))
     }
-
-    pub fn from_str(hash: &str) -> SnapshotHash {
-        SnapshotHash(Arc::from(hash.to_string()))
-    }
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
-impl Default for SnapshotHash {
-    fn default() -> Self {
-        SnapshotHash::new_test()
+impl std::str::FromStr for SnapshotHash {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(SnapshotHash(Arc::from(s.to_string())))
     }
 }
 
@@ -155,6 +153,32 @@ impl ConfigSnapshot {
             extra_templates: HashMap::new(),
             __private: (),
         }
+    }
+
+    /// Create a ConfigSnapshot from data loaded from the database.
+    ///
+    /// This is used when loading a previously stored config snapshot from ClickHouse.
+    /// The hash is recomputed from the config and templates to ensure consistency.
+    pub fn from_stored(
+        config_toml: &str,
+        extra_templates: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        let table: toml::Table = config_toml.parse().map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse stored config TOML: {e}"),
+            })
+        })?;
+
+        let sorted_table = prepare_table_for_snapshot(table);
+        let config = UninitializedConfig::try_from(sorted_table.clone())?;
+        let hash = ConfigSnapshot::hash(&sorted_table, &extra_templates)?;
+
+        Ok(Self {
+            config: config.into(),
+            hash,
+            extra_templates,
+            __private: (),
+        })
     }
 
     /// Compute a blake3 hash of this config snapshot

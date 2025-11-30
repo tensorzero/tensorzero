@@ -8,10 +8,7 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager;
-use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
 };
@@ -282,9 +279,10 @@ routing = ["test_provider::gpt-4"]
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates);
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();
@@ -296,7 +294,12 @@ routing = ["test_provider::gpt-4"]
     let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
 
     // Verify the retrieved snapshot matches what we wrote
-    assert_eq!(retrieved_snapshot.config, config_toml);
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_model_{random_id}")),
+        "Config should contain our test model"
+    );
     assert_eq!(retrieved_snapshot.extra_templates, extra_templates);
 }
 
@@ -372,9 +375,10 @@ routing = ["test_provider::gpt-4"]
         "Assistant responds: {{response}}".to_string(),
     );
 
-    let snapshot = ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone());
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();
@@ -386,7 +390,12 @@ routing = ["test_provider::gpt-4"]
     let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
 
     // Verify all extra templates are correctly stored and retrieved
-    assert_eq!(retrieved_snapshot.config, config_toml);
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_model_{random_id}")),
+        "Config should contain our test model"
+    );
     assert_eq!(retrieved_snapshot.extra_templates.len(), 3);
     assert_eq!(
         retrieved_snapshot.extra_templates.get("system_template"),
@@ -471,7 +480,7 @@ model = "test_model_{random_id}"
         .unwrap()
         .as_str()
         .unwrap();
-    let snapshot_hash = SnapshotHash::from_str(snapshot_hash_str);
+    let snapshot_hash: SnapshotHash = snapshot_hash_str.parse().unwrap();
 
     // Load snapshot from ClickHouse
     let retrieved_snapshot = clickhouse
@@ -480,13 +489,13 @@ model = "test_model_{random_id}"
         .unwrap();
 
     // Build new client from snapshot
-    let new_client = ClientBuilder::from_config_snapshot(
+    let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
-    )
+    ))
     .await
     .unwrap();
 
