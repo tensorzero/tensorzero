@@ -15,6 +15,8 @@ import {
   TableItemText,
 } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
+import { Badge } from "~/components/ui/badge";
+import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher, useNavigate } from "react-router";
@@ -30,6 +32,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "~/components/ui/sheet";
@@ -41,33 +44,62 @@ export default function DatasetRowTable({
   rows,
   dataset_name,
   function_name,
+  search_query,
 }: {
   rows: Datapoint[];
   dataset_name: string;
   function_name: string | undefined;
+  search_query: string | undefined;
 }) {
   const activeFetcher = useFetcher();
   const navigate = useNavigate();
   const functions = useAllFunctionConfigs();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterFunctionName, setFilterFunctionName] = useState<string | null>(
+    function_name ?? null,
+  );
+  const [filterSearchQuery, setFilterSearchQuery] = useState(
+    search_query ?? "",
+  );
   const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
     null,
   );
 
-  const handleFilterSelect = (functionName: string) => {
+  // Sync local filter state with props when sheet opens
+  useEffect(() => {
+    if (filterOpen) {
+      setFilterFunctionName(function_name ?? null);
+      setFilterSearchQuery(search_query ?? "");
+    }
+  }, [filterOpen, function_name, search_query]);
+
+  const handleFilterSubmit = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("function_name", functionName);
+
+    if (filterFunctionName) {
+      searchParams.set("function_name", filterFunctionName);
+    } else {
+      searchParams.delete("function_name");
+    }
+
+    if (filterSearchQuery.length > 0) {
+      searchParams.set("search_query", filterSearchQuery);
+    } else {
+      searchParams.delete("search_query");
+    }
+
     searchParams.delete("offset");
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
     setFilterOpen(false);
   };
 
-  const handleClearFilter = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("function_name");
-    searchParams.delete("offset");
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  const handleClearFunctionFilter = () => {
+    setFilterFunctionName(null);
+  };
+
+  const handleClearSearchFilter = () => {
+    setFilterSearchQuery("");
   };
 
   // Handle successful deletion
@@ -94,7 +126,7 @@ export default function DatasetRowTable({
             <TableHead className="w-[50px]">
               <div className="flex justify-end">
                 <Button
-                  variant={function_name ? "default" : "ghost"}
+                  variant={function_name || search_query ? "default" : "ghost"}
                   size="iconSm"
                   onClick={() => setFilterOpen(true)}
                 >
@@ -214,30 +246,57 @@ export default function DatasetRowTable({
       </Dialog>
 
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
-        <SheetContent side="right">
+        <SheetContent side="right" className="flex flex-col">
           <SheetHeader>
             <SheetTitle>Filter</SheetTitle>
           </SheetHeader>
 
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 flex-1 space-y-4">
             <div>
               <label className="text-sm font-medium">Function</label>
               <div className="mt-1 flex items-center gap-2">
                 <div className="flex-1">
                   <FunctionSelector
-                    selected={function_name ?? null}
-                    onSelect={handleFilterSelect}
+                    selected={filterFunctionName}
+                    onSelect={setFilterFunctionName}
                     functions={functions}
                   />
                 </div>
-                {function_name && (
-                  <Button variant="outline" onClick={handleClearFilter}>
+                {filterFunctionName && (
+                  <Button variant="outline" onClick={handleClearFunctionFilter}>
                     Clear
                   </Button>
                 )}
               </div>
             </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Search Query</label>
+                <Badge variant="outline" className="text-xs">
+                  Experimental
+                </Badge>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <Input
+                  value={filterSearchQuery}
+                  onChange={(e) => setFilterSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleFilterSubmit();
+                    }
+                  }}
+                />
+                <Button variant="outline" onClick={handleClearSearchFilter}>
+                  Clear
+                </Button>
+              </div>
+            </div>
           </div>
+
+          <SheetFooter className="mt-4">
+            <Button onClick={handleFilterSubmit}>Apply Filters</Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>

@@ -31,6 +31,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const rowsSkipped =
     rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
   const function_name = url.searchParams.get("function_name") || undefined;
+  const search_query = url.searchParams.get("search_query") || undefined;
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
@@ -42,6 +43,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       limit,
       offset,
       function_name,
+      search_query_experimental:
+        search_query && search_query.length > 0 ? search_query : undefined,
     }),
   ]);
   const count_info = counts.find(
@@ -59,6 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     rowsAdded,
     rowsSkipped,
     function_name,
+    search_query,
   };
 }
 
@@ -127,6 +131,7 @@ export default function DatasetDetailPage({
     rowsAdded,
     rowsSkipped,
     function_name,
+    search_query,
   } = loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
@@ -185,6 +190,7 @@ export default function DatasetDetailPage({
           rows={rows}
           dataset_name={count_info.dataset_name}
           function_name={function_name}
+          search_query={search_query}
         />
         <PageButtons
           onPreviousPage={handlePreviousPage}
