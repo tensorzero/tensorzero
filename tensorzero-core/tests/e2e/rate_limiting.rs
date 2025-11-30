@@ -127,12 +127,12 @@ fn assert_rate_limit_exceeded<T: Debug>(result: Result<T, TensorZeroError>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_concrete_tag_value_non_streaming() {
-    test_rate_limiting_concrete_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_concrete_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_concrete_tag_value_streaming() {
-    test_rate_limiting_concrete_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_concrete_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_concrete_tag_value_helper(stream: bool) {
@@ -194,12 +194,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_total_tag_value_non_streaming() {
-    test_rate_limiting_total_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_total_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_total_tag_value_streaming() {
-    test_rate_limiting_total_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_total_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_total_tag_value_helper(stream: bool) {
@@ -240,12 +240,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_each_tag_value() {
-    test_rate_limiting_each_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_each_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_each_tag_value_streaming() {
-    test_rate_limiting_each_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_each_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_each_tag_value_helper(stream: bool) {
@@ -296,12 +296,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_always_non_streaming() {
-    test_rate_limiting_priority_always_helper(false).await;
+    Box::pin(test_rate_limiting_priority_always_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_always_streaming() {
-    test_rate_limiting_priority_always_helper(true).await;
+    Box::pin(test_rate_limiting_priority_always_helper(true)).await;
 }
 
 async fn test_rate_limiting_priority_always_helper(stream: bool) {
@@ -764,12 +764,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_missing_tags_non_streaming() {
-    test_rate_limiting_missing_tags_helper(false).await;
+    Box::pin(test_rate_limiting_missing_tags_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_missing_tags_streaming() {
-    test_rate_limiting_missing_tags_helper(true).await;
+    Box::pin(test_rate_limiting_missing_tags_helper(true)).await;
 }
 
 async fn test_rate_limiting_missing_tags_helper(stream: bool) {

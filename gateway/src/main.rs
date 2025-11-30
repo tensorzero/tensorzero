@@ -7,14 +7,13 @@ use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -130,7 +129,7 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Handle `--config-file` or `--default-config`
-    let (config_load_info, glob) = match (args.default_config, args.config_file) {
+    let (unwritten_config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
             std::process::exit(1);
@@ -165,13 +164,8 @@ async fn main() {
             )
         }
     };
-    let ConfigLoadInfo {
-        config,
-        snapshot: _, // TODO: write the snapshot
-    } = config_load_info;
-    let config = Arc::new(config);
 
-    if config.gateway.debug {
+    if unwritten_config.gateway.debug {
         delayed_log_config
             .delayed_debug_logs
             .enable_debug()
@@ -186,7 +180,7 @@ async fn main() {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
-    if config.gateway.export.otlp.traces.enabled {
+    if unwritten_config.gateway.export.otlp.traces.enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
@@ -199,10 +193,17 @@ async fn main() {
 
         // Set config-level OTLP headers if we have a tracer wrapper
         if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
-            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+            if !unwritten_config
+                .gateway
+                .export
+                .otlp
+                .traces
+                .extra_headers
+                .is_empty()
+            {
                 tracer_wrapper
                     .set_static_otlp_traces_extra_headers(
-                        &config.gateway.export.otlp.traces.extra_headers,
+                        &unwritten_config.gateway.export.otlp.traces.extra_headers,
                     )
                     .expect_pretty("Failed to set OTLP config headers");
             }
@@ -228,13 +229,15 @@ async fn main() {
     }
 
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(config.clone())
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
         .await
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
+
+    let config = gateway_handle.app_state.config.clone();
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");

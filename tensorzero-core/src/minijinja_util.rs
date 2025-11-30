@@ -49,7 +49,7 @@ impl TemplateConfig<'_> {
         // Phase 2: Load hardcoded templates
         self.add_hardcoded_templates()?;
 
-        // Cache for storing loaded templates - will be used in future PR
+        // Cache for storing loaded templates
         let mut all_template_load_data = HashMap::new();
         // Phase 3: If filesystem access is enabled, eagerly load all referenced templates
         if let Some(base_path) = template_base_directory {
@@ -147,6 +147,13 @@ impl TemplateConfig<'_> {
             });
         }
         Ok(all_template_load_data)
+    }
+
+    pub fn add_templates(&mut self, templates: HashMap<String, String>) -> Result<(), Error> {
+        for (template_name, template_content) in templates {
+            self.add_template(template_name, template_content)?;
+        }
+        Ok(())
     }
 
     pub fn add_template(

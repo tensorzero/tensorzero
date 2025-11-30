@@ -1349,7 +1349,7 @@ model = "test-model"
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_url_image_inference_with_provider_and_store(
+    Box::pin(test_url_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1365,7 +1365,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         "#,
             temp_dir.path().to_string_lossy()
         ),
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1432,7 +1432,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1448,7 +1448,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that PDF was stored in filesystem
@@ -1472,7 +1472,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1488,7 +1488,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1551,7 +1551,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     prefix += "-";
 
     let (tensorzero_client, expected_key, storage_path) =
-        test_image_inference_with_provider_s3_compatible(
+        Box::pin(test_image_inference_with_provider_s3_compatible(
             provider,
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
@@ -1573,7 +1573,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     "#
             ),
             &prefix,
-        )
+        ))
         .await;
 
     check_object_fetch(
@@ -1620,9 +1620,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         }
     }
 
-    let (tensorzero_client, storage_path) =
-        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
-            .await;
+    let (tensorzero_client, storage_path) = Box::pin(
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix),
+    )
+    .await;
 
     let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client

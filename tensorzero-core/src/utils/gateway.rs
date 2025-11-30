@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob, ConfigLoadInfo};
+use crate::config::{unwritten_config::UnwrittenConfig, Config, ConfigFileGlob};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -168,18 +168,24 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
+    pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
-        Self::new_with_databases(config, clickhouse_url, postgres_url).await
+        Box::pin(Self::new_with_databases(
+            config,
+            clickhouse_url,
+            postgres_url,
+        ))
+        .await
     }
 
     async fn new_with_databases(
-        config: Arc<Config>,
+        config: UnwrittenConfig,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -276,16 +282,11 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(
-        &Config::new_empty().await?.config,
-        Some(clickhouse_url),
-        true,
-    )
-    .await
+    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
-    config: &Config,
+    config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
@@ -492,18 +493,17 @@ pub async fn start_openai_compatible_gateway(
             message: format!("Failed to get local address: {e}"),
         })
     })?;
-    let config = if let Some(config_file) = config_file {
-        let ConfigLoadInfo {
-            config,
-            snapshot: _,
-            // TODO: make sure this gets written
-        } = Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?;
-        Arc::new(config)
+    let config_load_info = if let Some(config_file) = config_file {
+        Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?
     } else {
-        Arc::new(Config::new_empty().await?.config)
+        Config::new_empty().await?
     };
-    let gateway_handle =
-        GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
+    let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
+        config_load_info,
+        clickhouse_url,
+        postgres_url,
+    ))
+    .await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()
@@ -545,8 +545,10 @@ pub struct GatewayHandleTestOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{gateway::GatewayConfig, ObservabilityConfig, PostgresConfig};
-
+    use crate::config::{
+        gateway::GatewayConfig, snapshot::ConfigSnapshot, unwritten_config::UnwrittenConfig,
+        ObservabilityConfig, PostgresConfig,
+    };
     #[tokio::test]
     async fn test_setup_clickhouse() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -571,12 +573,13 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config, None, false).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -597,11 +600,14 @@ mod tests {
             unstable_error_json: false,
             ..Default::default()
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
+            .await
+            .unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -635,12 +641,15 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(config, None, false).await.unwrap_err();
+        let err = setup_clickhouse(&unwritten_config, None, false)
+            .await
+            .unwrap_err();
         assert!(err
             .to_string()
             .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
@@ -665,11 +674,12 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        setup_clickhouse(config, Some("bad_url".to_string()), false)
+        };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -702,8 +712,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
         setup_clickhouse(
-            &config,
+            &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
