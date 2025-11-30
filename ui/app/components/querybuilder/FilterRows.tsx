@@ -159,16 +159,18 @@ const BooleanValueSelect = memo(function BooleanValueSelect({
 
 // Row Components
 
-export interface TagFilterRowProps<
-  T extends InferenceFilter | DatapointFilter = InferenceFilter,
-> {
-  filter: T & { type: "tag" };
-  onChange: (newFilter: T | undefined) => void;
+// TagFilter is the same shape in both InferenceFilter and DatapointFilter
+type TagFilterType = (InferenceFilter | DatapointFilter) & { type: "tag" };
+
+export interface TagFilterRowProps {
+  filter: TagFilterType;
+  onChange: (newFilter: TagFilterType | undefined) => void;
 }
 
-export const TagFilterRow = memo(function TagFilterRow<
-  T extends InferenceFilter | DatapointFilter,
->({ filter, onChange }: TagFilterRowProps<T>) {
+export const TagFilterRow = memo(function TagFilterRow({
+  filter,
+  onChange,
+}: TagFilterRowProps) {
   const [keyError, setKeyError] = useState<string>();
   const [valueError, setValueError] = useState<string>();
 

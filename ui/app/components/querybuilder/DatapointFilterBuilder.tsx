@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { FormLabel } from "~/components/ui/form";
-import type { DatapointFilter, InferenceFilter } from "~/types/tensorzero";
+import type { DatapointFilter } from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
 import {
   Tooltip,
@@ -209,16 +209,7 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
   }
 
   if (filter.type === "tag") {
-    return (
-      <TagFilterRow
-        filter={filter}
-        onChange={
-          onChange as (
-            f: (InferenceFilter | DatapointFilter) | undefined,
-          ) => void
-        }
-      />
-    );
+    return <TagFilterRow filter={filter} onChange={onChange} />;
   }
 
   // Unsupported filter types (time, not) - skip for now
