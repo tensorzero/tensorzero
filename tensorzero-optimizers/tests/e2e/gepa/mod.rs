@@ -31,10 +31,12 @@ use tensorzero_optimizers::gepa::{
     mutate::mutate_variant,
     pareto::{is_improvement, Candidate, ParetoFrontier},
     validate::{get_uninitialized_variant_configs, validate_gepa_config},
-    GEPAVariant,
 };
 
 pub mod analyze;
+
+/// Wait time for ClickHouse operations to complete (in milliseconds)
+const TEST_CLICKHOUSE_WAIT_MS: u64 = 500;
 
 /// Helper function to load the e2e test config
 async fn get_e2e_config() -> Arc<Config> {
@@ -269,7 +271,7 @@ async fn test_gepa_step_chat() {
 
     // Clean up any leftover data from previous failed test runs
     let _ = delete_dataset(&clickhouse, &dataset_name).await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Create test samples
     let samples = vec![
@@ -291,7 +293,7 @@ async fn test_gepa_step_chat() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -430,7 +432,7 @@ async fn test_gepa_step_chat() {
     // Create minibatch/training dataset with subset of examples (simulating mutation dataset)
     let train_dataset_name = "test_train_dataset_chat_e2e".to_string();
     let _ = delete_dataset(&clickhouse, &train_dataset_name).await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     let train_samples = vec![
         create_test_chat_rendered_sample("train input 1", "train output 1"),
@@ -447,7 +449,7 @@ async fn test_gepa_step_chat() {
     .await
     .expect("Failed to create training/minibatch dataset");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Evaluate parent on minibatch
     let parent_minibatch_results = evaluate_variant(EvaluateVariantParams {
@@ -673,7 +675,7 @@ async fn test_gepa_step_chat() {
     assert_eq!(train_delete_result.unwrap().num_deleted_datapoints, 2);
 
     // Give ClickHouse a moment to process the deletion
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Verify the validation dataset is empty after deletion
     let datapoints_after_delete = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -691,7 +693,7 @@ async fn test_gepa_step_json() {
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
         evaluation_name: "json_evaluation".to_string(),
-        initial_variants: Some(vec!["openai".to_string()]),
+        initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some("gepa_test_json".to_string()),
         batch_size: 5,
         max_iterations: 1,
@@ -709,6 +711,18 @@ async fn test_gepa_step_json() {
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
 
+    // Build gateway client early for all operations
+    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+        config: config.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        http_client: http_client.clone(),
+        timeout: Some(Duration::from_secs(gepa_config.timeout)),
+    })
+    .build()
+    .await
+    .expect("Failed to build gateway client");
+
     let function_context = validate_gepa_config(&gepa_config, &config)
         .expect("validate_gepa_config should succeed in test");
 
@@ -716,18 +730,12 @@ async fn test_gepa_step_json() {
     let initial_variants = get_uninitialized_variant_configs(&gepa_config, &function_context)
         .expect("get_uninitialized_variant_configs should succeed in test");
 
-    // Get the first variant to use for testing
-    let (internal_dynamic_variant_name, internal_dynamic_variant_config) = initial_variants
-        .iter()
-        .next()
-        .expect("Should have at least one variant");
-
     // Use deterministic dataset name for cache effectiveness
     let dataset_name = "test_eval_dataset_json_e2e".to_string();
 
     // Clean up any leftover data from previous failed test runs
     let _ = delete_dataset(&clickhouse, &dataset_name).await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Create test samples for JSON function
     let samples = vec![
@@ -747,7 +755,7 @@ async fn test_gepa_step_json() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -782,79 +790,163 @@ async fn test_gepa_step_json() {
     assert!(first_datapoint.output_schema.get("type").is_some());
     assert_eq!(first_datapoint.output_schema.get("type").unwrap(), "object");
 
-    // Test evaluate_variant function
-    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-        config: config.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
-        http_client: http_client.clone(),
-        timeout: Some(Duration::from_secs(gepa_config.timeout)),
-    })
-    .build()
-    .await
-    .expect("Failed to build gateway client");
+    // Evaluate ALL initial variants on validation dataset (following production code pattern)
+    let evaluator_configs = match &*function_context.evaluation_config {
+        EvaluationConfig::Inference(cfg) => &cfg.evaluators,
+    };
 
-    // Call evaluate_variant
-    let evaluation_params = EvaluateVariantParams {
+    let num_variants = initial_variants.len();
+    let per_variant_concurrency = (gepa_config.max_concurrency as usize / num_variants).max(1);
+
+    let mut all_evaluation_results = Vec::new();
+    for (variant_name, variant_config) in &initial_variants {
+        let evaluation_params = EvaluateVariantParams {
+            gateway_client: gateway_client.clone(),
+            clickhouse_connection_info: clickhouse.clone(),
+            tensorzero_config: config.clone(),
+            evaluation_config: Arc::clone(&function_context.evaluation_config),
+            evaluation_name: gepa_config.evaluation_name.clone(),
+            variant_name: variant_name.to_string(),
+            variant_config: variant_config.clone(),
+            dataset_name: dataset_name.clone(),
+            concurrency: per_variant_concurrency,
+        };
+
+        let evaluation_result = evaluate_variant(evaluation_params).await;
+        assert!(
+            evaluation_result.is_ok(),
+            "Failed to evaluate variant '{}': {:?}",
+            variant_name,
+            evaluation_result.err()
+        );
+
+        let evaluation_results = evaluation_result.unwrap();
+        assert_eq!(
+            evaluation_results.evaluation_infos.len(),
+            2,
+            "Expected 2 evaluation results for variant '{}', got {}",
+            variant_name,
+            evaluation_results.evaluation_infos.len()
+        );
+
+        assert_evaluation_results_valid(&evaluation_results, 2);
+        all_evaluation_results.push((variant_name.clone(), evaluation_results));
+    }
+
+    // Initialize Pareto frontier with validation datapoint IDs and evaluator configs
+    let mut pareto_frontier = ParetoFrontier::new(
+        response.ids.clone(),
+        evaluator_configs,
+        gepa_config.seed.map(|s| s as u64),
+    );
+
+    // Seed the frontier with initial variants and their validation scores
+    let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
+    for (variant_name, eval_results) in &all_evaluation_results {
+        let scores = eval_results.per_datapoint_scores();
+        if !scores.is_empty() {
+            if let Some(variant_config) = initial_variants.get(variant_name) {
+                initial_candidates.insert(
+                    variant_name.clone(),
+                    Candidate {
+                        variant: variant_config.clone(),
+                        scores,
+                    },
+                );
+            }
+        }
+    }
+
+    assert_eq!(
+        initial_candidates.len(),
+        initial_variants.len(),
+        "All initial variants should have scores before frontier update"
+    );
+
+    pareto_frontier
+        .update(initial_candidates)
+        .expect("Failed to seed Pareto frontier with initial candidates");
+
+    // Verify frontier contains at least one variant, but may have filtered dominated variants
+    let frontier_variants = pareto_frontier.variant_configs();
+    assert!(
+        !frontier_variants.is_empty(),
+        "Pareto frontier should contain at least one variant"
+    );
+    assert!(
+        frontier_variants.len() <= initial_variants.len(),
+        "Pareto frontier should not have more variants than initial set"
+    );
+
+    // Verify all frontier variants are from the initial set
+    for variant_name in frontier_variants.keys() {
+        assert!(
+            initial_variants.contains_key(variant_name),
+            "Frontier variant '{variant_name}' should be from the initial variants"
+        );
+    }
+
+    // Sample parent from Pareto frontier (following production code pattern)
+    let parent = pareto_frontier
+        .sample_by_frequency()
+        .expect("Failed to sample parent from Pareto frontier");
+
+    // Verify parent is one of the initial variants
+    assert!(
+        initial_variants.contains_key(&parent.name),
+        "Sampled parent '{}' should be one of the initial variants",
+        parent.name
+    );
+
+    // Create minibatch/training dataset with subset of examples (simulating mutation dataset)
+    let train_dataset_name = "test_train_dataset_json_e2e".to_string();
+    let _ = delete_dataset(&clickhouse, &train_dataset_name).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
+
+    let train_samples = vec![create_test_json_rendered_sample(
+        "train input 1",
+        r#"{"answer": "train output 1"}"#,
+    )];
+
+    let _train_create_datapoints_response = create_evaluation_dataset(
+        &config,
+        &http_client,
+        &clickhouse,
+        train_samples,
+        &train_dataset_name,
+    )
+    .await
+    .expect("Failed to create training/minibatch dataset");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
+
+    // Evaluate parent on minibatch
+    let parent_minibatch_results = evaluate_variant(EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
         tensorzero_config: config.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
-        variant_name: internal_dynamic_variant_name.to_string(),
-        variant_config: internal_dynamic_variant_config.clone(),
-        dataset_name: dataset_name.clone(),
+        variant_name: parent.name.clone(),
+        variant_config: parent.config.clone(),
+        dataset_name: train_dataset_name.clone(),
         concurrency: gepa_config.max_concurrency as usize,
-    };
+    })
+    .await
+    .expect("Failed to evaluate parent on minibatch");
 
-    let evaluation_result = evaluate_variant(evaluation_params).await;
-    assert!(
-        evaluation_result.is_ok(),
-        "Failed to evaluate variant: {:?}",
-        evaluation_result.err()
-    );
-
-    let evaluation_results = evaluation_result.unwrap();
-
-    // Assert evaluation results
     assert_eq!(
-        evaluation_results.evaluation_infos.len(),
-        2,
-        "Expected 2 evaluation results, got {}",
-        evaluation_results.evaluation_infos.len()
+        parent_minibatch_results.evaluation_infos.len(),
+        1,
+        "Parent should be evaluated on 1 minibatch example"
     );
 
-    // Verify evaluation results have expected structure and valid scores
-    assert_evaluation_results_valid(&evaluation_results, 2);
-
-    // Delete the dataset
-    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
-    assert!(
-        delete_result.is_ok(),
-        "Failed to delete dataset: {:?}",
-        delete_result.err()
-    );
-    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 2);
-
-    // Give ClickHouse a moment to process the deletion
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the dataset is empty after deletion
-    let datapoints_after_delete = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-    assert!(
-        datapoints_after_delete.is_empty(),
-        "Expected dataset to be empty after deletion, but found {} datapoints",
-        datapoints_after_delete.len()
-    );
-
-    // Run Analyses
+    // Run Analyses on parent minibatch results
     let analysis_result = analyze_inferences(
         &gateway_client,
-        &evaluation_results.evaluation_infos,
+        &parent_minibatch_results.evaluation_infos,
         &function_context,
-        internal_dynamic_variant_config,
+        &parent.config,
         &gepa_config,
     )
     .await;
@@ -865,7 +957,7 @@ async fn test_gepa_step_json() {
         "analyze_inferences should work with JSON functions"
     );
     let analyses = analysis_result.unwrap();
-    assert_eq!(analyses.len(), 2, "Should return 2 analyses");
+    assert_eq!(analyses.len(), 1, "Should return 1 analysis for minibatch");
 
     // Verify each analysis has content and expected XML tags
     for analysis in &analyses {
@@ -902,12 +994,7 @@ async fn test_gepa_step_json() {
         );
     }
 
-    // Test mutate_variant function
-    let parent = GEPAVariant {
-        name: internal_dynamic_variant_name.to_string(),
-        config: internal_dynamic_variant_config.clone(),
-    };
-
+    // Test mutate_variant function to generate child
     let mutate_result = mutate_variant(
         &gateway_client,
         &analyses,
@@ -925,9 +1012,7 @@ async fn test_gepa_step_json() {
         mutate_result.err()
     );
 
-    let child_variants = mutate_result.unwrap();
-
-    let child_config = &child_variants.config;
+    let child = mutate_result.unwrap();
 
     // Verify child variant name format uses the configured prefix
     let expected_prefix = format!(
@@ -935,19 +1020,19 @@ async fn test_gepa_step_json() {
         gepa_config.variant_prefix.as_deref().unwrap_or("gepa")
     );
     assert!(
-        child_variants.name.starts_with(&expected_prefix),
+        child.name.starts_with(&expected_prefix),
         "Child variant name '{}' should start with '{expected_prefix}'",
-        child_variants.name
+        child.name
     );
 
     // Verify templates are non-empty
     assert!(
-        !child_config.templates.inner.is_empty(),
+        !child.config.templates.inner.is_empty(),
         "Child variant should have non-empty templates"
     );
 
     // Verify all templates have non-empty content
-    for (template_name, template_config) in &child_config.templates.inner {
+    for (template_name, template_config) in &child.config.templates.inner {
         let content = template_config.path.data();
         assert!(
             !content.is_empty(),
@@ -956,7 +1041,8 @@ async fn test_gepa_step_json() {
     }
 
     // Verify system template contains the expected variable
-    let system_template = child_config
+    let system_template = child
+        .config
         .templates
         .inner
         .get("system")
@@ -972,7 +1058,8 @@ async fn test_gepa_step_json() {
     );
 
     // Verify user template contains the expected variable
-    let user_template = child_config
+    let user_template = child
+        .config
         .templates
         .inner
         .get("user")
@@ -980,5 +1067,119 @@ async fn test_gepa_step_json() {
     assert!(
         user_template.path.data().contains("{{ country }}"),
         "Child user template should preserve {{ country }} variable"
+    );
+
+    // Evaluate child on minibatch (same dataset as parent)
+    let child_minibatch_results = evaluate_variant(EvaluateVariantParams {
+        gateway_client: gateway_client.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        tensorzero_config: config.clone(),
+        evaluation_config: Arc::clone(&function_context.evaluation_config),
+        evaluation_name: gepa_config.evaluation_name.clone(),
+        variant_name: child.name.clone(),
+        variant_config: child.config.clone(),
+        dataset_name: train_dataset_name.clone(),
+        concurrency: gepa_config.max_concurrency as usize,
+    })
+    .await
+    .expect("Failed to evaluate child on minibatch");
+
+    assert_eq!(
+        child_minibatch_results.evaluation_infos.len(),
+        1,
+        "Child should be evaluated on 1 minibatch example"
+    );
+
+    // Test is_improvement function (compare parent vs child on minibatch)
+    let child_improves = is_improvement(
+        &parent_minibatch_results.evaluation_stats,
+        &child_minibatch_results.evaluation_stats,
+        evaluator_configs,
+    );
+
+    // If child improves, evaluate it on validation dataset and update frontier
+    if child_improves {
+        let child_val_results = evaluate_variant(EvaluateVariantParams {
+            gateway_client: gateway_client.clone(),
+            clickhouse_connection_info: clickhouse.clone(),
+            tensorzero_config: config.clone(),
+            evaluation_config: Arc::clone(&function_context.evaluation_config),
+            evaluation_name: gepa_config.evaluation_name.clone(),
+            variant_name: child.name.clone(),
+            variant_config: child.config.clone(),
+            dataset_name: dataset_name.clone(), // Use validation dataset
+            concurrency: per_variant_concurrency,
+        })
+        .await
+        .expect("Failed to evaluate child on validation dataset");
+
+        assert_eq!(
+            child_val_results.evaluation_infos.len(),
+            2,
+            "Child should be evaluated on 2 validation examples"
+        );
+
+        // Extract per-datapoint scores for the child
+        let child_val_scores = child_val_results.per_datapoint_scores();
+
+        // Update Pareto frontier with child
+        let frontier_size_before = pareto_frontier.variant_configs().len();
+
+        let mut child_candidate = HashMap::new();
+        child_candidate.insert(
+            child.name.clone(),
+            Candidate {
+                variant: child.config.clone(),
+                scores: child_val_scores,
+            },
+        );
+
+        pareto_frontier
+            .update(child_candidate)
+            .expect("Failed to update Pareto frontier with child");
+
+        // Verify frontier state after update
+        let frontier_after_update = pareto_frontier.variant_configs();
+        let frontier_size_after = frontier_after_update.len();
+
+        assert!(
+            frontier_size_after > 0,
+            "Frontier should not be empty after child update (was {frontier_size_before} before, {frontier_size_after} after)",
+        );
+
+        // Verify we can still sample from the frontier
+        let _another_sample = pareto_frontier
+            .sample_by_frequency()
+            .expect("Should be able to sample from frontier after update");
+    }
+
+    // Delete both datasets
+    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
+    assert!(
+        delete_result.is_ok(),
+        "Failed to delete validation dataset: {:?}",
+        delete_result.err()
+    );
+    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 2);
+
+    let train_delete_result = delete_dataset(&clickhouse, &train_dataset_name).await;
+    assert!(
+        train_delete_result.is_ok(),
+        "Failed to delete training dataset: {:?}",
+        train_delete_result.err()
+    );
+    assert_eq!(train_delete_result.unwrap().num_deleted_datapoints, 1);
+
+    // Give ClickHouse a moment to process the deletion
+    tokio::time::sleep(tokio::time::Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
+
+    // Verify the validation dataset is empty after deletion
+    let datapoints_after_delete = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(
+        datapoints_after_delete.is_empty(),
+        "Expected validation dataset to be empty after deletion, but found {} datapoints",
+        datapoints_after_delete.len()
     );
 }
