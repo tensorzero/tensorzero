@@ -3,8 +3,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::snapshot::SnapshotHash;
-use crate::config::ConfigWithHash;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
@@ -19,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{unwritten_config::ConfigLoadInfo, Config, ConfigFileGlob};
+use crate::config::{unwritten_config::UnwrittenConfig, Config, ConfigFileGlob};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -128,7 +126,6 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
-    pub snapshot_hash: SnapshotHash,
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
@@ -171,21 +168,24 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: ConfigLoadInfo) -> Result<Self, Error> {
+    pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
-        Self::new_with_databases(config, clickhouse_url, postgres_url).await
+        Box::pin(Self::new_with_databases(
+            config,
+            clickhouse_url,
+            postgres_url,
+        ))
+        .await
     }
 
     async fn new_with_databases(
-        config: ConfigLoadInfo,
+        config: UnwrittenConfig,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let ConfigWithHash { config, hash } =
-            config.into_config(&clickhouse_connection_info).await?;
-        let config = Arc::new(config);
+        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -194,7 +194,6 @@ impl GatewayHandle {
             postgres_connection_info,
             http_client,
             None,
-            hash,
         )
         .await
     }
@@ -210,12 +209,9 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
-        // For testing only
-        let snapshot_hash = SnapshotHash::new_test();
         Self {
             app_state: AppStateData {
                 config,
-                snapshot_hash,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -235,7 +231,6 @@ impl GatewayHandle {
         postgres_connection_info: PostgresConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
-        snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         // Validate that rate limiting is not configured when Postgres is disabled
         if config.rate_limiting.enabled()
@@ -271,7 +266,6 @@ impl GatewayHandle {
             app_state: AppStateData {
                 config,
                 http_client,
-                snapshot_hash,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
@@ -288,18 +282,20 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Box::pin(Config::new_empty()).await?,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
-    config: &ConfigLoadInfo,
+    config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    let clickhouse_connection_info = match (
-        config.config.gateway.observability.enabled,
-        clickhouse_url,
-    ) {
+    let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
         (Some(false), _) => {
             tracing::info!("Disabling observability: `gateway.observability.enabled` is set to false in config.");
@@ -316,7 +312,7 @@ pub async fn setup_clickhouse(
         (Some(true), Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.config.gateway.observability.batch_writes.clone(),
+                config.gateway.observability.batch_writes.clone(),
             )
             .await?
         }
@@ -334,7 +330,7 @@ pub async fn setup_clickhouse(
         (None, Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.config.gateway.observability.batch_writes.clone(),
+                config.gateway.observability.batch_writes.clone(),
             )
             .await?
         }
@@ -345,11 +341,7 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config
-                .config
-                .gateway
-                .observability
-                .disable_automatic_migrations,
+            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
         })
         .await?;
     }
@@ -507,12 +499,19 @@ pub async fn start_openai_compatible_gateway(
         })
     })?;
     let config_load_info = if let Some(config_file) = config_file {
-        Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?
+        Box::pin(Config::load_and_verify_from_path(&ConfigFileGlob::new(
+            config_file,
+        )?))
+        .await?
     } else {
-        Config::new_empty().await?
+        Box::pin(Config::new_empty()).await?
     };
-    let gateway_handle =
-        GatewayHandle::new_with_databases(config_load_info, clickhouse_url, postgres_url).await?;
+    let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
+        config_load_info,
+        clickhouse_url,
+        postgres_url,
+    ))
+    .await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()
@@ -558,8 +557,6 @@ mod tests {
         gateway::GatewayConfig, snapshot::ConfigSnapshot, unwritten_config::UnwrittenConfig,
         ObservabilityConfig, PostgresConfig,
     };
-    use std::collections::HashMap;
-
     #[tokio::test]
     async fn test_setup_clickhouse() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -588,17 +585,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
-        );
+        let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
-            .await
-            .unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config, None, false).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -623,14 +612,8 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
-        );
-        let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
             .await
             .unwrap();
         assert_eq!(
@@ -670,15 +653,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
-        );
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(&config_load_info, None, false)
+        let err = setup_clickhouse(&unwritten_config, None, false)
             .await
             .unwrap_err();
         assert!(err
@@ -709,14 +686,8 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
-        );
-        setup_clickhouse(&config_load_info, Some("bad_url".to_string()), false)
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -749,15 +720,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
-        );
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
         setup_clickhouse(
-            &config_load_info,
+            &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
@@ -875,7 +840,6 @@ mod tests {
             rate_limiting: Default::default(),
             ..Default::default()
         });
-        let hash = SnapshotHash::new_test();
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -888,7 +852,6 @@ mod tests {
             postgres_connection_info,
             http_client,
             None,
-            hash,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");

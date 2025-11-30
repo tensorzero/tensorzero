@@ -1,7 +1,6 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
-use tensorzero_core::config::ConfigWithHash;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -45,7 +44,7 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
     pub variant_name: String,
 }
 
@@ -114,7 +113,8 @@ pub struct RunEvaluationStreamingParams {
     pub clickhouse_url: String,
     pub config_path: String,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+    pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
@@ -140,7 +140,7 @@ pub async fn run_evaluation_streaming(
             ))
         })?;
 
-    let config_load_info = Config::load_from_path_optional_verify_credentials(&config_glob, false)
+    let unwritten_config = Config::load_from_path_optional_verify_credentials(&config_glob, false)
         .await
         .map_err(|e| {
             napi::Error::from_reason(format!(
@@ -150,21 +150,11 @@ pub async fn run_evaluation_streaming(
         })?;
     let clickhouse_client = ClickHouseConnectionInfo::new(
         &params.clickhouse_url,
-        config_load_info
-            .config
-            .gateway
-            .observability
-            .batch_writes
-            .clone(),
+        unwritten_config.gateway.observability.batch_writes.clone(),
     )
     .await
     .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
-    let ConfigWithHash {
-        config,
-        // Since the evaluation actually runs all inferences and feedback through the gateway,
-        // there is no use for this hash in the Node.js process
-        hash: _,
-    } = config_load_info
+    let config = unwritten_config
         .into_config(&clickhouse_client)
         .await
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;
@@ -195,6 +185,17 @@ pub async fn run_evaluation_streaming(
         ))
     })?;
 
+    let datapoint_ids: Vec<Uuid> = params
+        .datapoint_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid UUID in datapoint_ids: {e}"))
+            })
+        })
+        .collect::<Result<Vec<Uuid>, napi::Error>>()?;
+
     let evaluation_run_id = Uuid::now_v7();
 
     // Parse precision_targets from JSON string to HashMap
@@ -214,6 +215,7 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,

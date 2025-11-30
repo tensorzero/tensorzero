@@ -75,7 +75,7 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
+          pattern: build-{gateway,ui}-container
           merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
@@ -636,6 +636,14 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112  # v4.3.0
+        with:
+          version: "3.18.6"  # Conservatively match the `Helm 3.2.0+` version specified in examples/production-deployment-k8s-helm/README.md
+
+      - name: Install helm-values-schema-json plugin
+        run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
+
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
 
@@ -665,6 +673,12 @@ jobs:
 
       - name: detect‑private‑key
         run: uv run --with pre-commit pre-commit run detect-private-key --all-files
+
+      - name: helm-values-schema
+        run: uv run --with pre-commit pre-commit run helm-schema --all-files
+
+      - name: Check helm schema sync
+        run: ./ci/check-helm-schema-sync.sh
 
       # We don't run these two because we want to allow template files to have trailing whitespace
       # TODO: how do we exclude minijinja files using pre-commit in GHA?
@@ -708,7 +722,7 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-mock-inference-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -768,12 +782,13 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
+          pattern: build-{gateway,mock-inference}-container
           merge-multiple: true
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
+          docker load < mock-inference-container.tar
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -790,6 +805,10 @@ jobs:
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
+        run: |
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -850,7 +869,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-e2e-no-creds
+        run: cargo test-clickhouse
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
@@ -994,6 +1013,14 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
+  build-mock-inference-container:
+    uses: ./.github/workflows/build-mock-inference-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
   ui-tests:
     permissions:
       contents: read
@@ -1001,7 +1028,7 @@ jobs:
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: build-gateway-container
+    needs: [build-gateway-container, build-mock-inference-container]
 
   ui-tests-e2e:
     permissions:
@@ -1010,7 +1037,7 @@ jobs:
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-ui-container]
+    needs: [build-gateway-container, build-ui-container, build-mock-inference-container]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -1058,7 +1085,7 @@ jobs:
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   run-merge-queue-checks:
-    needs: [build-gateway-e2e-container]
+    needs: [build-gateway-e2e-container, build-mock-inference-container]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
@@ -1081,6 +1108,7 @@ jobs:
       actions: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
+    needs: [build-mock-inference-container]
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
@@ -1101,6 +1129,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        build-mock-inference-container,
         mocked-batch-tests,
         minikube,
         rust-build,

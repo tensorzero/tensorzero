@@ -22,9 +22,9 @@ use tensorzero_core::{
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
-    test_openai_compatible_route_with_function_name_as_model(
+    Box::pin(test_openai_compatible_route_with_function_name_as_model(
         "tensorzero::function_name::basic_test_no_system_schema",
-    )
+    ))
     .await;
 }
 

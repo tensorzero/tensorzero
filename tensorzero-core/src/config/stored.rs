@@ -8,7 +8,7 @@
 //! The `From` implementations use explicit destructuring to ensure compile-time errors
 //! when fields are added or removed from either the stored or uninitialized types.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ use crate::rate_limiting::UninitializedRateLimitingConfig;
 ///
 /// Accepts the deprecated `timeouts` field for backward compatibility with
 /// historical config snapshots stored in ClickHouse.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoredEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -73,7 +73,7 @@ impl From<StoredEmbeddingModelConfig> for UninitializedEmbeddingModelConfig {
 /// Stored version of `UninitializedEmbeddingProviderConfig`.
 ///
 /// Accepts the deprecated `timeouts` field for backward compatibility.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StoredEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -112,11 +112,47 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
     }
 }
 
+impl From<UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfig {
+    fn from(uninitialized: UninitializedEmbeddingProviderConfig) -> Self {
+        // Explicit destructuring ensures compile error if fields are added/removed
+        let UninitializedEmbeddingProviderConfig {
+            config,
+            timeout_ms,
+            extra_body,
+        } = uninitialized;
+
+        Self {
+            config,
+            timeout_ms,
+            timeouts: TimeoutsConfig::default(),
+            extra_body,
+        }
+    }
+}
+
+impl From<UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
+    fn from(uninitialized: UninitializedEmbeddingModelConfig) -> Self {
+        // Explicit destructuring ensures compile error if fields are added/removed
+        let UninitializedEmbeddingModelConfig {
+            routing,
+            providers,
+            timeout_ms,
+        } = uninitialized;
+
+        Self {
+            routing,
+            providers: providers.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            timeout_ms,
+            timeouts: TimeoutsConfig::default(),
+        }
+    }
+}
+
 /// Top-level stored config type.
 ///
 /// Only fields with deprecations in their subtree use `Stored*` types.
 /// Other fields re-use `Uninitialized*` types directly.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoredConfig {
     // Fields WITHOUT deprecations - reuse Uninitialized* types
@@ -145,6 +181,47 @@ pub struct StoredConfig {
     // Fields WITH deprecations - use Stored* types
     #[serde(default)]
     pub embedding_models: HashMap<Arc<str>, StoredEmbeddingModelConfig>,
+}
+
+impl From<UninitializedConfig> for StoredConfig {
+    fn from(stored: UninitializedConfig) -> Self {
+        // Explicit destructuring ensures compile error if fields are added/removed
+        let UninitializedConfig {
+            gateway,
+            postgres,
+            rate_limiting,
+            object_storage,
+            models,
+            functions,
+            metrics,
+            tools,
+            evaluations,
+            provider_types,
+            optimizers,
+            embedding_models,
+        } = stored;
+
+        // Note: as we migrate the config and deprecate stuff in the future,
+        // we'll need to build out this transformation
+        Self {
+            gateway,
+            postgres,
+            rate_limiting,
+            object_storage,
+            models,
+            functions,
+            metrics,
+            tools,
+            evaluations,
+            provider_types,
+            optimizers,
+            // Only embedding_models needs conversion
+            embedding_models: embedding_models
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+        }
+    }
 }
 
 impl From<StoredConfig> for UninitializedConfig {

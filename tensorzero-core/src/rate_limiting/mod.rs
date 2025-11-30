@@ -40,7 +40,7 @@ pub struct RateLimitingConfig {
     enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     rules: Vec<RateLimitingConfigRule>,

@@ -162,7 +162,6 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
 pub async fn inference_handler(
     State(AppStateData {
         config,
-        snapshot_hash,
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
@@ -172,16 +171,15 @@ pub async fn inference_handler(
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output = inference(
+    let inference_output = Box::pin(inference(
         config,
-        snapshot_hash,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
         deferred_tasks,
         params,
         api_key_ext,
-    )
+    ))
     .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
@@ -232,10 +230,8 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-#[expect(clippy::too_many_arguments)]
 pub async fn inference(
     config: Arc<Config>,
-    snapshot_hash: SnapshotHash,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
@@ -393,10 +389,11 @@ pub async fn inference(
         models: config.models.clone(),
         embedding_models: config.embedding_models.clone(),
     };
-    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(FetchContext {
+    let fetch_context = FetchContext {
         client: http_client,
         object_store_info: &config.object_store_info,
-    })?);
+    };
+    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(&fetch_context)?);
 
     // If we don't need sampling (pinned or dynamic variant), directly infer with the single variant
     if !needs_sampling {
@@ -433,7 +430,6 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
-            snapshot_hash: &snapshot_hash,
         })
         .await;
     }
@@ -485,7 +481,6 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
-            snapshot_hash: &snapshot_hash,
         })
         .await;
 
@@ -533,7 +528,6 @@ struct InferVariantArgs<'a> {
     extra_body: &'a UnfilteredInferenceExtraBody,
     extra_headers: &'a UnfilteredInferenceExtraHeaders,
     include_original_response: bool,
-    snapshot_hash: &'a SnapshotHash,
 }
 
 async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Error> {
@@ -560,7 +554,6 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         extra_body,
         extra_headers,
         include_original_response,
-        snapshot_hash,
     } = args;
 
     // Will be edited by the variant as part of making the request so we must clone here
@@ -632,7 +625,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             fetch_and_encode_input_files_before_inference: config
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
-            snapshot_hash: snapshot_hash.clone(),
+            snapshot_hash: config.hash.clone(),
         };
 
         let stream = create_stream(
@@ -675,7 +668,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 tags: tags.clone(),
                 extra_body,
                 extra_headers,
-                snapshot_hash: snapshot_hash.clone(),
+                snapshot_hash: config.hash.clone(),
             };
 
             let async_writes = config.gateway.observability.async_writes;

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
@@ -112,8 +111,6 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = SnapshotHash::new_test();
-
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -122,7 +119,6 @@ async fn test_from_components_basic() {
     // Build client using FromComponents mode
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::FromComponents {
         config,
-        snapshot_hash,
         clickhouse_connection_info,
         postgres_connection_info,
         http_client,
@@ -152,26 +148,24 @@ async fn test_write_config_snapshot() {
     .unwrap();
     let random_id = Uuid::now_v7();
 
-    // Create a test config snapshot
+    // Create a test config snapshot with minimal valid config
+    // Using a unique metric name to avoid conflicts between test runs
     let config_toml = format!(
         r#"
-[gateway]
-bind = "0.0.0.0:3000"
-
-[models.test_model{random_id}]
-routing = ["test_provider::gpt-4"]
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
 "#
     );
 
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
     let hash_number = hash.to_string();
 
     // Write the config snapshot
@@ -193,7 +187,13 @@ routing = ["test_provider::gpt-4"]
     // Parse and verify the result
     let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
 
-    assert_eq!(snapshot_row["config"].as_str().unwrap(), config_toml);
+    // Config is serialized from StoredConfig, so format may differ from original.
+    // Just verify it contains our metric definition.
+    let stored_config = snapshot_row["config"].as_str().unwrap();
+    assert!(
+        stored_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
+    );
     assert!(!snapshot_row["tensorzero_version"]
         .as_str()
         .unwrap()
@@ -207,10 +207,8 @@ routing = ["test_provider::gpt-4"]
     let last_used_1 = snapshot_row["last_used"].as_str().unwrap();
 
     // Test upsert behavior: write the same config again
-    let snapshot2 = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot2 =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
     write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
 
@@ -239,8 +237,12 @@ routing = ["test_provider::gpt-4"]
         "last_used should be updated on upsert"
     );
 
-    // Verify the data is still correct
-    assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
+    // Verify the data is still correct (config contains our metric)
+    let stored_config2 = snapshot_row2["config"].as_str().unwrap();
+    assert!(
+        stored_config2.contains(&format!("test_metric_{random_id}")),
+        "Config should still contain our test metric after upsert"
+    );
     assert_eq!(
         snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
@@ -277,12 +279,10 @@ routing = ["test_provider::gpt-4"]
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.clone(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();
@@ -294,7 +294,12 @@ routing = ["test_provider::gpt-4"]
     let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
 
     // Verify the retrieved snapshot matches what we wrote
-    assert_eq!(retrieved_snapshot.config, config_toml);
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_model_{random_id}")),
+        "Config should contain our test model"
+    );
     assert_eq!(retrieved_snapshot.extra_templates, extra_templates);
 }
 
@@ -370,12 +375,10 @@ routing = ["test_provider::gpt-4"]
         "Assistant responds: {{response}}".to_string(),
     );
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.clone(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();
@@ -387,7 +390,12 @@ routing = ["test_provider::gpt-4"]
     let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
 
     // Verify all extra templates are correctly stored and retrieved
-    assert_eq!(retrieved_snapshot.config, config_toml);
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_model_{random_id}")),
+        "Config should contain our test model"
+    );
     assert_eq!(retrieved_snapshot.extra_templates.len(), 3);
     assert_eq!(
         retrieved_snapshot.extra_templates.get("system_template"),
@@ -472,7 +480,7 @@ model = "test_model_{random_id}"
         .unwrap()
         .as_str()
         .unwrap();
-    let snapshot_hash = SnapshotHash::from_str(snapshot_hash_str).unwrap();
+    let snapshot_hash: SnapshotHash = snapshot_hash_str.parse().unwrap();
 
     // Load snapshot from ClickHouse
     let retrieved_snapshot = clickhouse
@@ -481,13 +489,13 @@ model = "test_model_{random_id}"
         .unwrap();
 
     // Build new client from snapshot
-    let new_client = ClientBuilder::from_config_snapshot(
+    let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
-    )
+    ))
     .await
     .unwrap();
 
@@ -613,10 +621,7 @@ type = "dummy"
 model_name = "test"
 "#;
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: HashMap::new(),
-    };
+    let snapshot = ConfigSnapshot::new_from_toml_string(config_toml, HashMap::new()).unwrap();
 
     // Loading from snapshot should succeed and migrate the timeout
     let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();
@@ -649,10 +654,7 @@ model_name = "test"
 timeouts.non_streaming.total_ms = 3000
 "#;
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: HashMap::new(),
-    };
+    let snapshot = ConfigSnapshot::new_from_toml_string(config_toml, HashMap::new()).unwrap();
 
     // Loading from snapshot should succeed and migrate the timeout
     let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();
@@ -688,10 +690,7 @@ type = "dummy"
 model_name = "test"
 "#;
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: HashMap::new(),
-    };
+    let snapshot = ConfigSnapshot::new_from_toml_string(config_toml, HashMap::new()).unwrap();
 
     // Loading from snapshot should succeed
     let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();

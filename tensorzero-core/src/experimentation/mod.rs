@@ -113,7 +113,7 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),

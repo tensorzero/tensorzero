@@ -4,6 +4,6 @@ export type EvaluationRunStartEvent = {
   evaluation_run_id: string;
   num_datapoints: number;
   evaluation_name: string;
-  dataset_name: string;
+  dataset_name: string | null;
   variant_name: string;
 };

@@ -8,7 +8,7 @@ use tokio::try_join;
 use url::Url;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config},
+    config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -46,7 +46,6 @@ impl Optimizer for OpenAISFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
-        _snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

@@ -252,7 +252,7 @@ impl Nursery {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,

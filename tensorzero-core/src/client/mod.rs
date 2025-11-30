@@ -1,8 +1,8 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::config::ConfigWithHash;
-use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
+use crate::config::snapshot::ConfigSnapshot;
+use crate::config::unwritten_config::UnwrittenConfig;
+use crate::config::ConfigFileGlob;
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -400,8 +400,6 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
-        /// The snapshot_hash of the config that was already parsed
-        snapshot_hash: SnapshotHash,
         /// Already-initialized ClickHouse connection
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
@@ -488,37 +486,40 @@ impl ClientBuilder {
                 verify_credentials,
                 allow_batch_writes,
             } => {
-                let config_load_info = if let Some(config_file) = config_file {
+                let unwritten_config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
                             ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                    Config::load_from_path_optional_verify_credentials(&glob, *verify_credentials)
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
-                            error: TensorZeroError::Other { source: e.into() },
-                            glob,
-                        })?
+                    Box::pin(Config::load_from_path_optional_verify_credentials(
+                        &glob,
+                        *verify_credentials,
+                    ))
+                    .await
+                    .map_err(|e| ClientBuilderError::ConfigParsing {
+                        error: TensorZeroError::Other { source: e.into() },
+                        glob,
+                    })?
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Config::new_empty()
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                    Box::pin(Config::new_empty()).await.map_err(|e| {
+                        ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob: ConfigFileGlob::new_empty(),
-                        })?
+                        }
+                    })?
                 };
                 let clickhouse_connection_info =
-                    setup_clickhouse(&config_load_info, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                let ConfigWithHash { config, hash } = config_load_info
+                let config = unwritten_config
                     .into_config(&clickhouse_connection_info)
                     .await
                     .map_err(|e| {
@@ -553,7 +554,6 @@ impl ClientBuilder {
                                 postgres_connection_info,
                                 http_client,
                                 self.drop_wrapper,
-                                hash,
                             )
                             .await
                             .map_err(|e| {
@@ -571,7 +571,6 @@ impl ClientBuilder {
             }
             ClientBuilderMode::FromComponents {
                 config,
-                snapshot_hash,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 http_client,
@@ -593,7 +592,6 @@ impl ClientBuilder {
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
-                                snapshot_hash.clone(),
                             )
                             .await
                             .map_err(|e| {
@@ -646,7 +644,7 @@ impl ClientBuilder {
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
         // Load config from snapshot
-        let config_load_info = Config::load_from_snapshot(snapshot, verify_credentials)
+        let config_load_info = Box::pin(Config::load_from_snapshot(snapshot, verify_credentials))
             .await
             .map_err(|e| ClientBuilderError::ConfigParsing {
                 error: TensorZeroError::Other { source: e.into() },
@@ -661,7 +659,7 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let ConfigWithHash { config, hash } = config_load_info
+        let config = config_load_info
             .into_config(&clickhouse_connection_info)
             .await
             .map_err(|e| {
@@ -686,14 +684,13 @@ impl ClientBuilder {
         // Build client using FromComponents pattern
         let builder = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
-            snapshot_hash: hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
             timeout,
         });
 
-        builder.build().await
+        Box::pin(builder.build()).await
     }
 
     /// Validates configuration for embedded gateway mode.
@@ -942,9 +939,8 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let res = crate::endpoints::inference::inference(
+                    let res = Box::pin(crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
-                        gateway.handle.app_state.snapshot_hash.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
@@ -953,7 +949,7 @@ impl Client {
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
                         None,
-                    )
+                    ))
                     .await
                     .map_err(err_to_http)?;
                     match res {
@@ -1038,16 +1034,16 @@ pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroErr
 /// If the path is None, it returns the default config.
 pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
-) -> Result<ConfigLoadInfo, TensorZeroError> {
+) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
-        Some(path) => Config::load_from_path_optional_verify_credentials(
+        Some(path) => Box::pin(Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
                 .map_err(|e| TensorZeroError::Other { source: e.into() })?,
             false,
-        )
+        ))
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::new_empty()
+        None => Ok(Box::pin(Config::new_empty())
             .await
             .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
@@ -1141,7 +1137,6 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1151,7 +1146,6 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
-            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
@@ -1194,7 +1188,6 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1204,7 +1197,6 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
-            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,

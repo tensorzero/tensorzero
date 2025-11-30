@@ -96,7 +96,7 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -118,7 +118,7 @@ pub struct LLMJudgeConfig {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
@@ -126,7 +126,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
@@ -177,7 +177,8 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
     format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedEvaluationConfig {
     Inference(UninitializedInferenceEvaluationConfig),
 }
@@ -259,7 +260,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
@@ -352,7 +353,7 @@ impl UninitializedInferenceEvaluationConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
@@ -361,7 +362,7 @@ enum UninitializedEvaluatorConfig {
     LLMJudge(UninitializedLLMJudgeConfig),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
@@ -534,14 +535,14 @@ impl UninitializedEvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeVariantConfig,
     timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedLLMJudgeVariantConfig {
@@ -556,7 +557,7 @@ enum UninitializedLLMJudgeVariantConfig {
     ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
@@ -664,7 +665,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
@@ -676,7 +677,7 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
@@ -688,7 +689,7 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
@@ -713,7 +714,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]

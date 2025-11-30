@@ -18,8 +18,11 @@ pub fn get_e2e_config_path() -> PathBuf {
 pub async fn get_e2e_config() -> Config {
     let config_path = get_e2e_config_path();
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    Config::load_from_path_optional_verify_credentials(&config_glob, false)
-        .await
-        .unwrap()
-        .dangerous_into_config_without_writing()
+    Box::pin(Config::load_from_path_optional_verify_credentials(
+        &config_glob,
+        false,
+    ))
+    .await
+    .unwrap()
+    .dangerous_into_config_without_writing()
 }

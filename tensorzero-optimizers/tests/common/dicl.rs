@@ -13,7 +13,7 @@ use tensorzero::{
     RenderedSample, Role, System,
 };
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config, ConfigFileGlob, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inferences_clickhouse, CLICKHOUSE_URL,
@@ -110,14 +110,13 @@ pub async fn test_dicl_optimization_chat() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config_load_info = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
-    let config = config_load_info.dangerous_into_config_without_writing();
-    let snapshot_hash = SnapshotHash::new_test();
+    .unwrap()
+    .dangerous_into_config_without_writing();
 
     let job_handle = optimizer_info
         .launch(
@@ -127,7 +126,6 @@ pub async fn test_dicl_optimization_chat() {
             &credentials,
             &clickhouse,
             Arc::new(config),
-            snapshot_hash,
         )
         .await
         .unwrap();
@@ -397,14 +395,13 @@ pub async fn test_dicl_optimization_json() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config_load_info = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
-    let config = config_load_info.dangerous_into_config_without_writing();
-    let snapshot_hash = SnapshotHash::new_test();
+    .unwrap()
+    .dangerous_into_config_without_writing();
 
     let job_handle = optimizer_info
         .launch(
@@ -414,7 +411,6 @@ pub async fn test_dicl_optimization_json() {
             &credentials,
             &clickhouse,
             Arc::new(config),
-            snapshot_hash,
         )
         .await
         .unwrap();

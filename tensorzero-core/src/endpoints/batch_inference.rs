@@ -20,7 +20,6 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
-use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::endpoints::RequestApiKeyExtension;
@@ -261,7 +260,7 @@ pub async fn start_batch_inference(
     let resolved_inputs = params
         .inputs
         .into_iter()
-        .map(|input| input.into_lazy_resolved_input(context))
+        .map(|input| input.into_lazy_resolved_input(&context))
         .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
 
     // If we have a pinned variant (only one candidate), skip sampling and directly start the batch inference
@@ -492,7 +491,6 @@ pub struct PollPathParams {
 pub async fn poll_batch_inference_handler(
     State(AppStateData {
         config,
-        snapshot_hash,
         http_client,
         clickhouse_connection_info,
         ..
@@ -512,7 +510,6 @@ pub async fn poll_batch_inference_handler(
                 &batch_request,
                 response,
                 &config,
-                snapshot_hash.clone(),
             )
             .await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
@@ -857,7 +854,6 @@ pub async fn write_poll_batch_inference(
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
-    snapshot_hash: SnapshotHash,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending {
@@ -882,7 +878,6 @@ pub async fn write_poll_batch_inference(
                 batch_request,
                 response,
                 config,
-                snapshot_hash,
             )
             .await?;
             // NOTE - in older versions of TensorZero, we were missing this call.
@@ -962,7 +957,6 @@ pub async fn write_completed_batch_inference<'a>(
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &Config,
-    snapshot_hash: SnapshotHash,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(
@@ -1095,11 +1089,11 @@ pub async fn write_completed_batch_inference<'a>(
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
-            snapshot_hash: snapshot_hash.clone(),
+            snapshot_hash: config.hash.clone(),
         };
         model_inference_rows_to_write.extend(
             inference_result
-                .get_serialized_model_inferences(snapshot_hash.clone())
+                .get_serialized_model_inferences(config.hash.clone())
                 .await,
         );
         match inference_result {

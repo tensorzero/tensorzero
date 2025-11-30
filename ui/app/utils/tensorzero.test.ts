@@ -24,12 +24,13 @@ describe("update datapoints", () => {
     // Verify initial state: is_custom should be false, source_inference_id should match
     const initialDatapoint = await tensorZeroClient.getDatapoint(
       createResult.id,
+      /*datasetName=*/ "test",
     );
-    expect(initialDatapoint).not.toBeNull();
+    expect(initialDatapoint).toBeDefined();
     expect(initialDatapoint?.is_custom).toBe(false);
     expect(initialDatapoint?.source_inference_id).toBe(inferenceId);
 
-    // TypeScript refinement: we've verified initialDatapoint is not null
+    // TypeScript refinement: we've verified initialDatapoint is defined
     if (!initialDatapoint || initialDatapoint.type !== "json") {
       throw new Error("Expected JSON datapoint");
     }
@@ -45,9 +46,7 @@ describe("update datapoints", () => {
     const updateResult = await tensorZeroClient.updateDatapoint("test", {
       type: "json",
       id: initialDatapoint.id,
-      // TODO (#4674 #4675): fix this casting
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      input: initialDatapoint.input as any, // Type conversion needed: StoredInput has ObjectStoragePointer files, Input expects full file types
+      input: initialDatapoint.input,
       output: {
         raw: JSON.stringify(updatedOutput),
       },
@@ -57,6 +56,7 @@ describe("update datapoints", () => {
     // Verify updated state
     const updatedDatapoint = await tensorZeroClient.getDatapoint(
       updateResult.id,
+      /*datasetName=*/ "test",
     );
 
     // New ID should be created
@@ -70,13 +70,13 @@ describe("update datapoints", () => {
   });
 
   test("should list datapoints", async () => {
-    const datapoints = await tensorZeroClient.listDatapoints(
-      "foo",
-      "extract_entities",
-      10,
-    );
-    expect(datapoints.length).toBe(10);
-    for (const datapoint of datapoints) {
+    const datapoints = await tensorZeroClient.listDatapoints("foo", {
+      function_name: "extract_entities",
+      limit: 10,
+      offset: 0,
+    });
+    expect(datapoints.datapoints.length).toBe(10);
+    for (const datapoint of datapoints.datapoints) {
       expect(datapoint.function_name).toBe("extract_entities");
     }
   });
