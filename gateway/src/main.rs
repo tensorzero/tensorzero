@@ -1,4 +1,4 @@
-use clap::{Args, Parser};
+use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
@@ -6,7 +6,6 @@ use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -19,52 +18,17 @@ use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_mi
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::observability::{self, LogFormat};
+use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
+mod cli;
 mod router;
 mod routes;
 
+use cli::GatewayArgs;
+
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-#[derive(Parser, Debug)]
-#[command(version, about)]
-struct GatewayArgs {
-    /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
-    #[arg(long)]
-    config_file: Option<PathBuf>,
-
-    /// Use a default config file. Incompatible with `--config-file`
-    #[arg(long)]
-    default_config: bool,
-
-    /// Sets the log format used for all gateway logs.
-    #[arg(long)]
-    #[arg(value_enum)]
-    #[clap(default_value_t = LogFormat::default())]
-    log_format: LogFormat,
-
-    #[command(flatten)]
-    migration_commands: MigrationCommands,
-}
-
-#[derive(Args, Debug)]
-#[group(multiple = false)]
-struct MigrationCommands {
-    /// Run ClickHouse migrations manually then exit.
-    // TODO: remove
-    #[arg(long, alias = "run-migrations")]
-    run_clickhouse_migrations: bool,
-
-    /// Run PostgreSQL migrations manually then exit.
-    #[arg(long)]
-    run_postgres_migrations: bool,
-
-    /// Create an API key then exit.
-    #[arg(long)]
-    create_api_key: bool,
-}
 
 #[expect(clippy::print_stdout)]
 fn print_key(key: &secrecy::SecretString) {
@@ -102,14 +66,14 @@ async fn main() {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
-    if args.migration_commands.create_api_key {
+    if args.early_exit_commands.create_api_key {
         handle_create_api_key()
             .await
             .expect_pretty("Failed to create API key");
         return;
     }
 
-    if args.migration_commands.run_clickhouse_migrations {
+    if args.early_exit_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
@@ -117,7 +81,7 @@ async fn main() {
         return;
     }
 
-    if args.migration_commands.run_postgres_migrations {
+    if args.early_exit_commands.run_postgres_migrations {
         manual_run_postgres_migrations()
             .await
             .expect_pretty("Failed to run PostgreSQL migrations");
