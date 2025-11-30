@@ -1,4 +1,4 @@
-import type { Datapoint } from "~/types/tensorzero";
+import type { Datapoint, DatapointFilter } from "~/types/tensorzero";
 import {
   Table,
   TableBody,
@@ -20,6 +20,8 @@ import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher, useNavigate } from "react-router";
+import { useForm } from "react-hook-form";
+import { Form } from "~/components/ui/form";
 import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
@@ -39,17 +41,20 @@ import {
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useAllFunctionConfigs } from "~/context/config";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
+import DatapointFilterBuilder from "~/components/querybuilder/DatapointFilterBuilder";
 
 export default function DatasetRowTable({
   rows,
   dataset_name,
   function_name,
   search_query,
+  filter,
 }: {
   rows: Datapoint[];
   dataset_name: string;
   function_name: string | undefined;
   search_query: string | undefined;
+  filter: DatapointFilter | undefined;
 }) {
   const activeFetcher = useFetcher();
   const navigate = useNavigate();
@@ -65,14 +70,21 @@ export default function DatasetRowTable({
   const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
     null,
   );
+  const [filterAdvanced, setFilterAdvanced] = useState<
+    DatapointFilter | undefined
+  >(filter);
+
+  // Form for the filter sheet (needed for FormLabel in DatapointFilterBuilder)
+  const filterForm = useForm();
 
   // Sync local filter state with props when sheet opens
   useEffect(() => {
     if (filterOpen) {
       setFilterFunctionName(function_name ?? null);
       setFilterSearchQuery(search_query ?? "");
+      setFilterAdvanced(filter);
     }
-  }, [filterOpen, function_name, search_query]);
+  }, [filterOpen, function_name, search_query, filter]);
 
   const handleFilterSubmit = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -87,6 +99,12 @@ export default function DatasetRowTable({
       searchParams.set("search_query", filterSearchQuery);
     } else {
       searchParams.delete("search_query");
+    }
+
+    if (filterAdvanced) {
+      searchParams.set("filter", JSON.stringify(filterAdvanced));
+    } else {
+      searchParams.delete("filter");
     }
 
     searchParams.delete("offset");
@@ -126,7 +144,11 @@ export default function DatasetRowTable({
             <TableHead className="w-[50px]">
               <div className="flex justify-end">
                 <Button
-                  variant={function_name || search_query ? "default" : "ghost"}
+                  variant={
+                    function_name || search_query || filter
+                      ? "default"
+                      : "ghost"
+                  }
                   size="iconSm"
                   onClick={() => setFilterOpen(true)}
                 >
@@ -246,57 +268,72 @@ export default function DatasetRowTable({
       </Dialog>
 
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
-        <SheetContent side="right" className="flex flex-col">
-          <SheetHeader>
-            <SheetTitle>Filter</SheetTitle>
-          </SheetHeader>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col md:w-5/6 xl:w-1/2"
+        >
+          <Form {...filterForm}>
+            <SheetHeader>
+              <SheetTitle>Filter</SheetTitle>
+            </SheetHeader>
 
-          <div className="mt-4 flex-1 space-y-4">
-            <div>
-              <label className="text-sm font-medium">Function</label>
-              <div className="mt-1 flex items-center gap-2">
-                <div className="flex-1">
-                  <FunctionSelector
-                    selected={filterFunctionName}
-                    onSelect={setFilterFunctionName}
-                    functions={functions}
-                  />
+            <div className="mt-4 flex-1 space-y-4">
+              <div>
+                <label className="text-sm font-medium">Function</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex-1">
+                    <FunctionSelector
+                      selected={filterFunctionName}
+                      onSelect={setFilterFunctionName}
+                      functions={functions}
+                    />
+                  </div>
+                  {filterFunctionName && (
+                    <Button
+                      variant="outline"
+                      onClick={handleClearFunctionFilter}
+                    >
+                      Clear
+                    </Button>
+                  )}
                 </div>
-                {filterFunctionName && (
-                  <Button variant="outline" onClick={handleClearFunctionFilter}>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Search Query</label>
+                  <Badge variant="outline" className="text-xs">
+                    Experimental
+                  </Badge>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    value={filterSearchQuery}
+                    onChange={(e) => setFilterSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleFilterSubmit();
+                      }
+                    }}
+                  />
+                  <Button variant="outline" onClick={handleClearSearchFilter}>
                     Clear
                   </Button>
-                )}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">Search Query</label>
-                <Badge variant="outline" className="text-xs">
-                  Experimental
-                </Badge>
-              </div>
-              <div className="mt-1 flex items-center gap-2">
-                <Input
-                  value={filterSearchQuery}
-                  onChange={(e) => setFilterSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleFilterSubmit();
-                    }
-                  }}
+              <div>
+                <DatapointFilterBuilder
+                  datapointFilter={filterAdvanced}
+                  setDatapointFilter={setFilterAdvanced}
                 />
-                <Button variant="outline" onClick={handleClearSearchFilter}>
-                  Clear
-                </Button>
               </div>
             </div>
-          </div>
 
-          <SheetFooter className="mt-4">
-            <Button onClick={handleFilterSubmit}>Apply Filters</Button>
-          </SheetFooter>
+            <SheetFooter className="mt-4">
+              <Button onClick={handleFilterSubmit}>Apply Filters</Button>
+            </SheetFooter>
+          </Form>
         </SheetContent>
       </Sheet>
     </div>

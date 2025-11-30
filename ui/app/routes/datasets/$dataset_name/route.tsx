@@ -19,6 +19,7 @@ import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
+import type { DatapointFilter } from "~/types/tensorzero";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -32,6 +33,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
   const function_name = url.searchParams.get("function_name") || undefined;
   const search_query = url.searchParams.get("search_query") || undefined;
+  const filterParam = url.searchParams.get("filter");
+  let filter: DatapointFilter | undefined;
+  if (filterParam) {
+    try {
+      filter = JSON.parse(filterParam) as DatapointFilter;
+    } catch {
+      // Invalid JSON, ignore
+    }
+  }
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
@@ -45,6 +55,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       function_name,
       search_query_experimental:
         search_query && search_query.length > 0 ? search_query : undefined,
+      filter,
     }),
   ]);
   const count_info = counts.find(
@@ -66,6 +77,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     rowsSkipped,
     function_name,
     search_query,
+    filter,
   };
 }
 
@@ -136,6 +148,7 @@ export default function DatasetDetailPage({
     rowsSkipped,
     function_name,
     search_query,
+    filter,
   } = loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
@@ -195,6 +208,7 @@ export default function DatasetDetailPage({
           dataset_name={count_info.dataset_name}
           function_name={function_name}
           search_query={search_query}
+          filter={filter}
         />
         <PageButtons
           onPreviousPage={handlePreviousPage}

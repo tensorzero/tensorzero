@@ -2,6 +2,7 @@ import { useState, useId, useEffect, memo } from "react";
 import { z } from "zod";
 import type {
   InferenceFilter,
+  DatapointFilter,
   MetricConfig,
   TagComparisonOperator,
   FloatComparisonOperator,
@@ -158,15 +159,16 @@ const BooleanValueSelect = memo(function BooleanValueSelect({
 
 // Row Components
 
-export interface TagFilterRowProps {
-  filter: InferenceFilter & { type: "tag" };
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+export interface TagFilterRowProps<
+  T extends InferenceFilter | DatapointFilter = InferenceFilter,
+> {
+  filter: T & { type: "tag" };
+  onChange: (newFilter: T | undefined) => void;
 }
 
-export const TagFilterRow = memo(function TagFilterRow({
-  filter,
-  onChange,
-}: TagFilterRowProps) {
+export const TagFilterRow = memo(function TagFilterRow<
+  T extends InferenceFilter | DatapointFilter,
+>({ filter, onChange }: TagFilterRowProps<T>) {
   const [keyError, setKeyError] = useState<string>();
   const [valueError, setValueError] = useState<string>();
 
