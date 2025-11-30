@@ -274,6 +274,17 @@ pub async fn mutate_variant(
         }
     }
 
+    // Log the generated mutated templates at debug level
+    let template_names: Vec<&String> = templates.keys().collect();
+    tracing::debug!(
+        "Generated {} mutated templates: {:?}",
+        templates.len(),
+        template_names
+    );
+    for (template_name, content) in &templates {
+        tracing::debug!("Mutated template '{}' content:\n{}", template_name, content);
+    }
+
     // Generate variant name: {prefix}-iter-{iteration}-{parent_name}
     let mutated_variant_name = format!(
         "{}-iter-{}-{}",
