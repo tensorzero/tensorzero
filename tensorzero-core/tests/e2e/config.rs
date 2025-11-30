@@ -268,11 +268,10 @@ async fn test_get_config_snapshot_success() {
     // Create a test config snapshot
     let config_toml = format!(
         r#"
-[gateway]
-bind = "0.0.0.0:3000"
-
-[models.test_model_{random_id}]
-routing = ["test_provider::gpt-4"]
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
 "#
     );
 
@@ -297,8 +296,8 @@ routing = ["test_provider::gpt-4"]
     // Compare by serializing to TOML and checking it contains our model definition
     let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
     assert!(
-        serialized_config.contains(&format!("test_model_{random_id}")),
-        "Config should contain our test model"
+        serialized_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
     );
     assert_eq!(retrieved_snapshot.extra_templates, extra_templates);
 }
@@ -353,11 +352,10 @@ async fn test_get_config_snapshot_with_extra_templates() {
     // Create a config snapshot with multiple extra templates
     let config_toml = format!(
         r#"
-[gateway]
-bind = "0.0.0.0:3000"
-
-[models.test_model_{random_id}]
-routing = ["test_provider::gpt-4"]
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
 "#
     );
 
@@ -393,8 +391,8 @@ routing = ["test_provider::gpt-4"]
     // Compare by serializing to TOML and checking it contains our model definition
     let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
     assert!(
-        serialized_config.contains(&format!("test_model_{random_id}")),
-        "Config should contain our test model"
+        serialized_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
     );
     assert_eq!(retrieved_snapshot.extra_templates.len(), 3);
     assert_eq!(

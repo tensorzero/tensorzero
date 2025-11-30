@@ -114,13 +114,20 @@ impl Default for SnapshotHash {
 
 impl ConfigSnapshot {
     pub fn new(
-        sorted_config_toml: toml::Table,
+        config_toml: toml::Table,
         extra_templates: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        let config = UninitializedConfig::try_from(sorted_config_toml.clone())?;
-        let hash = ConfigSnapshot::hash(&sorted_config_toml, &extra_templates)?;
+        let config = UninitializedConfig::try_from(config_toml)?;
+        let stored_config = config.into();
+        let stored_config_toml =
+            prepare_table_for_snapshot(toml::Table::try_from(&stored_config).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize stored config: {e}"),
+                })
+            })?);
+        let hash = ConfigSnapshot::hash(&stored_config_toml, &extra_templates)?;
         Ok(Self {
-            config: config.into(),
+            config: stored_config,
             hash,
             extra_templates,
             __private: (),
@@ -218,7 +225,7 @@ impl ConfigSnapshot {
 /// Recursively sorts every sub-table of the toml::Table so that the config is
 /// stable to rearranging on disk.
 /// This should be done prior to hashing.
-pub fn prepare_table_for_snapshot(raw_config: toml::Table) -> toml::Table {
+fn prepare_table_for_snapshot(raw_config: toml::Table) -> toml::Table {
     internal_prepare_table_for_snapshot(&raw_config)
 }
 
