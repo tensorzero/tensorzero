@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import { isInvalidJsonMarker } from "~/components/input_output/content_blocks/UnknownContentBlock";
 import {
   data,
   isRouteErrorResponse,
@@ -86,20 +85,9 @@ export function validateJsonOutput(
 }
 
 export function validateInput(
-  input: Input,
+  _input: Input,
 ): { valid: true } | { valid: false; error: string } {
-  // Check all messages for unknown content blocks with invalid JSON
-  for (const message of input.messages) {
-    for (const block of message.content) {
-      if (block.type === "unknown" && isInvalidJsonMarker(block.data)) {
-        return {
-          valid: false,
-          error:
-            "Invalid JSON in Unknown content block. Please fix the JSON format before saving.",
-        };
-      }
-    }
-  }
+  // TODO (#4903): Handle invalid intermediate states; right it'll keep stale version (but there is a visual cue)
   return { valid: true };
 }
 

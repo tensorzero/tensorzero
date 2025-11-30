@@ -5,27 +5,10 @@ import { type ReactNode } from "react";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import type { JsonValue } from "~/types/tensorzero";
 
-// Marker type for invalid JSON - allows validation at save time
-export interface InvalidJsonMarker {
-  __invalid_json__: true;
-  raw: string;
-}
-
-export function isInvalidJsonMarker(
-  value: unknown,
-): value is InvalidJsonMarker {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "__invalid_json__" in value &&
-    (value as InvalidJsonMarker).__invalid_json__ === true
-  );
-}
-
 interface UnknownContentBlockProps {
-  data: JsonValue | InvalidJsonMarker;
+  data: JsonValue;
   isEditing?: boolean;
-  onChange?: (data: JsonValue | InvalidJsonMarker) => void;
+  onChange?: (data: JsonValue) => void;
   actionBar?: ReactNode;
 }
 
@@ -35,21 +18,27 @@ export function UnknownContentBlock({
   onChange,
   actionBar,
 }: UnknownContentBlockProps) {
-  const getDisplayValue = (d: JsonValue | InvalidJsonMarker) => {
-    if (isInvalidJsonMarker(d)) {
-      return d.raw;
-    }
+  const getDisplayValue = (d: JsonValue) => {
     return JSON.stringify(d, null, 2);
+  };
+
+  const isInvalidJson = (value: string) => {
+    try {
+      JSON.parse(value);
+      return false;
+    } catch {
+      return true;
+    }
   };
 
   const [displayValue, setDisplayValue] = useState(getDisplayValue(data));
   const [jsonError, setJsonError] = useState<string | null>(
-    isInvalidJsonMarker(data) ? "Invalid JSON format" : null,
+    isInvalidJson(displayValue) ? "Invalid JSON format" : null,
   );
 
   useEffect(() => {
     setDisplayValue(getDisplayValue(data));
-    setJsonError(isInvalidJsonMarker(data) ? "Invalid JSON format" : null);
+    setJsonError(null);
   }, [data]);
 
   const handleChange = (value: string) => {
@@ -60,8 +49,7 @@ export function UnknownContentBlock({
       onChange?.(parsed);
     } catch {
       setJsonError("Invalid JSON format");
-      // Store the invalid JSON with a marker so validation can detect it
-      onChange?.({ __invalid_json__: true, raw: value });
+      // TODO (#4903): Handle invalid intermediate states; right it'll keep stale version (but there is a visual cue)
     }
   };
 

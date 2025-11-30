@@ -42,7 +42,7 @@ interface FileAdvancedAccordionProps {
   detail?: Detail;
   isEditing?: boolean;
   onFilenameChange?: (filename: string | undefined) => void;
-  onMimeTypeChange?: (mimeType: string | null) => void;
+  onMimeTypeChange?: (mimeType: string) => void;
   onDetailChange?: (detail: Detail | undefined) => void;
 }
 
@@ -60,7 +60,7 @@ function FileAdvancedAccordion({
   onDetailChange,
 }: FileAdvancedAccordionProps) {
   const handleMimeTypeChange = (value: string) => {
-    onMimeTypeChange?.(value.trim() === "" ? null : value);
+    onMimeTypeChange?.(value);
   };
 
   const handleDetailChange = (value: string) => {
@@ -299,7 +299,7 @@ function ImageContentBlock({
           isEditing={isEditing}
           onFilenameChange={(filename) => onChange?.({ ...block, filename })}
           onMimeTypeChange={(mime_type) =>
-            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+            onChange?.({ ...block, mime_type: mime_type || block.mime_type })
           }
           onDetailChange={(detail) => onChange?.({ ...block, detail })}
         />
@@ -351,7 +351,7 @@ function AudioContentBlock({
           isEditing={isEditing}
           onFilenameChange={(filename) => onChange?.({ ...block, filename })}
           onMimeTypeChange={(mime_type) =>
-            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+            onChange?.({ ...block, mime_type: mime_type || block.mime_type })
           }
           onDetailChange={(detail) => onChange?.({ ...block, detail })}
         />
@@ -531,7 +531,7 @@ function UrlFileContentBlock({
             isEditing={true}
             onFilenameChange={(filename) => onChange?.({ ...block, filename })}
             onMimeTypeChange={(mime_type) =>
-              onChange?.({ ...block, mime_type })
+              onChange?.({ ...block, mime_type: mime_type || null })
             }
             onDetailChange={(detail) => onChange?.({ ...block, detail })}
           />

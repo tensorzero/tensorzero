@@ -119,9 +119,7 @@ export function ContentBlockElement({
         <UnknownContentBlock
           data={block.data}
           isEditing={isEditing}
-          onChange={(data) =>
-            onChange?.({ ...block, data: data as typeof block.data })
-          }
+          onChange={(data) => onChange?.({ ...block, data })}
           actionBar={actionBar}
         />
       );

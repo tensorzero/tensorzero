@@ -1,10 +1,5 @@
-import { useState } from "react";
-import {
-  UnknownContentBlock,
-  type InvalidJsonMarker,
-} from "./UnknownContentBlock";
+import { UnknownContentBlock } from "./UnknownContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { JsonValue } from "~/types/tensorzero";
 
 const meta = {
   title: "Input Output/Content Blocks/UnknownContentBlock",
@@ -49,33 +44,6 @@ export const NestedObject: Story = {
       },
     },
     isEditing: false,
-  },
-};
-
-export const Editing: Story = {
-  name: "Editing",
-  args: {
-    data: { custom_field: "Edit me!", provider_specific: true },
-    isEditing: true,
-    onChange: () => {},
-  },
-  render: function EditingStory() {
-    const [data, setData] = useState<JsonValue | InvalidJsonMarker>({
-      custom_field: "Edit me!",
-      provider_specific: true,
-    });
-    return (
-      <UnknownContentBlock data={data} isEditing={true} onChange={setData} />
-    );
-  },
-};
-
-export const InvalidJson: Story = {
-  name: "Invalid JSON (Error State)",
-  args: {
-    data: { __invalid_json__: true, raw: '{ "broken": json' },
-    isEditing: true,
-    onChange: () => {},
   },
 };
 
