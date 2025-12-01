@@ -9,6 +9,9 @@ use crate::db::inferences::{
 };
 use crate::stored_inference::StoredInference;
 
+// Re-exported for backwards compatibility.
+pub use crate::endpoints::shared_types::OrderDirection;
+
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct FloatMetricFilter {
@@ -87,16 +90,6 @@ pub enum TagComparisonOperator {
     Equal,
     #[serde(rename = "!=")]
     NotEqual,
-}
-
-/// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
-#[ts(export)]
-pub enum OrderDirection {
-    #[serde(rename = "ascending")]
-    Asc,
-    #[serde(rename = "descending")]
-    Desc,
 }
 
 /// The property to order by.
@@ -289,4 +282,36 @@ pub struct GetInferenceBoundsResponse {
 
     /// The total number of inferences matching the filter criteria.
     pub count: u64,
+}
+
+/// Metadata about an inference.
+/// Used by the `GET /internal/inferences` endpoint.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS, Clone, PartialEq)]
+#[ts(export)]
+pub struct InternalInferenceMetadata {
+    /// The ID of the inference.
+    pub id: Uuid,
+
+    /// The function name of the inference.
+    pub function_name: String,
+
+    /// The variant name of the inference.
+    pub variant_name: String,
+
+    /// The episode ID of the inference.
+    pub episode_id: Uuid,
+
+    /// The function type of the inference.
+    pub function_type: String,
+
+    /// The timestamp of the inference.
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Response containing the list of inferences by ID.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InternalListInferencesByIdResponse {
+    /// The list of inferences.
+    pub inferences: Vec<InternalInferenceMetadata>,
 }

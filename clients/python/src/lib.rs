@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 /// Implements a Python tensorzero client, using `pyo3` to wrap the existing Rust client.
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
@@ -72,6 +73,7 @@ use tensorzero_rust::{
 };
 use tokio::sync::Mutex;
 use url::Url;
+use uuid::Uuid;
 
 mod evaluation_handlers;
 mod gil_helpers;
@@ -1152,8 +1154,23 @@ impl TensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints(this: PyRef<'_, Self>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (*, ids, dataset_name = None))]
+    fn get_datapoints(
+        this: PyRef<'_, Self>,
+        ids: Vec<Bound<'_, PyAny>>,
+        dataset_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .iter()
@@ -1163,7 +1180,7 @@ impl TensorZeroGateway {
                     .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid UUID: {e}")))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let fut = client.get_datapoints(ids);
+        let fut = client.get_datapoints(dataset_name, ids);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
@@ -1335,7 +1352,8 @@ impl TensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -1343,18 +1361,19 @@ impl TensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
@@ -1399,6 +1418,21 @@ impl TensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs (keeping as Option)
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
+            })
+            .transpose()?;
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1406,6 +1440,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
+            datapoint_ids,
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
@@ -1545,7 +1580,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -1601,9 +1636,14 @@ impl TensorZeroGateway {
         // for JSON schema compilation
         // TODO (#4259): remove the tokio spawn from that function and remove this guard.
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -2313,18 +2353,30 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
+    #[pyo3(signature = (*, ids, dataset_name = None))]
     fn get_datapoints<'a>(
         this: PyRef<'a, Self>,
         ids: Vec<Bound<'a, PyAny>>,
+        dataset_name: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .into_iter()
             .map(|id| python_uuid_to_uuid("id", id))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.get_datapoints(ids).await;
+            let res = client.get_datapoints(dataset_name, ids).await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
@@ -2514,7 +2566,8 @@ impl AsyncTensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -2522,18 +2575,19 @@ impl AsyncTensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
@@ -2571,6 +2625,21 @@ impl AsyncTensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
+            })
+            .transpose()?;
+
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
             let app_state = client.get_app_state_data().ok_or_else(|| {
@@ -2586,6 +2655,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
+                datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
@@ -2826,7 +2896,11 @@ impl AsyncTensorZeroGateway {
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

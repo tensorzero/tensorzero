@@ -1,30 +1,30 @@
 import type {
-  DisplayInput,
-  DisplayInputMessage,
-  DisplayInputMessageContent,
-  FileContent,
-  Input,
-  InputMessage,
-  InputMessageContent,
-  ModelInferenceInputMessage,
-  ModelInferenceInputMessageContent,
-  ResolvedBase64File,
-  Role,
-  LegacyTextInput,
+  ZodDisplayInput,
+  ZodDisplayInputMessage,
+  ZodDisplayInputMessageContent,
+  ZodFileContent,
+  ZodInput,
+  ZodInputMessage,
+  ZodInputMessageContent,
+  ZodModelInferenceInputMessage,
+  ZodModelInferenceInputMessageContent,
+  ZodResolvedBase64File,
+  ZodRole,
+  ZodLegacyTextInput,
 } from "./clickhouse/common";
 import type {
+  File,
   FunctionConfig,
   JsonValue,
-  StoredInput,
-  StoredInputMessage,
-  StoredInputMessageContent,
+  Input,
+  InputMessageContent,
 } from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(
-  input: Input,
+  input: ZodInput,
   functionConfig: FunctionConfig | null,
-): Promise<DisplayInput> {
+): Promise<ZodDisplayInput> {
   const resolvedMessages = await resolveMessages(
     input.messages,
     functionConfig,
@@ -36,9 +36,9 @@ export async function resolveInput(
 }
 
 export async function resolveMessages(
-  messages: InputMessage[],
+  messages: ZodInputMessage[],
   functionConfig: FunctionConfig | null,
-): Promise<DisplayInputMessage[]> {
+): Promise<ZodDisplayInputMessage[]> {
   return Promise.all(
     messages.map(async (message) => {
       return resolveMessage(message, functionConfig);
@@ -47,8 +47,8 @@ export async function resolveMessages(
 }
 
 export async function resolveModelInferenceMessages(
-  messages: ModelInferenceInputMessage[],
-): Promise<DisplayInputMessage[]> {
+  messages: ZodModelInferenceInputMessage[],
+): Promise<ZodDisplayInputMessage[]> {
   return Promise.all(
     messages.map(async (message) => {
       return resolveModelInferenceMessage(message);
@@ -56,9 +56,9 @@ export async function resolveModelInferenceMessages(
   );
 }
 async function resolveMessage(
-  message: InputMessage,
+  message: ZodInputMessage,
   functionConfig: FunctionConfig | null,
-): Promise<DisplayInputMessage> {
+): Promise<ZodDisplayInputMessage> {
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
       return resolveContent(content, message.role, functionConfig);
@@ -71,8 +71,8 @@ async function resolveMessage(
 }
 
 async function resolveModelInferenceMessage(
-  message: ModelInferenceInputMessage,
-): Promise<DisplayInputMessage> {
+  message: ZodModelInferenceInputMessage,
+): Promise<ZodDisplayInputMessage> {
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
       return resolveModelInferenceContent(content);
@@ -85,10 +85,10 @@ async function resolveModelInferenceMessage(
 }
 
 async function resolveContent(
-  content: InputMessageContent,
-  role: Role,
+  content: ZodInputMessageContent,
+  role: ZodRole,
   functionConfig: FunctionConfig | null,
-): Promise<DisplayInputMessageContent> {
+): Promise<ZodDisplayInputMessageContent> {
   switch (content.type) {
     case "tool_call":
     case "tool_result":
@@ -138,8 +138,8 @@ async function resolveContent(
 }
 
 async function resolveModelInferenceContent(
-  content: ModelInferenceInputMessageContent,
-): Promise<DisplayInputMessageContent> {
+  content: ZodModelInferenceInputMessageContent,
+): Promise<ZodDisplayInputMessageContent> {
   switch (content.type) {
     case "text":
       // Do not use prepareDisplayText here because these are model inferences and should be post-templating
@@ -192,7 +192,9 @@ async function resolveModelInferenceContent(
       }
   }
 }
-async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
+async function resolveFile(
+  content: ZodFileContent,
+): Promise<ZodResolvedBase64File> {
   const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
   const data = `data:${content.file.mime_type};base64,${json.data}`;
@@ -207,10 +209,10 @@ async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
 // So as we prepare the input for display, we check this and return an unambiguous type of structured or unstructured text.
 // TODO (Gabriel): this function uses legacy types and should be deprecated ASAP. It won't handle sad paths very well.
 function prepareDisplayText(
-  textBlock: LegacyTextInput,
-  role: Role,
+  textBlock: ZodLegacyTextInput,
+  role: ZodRole,
   functionConfig: FunctionConfig | null,
-): DisplayInputMessageContent {
+): ZodDisplayInputMessageContent {
   // If there's no function config, we can't do any templating because of legacy templates...
   if (!functionConfig) {
     return {
@@ -281,46 +283,40 @@ function prepareDisplayText(
   };
 }
 
-// ===== StoredInput =====
-// TODO: These functions should be deprecated as we clean up the types...
+/**
+ * Loads the content of files for an `Input`.
+ * Converts `ObjectStoragePointer` to `File` with `file_type: "object_storage"`.
+ *
+ * TODO (#4674 #4675): This will be handled in the gateway.
+ */
+export async function loadFileDataForInput(input: Input): Promise<Input> {
+  const resolvedMessages = await Promise.all(
+    input.messages.map(async (message) => {
+      const resolvedContent = await Promise.all(
+        message.content.map(async (content) => {
+          return loadFileDataForInputContent(content);
+        }),
+      );
+      return {
+        role: message.role,
+        content: resolvedContent,
+      };
+    }),
+  );
 
-export async function resolveStoredInput(
-  input: StoredInput,
-): Promise<DisplayInput> {
-  const resolvedMessages = await resolveStoredInputMessages(input.messages);
   return {
-    ...input,
+    system: input.system,
     messages: resolvedMessages,
   };
 }
 
-export async function resolveStoredInputMessages(
-  messages: StoredInputMessage[],
-): Promise<DisplayInputMessage[]> {
-  return Promise.all(
-    messages.map(async (message) => {
-      return resolveStoredInputMessage(message);
-    }),
-  );
-}
-
-async function resolveStoredInputMessage(
-  message: StoredInputMessage,
-): Promise<DisplayInputMessage> {
-  const resolvedContent = await Promise.all(
-    message.content.map(async (content) => {
-      return resolveStoredInputMessageContent(content);
-    }),
-  );
-  return {
-    ...message,
-    content: resolvedContent,
-  };
-}
-
-async function resolveStoredInputMessageContent(
-  content: StoredInputMessageContent,
-): Promise<DisplayInputMessageContent> {
+/**
+ * Resolves a StoredInputMessageContent to InputMessageContent.
+ * For files: converts StoredFile to File with file_type: "object_storage" by fetching data.
+ */
+async function loadFileDataForInputContent(
+  content: InputMessageContent,
+): Promise<InputMessageContent> {
   switch (content.type) {
     case "tool_call":
     case "tool_result":
@@ -330,36 +326,70 @@ async function resolveStoredInputMessageContent(
     case "template":
     case "text":
       return content;
-    case "file":
+    case "file": {
+      const loadedFile = await loadInputFileData(content);
+      return {
+        type: "file",
+        ...loadedFile,
+      };
+    }
+  }
+}
+
+/**
+ * Loads the data of a `file`, converting `ObjectStoragePointer` to `ObjectStorage` or `ObjectStorageError`.
+ * @param file - The file to load.
+ * @returns Loaded file.
+ */
+async function loadInputFileData(file: File): Promise<File> {
+  switch (file.file_type) {
+    // These types should be input-only, and if we need to resolve then on the FE,
+    // it represents an error (because we needed to store them).
+    case "url":
+    case "base64": {
+      throw new Error(
+        "URL and base64 files should not be passed to `loadInputFile`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    }
+    // These types are already resolved on the backend.
+    case "object_storage":
+      return file;
+    case "object_storage_error":
+      return file;
+    // ObjectStoragePointer can be loaded in the UI.
+    case "object_storage_pointer": {
       try {
-        // Convert flattened ObjectStorageFile to nested FileContent structure
-        const fileContent: FileContent = {
+        const fileContent: ZodFileContent = {
           type: "file",
           file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
+            url: file.source_url,
+            mime_type: file.mime_type,
           },
-          storage_path: content.storage_path,
+          storage_path: file.storage_path,
         };
         const resolvedFile = await resolveFile(fileContent);
-        return {
-          type: "file",
-          file: {
-            data: resolvedFile.data,
-            mime_type: resolvedFile.mime_type,
-          },
-          storage_path: content.storage_path,
+        const loadedFile: File = {
+          file_type: "object_storage",
+          data: resolvedFile.data,
+          mime_type: resolvedFile.mime_type,
+          storage_path: file.storage_path,
+          source_url: file.source_url,
+          detail: file.detail,
+          filename: file.filename,
         };
+        return loadedFile;
       } catch (error) {
-        return {
-          type: "file_error",
-          file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
-          },
-          storage_path: content.storage_path,
+        const loadFileError: File = {
+          file_type: "object_storage_error",
+          source_url: file.source_url,
+          mime_type: file.mime_type,
+          storage_path: file.storage_path,
+          detail: file.detail,
+          filename: file.filename,
           error: error instanceof Error ? error.message : String(error),
         };
+        return loadFileError;
       }
+    }
   }
 }

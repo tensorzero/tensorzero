@@ -139,15 +139,18 @@ pub use usage::Usage;
  * Most of them are defined below.
  */
 
-/// A request is made that contains an Input
+/// API representation of an input to a model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct Input {
+    /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub system: Option<System>,
+
+    /// Messages in the input.
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -161,7 +164,7 @@ pub struct FetchContext<'a> {
 impl Input {
     pub fn into_lazy_resolved_input(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInput, Error> {
         Ok(LazyResolvedInput {
             system: self.system,
@@ -170,6 +173,19 @@ impl Input {
                 .into_iter()
                 .map(|message| message.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    pub fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(InputMessage::into_stored_input_message_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -212,7 +228,7 @@ impl LazyResolvedInput {
 impl InputMessage {
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessage, Error> {
         Ok(LazyResolvedInputMessage {
             role: self.role,
@@ -221,6 +237,21 @@ impl InputMessage {
                 .into_iter()
                 .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    pub fn into_stored_input_message_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -275,7 +306,7 @@ impl InputMessageContent {
     /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(Text { text }) => {
@@ -315,7 +346,7 @@ impl InputMessageContent {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important: we do *not* use `tokio::spawn` here. As a result, the future
@@ -365,7 +396,7 @@ impl InputMessageContent {
                         let detail = &base64_file.detail;
                         let filename = &base64_file.filename;
 
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let base64_file_for_path = Base64File::new(
                             source_url.clone(),
                             mime_type.clone(),
@@ -458,6 +489,45 @@ impl InputMessageContent {
             InputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
+        })
+    }
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    pub fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                StoredInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
+            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
+            InputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call.try_into()?)
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match file {
+                    // If `file` is external, we cannot convert it directly to a StoredFile.
+                    File::Url(_) | File::Base64(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Cannot resolve file input without a fetch context. Please provide a fetch context when creating the input.".to_string()
+                        }));
+                    }
+                    // If `file` is present in our object storage, even if it's an error, we can represent it as a StoredFile.
+                    File::ObjectStorage(ObjectStorageFile { file, .. })
+                    | File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                    }
+                }
+            }
+            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
         })
     }
 }
@@ -795,17 +865,101 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
-    /// A fully-qualified name specifying when this content block should
-    /// be included in the model provider input.
-    pub model_provider_name: Option<String>,
+    /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    /// A provider name for the model you specified (e.g. `my_openai`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
+}
+
+/// Custom deserializer to handle legacy `model_provider_name` field.
+///
+/// Legacy format: `tensorzero::model_name::{model}::provider_name::{provider}`
+/// Current format: separate `model_name` and `provider_name` fields
+///
+/// If both old and new fields are present, return an error.
+/// If parsing the legacy format fails (e.g. the expected prefix/suffix markers are missing), a deserialization error is returned.
+impl<'de> Deserialize<'de> for Unknown {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct UnknownDeserialize {
+            data: Value,
+            model_provider_name: Option<String>,
+            model_name: Option<String>,
+            provider_name: Option<String>,
+        }
+
+        /// Parse legacy FQN format: `tensorzero::model_name::XXX::provider_name::YYY`
+        /// Uses best-effort parsing: everything between prefix and `::provider_name::` is model_name,
+        /// everything after `::provider_name::` is provider_name.
+        fn parse_fully_qualified_model_provider_name(
+            fqn: &str,
+        ) -> Result<(String, String), String> {
+            const PREFIX: &str = "tensorzero::model_name::";
+            const SUFFIX: &str = "::provider_name::";
+
+            let Some(rest) = fqn.strip_prefix(PREFIX) else {
+                return Err(format!(
+                    "Invalid legacy `model_provider_name` format (missing prefix): {fqn}"
+                ));
+            };
+
+            let Some(suffix_pos) = rest.find(SUFFIX) else {
+                return Err(format!(
+                    "Invalid legacy `model_provider_name` format (missing provider_name): {fqn}"
+                ));
+            };
+
+            let model_name = &rest[..suffix_pos];
+            let provider_name = &rest[suffix_pos + SUFFIX.len()..];
+
+            Ok((model_name.to_string(), provider_name.to_string()))
+        }
+
+        let helper = UnknownDeserialize::deserialize(deserializer)?;
+
+        // If new fields are present, use them directly
+        if helper.model_name.is_some() || helper.provider_name.is_some() {
+            if helper.model_provider_name.is_some() {
+                return Err(serde::de::Error::custom(
+                    "Cannot specify both `model_provider_name` and `model_name`/`provider_name`",
+                ));
+            }
+            return Ok(Unknown {
+                data: helper.data,
+                model_name: helper.model_name,
+                provider_name: helper.provider_name,
+            });
+        }
+
+        // Parse legacy format if present
+        let (model_name, provider_name) = match helper.model_provider_name {
+            Some(ref fqn) => {
+                let (m, p) = parse_fully_qualified_model_provider_name(fqn)
+                    .map_err(serde::de::Error::custom)?;
+                (Some(m), Some(p))
+            }
+            None => (None, None),
+        };
+
+        Ok(Unknown {
+            data: helper.data,
+            model_name,
+            provider_name,
+        })
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -818,8 +972,13 @@ impl Unknown {
     }
 
     #[getter]
-    pub fn model_provider_name(&self) -> Option<String> {
-        self.model_provider_name.clone()
+    pub fn model_name(&self) -> Option<String> {
+        self.model_name.clone()
+    }
+
+    #[getter]
+    pub fn provider_name(&self) -> Option<String> {
+        self.provider_name.clone()
     }
 }
 
@@ -894,22 +1053,7 @@ pub enum ContentBlock {
     #[serde(alias = "image")]
     File(Box<LazyFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlock {
@@ -927,13 +1071,7 @@ impl ContentBlock {
                 )))
             }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(StoredContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(StoredContentBlock::Unknown(unknown)),
         }
     }
 
@@ -948,13 +1086,7 @@ impl ContentBlock {
                 file.resolve().await?.clone().into_owned(),
             ))),
             ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(ResolvedContentBlock::Unknown(unknown)),
         }
     }
 }
@@ -974,7 +1106,7 @@ impl RateLimitedInputContent for ContentBlock {
             ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
             ContentBlock::File(file) => file.estimated_input_token_usage(),
             ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
-            ContentBlock::Unknown { .. } => 0,
+            ContentBlock::Unknown(_) => 0,
         }
     }
 }
@@ -991,22 +1123,7 @@ pub enum StoredContentBlock {
     #[serde(alias = "image")]
     File(Box<StoredFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
@@ -1020,10 +1137,7 @@ pub enum ResolvedContentBlock {
     ToolResult(ToolResult),
     File(Box<ObjectStorageFile>),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ResolvedContentBlock {
@@ -1037,13 +1151,7 @@ impl ResolvedContentBlock {
                 ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
-            ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ResolvedContentBlock::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -1081,15 +1189,12 @@ pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
@@ -1100,10 +1205,7 @@ pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlockChatOutput {
@@ -2034,14 +2136,8 @@ pub async fn parse_chat_output(
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
             }
-            ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            } => {
-                output.push(ContentBlockChatOutput::Unknown {
-                    data,
-                    model_provider_name,
-                });
+            ContentBlockOutput::Unknown(unknown) => {
+                output.push(ContentBlockChatOutput::Unknown(unknown));
             }
         }
     }
@@ -2162,13 +2258,7 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -2181,13 +2271,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
                 ContentBlockOutput::ToolCall(tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
         }
     }
 }
@@ -3257,5 +3341,41 @@ mod tests {
         let usage_mixed = result_mixed.usage_considering_cached();
         assert_eq!(usage_mixed.input_tokens, None); // None propagates
         assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
+    }
+
+    #[test]
+    fn test_unknown_deserialize() {
+        // New format
+        let u: Unknown =
+            serde_json::from_value(json!({"data": {}, "model_name": "m", "provider_name": "p"}))
+                .unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Provider-agnostic (no targeting)
+        let u: Unknown = serde_json::from_value(json!({"data": {}})).unwrap();
+        assert!(u.model_name.is_none() && u.provider_name.is_none());
+
+        // Legacy FQN - simple
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Legacy FQN - model with colons (e.g. dummy::echo)
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::dummy::echo::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
+
+        // Invalid legacy FQN - errors
+        assert!(serde_json::from_value::<Unknown>(
+            json!({"data": {}, "model_provider_name": "bad"})
+        )
+        .is_err());
+        assert!(serde_json::from_value::<Unknown>(
+            json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+        )
+        .is_err());
+
+        // Conflict: both old and new fields
+        assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
     }
 }

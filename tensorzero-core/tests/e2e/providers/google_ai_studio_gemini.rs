@@ -514,3 +514,81 @@ async fn test_gemini_double_thought() {
         "Unexpected error message: {error}"
     );
 }
+
+/// Test that when tool_choice is "auto" but allowed_tools is set,
+/// the model is forced to use tools (because internally we set mode to Any).
+#[tokio::test]
+async fn test_google_ai_studio_gemini_tool_choice_auto_with_allowed_tools() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                }
+            ]},
+        "tool_choice": "auto",
+        "allowed_tools": ["get_humidity"],
+        "stream": false,
+        "variant_name": "google-ai-studio-gemini-flash-8b",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    // Verify the response contains a tool call to get_humidity
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        !content.is_empty(),
+        "Response should contain content blocks"
+    );
+
+    let tool_call = content
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .expect("Response should contain a tool_call block");
+    assert_eq!(
+        tool_call.get("name").unwrap().as_str().unwrap(),
+        "get_humidity"
+    );
+
+    // Check ClickHouse ChatInference
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    assert_eq!(tool_params.get("tool_choice").unwrap(), "auto");
+
+    // tools_available should only contain get_humidity since we specified allowed_tools
+    let tools_available = tool_params
+        .get("tools_available")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        tools_available.len(),
+        1,
+        "Should only have one tool available"
+    );
+    assert_eq!(tools_available[0].get("name").unwrap(), "get_humidity");
+}

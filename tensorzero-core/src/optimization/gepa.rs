@@ -26,7 +26,7 @@ fn default_timeout() -> u64 {
     300
 }
 
-fn default_include_inference_input_for_mutation() -> bool {
+fn default_include_inference_for_mutation() -> bool {
     true
 }
 
@@ -78,17 +78,17 @@ pub struct GEPAConfig {
     /// Client timeout in seconds for TensorZero gateway operations
     pub timeout: u64,
 
-    /// Whether to include inference input in InferenceWithAnalysis for mutation
+    /// Whether to include inference input and output in Analysis for mutation
     ///
-    /// If true, the mutate function will see the inference input in addition to the output and analysis for each example in the batch.
-    /// This provides additional context but increases token usage significantly.
+    /// Inclusion can be helpful for adding few-shot examples.
     ///
     /// **Warning:** Use with caution, especially with:
     /// - Multi-turn conversations (many input messages)
+    /// - Long inference outputs (many tokens)
     /// - Large batch sizes (many analyses per mutation)
     ///
     /// These can cause context length overflow for the mutation model.
-    pub include_inference_input_for_mutation: bool,
+    pub include_inference_for_mutation: bool,
 
     /// Retry configuration for inference calls during GEPA optimization
     /// Applies to analyze function calls, mutate function calls, and all mutated variants
@@ -134,8 +134,8 @@ pub struct UninitializedGEPAConfig {
     #[serde(default = "default_timeout")]
     pub timeout: u64,
 
-    #[serde(default = "default_include_inference_input_for_mutation")]
-    pub include_inference_input_for_mutation: bool,
+    #[serde(default = "default_include_inference_for_mutation")]
+    pub include_inference_for_mutation: bool,
 
     #[serde(default)]
     pub retries: RetryConfig,
@@ -168,7 +168,7 @@ impl UninitializedGEPAConfig {
         max_concurrency=None,
         seed=None,
         timeout=None,
-        include_inference_input_for_mutation=None,
+        include_inference_for_mutation=None,
         retries=None,
         max_tokens=None,
     ))]
@@ -185,7 +185,7 @@ impl UninitializedGEPAConfig {
         max_concurrency: Option<u32>,
         seed: Option<u32>,
         timeout: Option<u64>,
-        include_inference_input_for_mutation: Option<bool>,
+        include_inference_for_mutation: Option<bool>,
         retries: Option<RetryConfig>,
         max_tokens: Option<u32>,
     ) -> Self {
@@ -201,8 +201,8 @@ impl UninitializedGEPAConfig {
             mutation_model,
             seed,
             timeout: timeout.unwrap_or_else(default_timeout),
-            include_inference_input_for_mutation: include_inference_input_for_mutation
-                .unwrap_or_else(default_include_inference_input_for_mutation),
+            include_inference_for_mutation: include_inference_for_mutation
+                .unwrap_or_else(default_include_inference_for_mutation),
             retries: retries.unwrap_or_default(),
             max_tokens,
         }
@@ -223,11 +223,11 @@ impl UninitializedGEPAConfig {
     /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
     /// :param seed: Optional random seed for reproducibility.
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
-    /// :param include_inference_input_for_mutation: Whether to include inference input for mutation context. Use with caution for multi-turn conversations or large batch sizes. Default: True.
+    /// :param include_inference_for_mutation: Whether to include inference input and output in Analysis for mutation. Inclusion can be helpful for adding few-shot examples. Use with caution for multi-turn conversations, long outputs, or large batch sizes. Default: True.
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
     /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None, max_tokens=None))]
+    #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
         this: Py<Self>,
         function_name: String,
@@ -241,7 +241,7 @@ impl UninitializedGEPAConfig {
         max_concurrency: Option<u32>,
         seed: Option<u32>,
         timeout: Option<u64>,
-        include_inference_input_for_mutation: Option<bool>,
+        include_inference_for_mutation: Option<bool>,
         retries: Option<RetryConfig>,
         max_tokens: Option<u32>,
     ) -> Py<Self> {
@@ -271,7 +271,7 @@ impl UninitializedGEPAConfig {
             mutation_model: self.mutation_model,
             seed: self.seed,
             timeout: self.timeout,
-            include_inference_input_for_mutation: self.include_inference_input_for_mutation,
+            include_inference_for_mutation: self.include_inference_for_mutation,
             retries: self.retries,
             max_tokens: self.max_tokens,
         })

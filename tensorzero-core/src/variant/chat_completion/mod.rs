@@ -23,6 +23,7 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata,
     chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
     ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    Unknown,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -160,45 +161,23 @@ impl ChatCompletionConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Schema associations and original file paths are not preserved.
-    pub fn into_uninitialized(self) -> UninitializedChatCompletionConfig {
-        let mut system_template = None;
-        let mut user_template = None;
-        let mut assistant_template = None;
+    /// All templates are placed in the new-style templates map, regardless of whether
+    /// they were originally defined using legacy fields (system_template, user_template, etc.).
+    pub fn as_uninitialized(&self) -> UninitializedChatCompletionConfig {
         let mut templates_map = HashMap::new();
 
-        // Extract templates from ChatTemplates
+        // Extract all templates into the new-style templates map
         for (name, template_with_schema) in self.templates.iter_templates() {
             let path = template_with_schema.template.path.clone();
-
-            // If this is a legacy template with a known name, put it in the legacy field
-            if template_with_schema.legacy_definition {
-                match name.as_str() {
-                    "system" => {
-                        system_template = Some(path);
-                        continue;
-                    }
-                    "user" => {
-                        user_template = Some(path);
-                        continue;
-                    }
-                    "assistant" => {
-                        assistant_template = Some(path);
-                        continue;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Otherwise, put it in the new-style templates map
             templates_map.insert(name.clone(), UninitializedChatTemplate { path });
         }
 
         UninitializedChatCompletionConfig {
             weight: self.weight,
-            model: self.model,
-            system_template,
-            user_template,
-            assistant_template,
+            model: Arc::clone(&self.model),
+            system_template: None,
+            user_template: None,
+            assistant_template: None,
             input_wrappers: None, // input_wrappers are deprecated and converted to templates
             templates: UninitializedChatTemplates {
                 inner: templates_map,
@@ -209,15 +188,15 @@ impl ChatCompletionConfig {
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
-            stop_sequences: self.stop_sequences,
-            reasoning_effort: self.inference_params_v2.reasoning_effort,
-            service_tier: self.inference_params_v2.service_tier,
+            stop_sequences: self.stop_sequences.clone(),
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            service_tier: self.inference_params_v2.service_tier.clone(),
             thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
-            verbosity: self.inference_params_v2.verbosity,
+            verbosity: self.inference_params_v2.verbosity.clone(),
             json_mode: self.json_mode,
             retries: self.retries,
-            extra_body: self.extra_body,
-            extra_headers: self.extra_headers,
+            extra_body: self.extra_body.clone(),
+            extra_headers: self.extra_headers.clone(),
         }
     }
 }
@@ -242,7 +221,9 @@ pub struct UninitializedChatTemplate {
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
-    inner: HashMap<String, UninitializedChatTemplate>,
+    /// Internal map of chat templates, made public for GEPA optimizer integration.
+    /// External users should use provided methods rather than accessing directly.
+    pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -556,10 +537,11 @@ pub async fn prepare_request_message(
                 content.push(ContentBlock::Thought(thought.clone()));
             }
             LazyResolvedInputMessageContent::Unknown(unknown) => {
-                content.push(ContentBlock::Unknown {
+                content.push(ContentBlock::Unknown(Unknown {
                     data: unknown.data.clone(),
-                    model_provider_name: unknown.model_provider_name.clone(),
-                });
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
+                }));
             }
         }
     }
@@ -2972,7 +2954,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: Some(0.8),
@@ -2990,7 +2972,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.model, "gpt-4".into());
         assert_eq!(exported.weight, Some(0.8));
@@ -3007,7 +2989,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_inference_params_v2() {
+    fn test_as_uninitialized_preserves_inference_params_v2() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             reasoning_effort: Some("high".to_string()),
@@ -3021,7 +3003,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.reasoning_effort, Some("high".to_string()));
         assert_eq!(exported.service_tier, Some(ServiceTier::Auto));
@@ -3030,7 +3012,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_none_values() {
+    fn test_as_uninitialized_preserves_none_values() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: None,
@@ -3049,7 +3031,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, None);
         assert_eq!(exported.temperature, None);
@@ -3063,7 +3045,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: Some(0.5),
@@ -3078,7 +3060,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();

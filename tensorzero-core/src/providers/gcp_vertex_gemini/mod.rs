@@ -55,13 +55,11 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
     UnknownChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{
-    fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
-};
+use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -1804,12 +1802,24 @@ impl<'a> GCPVertexGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some()
+                    && !MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name)
+                {
+                    GCPVertexGeminiFunctionCallingMode::Any
+                } else {
+                    GCPVertexGeminiFunctionCallingMode::Auto
+                };
+                GCPVertexGeminiToolConfig {
+                    function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => {
                 if MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
@@ -2231,10 +2241,10 @@ async fn convert_non_thought_content_block<'a>(
                 },
             ))
         }
-        Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
+        Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
             Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
         }
-        Cow::Owned(ContentBlock::Unknown { data, .. }) => {
+        Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
             Ok(FlattenUnknown::Unknown(Cow::Owned(data)))
         }
         Cow::Borrowed(ContentBlock::Thought(_)) | Cow::Owned(ContentBlock::Thought(_)) => {
@@ -2447,8 +2457,8 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                                 raw_response: None,
                             }));
                         }
-                        Some(Cow::Borrowed(ContentBlock::Unknown { .. }))
-                        | Some(Cow::Owned(ContentBlock::Unknown { .. })) => {
+                        Some(Cow::Borrowed(ContentBlock::Unknown(_)))
+                        | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
                             return Err(Error::new(ErrorDetails::InferenceServer {
                                 message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
                                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2467,20 +2477,14 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                     }
                 }
             }
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
                     data: FlattenUnknown::Unknown(Cow::Borrowed(data)),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
@@ -2675,7 +2679,8 @@ fn content_part_to_tensorzero_chunk(
                 output.push(ContentBlockChunk::Unknown(UnknownChunk {
                     id: "0".to_string(),
                     data: part.into_owned(),
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 }));
             }
         }
@@ -2712,7 +2717,7 @@ fn convert_to_output(
                 })]);
             }
             _ => {
-                return Ok(vec![ContentBlockOutput::Unknown {
+                return Ok(vec![ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -2720,8 +2725,9 @@ fn convert_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                }]);
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
+                })]);
             }
         }
     }
@@ -2762,18 +2768,20 @@ fn convert_to_output(
             }));
         }
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(data)) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: serde_json::json!({
                     "executableCode": data,
                 }),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
         FlattenUnknown::Unknown(data) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: data.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
     }
     Ok(output)
@@ -3254,7 +3262,7 @@ mod tests {
             }
         );
 
-        // Test Auto mode with specific allowed tools (new behavior)
+        // Test Auto mode with specific allowed tools - should use Any mode
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
@@ -3273,7 +3281,7 @@ mod tests {
             GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GCPVertexGeminiFunctionCallingMode::Auto
+            GCPVertexGeminiFunctionCallingMode::Any
         );
         let mut allowed_names = tool_config
             .function_calling_config

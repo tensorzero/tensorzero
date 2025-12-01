@@ -72,13 +72,13 @@ impl BestOfNSamplingConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
-    pub fn into_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
+    pub fn as_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
         UninitializedBestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: UninitializedBestOfNEvaluatorConfig {
-                inner: self.evaluator.inner.into_uninitialized(),
+                inner: self.evaluator.inner.as_uninitialized(),
             },
         }
     }
@@ -556,7 +556,7 @@ async fn inner_select_best_candidate<'a>(
         .find_map(|block| match block {
             ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown { .. } => None,
+            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown(_) => None,
         }) {
         Some(text) => text,
         None => {
@@ -1703,7 +1703,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: Some(1.0),
             timeout_s: 60.0,
@@ -1721,7 +1721,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(1.0));
         assert_eq!(exported.timeout_s, 60.0);
@@ -1734,7 +1734,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_nested_evaluator() {
+    fn test_as_uninitialized_preserves_nested_evaluator() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
             timeout_s: 300.0,
@@ -1754,7 +1754,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.evaluator.inner.model, "judge-model".into());
         assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
@@ -1763,7 +1763,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_with_empty_candidates() {
+    fn test_as_uninitialized_with_empty_candidates() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
             timeout_s: 300.0,
@@ -1780,13 +1780,13 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert!(exported.candidates.is_empty());
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedBestOfNSamplingConfig {
             weight: Some(0.7),
             timeout_s: 120.0,
@@ -1804,7 +1804,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();
