@@ -13,11 +13,13 @@ use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTe
 use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams, GetDatapointParams,
-    GetDatapointsParams, GetDatasetMetadataParams, JsonInferenceDatapointInsert,
+    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetOutputSource, DatasetQueries,
+    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
-use crate::endpoints::datasets::{DatapointKind, StoredDatapoint, validate_dataset_name};
+use crate::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
+};
+use crate::endpoints::datasets::{DatapointKind, validate_dataset_name};
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -604,15 +606,15 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     /// Inserts a batch of datapoints into the database. Internally, separate chat and JSON datapoints and write them to the appropriate tables. Note that this is not very atomic: the Chat table and Json table updates are not rolled back if one fails.
     ///
     /// Returns the number of rows written.
-    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
+    async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
         // Separate chat and JSON datapoints
-        let mut chat_datapoints: Vec<&ChatInferenceDatapointInsert> = Vec::new();
-        let mut json_datapoints: Vec<&JsonInferenceDatapointInsert> = Vec::new();
+        let mut chat_datapoints: Vec<&StoredChatInferenceDatapoint> = Vec::new();
+        let mut json_datapoints: Vec<&StoredJsonInferenceDatapoint> = Vec::new();
 
         for datapoint in datapoints {
             match datapoint {
-                DatapointInsert::Chat(chat) => chat_datapoints.push(chat),
-                DatapointInsert::Json(json) => json_datapoints.push(json),
+                StoredDatapoint::Chat(chat) => chat_datapoints.push(chat),
+                StoredDatapoint::Json(json) => json_datapoints.push(json),
             }
         }
 
@@ -688,7 +690,7 @@ impl ClickHouseConnectionInfo {
     /// Returns the number of rows written
     async fn insert_chat_datapoints_internal(
         &self,
-        datapoints: &[&ChatInferenceDatapointInsert],
+        datapoints: &[&StoredChatInferenceDatapoint],
     ) -> Result<u64, Error> {
         if datapoints.is_empty() {
             return Ok(0);
@@ -766,7 +768,7 @@ impl ClickHouseConnectionInfo {
     /// Returns the number of rows written
     async fn insert_json_datapoints_internal(
         &self,
-        datapoints: &[&JsonInferenceDatapointInsert],
+        datapoints: &[&StoredJsonInferenceDatapoint],
     ) -> Result<u64, Error> {
         if datapoints.is_empty() {
             return Ok(0);
@@ -1001,9 +1003,7 @@ mod tests {
     use crate::db::clickhouse::query_builder::{
         DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
     };
-    use crate::db::datasets::{
-        ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
-    };
+    use crate::db::datasets::MetricFilter;
     use crate::endpoints::datasets::v1::types::DatapointOrderBy;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
     use crate::tool::{
@@ -1914,21 +1914,21 @@ mod tests {
                     serde_json::from_str(&external_data.data).unwrap();
                 // When tool_params is None, the new Migration 0041 fields are not serialized
                 // (due to #[serde(flatten)]), so they won't be in the JSON
+                // Fields with skip_serializing are not in the JSON (is_deleted, auxiliary, updated_at)
                 let expected_row_as_json = json!({
                     "dataset_name": "test_dataset",
                     "function_name": "test_function",
                     "id": "123e4567-e89b-12d3-a456-426614174000",
-                    "name": "test_name",
                     "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                     "input": {
                         "messages": [],
                     },
                     "output": [{"type": "text", "text": "response"}],
                     "tags": {"test_tag": "test_value"},
-                    "auxiliary": "",
-                    "source_inference_id": null,
                     "is_custom": true,
+                    "source_inference_id": null,
                     "staled_at": null,
+                    "name": "test_name",
                     "snapshot_hash": null,
                 });
                 assert_eq!(
@@ -1949,7 +1949,7 @@ mod tests {
             });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let datapoint = ChatInferenceDatapointInsert {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
@@ -1972,9 +1972,11 @@ mod tests {
             source_inference_id: None,
             is_custom: true,
             snapshot_hash: None,
+            is_deleted: false,
+            updated_at: String::new(),
         };
         assert!(
-            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint successfully"
@@ -2028,7 +2030,7 @@ mod tests {
             });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let datapoint = ChatInferenceDatapointInsert {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
@@ -2063,9 +2065,11 @@ mod tests {
             source_inference_id: None,
             is_custom: true,
             snapshot_hash: None,
+            is_deleted: false,
+            updated_at: String::new(),
         };
         assert!(
-            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint with tool_params successfully"
@@ -2114,7 +2118,7 @@ mod tests {
             });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let datapoint = ChatInferenceDatapointInsert {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
@@ -2148,9 +2152,11 @@ mod tests {
             source_inference_id: None,
             is_custom: true,
             snapshot_hash: None,
+            is_deleted: false,
+            updated_at: String::new(),
         };
         assert!(
-            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint with Explicit allowed tool successfully"
@@ -2176,13 +2182,13 @@ mod tests {
                 );
 
                 // Parse and verify the data
+                // Fields with skip_serializing are not in the JSON (is_deleted, auxiliary, updated_at)
                 let actual_row_as_json: serde_json::Value =
                     serde_json::from_str(&external_data.data).unwrap();
                 let expected_row_as_json = json!({
                     "dataset_name": "test_dataset",
                     "function_name": "test_function",
                     "id": "123e4567-e89b-12d3-a456-426614174000",
-                    "name": "test_name",
                     "episode_id": "123e4567-e89b-12d3-a456-426614174000",
                     "input": {
                         "messages": [],
@@ -2190,10 +2196,10 @@ mod tests {
                     "output": {"raw": "{\"data\":\"extracted\"}", "parsed": {"data":"extracted"}},
                     "output_schema": {"type": "object"},
                     "tags": {"test_tag": "test_value"},
-                    "auxiliary": "",
-                    "source_inference_id": null,
                     "is_custom": true,
+                    "source_inference_id": null,
                     "staled_at": null,
+                    "name": "test_name",
                     "snapshot_hash": null,
                 });
 
@@ -2215,7 +2221,7 @@ mod tests {
             });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let datapoint = JsonInferenceDatapointInsert {
+        let datapoint = StoredJsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
@@ -2239,9 +2245,11 @@ mod tests {
             source_inference_id: None,
             is_custom: true,
             snapshot_hash: None,
+            is_deleted: false,
+            updated_at: String::new(),
         };
         assert!(
-            conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
+            conn.insert_datapoints(&[StoredDatapoint::Json(datapoint)])
                 .await
                 .is_ok(),
             "Should insert json datapoint successfully"
@@ -2363,7 +2371,7 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let datapoints = vec![
-            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "test_function_1".to_string(),
                 id: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
@@ -2383,8 +2391,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "test_function_2".to_string(),
                 id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
@@ -2404,8 +2414,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "test_function_3".to_string(),
                 id: Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(),
@@ -2425,6 +2437,8 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
         ];
 
@@ -2533,7 +2547,7 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let datapoints = vec![
-            DatapointInsert::Json(JsonInferenceDatapointInsert {
+            StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "json_function_1".to_string(),
                 id: Uuid::parse_str("44444444-4444-4444-4444-444444444444").unwrap(),
@@ -2554,8 +2568,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Json(JsonInferenceDatapointInsert {
+            StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "json_function_2".to_string(),
                 id: Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
@@ -2576,6 +2592,8 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
         ];
 
@@ -2653,7 +2671,7 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let datapoints = vec![
-            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "chat_function_1".to_string(),
                 id: Uuid::parse_str("66666666-6666-6666-6666-666666666666").unwrap(),
@@ -2673,8 +2691,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: false,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Json(JsonInferenceDatapointInsert {
+            StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "json_function_1".to_string(),
                 id: Uuid::parse_str("77777777-7777-7777-7777-777777777777").unwrap(),
@@ -2695,8 +2715,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: false,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "chat_function_2".to_string(),
                 id: Uuid::parse_str("88888888-8888-8888-8888-888888888888").unwrap(),
@@ -2716,8 +2738,10 @@ mod tests {
                 source_inference_id: None,
                 is_custom: false,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
-            DatapointInsert::Json(JsonInferenceDatapointInsert {
+            StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "test_dataset".to_string(),
                 function_name: "json_function_2".to_string(),
                 id: Uuid::parse_str("99999999-9999-9999-9999-999999999999").unwrap(),
@@ -2738,6 +2762,8 @@ mod tests {
                 source_inference_id: None,
                 is_custom: false,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             }),
         ];
 
@@ -2764,7 +2790,7 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let datapoints: Vec<DatapointInsert> = vec![];
+        let datapoints: Vec<StoredDatapoint> = vec![];
 
         let result = conn.insert_datapoints(&datapoints).await;
         assert!(result.is_ok(), "Should handle empty slice successfully");
@@ -2787,7 +2813,7 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         // Test with reserved name "builder"
-        let datapoints_with_builder = vec![DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoints_with_builder = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "builder".to_string(), // This should fail validation
             function_name: "test_function".to_string(),
             id: Uuid::parse_str("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").unwrap(),
@@ -2805,6 +2831,8 @@ mod tests {
             source_inference_id: None,
             is_custom: false,
             snapshot_hash: None,
+            is_deleted: false,
+            updated_at: String::new(),
         })];
 
         let result = conn.insert_datapoints(&datapoints_with_builder).await;
@@ -2820,7 +2848,7 @@ mod tests {
 
         // Test with reserved prefix "tensorzero::"
         let datapoints_with_tensorzero_prefix =
-            vec![DatapointInsert::Json(JsonInferenceDatapointInsert {
+            vec![StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "tensorzero::reserved".to_string(), // This should fail validation
                 function_name: "test_function".to_string(),
                 id: Uuid::parse_str("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").unwrap(),
@@ -2838,6 +2866,8 @@ mod tests {
                 source_inference_id: None,
                 is_custom: false,
                 snapshot_hash: None,
+                is_deleted: false,
+                updated_at: String::new(),
             })];
 
         let result = conn
