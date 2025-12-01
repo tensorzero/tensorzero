@@ -4,15 +4,13 @@ use http::StatusCode;
 use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use tensorzero::{
-    ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
-};
+use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
-    inference::types::TextKind,
+    inference::types::Text,
 };
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -609,7 +607,7 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],

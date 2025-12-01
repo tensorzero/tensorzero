@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use tensorzero::{
-    ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    InferenceOutput, Role, TensorZeroError,
+    ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent, Role,
+    TensorZeroError,
 };
 use tensorzero_core::endpoints::inference::{ChatCompletionInferenceParams, InferenceParams};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
@@ -52,7 +52,7 @@ async fn make_request_with_tags(
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1111,7 +1111,7 @@ retries = { num_retries = 3 }
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1129,7 +1129,7 @@ retries = { num_retries = 3 }
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1169,7 +1169,7 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],

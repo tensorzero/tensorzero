@@ -13,8 +13,7 @@ use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-        InferenceOutput,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,

@@ -1,10 +1,10 @@
 use futures::StreamExt;
 use serde_json::json;
 use tensorzero::{
-    Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    InferenceOutput, InferenceResponseChunk, Role,
+    Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
+    InputMessageContent, Role,
 };
-use tensorzero_core::inference::types::{Arguments, System, TextKind};
+use tensorzero_core::inference::types::{Arguments, System, Text};
 
 use crate::common::get_gateway_endpoint;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -31,7 +31,7 @@ async fn test_client_stream_with_error(client: Client) {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],

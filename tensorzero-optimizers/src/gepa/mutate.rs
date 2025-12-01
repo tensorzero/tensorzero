@@ -18,8 +18,7 @@ use serde_json::{from_value, json, to_value, Map};
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-        InferenceOutput,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,

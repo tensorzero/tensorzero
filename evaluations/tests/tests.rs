@@ -18,8 +18,7 @@ use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
 };
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_core::inference::types::TextKind;
-use tensorzero_core::inference::types::{Input, InputMessage, InputMessageContent, Text};
+use tensorzero_core::inference::types::Text;
 use tokio::time::sleep;
 use url::Url;
 
@@ -1656,7 +1655,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         system: None,
         messages: vec![InputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })],
         }],
@@ -1834,7 +1833,7 @@ async fn test_run_llm_judge_evaluator_json() {
         system: None,
         messages: vec![InputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })],
         }],

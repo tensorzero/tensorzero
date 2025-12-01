@@ -6,7 +6,7 @@ use tensorzero_core::{
         select_inference_evaluation_human_feedback_clickhouse,
     },
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
 };
 use tokio::time::{sleep, Duration};
@@ -1227,7 +1227,7 @@ async fn test_fast_inference_then_feedback() {
                         ))),
                         messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::InputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::InputMessageContent::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

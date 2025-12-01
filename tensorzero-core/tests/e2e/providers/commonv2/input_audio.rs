@@ -2,8 +2,8 @@ use crate::providers::common::E2ETestProvider;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, Input, InputMessage,
-    InputMessageContent, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
+    InputMessage, InputMessageContent,
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -11,7 +11,7 @@ use tensorzero_core::{
     inference::types::{
         file::Base64File,
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, TextKind,
+        ContentBlockChatOutput, File, Role, Text,
     },
 };
 use uuid::Uuid;
@@ -114,7 +114,7 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "What's going on in this audio?".to_string(),
                             }),
                             InputMessageContent::File(File::Base64(

@@ -4,10 +4,10 @@ use std::sync::Arc;
 use crate::clickhouse::get_clean_clickhouse;
 use serde_json::json;
 use tensorzero::ClientBuilder;
-use tensorzero::InputMessage;
-use tensorzero::InputMessageContent;
 use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
 use tensorzero_core::config::{Config, ConfigFileGlob};
@@ -18,7 +18,7 @@ use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{Arguments, System, TextKind};
+use tensorzero_core::inference::types::{Arguments, System, Template, Text};
 use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
 
@@ -90,7 +90,7 @@ async fn test_get_howdy_report() {
             ))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -121,7 +121,8 @@ async fn test_get_howdy_report() {
             ))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(
                         json!({
                             "country": "Japan",

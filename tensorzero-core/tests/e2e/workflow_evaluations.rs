@@ -5,8 +5,8 @@ use std::{
 
 use serde_json::json;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
+    ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -15,7 +15,7 @@ use tensorzero_core::{
         select_workflow_evaluation_run_episode_clickhouse,
     },
     endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    inference::types::{Arguments, System, TextKind},
+    inference::types::{Arguments, System, Text},
 };
 use uuid::{Timestamp, Uuid};
 
@@ -72,7 +72,7 @@ async fn test_workflow_evaluation() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],
@@ -260,7 +260,7 @@ async fn test_workflow_evaluation_other_function() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -333,7 +333,7 @@ async fn test_workflow_evaluation_variant_error() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -388,7 +388,7 @@ async fn test_workflow_evaluation_override_variant_tags() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -446,7 +446,7 @@ async fn test_bad_workflow_evaluation_run() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],

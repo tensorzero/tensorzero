@@ -16,14 +16,14 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
-    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    InferenceOutput, InferenceResponse,
+    ClientExt, ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
-use tensorzero_core::inference::types::{Arguments, StoredInput, System};
+use tensorzero_core::inference::types::{Arguments, StoredInput, System, Template};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
@@ -34,7 +34,7 @@ use tensorzero_core::{
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
-        StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Unknown,
+        StoredInputMessageContent, StoredRequestMessage, Text, Unknown,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -1371,7 +1371,8 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1417,7 +1418,8 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1764,7 +1766,7 @@ base_path = "{root}"
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1809,7 +1811,7 @@ model = "dummy::good"
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1878,7 +1880,7 @@ model_name = "json"
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1950,7 +1952,7 @@ model = "dummy::flaky_model"
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -2899,7 +2901,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -2940,7 +2942,7 @@ async fn test_dummy_only_replicated_clickhouse() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -3217,7 +3219,7 @@ async fn test_image_inference_without_object_store() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
                         InputMessageContent::File(File::Base64(
@@ -3392,7 +3394,7 @@ async fn test_tool_call_input_no_warning() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
                         InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
@@ -3907,7 +3909,7 @@ async fn test_clickhouse_bulk_insert() {
                         system: None,
                         messages: vec![InputMessage {
                             role: Role::User,
-                            content: vec![InputMessageContent::Text(TextKind::Text {
+                            content: vec![InputMessageContent::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             })],
                         }],

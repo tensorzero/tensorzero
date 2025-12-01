@@ -16,7 +16,7 @@ use tensorzero_core::{
     endpoints::feedback::{feedback, Params},
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
     utils::gateway::GatewayHandle,
 };
@@ -1526,7 +1526,7 @@ async fn test_fast_inference_then_feedback() {
                         ])))),
                         messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::InputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::InputMessageContent::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

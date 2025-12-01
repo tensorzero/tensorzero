@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::{Input, FeedbackParams, InferenceResponse};
+use tensorzero_core::client::{FeedbackParams, InferenceResponse, Input};
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig};

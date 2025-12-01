@@ -32,8 +32,8 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, Input, InputMessage,
-    InputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
@@ -41,14 +41,14 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage, Text,
+        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -1056,7 +1056,7 @@ model = "test-model"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1156,7 +1156,7 @@ defaults.{}
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1276,7 +1276,7 @@ model = "test-model"
                     system: None,
                     messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Say hello".to_string(),
                         })],
                     }],
@@ -1315,7 +1315,7 @@ model = "test-model"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1691,7 +1691,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
                             InputMessageContent::File(File::Url(UrlFile {
@@ -1760,7 +1760,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
                             InputMessageContent::File(File::Base64(
@@ -1826,7 +1826,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    InputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
                     InputMessageContent::File(File::Base64(
@@ -2496,7 +2496,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                     },
                     InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     },
@@ -8978,7 +8978,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 messages: vec![tensorzero::InputMessage {
                     role: Role::User,
                     content: vec![tensorzero::InputMessageContent::Text(
-                        TextKind::Text {
+                        Text {
                             text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
                                 .to_string(),
                         },
@@ -9109,7 +9109,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
                 role: Role::User,
                 content: vec![
                     tensorzero::InputMessageContent::Text(
-                        TextKind::Text {
+                        Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
                     )
@@ -9417,7 +9417,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             )])))),
             messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::InputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::InputMessageContent::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         extra_headers: if provider.model_provider_name == "vllm"

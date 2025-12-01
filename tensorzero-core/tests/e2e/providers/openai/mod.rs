@@ -7,9 +7,8 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role, UnknownChunk, UrlFile,
+    ClientExt, ClientInferenceParams, ContentBlockChunk, File, InferenceOutput, InferenceResponse,
+    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, UnknownChunk, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -22,7 +21,7 @@ use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, Text, TextKind,
+    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, Text,
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -2016,7 +2015,7 @@ async fn test_forward_image_url() {
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the image".to_string() }),
                 InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
@@ -2095,7 +2094,7 @@ async fn test_forward_file_url() {
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the PDF".to_string() }),
                 InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
@@ -2369,7 +2368,7 @@ model = "test-model"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2449,7 +2448,7 @@ model = "test-model"
         .content
         .iter()
         .map(|block| match block {
-            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(TextKind::Text {
+            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(Text {
                 text: text.text.clone(),
             }),
             ContentBlockChatOutput::ToolCall(tool_call) => InputMessageContent::ToolCall(
@@ -2475,7 +2474,7 @@ model = "test-model"
                 messages: vec![
                     InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
@@ -2485,7 +2484,7 @@ model = "test-model"
                     },
                     InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Can you summarize what you just told me in one sentence?"
                                 .to_string(),
                         })],
@@ -2558,7 +2557,7 @@ model = "test-model"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2736,7 +2735,7 @@ model = "test-model"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2836,7 +2835,7 @@ model = "test-model"
         .content
         .iter()
         .map(|block| match block {
-            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(TextKind::Text {
+            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(Text {
                 text: text.text.clone(),
             }),
             ContentBlockChatOutput::ToolCall(tool_call) => InputMessageContent::ToolCall(
@@ -2862,7 +2861,7 @@ model = "test-model"
                 messages: vec![
                     InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
@@ -2872,7 +2871,7 @@ model = "test-model"
                     },
                     InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Can you summarize what you just told me in one sentence?"
                                 .to_string(),
                         })],
@@ -3071,7 +3070,7 @@ async fn test_file_custom_filename_sent_to_openai() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the PDF".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
@@ -3139,7 +3138,7 @@ async fn test_file_fallback_filename_sent_to_openai() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the PDF".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {

@@ -7,10 +7,8 @@ use tensorzero_core::observability::enter_fake_http_request_otel;
 use uuid::Uuid;
 
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
-use tensorzero::{
-    ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
-};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
+use tensorzero_core::inference::types::Text;
 
 use crate::common::get_gateway_endpoint;
 use crate::otel::install_capturing_otel_exporter;
@@ -41,7 +39,7 @@ extra_headers."X-Static-Header-2" = "static-value-2"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test static headers".to_string(),
                     })],
                 }],
@@ -85,7 +83,7 @@ extra_headers."X-Config-Header" = "config-value"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test mixed headers".to_string(),
                     })],
                 }],
@@ -124,7 +122,7 @@ extra_headers."X-Empty-Header" = ""
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test empty header value".to_string(),
                     })],
                 }],
@@ -158,7 +156,7 @@ enabled = true
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test without config headers".to_string(),
                     })],
                 }],
@@ -198,7 +196,7 @@ extra_headers."X-Multi-Header" = "multi-value"
                     system: None,
                     messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: format!("Request {i}"),
                         })],
                     }],
@@ -240,7 +238,7 @@ extra_headers."x-lowercase" = "lowercase-value"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test various header formats".to_string(),
                     })],
                 }],

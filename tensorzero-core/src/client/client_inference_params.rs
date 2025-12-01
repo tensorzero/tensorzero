@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        Input, InputMessage,
+        Input,
     },
     tool::DynamicToolParams,
 };

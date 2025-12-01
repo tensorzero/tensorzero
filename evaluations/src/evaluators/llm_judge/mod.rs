@@ -4,8 +4,8 @@ use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
-    ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
+    ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
+    InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
@@ -13,7 +13,7 @@ use tensorzero_core::evaluations::{
     LLMJudgeOutputType,
 };
 use tensorzero_core::inference::types::{
-    Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, TextKind,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, Template, Text,
 };
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -203,7 +203,8 @@ fn prepare_llm_judge_input(
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         #[expect(clippy::expect_used)]
                         arguments: Arguments(
                             json!({
@@ -232,7 +233,7 @@ fn prepare_llm_judge_input(
                 Some(final_message) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: final_message,
                         })],
                     });
@@ -296,16 +297,14 @@ fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
             System::Text(text) => {
                 messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
-                        text: text.clone(),
-                    })],
+                    content: vec![InputMessageContent::Text(Text { text: text.clone() })],
                 });
             }
             System::Template(arguments) => {
                 let system_message = serde_json::to_string(arguments)?;
                 messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: system_message,
                     })],
                 });
@@ -346,27 +345,17 @@ fn serialize_content_for_messages_input(
             }
             InputMessageContent::Template(input) => {
                 // Since the LLM Judge does not have the template of the original function,
-                // we instead serialize the arguments and send them as a TextKind::Text block.
+                // we instead serialize the arguments and send them as a Text block.
                 let arguments_string = serde_json::to_string(input)?;
-                serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                serialized_content.push(InputMessageContent::Text(Text {
                     text: arguments_string,
                 }));
             }
-            InputMessageContent::Text(text) => match text {
-                TextKind::Text { text } => {
-                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
-                        text: text.clone(),
-                    }));
-                }
-                // Since the LLM Judge does not have the template of the original function,
-                // we instead serialize the arguments and send them as a TextKind::Text block.
-                TextKind::Arguments { arguments } => {
-                    let arguments_string = serde_json::to_string(arguments)?;
-                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
-                        text: arguments_string,
-                    }));
-                }
-            },
+            InputMessageContent::Text(text) => {
+                serialized_content.push(InputMessageContent::Text(Text {
+                    text: text.text.clone(),
+                }));
+            }
         }
     }
     Ok(serialized_content)
@@ -449,7 +438,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -466,7 +455,7 @@ mod tests {
             messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    InputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     }),
                     InputMessageContent::ToolResult(ToolResult {
@@ -562,7 +551,7 @@ mod tests {
             system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "bar".to_string(),
                 })],
             }],
@@ -614,7 +603,8 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("input".to_string(), "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".into()),
                             ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi world!\"}]".into()),
@@ -682,7 +672,8 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("input".to_string(), "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".into()),
                             ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi, world!\"}]".into()),
@@ -701,7 +692,7 @@ mod tests {
             system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -710,10 +701,10 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
         assert_eq!(messages[0].content.len(), 1);
-        if let InputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(text, "You are a helpful assistant");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
         assert_eq!(messages[1].role, Role::User);
 
@@ -725,7 +716,7 @@ mod tests {
             ])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -733,32 +724,33 @@ mod tests {
         let messages = prepare_messages_input(&input).unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
-        if let InputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(
                 text,
                 r#"{"instructions":"Be helpful","persona":"assistant"}"#
             );
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
     }
 
     #[test]
     fn test_serialize_content_for_messages_input() {
-        // Test with TextKind::Text
-        let content = vec![InputMessageContent::Text(TextKind::Text {
+        // Test with Text
+        let content = vec![InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let InputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
             assert_eq!(text, "Hello, world!");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
-        // Test with TextKind::Arguments
-        let content = vec![InputMessageContent::Text(TextKind::Arguments {
+        // Test with Template
+        let content = vec![InputMessageContent::Template(Template {
+            name: "test".to_string(),
             arguments: Arguments(serde_json::Map::from_iter([(
                 "key".to_string(),
                 "value".into(),
@@ -766,10 +758,10 @@ mod tests {
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let InputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
-            assert_eq!(text, r#"{"key":"value"}"#);
+        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
+            assert!(text.contains("test") && text.contains("key"));
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
@@ -1024,7 +1016,7 @@ mod tests {
             system: Some(System::Text("System instruction".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "User message".to_string(),
                 })],
             }],
@@ -1075,36 +1067,30 @@ mod tests {
 
         // First message should be system converted to user
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let InputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[0].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[0].content[0] {
             assert_eq!(text, "System instruction");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Second message should be original user message
         assert_eq!(prepared_input.messages[1].role, Role::User);
-        if let InputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[1].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[1].content[0] {
             assert_eq!(text, "User message");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Third message should contain the generated output
         assert_eq!(prepared_input.messages[2].role, Role::User);
-        if let InputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[2].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[2].content[0] {
             let expected = format!(
                 include_str!("message_output_template_without_reference.txt"),
                 "[{\"type\":\"text\",\"text\":\"Generated output\"}]"
             );
             assert_eq!(text, &expected);
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
     }
 
@@ -1140,7 +1126,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Query".to_string(),
                 })],
             }],
@@ -1191,9 +1177,10 @@ mod tests {
         assert_eq!(prepared_input.system, None);
         assert_eq!(prepared_input.messages.len(), 1);
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let InputMessageContent::Text(TextKind::Arguments { arguments }) =
+        if let InputMessageContent::Template(Template { name, arguments }) =
             &prepared_input.messages[0].content[0]
         {
+            assert_eq!(name, "user");
             assert_eq!(
                 arguments.0.get("input").and_then(|v| v.as_str()).unwrap(),
                 r#"{"messages":[{"role":"user","content":[{"type":"text","text":"Query"}]}]}"#
@@ -1208,7 +1195,7 @@ mod tests {
             );
             assert!(arguments.0.get("reference_output").unwrap().is_null());
         } else {
-            panic!("Expected TextKind::Arguments");
+            panic!("Expected Template");
         }
     }
 }

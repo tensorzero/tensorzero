@@ -30,8 +30,8 @@ pub use tensorzero_core::client::{
 
 // Client input types
 pub use tensorzero_core::client::{
-    CacheParamsOptions, ClientInferenceParams, Input, InputMessage,
-    InputMessageContent, ClientSecretString,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, Input, InputMessage,
+    InputMessageContent,
 };
 
 // Input handling utilities
@@ -80,8 +80,8 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
-    Base64File, ContentBlockChunk, File, Input, InputMessage, InputMessageContent,
-    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile, Usage,
+    Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
+    UrlFile, Usage,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{

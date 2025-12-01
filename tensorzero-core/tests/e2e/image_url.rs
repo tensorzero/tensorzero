@@ -9,15 +9,15 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, Input, InputMessage,
-    InputMessageContent, InferenceOutput, InferenceResponse, Role,
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
+    InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::{Base64File, File, UrlFile};
 use url::Url;
 use uuid::Uuid;
@@ -161,7 +161,7 @@ async fn test_image_url_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
@@ -239,7 +239,7 @@ async fn test_image_url_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
@@ -293,7 +293,7 @@ async fn test_base64_image_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
                         InputMessageContent::File(File::Base64(
@@ -373,7 +373,7 @@ async fn test_base64_image_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
                         InputMessageContent::File(File::Base64(
@@ -455,7 +455,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
@@ -531,7 +531,7 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
@@ -609,7 +609,7 @@ async fn test_image_url_403_error() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
                         InputMessageContent::File(File::Url(UrlFile {
