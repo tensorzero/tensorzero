@@ -2,7 +2,7 @@ use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::migration_manager::migrations::{
     check_column_exists, check_table_exists,
 };
-use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 use std::time::Duration;
@@ -114,6 +114,13 @@ impl<'a> Migration for Migration0043<'a> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "ConfigSnapshot",
+                table_engine_name: "ReplacingMergeTree",
+                engine_args: &["last_used"],
+            },
+        );
 
         // Create ConfigSnapshot table
         let create_table_query = format!(
@@ -125,7 +132,7 @@ impl<'a> Migration for Migration0043<'a> {
                 tensorzero_version String,
                 created_at DateTime64(6) DEFAULT now(),
                 last_used DateTime64(6) DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(last_used)
+            ) ENGINE = {table_engine_name}
             ORDER BY hash
             SETTINGS index_granularity = 256
         "
