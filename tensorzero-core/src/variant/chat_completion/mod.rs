@@ -161,45 +161,23 @@ impl ChatCompletionConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Schema associations and original file paths are not preserved.
+    /// All templates are placed in the new-style templates map, regardless of whether
+    /// they were originally defined using legacy fields (system_template, user_template, etc.).
     pub fn as_uninitialized(&self) -> UninitializedChatCompletionConfig {
-        let mut system_template = None;
-        let mut user_template = None;
-        let mut assistant_template = None;
         let mut templates_map = HashMap::new();
 
-        // Extract templates from ChatTemplates
+        // Extract all templates into the new-style templates map
         for (name, template_with_schema) in self.templates.iter_templates() {
             let path = template_with_schema.template.path.clone();
-
-            // If this is a legacy template with a known name, put it in the legacy field
-            if template_with_schema.legacy_definition {
-                match name.as_str() {
-                    "system" => {
-                        system_template = Some(path);
-                        continue;
-                    }
-                    "user" => {
-                        user_template = Some(path);
-                        continue;
-                    }
-                    "assistant" => {
-                        assistant_template = Some(path);
-                        continue;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Otherwise, put it in the new-style templates map
             templates_map.insert(name.clone(), UninitializedChatTemplate { path });
         }
 
         UninitializedChatCompletionConfig {
             weight: self.weight,
             model: Arc::clone(&self.model),
-            system_template,
-            user_template,
-            assistant_template,
+            system_template: None,
+            user_template: None,
+            assistant_template: None,
             input_wrappers: None, // input_wrappers are deprecated and converted to templates
             templates: UninitializedChatTemplates {
                 inner: templates_map,
