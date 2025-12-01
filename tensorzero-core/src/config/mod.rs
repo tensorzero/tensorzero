@@ -1319,10 +1319,17 @@ pub mod unwritten_config {
 /// Writes the config snapshot to the `ConfigSnapshot` table.
 /// Takes special care to retain the created_at if there was already a row
 /// that had the same hash.
+///
+/// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
+/// If the env var is not set to "1", the write is skipped.
 pub async fn write_config_snapshot(
     clickhouse: &ClickHouseConnectionInfo,
     snapshot: ConfigSnapshot,
 ) -> Result<(), Error> {
+    // Feature flag: only write if TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1
+    if std::env::var("TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT").unwrap_or_default() != "1" {
+        return Ok(());
+    }
     // Define the row structure for serialization
     #[derive(Serialize)]
     struct ConfigSnapshotRow<'a> {
