@@ -142,7 +142,7 @@ single_match_else = "allow"
 doc_lazy_continuation = "allow"
 
 [profile.dev]
-debug = "limited"
+debug = "line-tables-only"
 
 [profile.performance]
 inherits = "release"
