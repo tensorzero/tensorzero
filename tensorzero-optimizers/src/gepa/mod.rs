@@ -144,6 +144,7 @@ impl Optimizer for GEPAConfig {
 
         // Divide concurrency among variants to avoid max_concurrency² explosion
         // Since each variant is evaluated on the same dataset, they'll take similar time
+        // TODO[#4914] enable semaphore sharing with `run_evaluation_core_streaming`
         let per_variant_concurrency = (self.max_concurrency as usize / num_variants).max(1);
 
         let evaluation_name = self.evaluation_name.clone();
