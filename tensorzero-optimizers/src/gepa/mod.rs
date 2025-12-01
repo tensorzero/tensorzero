@@ -152,7 +152,10 @@ impl Optimizer for GEPAConfig {
             EvaluationConfig::Inference(cfg) => &cfg.evaluators,
         };
 
-        // Create parallel evaluation futures
+        // Evaluate all initial variants in parallel. Errors are returned from each future
+        // and collected by join_all(), allowing us to proceed with any variants that succeed
+        // rather than failing fast. The safety check below (lines 220-224) ensures at least
+        // one variant succeeded before proceeding with optimization.
         let evaluation_futures: Vec<_> = initial_variants
             .iter()
             .map(|(variant_name, variant_config)| {
@@ -315,6 +318,9 @@ impl Optimizer for GEPAConfig {
                 iteration
             );
 
+            // Evaluate parent on minibatch. Unlike initial evaluation, this is a sequential
+            // operation within the iteration loop. If it fails, we use 'continue' to skip
+            // to the next iteration rather than stopping the entire optimization.
             let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -409,6 +415,8 @@ impl Optimizer for GEPAConfig {
                 child.name
             );
 
+            // Evaluate child on minibatch. Use 'continue' to skip to next iteration if
+            // evaluation fails, consistent with parent evaluation error handling.
             let child_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
