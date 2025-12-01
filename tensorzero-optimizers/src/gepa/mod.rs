@@ -99,11 +99,11 @@ impl Optimizer for GEPAConfig {
 
         // Uninitialize baseline variants for optimization
         // These will be used as the starting pool for GEPA iterations
-        let initial_variants = get_uninitialized_variant_configs(self, &function_context)?;
+        let original_variants = get_uninitialized_variant_configs(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
-            initial_variants.keys().cloned().collect();
+            original_variants.keys().cloned().collect();
 
         tracing::info!(
             "Initialized with {} baseline variants: {:?}",
@@ -136,7 +136,7 @@ impl Optimizer for GEPAConfig {
         tracing::info!("Validation dataset created successfully");
 
         // Evaluate initial variants on validation set
-        let num_variants = initial_variants.len();
+        let num_variants = original_variants.len();
         tracing::info!(
             "Evaluating {} initial variants on validation dataset",
             num_variants
@@ -156,7 +156,7 @@ impl Optimizer for GEPAConfig {
         // and collected by join_all(), allowing us to proceed with any variants that succeed
         // rather than failing fast. The safety check below (lines 220-224) ensures at least
         // one variant succeeded before proceeding with optimization.
-        let evaluation_futures: Vec<_> = initial_variants
+        let evaluation_futures: Vec<_> = original_variants
             .iter()
             .map(|(variant_name, variant_config)| {
                 let gateway_client = gateway_client.clone();
@@ -236,7 +236,7 @@ impl Optimizer for GEPAConfig {
         // Seed the frontier with initial variants and their validation scores
         let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
         for (variant_name, scores) in initial_scores {
-            if let Some(variant_config) = initial_variants.get(&variant_name) {
+            if let Some(variant_config) = original_variants.get(&variant_name) {
                 initial_candidates.insert(
                     variant_name.clone(),
                     Candidate {
