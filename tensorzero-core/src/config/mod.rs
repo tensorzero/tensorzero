@@ -967,6 +967,7 @@ impl Config {
             .await?;
 
         // Add built in functions
+        // NOTE: for now these are not versioned (will fix #4922)
         let built_in_functions = built_in::get_all_built_in_functions()?;
         let built_in_templates = Config::get_templates(&built_in_functions);
         templates.add_templates(built_in_templates)?;
