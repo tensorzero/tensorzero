@@ -225,6 +225,20 @@ async fn test_workflow_evaluation() {
             "DynamicEvaluationRunEpisode should have snapshot_hash"
         );
 
+        // Assert DynamicEvaluationRunEpisodeByRunId materialized view has snapshot_hash
+        let query = format!(
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisodeByRunId WHERE run_id_uint = toUInt128(toUUID('{run_id}')) AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "DynamicEvaluationRunEpisodeByRunId should have snapshot_hash"
+        );
+
         // Send feedback for the dynamic evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
