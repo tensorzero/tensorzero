@@ -3,8 +3,6 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
   queryInferenceById,
-  queryInferenceTable,
-  queryInferenceTableBounds,
   listInferencesWithPagination,
   countInferencesByFunction,
   countInferencesForVariant,
@@ -97,110 +95,109 @@ test("countInferencesForVariant returns correct counts", async () => {
   expect(chatCount).toBe(649);
 });
 
-test("queryInferenceTable", async () => {
-  const inferences = await queryInferenceTable({
+test("listInferencesWithPagination", async () => {
+  const result = await listInferencesWithPagination({
     limit: 10,
   });
-  expect(inferences.length).toBe(10);
+  expect(result.inferences.length).toBe(10);
 
   // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
+  for (let i = 1; i < result.inferences.length; i++) {
+    expect(
+      result.inferences[i - 1].inference_id > result.inferences[i].inference_id,
+    ).toBe(true);
   }
 
-  const inferences2 = await queryInferenceTable({
-    before: inferences[inferences.length - 1].id,
+  const result2 = await listInferencesWithPagination({
+    before: result.inferences[result.inferences.length - 1].inference_id,
     limit: 10,
   });
-  expect(inferences2.length).toBe(10);
+  expect(result2.inferences.length).toBe(10);
 });
 
 test(
-  "queryInferenceTable pagination samples front and near-end pages correctly",
+  "listInferencesWithPagination pagination samples front pages correctly",
   { timeout: 10_000 },
   async () => {
     const LIMIT = 100;
 
     // --- Front of the table (most recent entries) ---
-    const firstPage = await queryInferenceTable({ limit: LIMIT });
-    expect(firstPage.length).toBe(LIMIT);
-    for (let i = 1; i < firstPage.length; i++) {
-      expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
+    const firstResult = await listInferencesWithPagination({ limit: LIMIT });
+    expect(firstResult.inferences.length).toBe(LIMIT);
+    expect(firstResult.hasPreviousPage).toBe(false); // First page has no previous
+    expect(firstResult.hasNextPage).toBe(true); // Should have more pages
+    for (let i = 1; i < firstResult.inferences.length; i++) {
+      expect(
+        firstResult.inferences[i - 1].inference_id >
+          firstResult.inferences[i].inference_id,
+      ).toBe(true);
     }
 
-    const secondPage = await queryInferenceTable({
-      before: firstPage[firstPage.length - 1].id,
+    const secondResult = await listInferencesWithPagination({
+      before:
+        firstResult.inferences[firstResult.inferences.length - 1].inference_id,
       limit: LIMIT,
     });
-    expect(secondPage.length).toBe(LIMIT);
-    for (let i = 1; i < secondPage.length; i++) {
-      expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
+    expect(secondResult.inferences.length).toBe(LIMIT);
+    expect(secondResult.hasPreviousPage).toBe(true); // We came from first page
+    for (let i = 1; i < secondResult.inferences.length; i++) {
+      expect(
+        secondResult.inferences[i - 1].inference_id >
+          secondResult.inferences[i].inference_id,
+      ).toBe(true);
     }
 
-    // --- Near the end of the table (oldest entries) ---
-    const bounds = await queryInferenceTableBounds();
-    // bounds.last_id is the earliest (oldest) inference ID
-    const lastID = bounds.last_id!;
-
-    const endPage1 = await queryInferenceTable({
-      before: lastID,
+    // Test going forward (to newer) using after
+    const forwardResult = await listInferencesWithPagination({
+      after:
+        secondResult.inferences[secondResult.inferences.length - 1]
+          .inference_id,
       limit: LIMIT,
     });
-    expect(endPage1.length).toBeGreaterThan(0);
-    for (let i = 1; i < endPage1.length; i++) {
-      expect(endPage1[i - 1].id > endPage1[i].id).toBe(true);
-    }
-
-    const endPage2 = await queryInferenceTable({
-      before: endPage1[endPage1.length - 1].id,
-      limit: LIMIT,
-    });
-    // this may be empty if there are no more older entries
-    expect(endPage2.length).toBeGreaterThanOrEqual(0);
-    for (let i = 1; i < endPage2.length; i++) {
-      expect(endPage2[i - 1].id > endPage2[i].id).toBe(true);
-    }
-
-    // Try to grab the last page by after
-    const lastPageByAfter = await queryInferenceTable({
-      after: endPage1[endPage1.length - 1].id,
-      limit: LIMIT,
-    });
-    expect(lastPageByAfter.length).toBe(LIMIT);
-    for (let i = 1; i < lastPageByAfter.length; i++) {
-      expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
+    expect(forwardResult.inferences.length).toBe(LIMIT);
+    expect(forwardResult.hasNextPage).toBe(true); // We came from older page
+    for (let i = 1; i < forwardResult.inferences.length; i++) {
+      expect(
+        forwardResult.inferences[i - 1].inference_id >
+          forwardResult.inferences[i].inference_id,
+      ).toBe(true);
     }
   },
 );
 
-test("queryInferenceTable pages through results correctly using after with inference ID", async () => {
+test("listInferencesWithPagination pages through results correctly using after", async () => {
   const LIMIT = 20;
   // Get a limited sample of inferences instead of the full table
   const sampleSize = 100;
 
   // Now, page forward using after through our sample
-  let results: Awaited<ReturnType<typeof queryInferenceTable>> = [];
+  let results: Awaited<
+    ReturnType<typeof listInferencesWithPagination>
+  >["inferences"] = [];
   let after: string | undefined = undefined;
   let pageCount = 0;
 
   // Only page through our sample size
   while (results.length < sampleSize) {
-    const page = await queryInferenceTable({
+    const result = await listInferencesWithPagination({
       limit: LIMIT,
       after,
     });
-    if (page.length === 0) break;
+    if (result.inferences.length === 0) break;
 
     // IDs should be in descending order within the page
-    for (let i = 1; i < page.length; i++) {
-      expect(page[i - 1].id > page[i].id).toBe(true);
+    for (let i = 1; i < result.inferences.length; i++) {
+      expect(
+        result.inferences[i - 1].inference_id >
+          result.inferences[i].inference_id,
+      ).toBe(true);
     }
 
-    results = results.concat(page);
-    after = page[page.length - 1].id;
+    results = results.concat(result.inferences);
+    after = result.inferences[result.inferences.length - 1].inference_id;
     pageCount++;
 
-    if (page.length < LIMIT) break;
+    if (result.inferences.length < LIMIT) break;
 
     // Safety check to avoid infinite loops
     if (pageCount > 10) break;
@@ -208,231 +205,6 @@ test("queryInferenceTable pages through results correctly using after with infer
 
   // Should have paged at least once
   expect(pageCount).toBeGreaterThanOrEqual(1);
-});
-
-test("queryInferenceTable after future timestamp is empty", async () => {
-  // Create a future timestamp UUID - this will be larger than any existing ID
-  const futureUUID = "ffffffff-ffff-7fff-ffff-ffffffffffff";
-  const inferences = await queryInferenceTable({
-    after: futureUUID,
-    limit: 10,
-  });
-  expect(inferences.length).toBe(0);
-});
-
-test("queryInferenceTable before past timestamp is empty", async () => {
-  // Create a past timestamp UUID - this will be smaller than any existing ID
-  const pastUUID = "00000000-0000-7000-0000-000000000000";
-  const inferences = await queryInferenceTable({
-    before: pastUUID,
-    limit: 10,
-  });
-  expect(inferences.length).toBe(0);
-});
-
-test("queryInferenceTable pages through initial and final pages correctly using before with episode_id", async () => {
-  const LIMIT = 20;
-  const episodeId = "01942e26-618b-7b80-b492-34bed9f6d872";
-
-  // First page
-  const firstPage = await queryInferenceTable({
-    limit: LIMIT,
-    episode_id: episodeId,
-  });
-  // Should be exactly LIMIT
-  expect(firstPage.length).toBe(LIMIT);
-  // IDs in descending order
-  for (let i = 1; i < firstPage.length; i++) {
-    expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
-  }
-
-  // Next (and in this case final) page
-  const lastPage = await queryInferenceTable({
-    before: firstPage[firstPage.length - 1].id,
-    limit: LIMIT,
-    episode_id: episodeId,
-  });
-  // Should be smaller or equal to LIMIT (here 15)
-  expect(lastPage.length).toBeLessThanOrEqual(LIMIT);
-  // IDs in descending order
-  for (let i = 1; i < lastPage.length; i++) {
-    expect(lastPage[i - 1].id > lastPage[i].id).toBe(true);
-  }
-
-  // Verify total elements matches expected count
-  expect(firstPage.length + lastPage.length).toBe(35);
-});
-
-test("queryInferenceTable pages through a sample of results correctly using after with episode_id", async () => {
-  const LIMIT = 20;
-  const episodeId = "01942e26-469a-7553-af00-cb0495dc7bb5";
-
-  // Get the first page
-  const firstPage = await queryInferenceTable({
-    limit: LIMIT,
-    episode_id: episodeId,
-  });
-
-  // Verify first page properties
-  expect(firstPage.length).toBe(LIMIT);
-  for (let i = 1; i < firstPage.length; i++) {
-    expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
-  }
-
-  // Get the second page using the last ID of the first page
-  const secondPage = await queryInferenceTable({
-    before: firstPage[firstPage.length - 1].id,
-    limit: LIMIT,
-    episode_id: episodeId,
-  });
-
-  // Verify second page properties
-  expect(secondPage.length).toBe(LIMIT);
-  for (let i = 1; i < secondPage.length; i++) {
-    expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
-  }
-
-  // Now test paging forward using after
-  // Get a page starting after the first item of the second page
-  const forwardPage = await queryInferenceTable({
-    after: secondPage[0].id,
-    limit: LIMIT,
-    episode_id: episodeId,
-  });
-
-  // Verify forward paging works
-  expect(forwardPage.length).toBeGreaterThan(0);
-  expect(forwardPage.length).toBeLessThanOrEqual(LIMIT);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < forwardPage.length; i++) {
-    expect(forwardPage[i - 1].id > forwardPage[i].id).toBe(true);
-  }
-
-  // Get the last page to verify we can reach the end
-  let lastPage = firstPage;
-  let nextPage = secondPage;
-
-  // Just get a couple more pages to avoid too many queries
-  for (let i = 0; i < 2 && nextPage.length === LIMIT; i++) {
-    lastPage = nextPage;
-    nextPage = await queryInferenceTable({
-      before: lastPage[lastPage.length - 1].id,
-      limit: LIMIT,
-      episode_id: episodeId,
-    });
-  }
-
-  // Verify we can get to the end if needed
-  if (nextPage.length < LIMIT) {
-    // We reached the last page
-    expect(nextPage.length).toBeLessThan(LIMIT);
-  }
-
-  // Verify total count is as expected (42 from previous test)
-  const totalCount = await countInferencesForEpisode(episodeId);
-  expect(totalCount).toBe(43);
-});
-
-// queryInferenceTableBounds and queryEpisodeTableBounds are the same because the early inferences are in singleton episodes.
-test("queryInferenceTableBounds", async () => {
-  const bounds = await queryInferenceTableBounds();
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("019a0881-7437-7495-b506-782079c593bf");
-});
-
-test("queryInferenceTableBounds with episode_id", async () => {
-  const bounds = await queryInferenceTableBounds({
-    episode_id: "01942e26-6497-7910-89d6-d9d1c735d3df",
-  });
-  expect(bounds.first_id).toBe("01942e26-6e50-7fa0-8d61-9fd730a73a8b");
-  expect(bounds.last_id).toBe("01942e27-5a2b-75b3-830c-094f82096270");
-});
-
-test("queryInferenceTableBounds with invalid episode_id", async () => {
-  const bounds = await queryInferenceTableBounds({
-    episode_id: "01942e26-6497-7910-89d6-d9c1c735d3df",
-  });
-  expect(bounds.first_id).toBe(null);
-  expect(bounds.last_id).toBe(null);
-});
-
-test("queryInferenceTable with function_name", async () => {
-  const inferences = await queryInferenceTable({
-    function_name: "extract_entities",
-    limit: 10,
-  });
-  expect(inferences.length).toBe(10);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
-  }
-
-  // Test pagination with before
-  const inferences2 = await queryInferenceTable({
-    function_name: "extract_entities",
-    before: inferences[inferences.length - 1].id,
-    limit: 10,
-  });
-  expect(inferences2.length).toBe(10);
-
-  // Test pagination with after
-  const inferences3 = await queryInferenceTable({
-    function_name: "extract_entities",
-    after: inferences[0].id,
-    limit: 10,
-  });
-  expect(inferences3.length).toBe(0);
-});
-
-test("queryInferenceTableBounds with function_name", async () => {
-  const bounds = await queryInferenceTableBounds({
-    function_name: "extract_entities",
-  });
-  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0196374c-2c92-74b3-843f-ffa611b577b4");
-});
-
-test("queryInferenceTable with variant_name", async () => {
-  const inferences = await queryInferenceTable({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    limit: 10,
-  });
-  expect(inferences.length).toBe(10);
-
-  // Verify IDs are in descending order
-  for (let i = 1; i < inferences.length; i++) {
-    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
-  }
-
-  // Test pagination with before
-  const inferences2 = await queryInferenceTable({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    before: inferences[inferences.length - 1].id,
-    limit: 10,
-  });
-  expect(inferences2.length).toBe(10);
-
-  // Test pagination with after
-  const inferences3 = await queryInferenceTable({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-    after: inferences[0].id,
-    limit: 10,
-  });
-  expect(inferences3.length).toBe(0);
-});
-
-test("queryInferenceTableBounds with variant_name", async () => {
-  const bounds = await queryInferenceTableBounds({
-    function_name: "extract_entities",
-    variant_name: "gpt4o_initial_prompt",
-  });
-  expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
-  expect(bounds.last_id).toBe("0196368e-5505-7721-88d2-654cd26483b4");
 });
 
 // Tests for listInferencesWithPagination (new cursor-based pagination API)

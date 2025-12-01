@@ -13,8 +13,6 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-  TableBoundsWithCount,
-  InternalInferenceMetadata,
   StoredInference,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
@@ -34,74 +32,6 @@ import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { getTensorZeroClient } from "../tensorzero.server";
 import { isTensorZeroServerError } from "../tensorzero";
-
-/**
- * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
- * before the given `before` ID or after the given `after` ID. Optional filters can be applied
- * for function_name, variant_name, and episode_id.
- *
- * - If `before` and `after` are both not provided, returns the most recent `limit` Inferences.
- * - If `before` and `after` are both provided, throw an error.
- * - If `before` is provided, returns the most recent `limit` Inferences before the given `before` ID.
- * - If `after` is provided, returns the earliest `limit` Inferences after the given `after` ID.
- *
- * All returned data should be ordered by `id` in descending order.
- *
- * TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
- */
-export async function queryInferenceTable(params: {
-  limit: number;
-  before?: string; // UUIDv7 string
-  after?: string; // UUIDv7 string
-  function_name?: string;
-  variant_name?: string;
-  episode_id?: string;
-}): Promise<InternalInferenceMetadata[]> {
-  const { limit, before, after, function_name, variant_name, episode_id } =
-    params;
-
-  if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
-  }
-
-  try {
-    const client = getTensorZeroClient();
-    const result = await client.internalListInferencesById({
-      limit,
-      before,
-      after,
-      function_name,
-      variant_name,
-      episode_id,
-    });
-    return result.inferences;
-  } catch (error) {
-    logger.error("Failed to query inference table:", error);
-    throw data("Error querying inference table", { status: 500 });
-  }
-}
-
-/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
-export async function queryInferenceTableBounds(params?: {
-  function_name?: string;
-  variant_name?: string;
-  episode_id?: string;
-}): Promise<TableBoundsWithCount> {
-  try {
-    const client = getTensorZeroClient();
-    const result = await client.getInferenceBounds(params);
-
-    return {
-      // TODO: handle undefined values instead of nulls
-      first_id: result.earliest_id || null,
-      last_id: result.latest_id || null,
-      count: result.count,
-    };
-  } catch (error) {
-    logger.error("Failed to query inference table bounds:", error);
-    throw data("Error querying inference table bounds", { status: 500 });
-  }
-}
 
 /**
  * Result type for listInferencesWithPagination with pagination info.
