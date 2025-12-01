@@ -8,6 +8,7 @@ COPY . .
 ARG CARGO_BUILD_FLAGS=""
 
 RUN cargo build -p mock-inference-provider $CARGO_BUILD_FLAGS && \
+    mkdir -p /release && \
     cp -r /src/target/debug/mock-inference-provider /release/mock-inference-provider
 
 # ========== mock-inference-provider ==========
