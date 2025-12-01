@@ -8,6 +8,7 @@ use chrono::Duration;
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
 ///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
+use gateway::AuthConfig;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -1431,12 +1432,50 @@ impl Config {
     ///
     /// These fields are infrastructure/runtime concerns that should not be replayed
     /// from historical data.
-    pub fn overlay_runtime_config(&mut self, live_config: &Config) {
-        self.gateway = live_config.gateway.clone();
-        self.object_store_info = live_config.object_store_info.clone();
-        self.postgres = live_config.postgres.clone();
-        self.rate_limiting = live_config.rate_limiting.clone();
-        self.http_client = live_config.http_client.clone();
+    pub fn overlay_runtime_config(self, live_config: &Config) -> Config {
+        let gateway = GatewayConfig {
+            bind_address: None,
+            observability: live_config.gateway.observability.clone(),
+            debug: live_config.gateway.debug,
+            template_filesystem_access: live_config.gateway.template_filesystem_access.clone(),
+            export: live_config.gateway.export.clone(),
+            base_path: None,
+            // We would prefer this to not be global but it is global
+            unstable_error_json: live_config.gateway.unstable_error_json,
+            unstable_disable_feedback_target_validation: live_config
+                .gateway
+                .unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics: live_config
+                .gateway
+                .disable_pseudonymous_usage_analytics,
+            // Rehydrated inferences have object store pointers so we don't need to use
+            // whatever the historical setting was
+            fetch_and_encode_input_files_before_inference: live_config
+                .gateway
+                .fetch_and_encode_input_files_before_inference,
+            auth: AuthConfig {
+                enabled: false,
+                cache: None,
+            },
+            global_outbound_http_timeout: live_config.gateway.global_outbound_http_timeout,
+        };
+        Config {
+            gateway,
+            models: self.models,
+            embedding_models: self.embedding_models,
+            functions: self.functions,
+            metrics: self.metrics,
+            tools: self.tools,
+            evaluations: self.evaluations,
+            templates: self.templates,
+            object_store_info: live_config.object_store_info.clone(),
+            provider_types: self.provider_types,
+            optimizers: self.optimizers,
+            postgres: live_config.postgres.clone(),
+            rate_limiting: live_config.rate_limiting.clone(),
+            http_client: live_config.http_client.clone(),
+            hash: self.hash,
+        }
     }
 }
 

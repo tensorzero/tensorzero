@@ -677,7 +677,7 @@ impl ClientBuilder {
         // Overlay runtime config from live gateway.
         // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
         // reflect the current environment rather than historical snapshot values.
-        config.overlay_runtime_config(live_config);
+        config = config.overlay_runtime_config(live_config);
 
         let config = Arc::new(config);
 

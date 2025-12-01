@@ -3171,7 +3171,7 @@ async fn test_deprecated_template_filesystem_access_enabled() {
 #[test]
 fn test_overlay_runtime_config() {
     // Create snapshot config with default values
-    let mut snapshot_config = Config::default();
+    let snapshot_config = Config::default();
 
     // Create live config with distinguishable values
     let mut live_config = Config::default();
@@ -3188,7 +3188,7 @@ fn test_overlay_runtime_config() {
     );
 
     // Apply overlay
-    snapshot_config.overlay_runtime_config(&live_config);
+    let snapshot_config = snapshot_config.overlay_runtime_config(&live_config);
 
     // Verify gateway was overlaid
     assert!(snapshot_config.gateway.debug);
