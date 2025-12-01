@@ -535,3 +535,124 @@ model = "test_model_{random_id}"
     // Both inferences should have the same snapshot hash
     assert_eq!(snapshot_hash_str, stored_hash2);
 }
+
+/// Test that from_config_snapshot correctly overlays runtime config from live_config
+#[tokio::test(flavor = "multi_thread")]
+async fn test_from_config_snapshot_overlays_runtime_config() {
+    use tensorzero::ClientExt;
+
+    // Create a unique config with randomness
+    let random_id = Uuid::now_v7();
+    let config = format!(
+        r#"
+[gateway]
+debug = false
+
+[models.test_model_{random_id}]
+routing = ["good"]
+
+[models.test_model_{random_id}.providers.good]
+type = "dummy"
+model_name = "good"
+
+[functions.basic_test_{random_id}]
+type = "chat"
+
+[functions.basic_test_{random_id}.variants.test_variant]
+type = "chat_completion"
+model = "test_model_{random_id}"
+"#
+    );
+
+    // Build first client - this writes the snapshot to ClickHouse
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    // Verify the original config has debug = false
+    let original_config = client.get_config().unwrap();
+    assert!(
+        !original_config.gateway.debug,
+        "Original config should have debug = false"
+    );
+
+    // Perform an inference to ensure snapshot is written
+    let params = ClientInferenceParams {
+        function_name: Some(format!("basic_test_{random_id}")),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello!".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let InferenceOutput::NonStreaming(response) = client.inference(params).await.unwrap() else {
+        panic!("Expected a non-streaming response");
+    };
+    let inference_id = response.inference_id();
+
+    drop(client);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Get snapshot hash from ChatInference table
+    let clickhouse = get_clickhouse().await;
+    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let snapshot_hash_str = inference_row
+        .get("snapshot_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let snapshot_hash: SnapshotHash = snapshot_hash_str.parse().unwrap();
+
+    // Load snapshot from ClickHouse
+    let retrieved_snapshot = clickhouse
+        .get_config_snapshot(snapshot_hash.clone())
+        .await
+        .unwrap();
+
+    // Create a live config with DIFFERENT runtime values
+    // Specifically, set debug = true (different from snapshot's debug = false)
+    let mut live_config = Config::default();
+    live_config.gateway.debug = true;
+    live_config.postgres.connection_pool_size = 99; // Different from default of 20
+
+    // Build new client from snapshot with our modified live config
+    let new_client = Box::pin(ClientBuilder::from_config_snapshot(
+        retrieved_snapshot,
+        &live_config,
+        Some(CLICKHOUSE_URL.clone()),
+        None,
+        false,
+        Some(Duration::from_secs(60)),
+    ))
+    .await
+    .unwrap();
+
+    // Verify that the new client's config has the LIVE config's runtime values,
+    // not the snapshot's values
+    let new_config = new_client.get_config().unwrap();
+
+    // Gateway should come from live_config (debug = true), not snapshot (debug = false)
+    assert!(
+        new_config.gateway.debug,
+        "Gateway should be overlaid from live_config (debug = true)"
+    );
+
+    // Postgres should come from live_config (connection_pool_size = 99)
+    assert_eq!(
+        new_config.postgres.connection_pool_size, 99,
+        "Postgres should be overlaid from live_config"
+    );
+
+    // But the function should still come from the snapshot
+    assert!(
+        new_config
+            .functions
+            .contains_key(&format!("basic_test_{random_id}")),
+        "Function from snapshot should still be present"
+    );
+}
