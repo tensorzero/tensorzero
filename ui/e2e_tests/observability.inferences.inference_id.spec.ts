@@ -153,8 +153,8 @@ test("should be able to add float feedback via the inference page", async ({
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -203,8 +203,8 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -250,8 +250,8 @@ test("should be able to add json demonstration feedback via the inference page",
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
@@ -300,8 +300,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Sleep for a little bit to ensure the dialog is open
   await page.waitForTimeout(500);
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page
