@@ -187,8 +187,8 @@ pub struct DatasetQueryParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+/// Parameters to query for dataset metadata (by aggregating over the datapoint tables).
+#[derive(Deserialize)]
 pub struct GetDatasetMetadataParams {
     /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
@@ -200,8 +200,7 @@ pub struct GetDatasetMetadataParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DatasetMetadata {
     pub dataset_name: String,
     pub count: u32,

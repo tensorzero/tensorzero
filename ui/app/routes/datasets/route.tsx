@@ -1,7 +1,4 @@
-import {
-  getDatasetMetadata,
-  countDatasets,
-} from "~/utils/clickhouse/datasets.server";
+import { countDatasets } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
 import { data, isRouteErrorResponse } from "react-router";
@@ -15,6 +12,7 @@ import {
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -23,12 +21,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
-  const datasetMetadata = await getDatasetMetadata({
-    limit,
-    offset,
-  });
-  const numberOfDatasets = await countDatasets();
-  return { counts: datasetMetadata, limit, offset, numberOfDatasets };
+  const [datasetMetadata, numberOfDatasets] = await Promise.all([
+    getTensorZeroClient().listDatasets({
+      limit,
+      offset,
+    }),
+    countDatasets(),
+  ]);
+  return { counts: datasetMetadata.datasets, limit, offset, numberOfDatasets };
 }
 
 export async function action({ request }: Route.ActionArgs) {
