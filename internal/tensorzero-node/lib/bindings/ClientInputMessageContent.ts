@@ -8,7 +8,7 @@ import type { ToolCallWrapper } from "./ToolCallWrapper";
 import type { ToolResult } from "./ToolResult";
 import type { Unknown } from "./Unknown";
 
-export type ClientInputMessageContent =
+export type InputMessageContent =
   | ({ type: "text" } & TextKind)
   | ({ type: "template" } & Template)
   | ({ type: "tool_call" } & ToolCallWrapper)

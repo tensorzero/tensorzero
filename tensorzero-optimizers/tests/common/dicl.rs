@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::use_mock_inference_provider;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
     DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
     RenderedSample, Role, System,
 };
@@ -205,14 +205,14 @@ pub async fn test_dicl_optimization_chat() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(TextKind::Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -489,14 +489,14 @@ pub async fn test_dicl_optimization_json() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(TextKind::Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -631,7 +631,7 @@ fn create_inference_params(
     function_name: &str,
     variant_name: &str,
     episode_id: Uuid,
-    input: ClientInput,
+    input: Input,
     stream: bool,
 ) -> ClientInferenceParams {
     ClientInferenceParams {

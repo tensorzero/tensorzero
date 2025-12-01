@@ -5,7 +5,7 @@ use std::{
 
 use serde_json::json;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
     FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
@@ -65,14 +65,14 @@ async fn test_workflow_evaluation() {
         let inference_params = ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],
@@ -253,14 +253,14 @@ async fn test_workflow_evaluation_other_function() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -326,14 +326,14 @@ async fn test_workflow_evaluation_variant_error() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -381,14 +381,14 @@ async fn test_workflow_evaluation_override_variant_tags() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -439,14 +439,14 @@ async fn test_bad_workflow_evaluation_run() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],

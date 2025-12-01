@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientInferenceParams, Input, InputMessage, InputMessageContent,
     InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -1504,11 +1504,11 @@ max_tokens = 100
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),
         episode_id: Some(episode_id),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "What programming language is used for web development?".to_string(),
                 })],
             }],
@@ -1682,11 +1682,11 @@ max_tokens = 100
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),
         episode_id: Some(episode_id),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Who was the author of the Harry Potter series?".to_string(),
                 })],
             }],

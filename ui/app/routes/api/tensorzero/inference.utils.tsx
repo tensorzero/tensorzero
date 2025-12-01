@@ -5,9 +5,9 @@ import type { ZodDisplayInputMessage } from "~/utils/clickhouse/common";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
   CacheParamsOptions,
-  ClientInput,
-  ClientInputMessage,
-  ClientInputMessageContent,
+  Input,
+  InputMessage,
+  InputMessageContent,
   FunctionConfig,
   JsonValue,
   PathWithContents,
@@ -379,7 +379,7 @@ export function prepareInferenceActionRequest(
     return {
       ...baseParams,
       function_name: args.functionName,
-      input: resolvedInputToClientInput(args.input),
+      input: resolvedInputToInput(args.input),
       variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: args.tool_choice || undefined,
@@ -406,7 +406,7 @@ export function prepareInferenceActionRequest(
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
-    const clientInput = resolvedInputToClientInput(args.resource.input);
+    const Input = resolvedInputToInput(args.resource.input);
     // TODO: this is unsupported in Node bindings for now
     // const extra_body =
     //   args.source === "inference" ? args.resource.extra_body : undefined;
@@ -414,7 +414,7 @@ export function prepareInferenceActionRequest(
     return {
       ...baseParams,
       function_name: args.resource.function_name,
-      input: clientInput,
+      input: Input,
       variant_name: args.variant,
     };
   }
@@ -424,14 +424,14 @@ function prepareDefaultFunctionRequest(
   inference: ParsedInferenceRow,
   selectedVariant: string,
 ): Partial<ClientInferenceParams> {
-  const clientInput = resolvedInputToClientInput(inference.input);
+  const Input = resolvedInputToInput(inference.input);
   if (inference.function_type === "chat") {
     const tool_choice = inference.tool_params?.tool_choice;
     const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
     const tools_available = inference.tool_params?.tools_available;
     return {
       model_name: selectedVariant,
-      input: clientInput,
+      input: Input,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls || undefined,
       // We need to add all tools as additional for the default function
@@ -442,7 +442,7 @@ function prepareDefaultFunctionRequest(
     const output_schema = inference.output_schema;
     return {
       model_name: selectedVariant,
-      input: clientInput,
+      input: Input,
       output_schema: output_schema || null,
     };
   }
@@ -450,7 +450,7 @@ function prepareDefaultFunctionRequest(
   // Fallback case
   return {
     model_name: selectedVariant,
-    input: clientInput,
+    input: Input,
   };
 }
 
@@ -459,12 +459,12 @@ export interface VariantResponseInfo {
   usage?: InferenceUsage;
 }
 
-export function resolvedInputToClientInput(
+export function resolvedInputToInput(
   input: ZodDisplayInput,
-): ClientInput {
+): Input {
   return {
     system: input.system || null,
-    messages: input.messages.map(resolvedInputMessageToClientInputMessage),
+    messages: input.messages.map(resolvedInputMessageToInputMessage),
   };
 }
 
@@ -527,20 +527,20 @@ function resolvedFileContentToTensorZeroFile(
   };
 }
 
-function resolvedInputMessageToClientInputMessage(
+function resolvedInputMessageToInputMessage(
   message: ZodDisplayInputMessage,
-): ClientInputMessage {
+): InputMessage {
   return {
     role: message.role,
     content: message.content.map(
-      resolvedInputMessageContentToClientInputMessageContent,
+      resolvedInputMessageContentToInputMessageContent,
     ),
   };
 }
 
-function resolvedInputMessageContentToClientInputMessageContent(
+function resolvedInputMessageContentToInputMessageContent(
   content: ZodDisplayInputMessageContent,
-): ClientInputMessageContent {
+): InputMessageContent {
   switch (content.type) {
     case "template":
       return content;
@@ -605,7 +605,7 @@ function resolvedInputMessageContentToClientInputMessageContent(
 
 function resolvedFileContentToClientFile(
   content: ZodResolvedFileContent,
-): ClientInputMessageContent {
+): InputMessageContent {
   const data = content.file.data.split(",")[1];
   return {
     type: "file",

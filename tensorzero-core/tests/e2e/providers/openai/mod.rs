@@ -7,7 +7,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
     InputMessage, InputMessageContent, Role, UnknownChunk, UrlFile,
 };
@@ -2013,11 +2013,11 @@ async fn test_forward_image_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("openai::gpt-4o-mini".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
@@ -2092,11 +2092,11 @@ async fn test_forward_file_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("openai::gpt-4o-mini".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,
@@ -2365,11 +2365,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2445,21 +2445,21 @@ model = "test-model"
     );
 
     // Round-trip test: Convert output content blocks back to input and make another inference
-    let assistant_content: Vec<ClientInputMessageContent> = chat_response
+    let assistant_content: Vec<InputMessageContent> = chat_response
         .content
         .iter()
         .map(|block| match block {
-            ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
+            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+            ContentBlockChatOutput::ToolCall(tool_call) => InputMessageContent::ToolCall(
                 ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
             ),
             ContentBlockChatOutput::Thought(thought) => {
-                ClientInputMessageContent::Thought(thought.clone())
+                InputMessageContent::Thought(thought.clone())
             }
             ContentBlockChatOutput::Unknown(unknown) => {
-                ClientInputMessageContent::Unknown(unknown.clone())
+                InputMessageContent::Unknown(unknown.clone())
             }
         })
         .collect();
@@ -2470,22 +2470,22 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
                 messages: vec![
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(TextKind::Text {
                             text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::Assistant,
                         content: assistant_content,
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(TextKind::Text {
                             text: "Can you summarize what you just told me in one sentence?"
                                 .to_string(),
                         })],
@@ -2554,11 +2554,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2732,11 +2732,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
@@ -2832,21 +2832,21 @@ model = "test-model"
     );
 
     // Round-trip test: Convert output content blocks back to input and make another inference
-    let assistant_content: Vec<ClientInputMessageContent> = chat_response
+    let assistant_content: Vec<InputMessageContent> = chat_response
         .content
         .iter()
         .map(|block| match block {
-            ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
+            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+            ContentBlockChatOutput::ToolCall(tool_call) => InputMessageContent::ToolCall(
                 ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
             ),
             ContentBlockChatOutput::Thought(thought) => {
-                ClientInputMessageContent::Thought(thought.clone())
+                InputMessageContent::Thought(thought.clone())
             }
             ContentBlockChatOutput::Unknown(unknown) => {
-                ClientInputMessageContent::Unknown(unknown.clone())
+                InputMessageContent::Unknown(unknown.clone())
             }
         })
         .collect();
@@ -2857,22 +2857,22 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
                 messages: vec![
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(TextKind::Text {
                             text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::Assistant,
                         content: assistant_content,
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(TextKind::Text {
                             text: "Can you summarize what you just told me in one sentence?"
                                 .to_string(),
                         })],
@@ -3067,14 +3067,14 @@ async fn test_file_custom_filename_sent_to_openai() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: ClientInput {
-                messages: vec![ClientInputMessage {
+            input: Input {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the PDF".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                             mime_type: Some(mime::APPLICATION_PDF),
                             detail: None,
@@ -3135,14 +3135,14 @@ async fn test_file_fallback_filename_sent_to_openai() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: ClientInput {
-                messages: vec![ClientInputMessage {
+            input: Input {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the PDF".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                             mime_type: Some(mime::APPLICATION_PDF),
                             detail: None,

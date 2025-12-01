@@ -9,7 +9,7 @@ use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::Clients;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
@@ -1651,12 +1651,12 @@ async fn test_run_llm_judge_evaluator_chat() {
         cutoff: None,
         description: None,
     };
-    // Construct the equivalent ClientInput for the datapoint
-    let input = ClientInput {
+    // Construct the equivalent Input for the datapoint
+    let input = Input {
         system: None,
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(TextKind::Text {
                 text: "Hello, world!".to_string(),
             })],
         }],
@@ -1829,12 +1829,12 @@ async fn test_run_llm_judge_evaluator_json() {
         cutoff: None,
         description: None,
     };
-    // Construct the equivalent ClientInput for the datapoint
-    let input = ClientInput {
+    // Construct the equivalent Input for the datapoint
+    let input = Input {
         system: None,
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(TextKind::Text {
                 text: "Hello, world!".to_string(),
             })],
         }],

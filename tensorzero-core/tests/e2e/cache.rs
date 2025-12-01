@@ -11,9 +11,9 @@ use serde_json::Value;
 use std::time::Duration;
 use tensorzero::CacheParamsOptions;
 use tensorzero::ClientInferenceParams;
-use tensorzero::ClientInput;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
+use tensorzero::Input;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
 use tensorzero::ContentBlockChunk;
 use tensorzero::DynamicToolParams;
 use tensorzero::FunctionTool;
@@ -356,11 +356,11 @@ pub async fn test_dont_cache_invalid_tool_call() {
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],
@@ -406,11 +406,11 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],

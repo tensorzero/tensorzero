@@ -30,8 +30,8 @@ pub use tensorzero_core::client::{
 
 // Client input types
 pub use tensorzero_core::client::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString,
+    CacheParamsOptions, ClientInferenceParams, Input, InputMessage,
+    InputMessageContent, ClientSecretString,
 };
 
 // Input handling utilities

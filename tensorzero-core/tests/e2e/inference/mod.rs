@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, Input, InputMessage, InputMessageContent,
     InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -1364,14 +1364,14 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
     let error = client
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1410,14 +1410,14 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1757,14 +1757,14 @@ base_path = "{root}"
 
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1802,14 +1802,14 @@ model = "dummy::good"
 
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1875,10 +1875,10 @@ model_name = "json"
 
     let params = ClientInferenceParams {
         function_name: Some("best_of_n".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1947,10 +1947,10 @@ model = "dummy::flaky_model"
 
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -2576,14 +2576,14 @@ pub async fn test_raw_text(client: tensorzero::Client) {
         .inference(ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::RawText(RawText {
+                    content: vec![InputMessageContent::RawText(RawText {
                         value: "This is not the normal input".into(),
                     })],
                 }],
@@ -2895,11 +2895,11 @@ async fn test_dummy_only_embedded_gateway_no_config() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -2936,11 +2936,11 @@ async fn test_dummy_only_replicated_clickhouse() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(TextKind::Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -3212,15 +3212,15 @@ async fn test_image_inference_without_object_store() {
     let err_msg = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(
+                        InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
                                 mime::IMAGE_PNG,
@@ -3387,15 +3387,15 @@ async fn test_tool_call_input_no_warning() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+                        InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                             id: "0".to_string(),
                             name: "get_temperature".to_string(),
                             arguments: json!({
@@ -3903,11 +3903,11 @@ async fn test_clickhouse_bulk_insert() {
                 .inference(ClientInferenceParams {
                     episode_id: Some(episode_id),
                     model_name: Some("dummy::my-model".to_string()),
-                    input: ClientInput {
+                    input: Input {
                         system: None,
-                        messages: vec![ClientInputMessage {
+                        messages: vec![InputMessage {
                             role: Role::User,
-                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            content: vec![InputMessageContent::Text(TextKind::Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             })],
                         }],

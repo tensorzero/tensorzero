@@ -18,7 +18,7 @@ use serde_json::{from_value, json, to_value, Map};
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+        Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
         InferenceOutput,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
@@ -178,10 +178,10 @@ pub async fn mutate_variant(
     // Create ClientInferenceParams for the mutate function
     let params = ClientInferenceParams {
         function_name: Some("tensorzero::optimization::gepa::mutate".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Template(Template {
+                content: vec![InputMessageContent::Template(Template {
                     name: "user".to_string(),
                     arguments,
                 })],

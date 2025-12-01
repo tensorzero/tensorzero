@@ -16,8 +16,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::client_input::{test_client_input_to_input, ClientInput};
-
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
@@ -32,7 +30,7 @@ pub struct ClientInferenceParams {
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
     // the input for the inference
-    pub input: ClientInput,
+    pub input: Input,
     // default False
     pub stream: Option<bool>,
     // Inference-time overrides for variant types (use with caution)
@@ -97,25 +95,11 @@ pub struct ClientInferenceParams {
 impl TryFrom<ClientInferenceParams> for Params {
     type Error = Error;
     fn try_from(this: ClientInferenceParams) -> Result<Self, Error> {
-        let mut messages = Vec::with_capacity(this.input.messages.len());
-        for message in this.input.messages {
-            let mut content = Vec::with_capacity(message.content.len());
-            for input_content in message.content {
-                content.push(input_content.to_input_message_content(&message.role)?);
-            }
-            messages.push(InputMessage {
-                role: message.role,
-                content,
-            });
-        }
         Ok(Params {
             function_name: this.function_name,
             model_name: this.model_name,
             episode_id: this.episode_id,
-            input: Input {
-                system: this.input.system,
-                messages,
-            },
+            input: this.input,
             stream: this.stream,
             params: this.params,
             variant_name: this.variant_name,
@@ -169,7 +153,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
-        input: test_client_input_to_input(input),
+        input,
         stream,
         params,
         variant_name,

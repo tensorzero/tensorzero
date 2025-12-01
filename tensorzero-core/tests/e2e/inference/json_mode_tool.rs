@@ -18,7 +18,7 @@
 
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, InferenceOutput, InferenceResponse,
+    ClientInferenceParams, Input, InputMessage, InferenceOutput, InferenceResponse,
     InferenceResponseChunk, Role,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
@@ -66,11 +66,11 @@ model = "dummy::good"
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_no_tools".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "This is a great product!".to_string(),
                         },
@@ -118,11 +118,11 @@ model = "dummy::good"
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_no_tools".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "This is a great product!".to_string(),
                         },
@@ -195,11 +195,11 @@ parameters = "{}"
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_with_tools".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "What's the temperature?".to_string(),
                         },
@@ -263,11 +263,11 @@ model = "dummy::good"
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_no_tools".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "Test message".to_string(),
                         },
@@ -310,11 +310,11 @@ async fn test_model_name_with_output_schema_succeeds() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "This is a great product!".to_string(),
                         },
@@ -349,11 +349,11 @@ async fn test_model_name_without_output_schema_fails() {
     let result = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "This is a great product!".to_string(),
                         },
@@ -402,11 +402,11 @@ model = "dummy::good_tool"
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_tool_mode".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "Analyze sentiment".to_string(),
                         },
@@ -505,11 +505,11 @@ model = "dummy::good_tool"
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("test_chat_tool_mode".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "Analyze sentiment".to_string(),
                         },
@@ -641,11 +641,11 @@ json_mode = "tool"
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("test_json".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "Extract: John Doe, john@example.com".to_string(),
                         },
@@ -711,11 +711,11 @@ json_mode = "tool"
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("test_json_stream".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: "Analyze sentiment".to_string(),
                         },
@@ -802,11 +802,11 @@ Text: \"My name is Megumin. I love my job as an archmage.\""#;
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                    content: vec![tensorzero::InputMessageContent::Text(
                         TextKind::Text {
                             text: conflicting_prompt.to_string(),
                         },
