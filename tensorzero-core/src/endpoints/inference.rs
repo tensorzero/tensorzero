@@ -1044,7 +1044,7 @@ async fn write_inference(
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_responses: Vec<serde_json::Value> = result
-        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
+        .get_serialized_model_inferences(metadata.snapshot_hash.if_enabled())
         .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);

@@ -1718,7 +1718,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub ttft_ms: Option<u32>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
-    pub snapshot_hash: SnapshotHash,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[cfg(test)]
@@ -1842,7 +1842,7 @@ impl ModelInferenceDatabaseInsert {
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
-        snapshot_hash: SnapshotHash,
+        snapshot_hash: Option<SnapshotHash>,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1946,7 +1946,7 @@ impl InferenceResult {
 
     pub async fn get_serialized_model_inferences(
         &self,
-        snapshot_hash: SnapshotHash,
+        snapshot_hash: Option<SnapshotHash>,
     ) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
@@ -2163,7 +2163,7 @@ impl ChatInferenceDatabaseInsert {
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
-            snapshot_hash: Some(metadata.snapshot_hash),
+            snapshot_hash: metadata.snapshot_hash.if_enabled(),
         }
     }
 }
@@ -2201,7 +2201,7 @@ impl JsonInferenceDatabaseInsert {
             tags: metadata.tags,
             extra_body: metadata.extra_body,
             ttft_ms: metadata.ttft_ms,
-            snapshot_hash: Some(metadata.snapshot_hash),
+            snapshot_hash: metadata.snapshot_hash.if_enabled(),
         }
     }
 }

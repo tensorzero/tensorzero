@@ -1327,7 +1327,7 @@ pub async fn write_config_snapshot(
     snapshot: ConfigSnapshot,
 ) -> Result<(), Error> {
     // Feature flag: only write if TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1
-    if std::env::var("TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT").unwrap_or_default() != "1" {
+    if !snapshot::write_snapshot_hash_enabled() {
         return Ok(());
     }
     // Define the row structure for serialization

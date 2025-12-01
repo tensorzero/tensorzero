@@ -253,7 +253,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
-                snapshot_hash: Some(config.hash.clone()),
+                snapshot_hash: config.hash.if_enabled(),
 
                 // Ignored during insert.
                 is_deleted: false,
@@ -299,7 +299,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
-                snapshot_hash: Some(config.hash.clone()),
+                snapshot_hash: config.hash.if_enabled(),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -468,7 +468,7 @@ pub async fn update_datapoint_handler(
                 is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
                 staled_at: chat.staled_at,
-                snapshot_hash: Some(app_state.config.hash.clone()),
+                snapshot_hash: app_state.config.hash.if_enabled(),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -558,7 +558,7 @@ pub async fn update_datapoint_handler(
                 is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
                 staled_at: json.staled_at,
-                snapshot_hash: Some(app_state.config.hash.clone()),
+                snapshot_hash: app_state.config.hash.if_enabled(),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -1282,7 +1282,7 @@ impl ChatInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-            snapshot_hash: Some(snapshot_hash),
+            snapshot_hash: snapshot_hash.if_enabled(),
         })
     }
 
@@ -1316,7 +1316,7 @@ impl ChatInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-            snapshot_hash: Some(snapshot_hash.clone()),
+            snapshot_hash: snapshot_hash.if_enabled(),
         })
     }
 }
@@ -1357,7 +1357,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-            snapshot_hash: Some(snapshot_hash),
+            snapshot_hash: snapshot_hash.if_enabled(),
         })
     }
 
@@ -1386,7 +1386,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-            snapshot_hash: Some(snapshot_hash),
+            snapshot_hash: snapshot_hash.if_enabled(),
         })
     }
 }

@@ -1093,7 +1093,7 @@ pub async fn write_completed_batch_inference<'a>(
         };
         model_inference_rows_to_write.extend(
             inference_result
-                .get_serialized_model_inferences(config.hash.clone())
+                .get_serialized_model_inferences(config.hash.if_enabled())
                 .await,
         );
         match inference_result {

@@ -87,6 +87,24 @@ impl std::fmt::Display for SnapshotHash {
     }
 }
 
+/// Returns true if the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT` feature flag is enabled.
+/// When enabled (set to "1"), snapshot hashes will be written to database tables.
+pub fn write_snapshot_hash_enabled() -> bool {
+    std::env::var("TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT").unwrap_or_default() == "1"
+}
+
+impl SnapshotHash {
+    /// Returns `Some(self.clone())` if snapshot hash writing is enabled, otherwise `None`.
+    /// Use this when setting `snapshot_hash` fields on database insert structs.
+    pub fn if_enabled(&self) -> Option<SnapshotHash> {
+        if write_snapshot_hash_enabled() {
+            Some(self.clone())
+        } else {
+            None
+        }
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl SnapshotHash {
     pub fn new_test() -> SnapshotHash {
