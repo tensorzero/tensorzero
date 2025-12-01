@@ -352,7 +352,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
             })
         })?;
 
-        ConfigSnapshot::from_stored(&row.config, row.extra_templates)
+        ConfigSnapshot::from_stored(&row.config, row.extra_templates, &snapshot_hash)
     }
 }
 
