@@ -54,13 +54,6 @@ impl From<StoredEmbeddingModelConfig> for UninitializedEmbeddingModelConfig {
             timeouts,
         } = stored;
 
-        // Emit deprecation warning if old format detected
-        if timeouts.non_streaming.total_ms.is_some() {
-            crate::utils::deprecation_warning(
-                "`timeouts` is deprecated for embedding models. Use `timeout_ms` instead.",
-            );
-        }
-
         Self {
             routing,
             providers: providers.into_iter().map(|(k, v)| (k, v.into())).collect(),

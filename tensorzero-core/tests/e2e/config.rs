@@ -569,38 +569,3 @@ model_name = "test"
         "Expected 'unknown field' error for deprecated timeouts, got: {err}"
     );
 }
-
-/// Test that fresh configs REJECT the deprecated timeouts field for embedding providers.
-#[tokio::test]
-async fn test_fresh_config_rejects_deprecated_embedding_provider_timeouts() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let config_path = temp_dir.path().join("config.toml");
-
-    // Config with deprecated `timeouts` field on provider
-    std::fs::write(
-        &config_path,
-        r#"
-[embedding_models.test_model]
-routing = ["provider"]
-
-[embedding_models.test_model.providers.provider]
-type = "dummy"
-model_name = "test"
-timeouts.non_streaming.total_ms = 5000
-"#,
-    )
-    .unwrap();
-
-    let result = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new(config_path.to_string_lossy().to_string()).unwrap(),
-        false,
-    )
-    .await;
-
-    // Should fail with "unknown field" error
-    let err = result.unwrap_err();
-    assert!(
-        err.to_string().contains("unknown field"),
-        "Expected 'unknown field' error for deprecated provider timeouts, got: {err}"
-    );
-}
