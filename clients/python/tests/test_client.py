@@ -2308,7 +2308,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "id": "1",
     }
     assert request["input"]["messages"][2]["content"][0] == {
-        "type": "text",
+        "type": "template",
+        "name": "user",
         "arguments": {"foo": "bar"},
     }
     assert request["input"]["messages"][2]["content"][1] == {
@@ -3321,7 +3322,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_core::client::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
     )
 
 
@@ -3363,7 +3364,7 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                 }
             ],
         },
