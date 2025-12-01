@@ -274,6 +274,28 @@ function ImageContentBlock({
   isEditing,
   onChange,
 }: ImageContentBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(",")[1] ?? "";
+      onChange?.({
+        file_type: "base64",
+        data: base64Data,
+        mime_type: file.type || block.mime_type,
+        filename: block.filename || file.name,
+        detail: block.detail,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <ContentBlockLabel
@@ -292,6 +314,27 @@ function ImageContentBlock({
         >
           <img src={block.data} alt="Image" />
         </Link>
+        {isEditing && (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              Replace File
+            </Button>
+          </div>
+        )}
         <FileAdvancedAccordion
           filename={block.filename}
           mimeType={block.mime_type}
@@ -325,7 +368,27 @@ function AudioContentBlock({
   isEditing,
   onChange,
 }: AudioContentBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const blobUrl = useBase64UrlToBlobUrl(block.data, block.mime_type);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(",")[1] ?? "";
+      onChange?.({
+        file_type: "base64",
+        data: base64Data,
+        mime_type: file.type || block.mime_type,
+        filename: block.filename || file.name,
+        detail: block.detail,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -344,6 +407,27 @@ function AudioContentBlock({
         <audio controls preload="none" className="w-full">
           <source src={blobUrl} type={block.mime_type} />
         </audio>
+        {isEditing && (
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="audio/*"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              Replace File
+            </Button>
+          </div>
+        )}
         <FileAdvancedAccordion
           filename={block.filename}
           mimeType={block.mime_type}
@@ -377,7 +461,28 @@ function GenericFileContentBlock({
   isEditing,
   onChange,
 }: GenericFileContentBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const blobUrl = useBase64UrlToBlobUrl(block.data, block.mime_type);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(",")[1] ?? "";
+      onChange?.({
+        file_type: "base64",
+        data: base64Data,
+        mime_type: file.type || block.mime_type,
+        filename: block.filename || file.name,
+        detail: block.detail,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -413,6 +518,26 @@ function GenericFileContentBlock({
             <ExternalLink className="h-5 w-5" />
           </Link>
         </div>
+        {isEditing && (
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              Replace File
+            </Button>
+          </div>
+        )}
         <FileAdvancedAccordion
           filename={block.filename}
           mimeType={block.mime_type}
@@ -445,6 +570,28 @@ function FileErrorContentBlock({
   isEditing,
   onChange,
 }: FileErrorContentBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(",")[1] ?? "";
+      onChange?.({
+        file_type: "base64",
+        data: base64Data,
+        mime_type: file.type || block.mime_type,
+        filename: block.filename || file.name,
+        detail: block.detail,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const errorMessage = block.error || "Failed to retrieve file";
 
   return (
@@ -471,6 +618,26 @@ function FileErrorContentBlock({
             </Tooltip>
           </div>
         </div>
+        {isEditing && (
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              Replace File
+            </Button>
+          </div>
+        )}
         <FileAdvancedAccordion
           filename={block.filename}
           mimeType={block.mime_type}
