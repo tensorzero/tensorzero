@@ -39,21 +39,23 @@ TensorZero tests against ClickHouse Cloud's `regular` (recommended) and `fast` r
 
 You can alternatively run your own self-managed ClickHouse instance or cluster.
 
+<Warning>
+
+**We strongly recommend using ClickHouse `lts` instead of `latest` in production.**
+
+We test against both versions, but ClickHouse `latest` often has bugs and breaking changes.
+
+</Warning>
+
 TensorZero supports single-node and replicated deployments.
 
 <Warning>
-  TensorZero does not currently support **sharded** self-hosted ClickHouse
-  deployments.
+
+TensorZero does not currently support **sharded** self-hosted ClickHouse deployments.
+
 </Warning>
 
 See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more details on configuring your ClickHouse deployment.
-
-<Note>
-
-TensorZero tests against ClickHouse `lts` (recommended) and `latest`.
-ClickHouse occasionally introduces breaking changes on `latest`.
-
-</Note>
 
 ## Configure
 

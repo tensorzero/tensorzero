@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse:24.12
+    image: clickhouse:lts
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -73,7 +73,7 @@ services:
   # Optional: Load fixture data into ClickHouse (`docker compose up load-fixture`)
   load-fixture:
     profiles: [load-fixture]
-    image: clickhouse:24.12
+    image: clickhouse:lts
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_PASSWORD: chpassword

@@ -17,8 +17,8 @@ import {
 } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { listDatapoints } from "~/utils/tensorzero.server";
-import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
@@ -152,11 +152,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const datasetName = searchParams.get("datasetName");
 
-  let datapoints, totalDatapoints;
+  let getDatapointsResponse, totalDatapoints;
   try {
-    [datapoints, totalDatapoints] = datasetName
+    [getDatapointsResponse, totalDatapoints] = datasetName
       ? await Promise.all([
-          listDatapoints(datasetName, functionName ?? undefined, limit, offset),
+          getTensorZeroClient().listDatapoints(datasetName, {
+            function_name: functionName ?? undefined,
+            limit,
+            offset,
+          }),
           functionName
             ? countDatapointsForDatasetFunction(datasetName, functionName)
             : null,
@@ -171,12 +175,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  const datapoints: TensorZeroDatapoint[] =
+    getDatapointsResponse?.datapoints ?? [];
+
   let inputs;
   try {
-    inputs = datapoints
+    inputs = getDatapointsResponse
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
-            const inputData = tensorZeroStoredInputToInput(datapoint.input);
+            const inputData = datapointInputToZodInput(datapoint.input);
             return await resolveInput(inputData, functionConfig ?? null);
           }),
         )

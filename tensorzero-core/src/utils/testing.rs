@@ -13,7 +13,7 @@ use tracing_subscriber::{fmt::MakeWriter, FmtSubscriber};
 
 // This can be tweaked as needed if we want to capture more or less output
 // in tests that use `capture_logs`
-const TEST_LOG_FILTER: &str = "gateway=trace,tensorzero_core=trace,tower_http::trace=debug,warn";
+const TEST_LOG_FILTER: &str = "gateway=trace,tensorzero_core=trace,warn";
 
 static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
 

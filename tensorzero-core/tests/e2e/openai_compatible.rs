@@ -1121,3 +1121,138 @@ async fn test_openai_compatible_file_with_custom_filename() {
         "myfile.pdf"
     );
 }
+
+#[tokio::test]
+async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // First request: Get parallel tool calls
+    let body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": [
+            { "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]},
+            {
+                "role": "user",
+                "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            }
+        ],
+        "parallel_tool_calls": true,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "gpt-5-mini",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("First request response: {response_json:#?}");
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Extract inference_id from response
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // ClickHouse validation
+    let clickhouse = get_clickhouse().await;
+
+    // Validate ChatInference table
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {chat_inference:#?}");
+
+    // Validate ModelInference table
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {model_inference:#?}");
+
+    // Extract tool calls from response
+    let first_message = response_json["choices"][0]["message"].clone();
+    let tool_calls = first_message["tool_calls"].as_array().unwrap();
+    assert_eq!(tool_calls.len(), 2);
+
+    // Build messages with tool results (one tool message per tool call)
+    let mut messages = vec![
+        json!({ "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]}),
+        json!({
+            "role": "user",
+            "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+        }),
+        first_message.clone(),
+    ];
+
+    // Add one tool message for each tool call
+    for tool_call in tool_calls {
+        let tool_id = tool_call["id"].as_str().unwrap();
+        let tool_name = tool_call["function"]["name"].as_str().unwrap();
+
+        let result_content = match tool_name {
+            "get_temperature" => "22°C",
+            "get_humidity" => "65%",
+            _ => panic!("Unexpected tool: {tool_name}"),
+        };
+
+        messages.push(json!({
+            "role": "tool",
+            "tool_call_id": tool_id,
+            "content": result_content
+        }));
+    }
+
+    // Second request: Submit tool results and get final response
+    let second_body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": messages,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "openai",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&second_body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let final_response_json = response.json::<Value>().await.unwrap();
+
+    println!("Final response: {final_response_json:#?}");
+
+    // Validate final response
+    let final_choice = &final_response_json["choices"][0];
+    let finish_reason = final_choice["finish_reason"].as_str().unwrap();
+    // Should be "stop" (normal completion) not "tool_calls" since we provided results
+    assert_eq!(finish_reason, "stop");
+
+    // Should have text content in the response
+    let content = final_choice["message"]["content"].as_str();
+    assert!(content.is_some());
+    assert!(!content.unwrap().is_empty());
+
+    // Should not have tool_calls in final response
+    let tool_calls = final_choice["message"]["tool_calls"].as_array().unwrap();
+    assert!(tool_calls.is_empty());
+
+    println!(
+        "Multi-turn test passed! Got final response: {}",
+        content.unwrap()
+    );
+}

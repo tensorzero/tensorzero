@@ -13,18 +13,16 @@ RUN cargo build -p mock-inference-provider $CARGO_BUILD_FLAGS && \
 
 # ========== mock-inference-provider ==========
 
-FROM debian:bookworm-slim AS mock-inference-provider
-
-RUN apt-get update && apt-get install -y wget
-
-RUN useradd -m -s /bin/bash mock-inference-provider
-
-USER mock-inference-provider
+FROM gcr.io/distroless/cc-debian12:debug AS mock-inference-provider
 
 COPY --from=builder /release/mock-inference-provider /usr/local/bin/mock-inference-provider
 
 WORKDIR /app
 
 EXPOSE 3030
+
+USER nonroot:nonroot
+
+HEALTHCHECK --start-period=30s --start-interval=1s --timeout=1s CMD ["/busybox/wget", "--spider", "--tries=1", "http://localhost:3030/status"]
 
 ENTRYPOINT ["mock-inference-provider"]

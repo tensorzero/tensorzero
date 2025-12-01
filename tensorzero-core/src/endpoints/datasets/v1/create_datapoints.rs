@@ -315,7 +315,7 @@ mod tests {
                 episode_id: None,
                 input: create_chat_input(),
                 output: Some(JsonDatapointOutputUpdate {
-                    raw: r#"{"value": "test"}"#.to_string(),
+                    raw: Some(r#"{"value": "test"}"#.to_string()),
                 }),
                 output_schema: None,
                 tags: None,
@@ -391,7 +391,7 @@ mod tests {
                     episode_id: None,
                     input: create_chat_input(),
                     output: Some(JsonDatapointOutputUpdate {
-                        raw: r#"{"value": "test"}"#.to_string(),
+                        raw: Some(r#"{"value": "test"}"#.to_string()),
                     }),
                     output_schema: None,
                     tags: None,

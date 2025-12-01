@@ -4,14 +4,13 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::datasets::{
-    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetMetadata, DatasetQueries, DatasetQueryParams,
-    GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
+    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
+    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
+    MockDatasetQueries,
 };
 use crate::db::inferences::{
-    GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
-    MockInferenceQueries,
+    GetInferenceBoundsParams, InferenceBounds, InferenceMetadata, InferenceQueries,
+    ListInferencesByIdParams, ListInferencesParams, MockInferenceQueries,
 };
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
@@ -57,6 +56,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<InferenceBounds, Error> {
         self.inference_queries.get_inference_bounds(params).await
     }
+
+    async fn list_inferences_by_id(
+        &self,
+        params: ListInferencesByIdParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        self.inference_queries.list_inferences_by_id(params).await
+    }
 }
 
 #[async_trait]
@@ -67,13 +73,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
         self.dataset_queries.insert_rows_for_dataset(params).await
-    }
-
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error> {
-        self.dataset_queries.get_dataset_rows(params).await
     }
 
     async fn get_dataset_metadata(
@@ -87,10 +86,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.count_datasets().await
     }
 
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error> {
-        self.dataset_queries.stale_datapoint(params).await
-    }
-
     async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
@@ -101,15 +96,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
     ) -> Result<u32, Error> {
         self.dataset_queries
             .count_datapoints_for_dataset_function(params)
-            .await
-    }
-
-    async fn get_adjacent_datapoint_ids(
-        &self,
-        params: &GetAdjacentDatapointIdsParams,
-    ) -> Result<AdjacentDatapointIds, Error> {
-        self.dataset_queries
-            .get_adjacent_datapoint_ids(params)
             .await
     }
 

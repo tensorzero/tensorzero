@@ -4,7 +4,10 @@ use chrono::Utc;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
+use pyo3::{
+    types::{PyDict, PyModule},
+    IntoPyObjectExt,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -235,7 +238,7 @@ async fn insert_from_existing(
                 }
                 OutputKind::None => None,
             };
-            // TODO(#3957): the `put_json_datapoints` call should really take a `JsonInferenceDatapointInsert`. We'll fix it separately.
+            // TODO(#4737): review the usage of Stored* and *Insert types.
             let datapoint = StoredJsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
@@ -247,12 +250,12 @@ async fn insert_from_existing(
                 output_schema: inference.output_schema,
                 tags: Some(inference.tags),
                 auxiliary: String::new(),
-                is_deleted: false,
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
 
                 // Ignored during insert.
+                is_deleted: false,
                 updated_at: Utc::now().to_string(),
             };
             let rows_written = clickhouse
@@ -382,7 +385,7 @@ pub async fn update_datapoint_handler(
             let resolved_input = chat
                 .input
                 .clone()
-                .into_lazy_resolved_input(fetch_context)?
+                .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
             function_config.validate_input(&chat.input)?;
@@ -487,7 +490,7 @@ pub async fn update_datapoint_handler(
             let resolved_input = json
                 .input
                 .clone()
-                .into_lazy_resolved_input(fetch_context)?
+                .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
             function_config.validate_input(&json.input)?;
@@ -788,9 +791,22 @@ pub async fn insert_datapoint(
                 }
 
                 // Convert legacy Value output to JsonDatapointOutputUpdate
-                let output_update = json.output.map(|output| JsonDatapointOutputUpdate {
-                    raw: output.to_string(),
-                });
+                let output_update = match json.output {
+                    Some(output) => {
+                        let raw = match output {
+                            serde_json::Value::Object(_) => Some(output.to_string()),
+                            serde_json::Value::Null => None,
+                            _ => {
+                                return Err(Error::new(ErrorDetails::InvalidRequest {
+                                    message: "The field `output` must be an object or null."
+                                        .to_string(),
+                                }))
+                            }
+                        };
+                        Some(JsonDatapointOutputUpdate { raw })
+                    }
+                    None => None,
+                };
 
                 v1_datapoints.push(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: json.function_name,
@@ -1030,7 +1046,7 @@ pub async fn list_datapoints(
 
     let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
-        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint(config))
+        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint())
         .collect();
     let datapoints = match datapoints {
         Ok(datapoints) => datapoints,
@@ -1096,7 +1112,7 @@ pub async fn get_datapoint_handler(
         .await?;
 
     // Convert storage type to wire type
-    let wire = datapoint.into_datapoint(&app_state.config)?;
+    let wire = datapoint.into_datapoint()?;
     Ok(Json(wire))
 }
 
@@ -1193,7 +1209,7 @@ impl Datapoint {
         }
     }
 
-    pub fn input(&self) -> &StoredInput {
+    pub fn input(&self) -> &Input {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
             Datapoint::Json(datapoint) => &datapoint.input,
@@ -1206,25 +1222,68 @@ impl Datapoint {
             Datapoint::Json(_) => None,
         }
     }
+
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        match self {
+            Datapoint::Chat(_datapoint) => None,
+            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
+        }
+    }
 }
 
 impl StoredDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    /// TODO(shuyangli): Prepare for resolving
-    pub fn into_datapoint(self, config: &Config) -> Result<Datapoint, Error> {
+    /// TODO(shuyangli): Add parameter to optionally fetch files from object storage
+    pub fn into_datapoint(self) -> Result<Datapoint, Error> {
         match self {
-            StoredDatapoint::Chat(chat) => {
-                let function_config = config.get_function(&chat.function_name)?;
-                Ok(Datapoint::Chat(chat.into_datapoint(&function_config)))
-            }
+            StoredDatapoint::Chat(chat) => Ok(Datapoint::Chat(chat.into_datapoint())),
             StoredDatapoint::Json(json) => Ok(Datapoint::Json(json.into_datapoint())),
         }
     }
 }
 
 impl ChatInferenceDatapoint {
-    /// Convert to storage type, properly handling tool params with function config
-    pub fn into_storage(
+    /// Convert to storage type, properly handling tool params with function config.
+    /// If `fetch_context` is provided, any external URLs or Base64 files will be properly resolved and stored.
+    /// If `fetch_context` is not provided, we will return an error if the input contains any external URLs or Base64 files,
+    /// because we cannot represent them as the database type.
+    pub async fn into_storage(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+        fetch_context: &FetchContext<'_>,
+    ) -> Result<StoredChatInferenceDatapoint, Error> {
+        let tool_params = function_config
+            .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
+        let stored_input = self
+            .input
+            .into_lazy_resolved_input(fetch_context)?
+            .into_stored_input(fetch_context.object_store_info)
+            .await?;
+
+        Ok(StoredChatInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: stored_input,
+            output: self.output,
+            tool_params,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        })
+    }
+
+    /// Convert to storage type, without resolving network resources for files.
+    /// This is used in PyO3 where we do not have a fetch context available.
+    /// Returns an error if the input contains any external URLs or Base64 files.
+    pub fn into_storage_without_file_handling(
         self,
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
@@ -1232,12 +1291,14 @@ impl ChatInferenceDatapoint {
         let tool_params = function_config
             .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
 
+        let stored_input = self.input.into_stored_input_without_file_handling()?;
+
         Ok(StoredChatInferenceDatapoint {
             dataset_name: self.dataset_name,
             function_name: self.function_name,
             id: self.id,
             episode_id: self.episode_id,
-            input: self.input,
+            input: stored_input,
             output: self.output,
             tool_params,
             tags: self.tags,
@@ -1253,14 +1314,30 @@ impl ChatInferenceDatapoint {
 }
 
 impl JsonInferenceDatapoint {
-    /// Convert to storage type.
-    pub fn into_storage(self) -> StoredJsonInferenceDatapoint {
-        StoredJsonInferenceDatapoint {
+    /// Convert to storage type, possibly handling input file storage.
+    /// If `fetch_context` is provided, any external URLs or Base64 files will be properly resolved and stored.
+    /// If `fetch_context` is not provided, we will return an error if the input contains any external URLs or Base64 files,
+    /// because we cannot represent them as the database type.
+    pub async fn into_storage(
+        self,
+        fetch_context: Option<&FetchContext<'_>>,
+    ) -> Result<StoredJsonInferenceDatapoint, Error> {
+        let stored_input = match fetch_context {
+            Some(fetch_context) => {
+                self.input
+                    .into_lazy_resolved_input(fetch_context)?
+                    .into_stored_input(fetch_context.object_store_info)
+                    .await?
+            }
+            None => self.input.into_stored_input_without_file_handling()?,
+        };
+
+        Ok(StoredJsonInferenceDatapoint {
             dataset_name: self.dataset_name,
             function_name: self.function_name,
             id: self.id,
             episode_id: self.episode_id,
-            input: self.input,
+            input: stored_input,
             output: self.output,
             output_schema: self.output_schema,
             tags: self.tags,
@@ -1271,7 +1348,32 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-        }
+        })
+    }
+
+    /// Convert to storage type, without resolving network resources for files.
+    /// This is used in PyO3 where we do not have a fetch context available.
+    /// Returns an error if the input contains any external URLs or Base64 files.
+    pub fn into_storage_without_file_handling(self) -> Result<StoredJsonInferenceDatapoint, Error> {
+        let stored_input = self.input.into_stored_input_without_file_handling()?;
+
+        Ok(StoredJsonInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: stored_input,
+            output: self.output,
+            output_schema: self.output_schema,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        })
     }
 }
 
@@ -1289,7 +1391,27 @@ impl Datapoint {
 
     #[getter]
     pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.input().clone().into_bound_py_any(py)
+        // This is python_helpers.rs convert_response_to_python_dataclass, but we can't import it across crates.
+        // We will remove the whole Datapoint type and replace with generated types soon.
+
+        // Serialize Rust response to JSON dict
+
+        let dict = serialize_to_dict(py, self.input().clone())?;
+
+        // Import the target dataclass
+        let module = PyModule::import(py, "tensorzero")?;
+        let data_class = module.getattr("Input")?;
+
+        // Use dacite.from_dict to construct the dataclass, so that it can handle nested dataclass construction.
+        let dacite = PyModule::import(py, "dacite")?;
+        let from_dict = dacite.getattr("from_dict")?;
+
+        // Call dacite.from_dict(data_class=TargetClass, data=dict)
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("data_class", data_class)?;
+        kwargs.set_item("data", dict)?;
+
+        from_dict.call((), Some(&kwargs))
     }
 
     #[getter]
@@ -1387,7 +1509,7 @@ impl Datapoint {
 }
 
 /// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
-/// Convert to Datapoint with `.into_datapoint(config)`
+/// Convert to Datapoint with `.into_datapoint()`
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredDatapoint {
@@ -1483,7 +1605,7 @@ pub struct JsonDatapointInsert {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
@@ -1491,11 +1613,10 @@ pub struct ChatInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: StoredInput,
+    pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     // `tool_params` are always flattened to match the convention of LLM APIs
     #[serde(flatten)]
@@ -1503,7 +1624,7 @@ pub struct ChatInferenceDatapoint {
     pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
+    #[cfg_attr(test, ts(type = "Record<string, string>"))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)]
     pub auxiliary: String,
@@ -1512,16 +1633,13 @@ pub struct ChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
 }
 
@@ -1534,7 +1652,8 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 
 impl StoredChatInferenceDatapoint {
     /// Convert to wire type, converting tool params from storage format to wire format using From<> trait
-    pub fn into_datapoint(self, _function_config: &FunctionConfig) -> ChatInferenceDatapoint {
+    /// TODO(shuyangli): Add parameter to optionally fetch files from object storage
+    pub fn into_datapoint(self) -> ChatInferenceDatapoint {
         let tool_params = self.tool_params.map(|tp| tp.into()).unwrap_or_default();
 
         ChatInferenceDatapoint {
@@ -1542,7 +1661,7 @@ impl StoredChatInferenceDatapoint {
             function_name: self.function_name,
             id: self.id,
             episode_id: self.episode_id,
-            input: self.input,
+            input: self.input.into_input(),
             output: self.output,
             tool_params,
             tags: self.tags,
@@ -1629,7 +1748,7 @@ pub struct JsonInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: StoredInput,
+    pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
@@ -1757,7 +1876,7 @@ impl StoredJsonInferenceDatapoint {
             function_name: self.function_name,
             id: self.id,
             episode_id: self.episode_id,
-            input: self.input,
+            input: self.input.into_input(),
             output: self.output,
             output_schema: self.output_schema,
             tags: self.tags,
