@@ -13,17 +13,19 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
+  CloneDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  UpdateDatapointsMetadataRequest,
-  UpdateDatapointsRequest,
-  UpdateDatapointRequest,
-  UpdateDatapointsResponse,
   GetInferenceBoundsResponse,
   InternalListInferencesByIdResponse,
+  ListDatapointsRequest,
+  UpdateDatapointRequest,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsRequest,
+  UpdateDatapointsResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -446,8 +448,14 @@ export class TensorZeroClient {
     return { id: body.ids[0] };
   }
 
-  async getDatapoint(datapointId: string): Promise<Datapoint | null> {
-    const endpoint = `/v1/datasets/get_datapoints`;
+  async getDatapoint(
+    datapointId: string,
+    datasetName?: string,
+  ): Promise<Datapoint | undefined> {
+    // We currently maintain 2 endpoints for getting a datapoint, with/without the dataset name.
+    const endpoint = datasetName
+      ? `/v1/datasets/${encodeURIComponent(datasetName)}/get_datapoints`
+      : `/v1/datasets/get_datapoints`;
     const requestBody: GetDatapointsRequest = {
       ids: [datapointId],
     };
@@ -463,38 +471,28 @@ export class TensorZeroClient {
     }
 
     const body = (await response.json()) as GetDatapointsResponse;
-    return body.datapoints[0] ?? null;
+    if (body.datapoints.length === 0) {
+      return undefined;
+    }
+    return body.datapoints[0];
   }
 
   async listDatapoints(
     dataset_name: string,
-    function_name?: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<Datapoint[]> {
-    const params = new URLSearchParams();
-    if (function_name) {
-      params.append("function_name", function_name);
-    }
-    if (limit !== undefined) {
-      params.append("limit", limit.toString());
-    }
-    if (offset !== undefined) {
-      params.append("offset", offset.toString());
-    }
-
-    const queryString = params.toString();
-    const endpoint = `/datasets/${encodeURIComponent(dataset_name)}/datapoints${queryString ? `?${queryString}` : ""}`;
+    params: ListDatapointsRequest,
+  ): Promise<GetDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(dataset_name)}/list_datapoints`;
 
     const response = await this.fetch(endpoint, {
-      method: "GET",
+      method: "POST",
+      body: JSON.stringify(params),
     });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    const body = await response.json();
-    return body as Datapoint[];
+    const body = (await response.json()) as GetDatapointsResponse;
+    return body;
   }
 
   async updateDatapointsMetadata(
@@ -540,6 +538,29 @@ export class TensorZeroClient {
     }
     const body = (await response.json()) as DeleteDatapointsResponse;
     return body;
+  }
+
+  /**
+   * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+   * @param targetDatasetName - The name of the target dataset to clone datapoints to
+   * @param datapointIds - Array of datapoint UUIDs to clone
+   * @returns A promise that resolves with the response containing the new datapoint IDs (null if source not found)
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async cloneDatapoints(
+    targetDatasetName: string,
+    datapointIds: string[],
+  ): Promise<CloneDatapointsResponse> {
+    const endpoint = `/internal/datasets/${encodeURIComponent(targetDatasetName)}/datapoints/clone`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ datapoint_ids: datapointIds }),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CloneDatapointsResponse;
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {

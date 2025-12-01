@@ -3024,6 +3024,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -3087,6 +3089,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();

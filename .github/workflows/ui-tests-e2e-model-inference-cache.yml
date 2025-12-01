@@ -25,7 +25,7 @@ on:
         required: true
         type: boolean
       force_no_auth:
-        description: 'Force auth_enabled to be false only (skip auth matrix)'
+        description: "Force auth_enabled to be false only (skip auth matrix)"
         required: false
         type: boolean
         default: false

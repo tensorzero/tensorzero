@@ -329,27 +329,38 @@ impl OpenAICustomTool {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[schemars(title = "ProviderToolScopeModelProvider")]
+#[ts(optional_fields)]
+pub struct ProviderToolScopeModelProvider {
+    pub model_name: String,
+    #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
+    pub provider_name: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
+#[ts(optional_fields)]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
-    #[schemars(title = "ProviderToolScopeModelProvider")]
-    ModelProvider {
-        model_name: String,
-        model_provider_name: String,
-    },
+    ModelProvider(ProviderToolScopeModelProvider),
 }
 
 impl ProviderToolScope {
-    pub(crate) fn matches(&self, scope_model_name: &str, scope_model_provider_name: &str) -> bool {
+    pub(crate) fn matches(&self, scope_model_name: &str, scope_provider_name: &str) -> bool {
         match self {
             ProviderToolScope::Unscoped => true,
-            ProviderToolScope::ModelProvider {
-                model_name,
-                model_provider_name,
-            } => scope_model_name == model_name && scope_model_provider_name == model_provider_name,
+            ProviderToolScope::ModelProvider(mp) => {
+                if scope_model_name != mp.model_name {
+                    return false;
+                }
+                match &mp.provider_name {
+                    Some(pn) => scope_provider_name == pn,
+                    None => true, // If provider_name is None, match any provider for this model
+                }
+            }
         }
     }
 }

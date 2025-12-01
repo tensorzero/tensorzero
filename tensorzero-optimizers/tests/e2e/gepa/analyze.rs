@@ -342,9 +342,7 @@ pub fn create_test_evaluation_info(
         name: None,
     };
 
-    // Convert StoredDatapoint to Datapoint
-    let function_config = create_test_function_config();
-    let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
+    let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
 
     let response = InferenceResponse::Chat(ChatInferenceResponse {
         inference_id: Uuid::now_v7(),
@@ -863,9 +861,7 @@ async fn test_analyze_input_format_scenarios() {
         );
 
         evaluations::stats::EvaluationInfo {
-            datapoint: Datapoint::Chat(
-                datapoint.into_datapoint(&tools_function_config_tool_params),
-            ),
+            datapoint: Datapoint::Chat(datapoint.into_datapoint()),
             response,
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),

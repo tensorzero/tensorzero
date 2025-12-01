@@ -69,7 +69,7 @@ async fn test_dicl_reject_unknown_content_block() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "What is the name of the capital city of Japan?"},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai", "data": {"type": "text", "text": "My extra openai text"}}
+                        {"type": "unknown", "model_name": "gpt-4o-mini-2024-07-18", "provider_name": "openai", "data": {"type": "text", "text": "My extra openai text"}}
                     ]
                 }
             ]},

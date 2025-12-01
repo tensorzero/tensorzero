@@ -42,9 +42,11 @@ See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) 
 - **Required:** no
 
 A list of tool names that the model is allowed to call.
-The tools must be defined in the configuration file.
+The tools must be defined in the configuration file or provided dynamically via `additional_tools`.
 
-Any tools provided in `additional_tools` are always allowed, irrespective of this field.
+Some providers (notably OpenAI) natively support restricting allowed tools.
+For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
+For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
 
 #### `cache_options`
 

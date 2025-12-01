@@ -4,7 +4,6 @@ import type {
   ClientInferenceParams,
   Config,
   CountDatapointsForDatasetFunctionParams,
-  DatasetDetailRow,
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
@@ -12,7 +11,6 @@ import type {
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
   GetDatasetMetadataParams,
-  GetDatasetRowsParams,
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
@@ -30,8 +28,6 @@ import type {
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
-  GetDatapointParams,
-  Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
@@ -241,12 +237,6 @@ export class DatabaseClient {
     );
   }
 
-  async getDatapoint(params: GetDatapointParams): Promise<Datapoint> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatapoint(paramsString);
-    return JSON.parse(result) as Datapoint;
-  }
-
   async getModelUsageTimeseries(
     timeWindow: TimeWindow,
     maxPeriods: number,
@@ -370,14 +360,6 @@ export class DatabaseClient {
     const result =
       await this.nativeDatabaseClient.getDatasetMetadata(paramsString);
     return JSON.parse(result) as DatasetMetadata[];
-  }
-
-  async getDatasetRows(
-    params: GetDatasetRowsParams,
-  ): Promise<DatasetDetailRow[]> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
-    return JSON.parse(result) as DatasetDetailRow[];
   }
 
   async countDatasets(): Promise<number> {

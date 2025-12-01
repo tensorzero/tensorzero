@@ -556,7 +556,7 @@ async fn inner_select_best_candidate<'a>(
         .find_map(|block| match block {
             ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown { .. } => None,
+            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown(_) => None,
         }) {
         Some(text) => text,
         None => {
