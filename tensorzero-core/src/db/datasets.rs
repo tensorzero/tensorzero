@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
@@ -94,7 +95,7 @@ pub struct ChatInferenceDatapointInsert {
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
     #[serde(default)]
-    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 /// Type that gets serialized directly to be written to ClickHouse. Serialization should match
@@ -154,7 +155,7 @@ pub struct JsonInferenceDatapointInsert {
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
     #[serde(default)]
-    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]

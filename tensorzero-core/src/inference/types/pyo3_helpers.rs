@@ -400,10 +400,11 @@ pub fn deserialize_from_stored_sample<'a>(
                 )))
             }
             Datapoint::Json(json_wire) => {
-                let datapoint = match json_wire.into_storage_without_file_handling() {
-                    Ok(d) => d,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-                };
+                let datapoint =
+                    match json_wire.into_storage_without_file_handling(config.hash.clone()) {
+                        Ok(d) => d,
+                        Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                    };
                 Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
                     datapoint,
                 )))
