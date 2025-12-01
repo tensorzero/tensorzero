@@ -94,6 +94,8 @@ pub struct ChatInferenceDatapointInsert {
     pub is_custom: bool,
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
@@ -154,6 +156,8 @@ pub struct JsonInferenceDatapointInsert {
     pub is_custom: bool,
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
