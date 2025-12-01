@@ -99,11 +99,11 @@ impl Optimizer for GEPAConfig {
 
         // Uninitialize baseline variants for optimization
         // These will be used as the starting pool for GEPA iterations
-        let initial_variants = get_uninitialized_variant_configs(self, &function_context)?;
+        let original_variants = get_uninitialized_variant_configs(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
-            initial_variants.keys().cloned().collect();
+            original_variants.keys().cloned().collect();
 
         tracing::info!(
             "Initialized with {} baseline variants: {:?}",
@@ -136,7 +136,7 @@ impl Optimizer for GEPAConfig {
         tracing::info!("Validation dataset created successfully");
 
         // Evaluate initial variants on validation set
-        let num_variants = initial_variants.len();
+        let num_variants = original_variants.len();
         tracing::info!(
             "Evaluating {} initial variants on validation dataset",
             num_variants
@@ -144,6 +144,7 @@ impl Optimizer for GEPAConfig {
 
         // Divide concurrency among variants to avoid max_concurrency² explosion
         // Since each variant is evaluated on the same dataset, they'll take similar time
+        // TODO[#4914] enable semaphore sharing with `run_evaluation_core_streaming`
         let per_variant_concurrency = (self.max_concurrency as usize / num_variants).max(1);
 
         let evaluation_name = self.evaluation_name.clone();
@@ -151,8 +152,11 @@ impl Optimizer for GEPAConfig {
             EvaluationConfig::Inference(cfg) => &cfg.evaluators,
         };
 
-        // Create parallel evaluation futures
-        let evaluation_futures: Vec<_> = initial_variants
+        // Evaluate all initial variants in parallel. Errors are returned from each future
+        // and collected by join_all(), allowing us to proceed with any variants that succeed
+        // rather than failing fast. The safety check below (lines 220-224) ensures at least
+        // one variant succeeded before proceeding with optimization.
+        let evaluation_futures: Vec<_> = original_variants
             .iter()
             .map(|(variant_name, variant_config)| {
                 let gateway_client = gateway_client.clone();
@@ -232,7 +236,7 @@ impl Optimizer for GEPAConfig {
         // Seed the frontier with initial variants and their validation scores
         let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
         for (variant_name, scores) in initial_scores {
-            if let Some(variant_config) = initial_variants.get(&variant_name) {
+            if let Some(variant_config) = original_variants.get(&variant_name) {
                 initial_candidates.insert(
                     variant_name.clone(),
                     Candidate {
@@ -314,6 +318,9 @@ impl Optimizer for GEPAConfig {
                 iteration
             );
 
+            // Evaluate parent on minibatch. Unlike initial evaluation, this is a sequential
+            // operation within the iteration loop. If it fails, we use 'continue' to skip
+            // to the next iteration rather than stopping the entire optimization.
             let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -408,6 +415,8 @@ impl Optimizer for GEPAConfig {
                 child.name
             );
 
+            // Evaluate child on minibatch. Use 'continue' to skip to next iteration if
+            // evaluation fails, consistent with parent evaluation error handling.
             let child_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
