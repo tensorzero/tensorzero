@@ -350,7 +350,18 @@ pub(crate) fn generate_list_inferences_sql(
 
             // For single-table queries, use proper ORDER BY generation that supports joining with metrics.
             // Reuse the join registry from the filter so we don't create duplicate joins
-            let order_by_sql = if opts.order_by.is_some() {
+            let order_by_sql = if let Some(pagination) = &opts.pagination {
+                // When using cursor pagination, always order by id
+                // For "After" case, we'll order ASC in subquery and reverse outside
+                match pagination {
+                    PaginateByIdCondition::After { .. } => {
+                        "\nORDER BY toUInt128(i.id) ASC".to_string()
+                    }
+                    PaginateByIdCondition::Before { .. } => {
+                        "\nORDER BY toUInt128(i.id) DESC".to_string()
+                    }
+                }
+            } else if opts.order_by.is_some() {
                 generate_order_by_sql(
                     opts,
                     config,
@@ -371,6 +382,11 @@ pub(crate) fn generate_list_inferences_sql(
             sql.push_str(&query.where_sql_fragment);
             if !order_by_sql.is_empty() {
                 sql.push_str(&order_by_sql);
+            }
+
+            // For "After" cursor pagination, wrap in subquery and reverse order
+            if matches!(opts.pagination, Some(PaginateByIdCondition::After { .. })) {
+                sql = format!("SELECT * FROM (\n{sql}\n) ORDER BY toUInt128(inference_id) DESC");
             }
 
             sql
@@ -418,7 +434,17 @@ pub(crate) fn generate_list_inferences_sql(
             // Generate ORDER BY clause for both inner and outer queries
             // For UNION ALL queries, we only support timestamp ordering (not metrics)
             // TODO(#4181): this should support proper ORDER BY generation that supports joining with metrics.
-            let order_by_sql = if let Some(order_by) = opts.order_by {
+            let order_by_sql = if let Some(pagination) = &opts.pagination {
+                // When using cursor pagination, always order by id
+                match pagination {
+                    PaginateByIdCondition::After { .. } => {
+                        "\nORDER BY toUInt128(id) ASC".to_string()
+                    }
+                    PaginateByIdCondition::Before { .. } => {
+                        "\nORDER BY toUInt128(id) DESC".to_string()
+                    }
+                }
+            } else if let Some(order_by) = opts.order_by {
                 let order_clauses: Vec<String> = order_by
                     .iter()
                     .map(|o| {
@@ -462,7 +488,13 @@ pub(crate) fn generate_list_inferences_sql(
             // Otherwise, the LIMIT will select rows based on the physical table ordering
             // (function_name, variant_name, episode_id), not the user's requested ordering
             // (e.g., timestamp DESC), resulting in incorrect results.
-            let inner_limit = opts.limit + opts.offset;
+            //
+            // For cursor pagination, we only fetch LIMIT rows (not LIMIT + OFFSET).
+            let inner_limit = if opts.pagination.is_some() {
+                opts.limit
+            } else {
+                opts.limit + opts.offset
+            };
 
             if !order_by_sql.is_empty() {
                 chat_sql.push_str(&order_by_sql);
@@ -493,16 +525,33 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            let outer_offset_param_placeholder = add_parameter(
-                opts.offset,
-                ClickhouseType::UInt64,
-                &mut query_params,
-                &mut param_idx_counter,
-            );
 
-            format!(
-                "SELECT * FROM (\n{chat_sql}\nUNION ALL\n{json_sql}\n) AS combined{order_by_sql}\nLIMIT {outer_limit_param_placeholder}\nOFFSET {outer_offset_param_placeholder}"
-            )
+            let mut combined_query = if opts.pagination.is_none() {
+                // Offset pagination: apply OFFSET on outer query
+                let outer_offset_param_placeholder = add_parameter(
+                    opts.offset,
+                    ClickhouseType::UInt64,
+                    &mut query_params,
+                    &mut param_idx_counter,
+                );
+                format!(
+                    "SELECT * FROM (\n{chat_sql}\nUNION ALL\n{json_sql}\n) AS combined{order_by_sql}\nLIMIT {outer_limit_param_placeholder}\nOFFSET {outer_offset_param_placeholder}"
+                )
+            } else {
+                // Cursor pagination: no OFFSET
+                format!(
+                    "SELECT * FROM (\n{chat_sql}\nUNION ALL\n{json_sql}\n) AS combined{order_by_sql}\nLIMIT {outer_limit_param_placeholder}"
+                )
+            };
+
+            // For "After" cursor pagination, wrap in subquery and reverse order
+            if matches!(opts.pagination, Some(PaginateByIdCondition::After { .. })) {
+                combined_query = format!(
+                    "SELECT * FROM (\n{combined_query}\n) ORDER BY toUInt128(inference_id) DESC"
+                );
+            }
+
+            combined_query
         }
     };
 
@@ -516,13 +565,16 @@ pub(crate) fn generate_list_inferences_sql(
         );
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
 
-        let offset_param_placeholder = add_parameter(
-            opts.offset,
-            ClickhouseType::UInt64,
-            &mut query_params,
-            &mut param_idx_counter,
-        );
-        sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
+        // Only apply OFFSET when not using cursor pagination
+        if opts.pagination.is_none() {
+            let offset_param_placeholder = add_parameter(
+                opts.offset,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
+        }
     }
 
     sql.push_str("\nFORMAT JSONEachRow");
@@ -633,6 +685,34 @@ fn generate_single_table_query_for_type(
             param_idx_counter,
         );
         where_clauses.push(format!("i.episode_id = {episode_id_param_placeholder}"));
+    }
+
+    // Add cursor-based pagination filters
+    if let Some(ref pagination) = opts.pagination {
+        match pagination {
+            PaginateByIdCondition::Before { id } => {
+                let id_param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    query_params,
+                    param_idx_counter,
+                );
+                where_clauses.push(format!(
+                    "toUInt128(i.id) < toUInt128(toUUID({id_param_placeholder}))"
+                ));
+            }
+            PaginateByIdCondition::After { id } => {
+                let id_param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    query_params,
+                    param_idx_counter,
+                );
+                where_clauses.push(format!(
+                    "toUInt128(i.id) > toUInt128(toUUID({id_param_placeholder}))"
+                ));
+            }
+        }
     }
 
     // Handle OutputSource
@@ -1696,6 +1776,221 @@ mod tests {
                     pagination: Some(PaginateByIdCondition::After { id: after_id }),
                     limit: 10,
                 })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+    }
+
+    mod list_inferences_cursor_pagination_tests {
+        use super::*;
+        use crate::config::Config;
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{
+            InferenceOutputSource, InferenceQueries, ListInferencesParams, PaginateByIdCondition,
+        };
+        use std::sync::Arc;
+
+        #[tokio::test]
+        async fn test_list_inferences_with_before_cursor() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Should include the before cursor in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) < toUInt128(toUUID({p"),
+                        "Query should contain before cursor condition"
+                    );
+                    // Should not have OFFSET when using cursor pagination
+                    assert!(
+                        !query.contains("OFFSET"),
+                        "Query should not have OFFSET with cursor pagination"
+                    );
+                    // Verify the cursor UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: Some(PaginateByIdCondition::Before { id: before_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_with_after_cursor() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            let after_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Should include the after cursor in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) > toUInt128(toUUID({p"),
+                        "Query should contain after cursor condition"
+                    );
+                    // Should not have OFFSET when using cursor pagination
+                    assert!(
+                        !query.contains("OFFSET"),
+                        "Query should not have OFFSET with cursor pagination"
+                    );
+                    // Verify the cursor UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: Some(PaginateByIdCondition::After { id: after_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_cursor_without_function_name() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Should use UNION ALL query when function_name is not provided
+                    assert!(
+                        query.contains("UNION ALL"),
+                        "Query should use UNION ALL when function_name is not provided"
+                    );
+                    // Should still include the before cursor in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) < toUInt128(toUUID({p"),
+                        "Query should contain before cursor condition"
+                    );
+                    // Verify the cursor UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = Config::default();
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: None, // No function_name to trigger UNION ALL
+                        pagination: Some(PaginateByIdCondition::Before { id: before_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_no_cursor_uses_offset() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    // Should include OFFSET when not using cursor pagination
+                    assert!(
+                        query.contains("OFFSET {p"),
+                        "Query should have OFFSET without cursor pagination"
+                    );
+                    // Should have offset parameter set to 20
+                    assert!(params.values().any(|v| *v == "20"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: None, // No cursor pagination
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 20, // Should use offset
+                        ..Default::default()
+                    },
+                )
                 .await
                 .unwrap();
 

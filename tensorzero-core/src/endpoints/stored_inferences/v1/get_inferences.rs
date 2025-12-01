@@ -4,7 +4,7 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::inferences::{InferenceQueries, ListInferencesParams};
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -79,6 +79,22 @@ pub async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
+    // Validate that before and after are mutually exclusive
+    if request.before.is_some() && request.after.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Cannot specify both 'before' and 'after' parameters".to_string(),
+        }));
+    }
+
+    // Validate that cursor pagination and offset are mutually exclusive
+    if (request.before.is_some() || request.after.is_some())
+        && matches!(request.offset, Some(offset) if offset != 0)
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Cannot use 'offset' with cursor pagination ('before' or 'after')".to_string(),
+        }));
+    }
+
     let params = request.as_list_inferences_params();
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage

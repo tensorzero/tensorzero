@@ -197,6 +197,16 @@ pub struct ListInferencesRequest {
     /// Defaults to 0.
     pub offset: Option<u32>,
 
+    /// Optional inference ID to paginate before (exclusive).
+    /// Returns inferences with IDs before this one (earlier in time).
+    /// Cannot be used together with `after` or `offset`.
+    pub before: Option<Uuid>,
+
+    /// Optional inference ID to paginate after (exclusive).
+    /// Returns inferences with IDs after this one (later in time).
+    /// Cannot be used together with `before` or `offset`.
+    pub after: Option<Uuid>,
+
     /// Optional filter to apply when querying inferences.
     /// Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
     pub filter: Option<InferenceFilter>,
@@ -223,6 +233,14 @@ pub struct ListInferencesRequest {
 impl ListInferencesRequest {
     /// Convert the request to a `ListInferencesParams` struct for the database query layer.
     pub fn as_list_inferences_params<'a>(&'a self) -> ListInferencesParams<'a> {
+        use crate::db::inferences::PaginateByIdCondition;
+
+        let pagination = match (self.before, self.after) {
+            (Some(before), None) => Some(PaginateByIdCondition::Before { id: before }),
+            (None, Some(after)) => Some(PaginateByIdCondition::After { id: after }),
+            _ => None,
+        };
+
         ListInferencesParams {
             ids: None,
             function_name: self.function_name.as_deref(),
@@ -232,6 +250,7 @@ impl ListInferencesRequest {
             output_source: self.output_source,
             limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
             offset: self.offset.unwrap_or(0),
+            pagination,
             order_by: self.order_by.as_deref(),
             search_query_experimental: self.search_query_experimental.as_deref(),
         }

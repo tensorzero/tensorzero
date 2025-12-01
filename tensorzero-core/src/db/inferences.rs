@@ -198,6 +198,10 @@ pub struct ListInferencesParams<'a> {
     pub limit: u32,
     /// Number of inferences to skip before starting to return results.
     pub offset: u32,
+    /// Optional cursor-based pagination condition.
+    /// This supports 2 types: "before a given ID" and "after a given ID".
+    /// If provided, cursor pagination takes precedence over offset pagination.
+    pub pagination: Option<PaginateByIdCondition>,
     /// Ordering criteria for the results.
     pub order_by: Option<&'a [OrderBy]>,
     /// Experimental: search query to filter inferences by.
@@ -215,6 +219,7 @@ impl Default for ListInferencesParams<'_> {
             output_source: InferenceOutputSource::Inference,
             limit: DEFAULT_INFERENCE_QUERY_LIMIT,
             offset: 0,
+            pagination: None,
             order_by: None,
             search_query_experimental: None,
         }
@@ -260,7 +265,7 @@ impl InferenceBounds {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PaginateByIdCondition {
     /// Return the latest inferences before the given ID.
     Before { id: Uuid },
