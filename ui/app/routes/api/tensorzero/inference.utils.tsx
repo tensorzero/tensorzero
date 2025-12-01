@@ -5,9 +5,6 @@ import type { ZodDisplayInputMessage } from "~/utils/clickhouse/common";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
   CacheParamsOptions,
-  Input,
-  InputMessage,
-  InputMessageContent,
   FunctionConfig,
   JsonValue,
   PathWithContents,
@@ -459,9 +456,7 @@ export interface VariantResponseInfo {
   usage?: InferenceUsage;
 }
 
-export function resolvedInputToInput(
-  input: ZodDisplayInput,
-): Input {
+export function resolvedInputToInput(input: ZodDisplayInput): Input {
   return {
     system: input.system || null,
     messages: input.messages.map(resolvedInputMessageToInputMessage),
