@@ -1,6 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::unwritten_config::UnwrittenConfig;
+use crate::config::unwritten::UnwrittenConfig;
 use crate::config::ConfigFileGlob;
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;

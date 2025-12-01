@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{unwritten_config::UnwrittenConfig, Config, ConfigFileGlob};
+use crate::config::{unwritten::UnwrittenConfig, Config, ConfigFileGlob};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -546,8 +546,7 @@ pub struct GatewayHandleTestOptions {
 mod tests {
     use super::*;
     use crate::config::{
-        gateway::GatewayConfig, snapshot::ConfigSnapshot, unwritten_config::UnwrittenConfig,
-        ObservabilityConfig, PostgresConfig,
+        gateway::GatewayConfig, snapshot::ConfigSnapshot, ObservabilityConfig, PostgresConfig,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
