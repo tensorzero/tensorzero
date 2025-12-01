@@ -336,16 +336,16 @@ system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_
 type = "inference"
 function_name = "basic_test"
 
-[evaluations.test_gepa_pinocchio_chat.evaluators.includes_nose_grows]
+[evaluations.test_gepa_pinocchio_chat.evaluators.validate_nose_growth]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
-description = "Checks whether the output contains the phrase 'nose grows', which is required for Pinocchio's lying pattern. Returns True if the phrase is present, False otherwise."
+description = "Validates that the nose growth pattern aligns correctly with the assistant's persona. Returns True if Pinocchio includes 'nose grows' OR if non-Pinocchio assistants do NOT include 'nose grows', False otherwise."
 
-[evaluations.test_gepa_pinocchio_chat.evaluators.includes_nose_grows.variants.openai]
+[evaluations.test_gepa_pinocchio_chat.evaluators.validate_nose_growth.variants.openai]
 type = "chat_completion"
 model = "openai::gpt-4.1-mini"
-system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/includes_nose_grows/system_instructions.txt"
+system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/validate_nose_growth/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.0
 
@@ -367,16 +367,16 @@ temperature = 0.0
 type = "inference"
 function_name = "json_success"
 
-[evaluations.test_gepa_pinocchio_json.evaluators.includes_nose_grows]
+[evaluations.test_gepa_pinocchio_json.evaluators.validate_nose_growth]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
-description = "Checks whether the output contains the phrase 'nose grows', which is required for Pinocchio's lying pattern. Returns True if the phrase is present, False otherwise."
+description = "Validates that the nose growth pattern aligns correctly with the assistant's persona. Returns True if Pinocchio includes 'nose grows' OR if non-Pinocchio assistants do NOT include 'nose grows', False otherwise."
 
-[evaluations.test_gepa_pinocchio_json.evaluators.includes_nose_grows.variants.openai]
+[evaluations.test_gepa_pinocchio_json.evaluators.validate_nose_growth.variants.openai]
 type = "chat_completion"
 model = "openai::gpt-4.1-mini"
-system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/includes_nose_grows/system_instructions.txt"
+system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/validate_nose_growth/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.0
 
