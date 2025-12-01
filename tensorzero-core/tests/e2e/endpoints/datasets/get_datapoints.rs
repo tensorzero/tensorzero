@@ -8,8 +8,9 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::inference::types::{
     Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
@@ -33,7 +34,7 @@ mod get_datapoints_tests {
         let mut tags = HashMap::new();
         tags.insert("env".to_string(), "test".to_string());
 
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: Some("Test Datapoint".to_string()),
@@ -64,6 +65,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -115,7 +118,7 @@ mod get_datapoints_tests {
         let mut tags = HashMap::new();
         tags.insert("env".to_string(), "test".to_string());
 
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: Some("Test Datapoint".to_string()),
@@ -146,6 +149,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -203,7 +208,7 @@ mod get_datapoints_tests {
             "additionalProperties": false
         });
 
-        let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "json_success".to_string(),
             name: None,
@@ -233,6 +238,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -279,7 +286,7 @@ mod get_datapoints_tests {
         let chat_id2 = Uuid::now_v7();
         let json_id = Uuid::now_v7();
 
-        let chat_insert1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let chat_insert1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -305,9 +312,11 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
-        let chat_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let chat_insert2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -333,9 +342,11 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
-        let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        let json_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "json_success".to_string(),
             name: None,
@@ -360,6 +371,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -411,7 +424,7 @@ mod get_datapoints_tests {
 
         // Create one datapoint
         let existing_id = Uuid::now_v7();
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -437,6 +450,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -479,7 +494,7 @@ mod get_datapoints_tests {
 
         // Create a datapoint
         let datapoint_id = Uuid::now_v7();
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -505,6 +520,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -552,7 +569,7 @@ mod get_datapoints_tests {
 
         // Create a datapoint so we have a valid dataset name.
         let datapoint_id = Uuid::now_v7();
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -578,6 +595,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -614,7 +633,7 @@ mod get_datapoints_tests {
 
         // Create a datapoint so we have a valid dataset name.
         let datapoint_id = Uuid::now_v7();
-        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -640,6 +659,8 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -678,7 +699,7 @@ mod list_datapoints_tests {
         // Create 5 datapoints
         let mut inserts = vec![];
         for i in 0..5 {
-            inserts.push(DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: dataset_name.clone(),
                 function_name: "basic_test".to_string(),
                 name: Some(format!("Datapoint {i}")),
@@ -704,6 +725,8 @@ mod list_datapoints_tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
             }));
         }
 
@@ -788,7 +811,7 @@ mod list_datapoints_tests {
 
         // Create datapoints with different function names
         let function1_id = Uuid::now_v7();
-        let function1_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let function1_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -814,10 +837,12 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         let function2_id = Uuid::now_v7();
-        let function2_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let function2_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "weather_helper".to_string(),
             name: None,
@@ -843,6 +868,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -902,7 +929,7 @@ mod list_datapoints_tests {
         tags2.insert("env".to_string(), "staging".to_string());
 
         let datapoint1_id = Uuid::now_v7();
-        let datapoint1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -928,10 +955,12 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         let datapoint2_id = Uuid::now_v7();
-        let datapoint2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -957,6 +986,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -1021,7 +1052,7 @@ mod list_datapoints_tests {
 
         // Create a datapoint
         let datapoint_id = Uuid::now_v7();
-        let datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1047,6 +1078,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
@@ -1120,7 +1153,7 @@ mod list_datapoints_tests {
         tags3.insert("region".to_string(), "us-east".to_string());
 
         let datapoint1_id = Uuid::now_v7();
-        let datapoint1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1146,10 +1179,12 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         let datapoint2_id = Uuid::now_v7();
-        let datapoint2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1175,10 +1210,12 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         let datapoint3_id = Uuid::now_v7();
-        let datapoint3 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint3 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1204,6 +1241,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -1311,7 +1350,7 @@ mod list_datapoints_tests {
 
         // Create a datapoint
         let datapoint_id = Uuid::now_v7();
-        let datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1337,6 +1376,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
@@ -1390,7 +1431,7 @@ mod list_datapoints_tests {
 
         // Create both chat and JSON datapoints
         let chat_id = Uuid::now_v7();
-        let chat_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let chat_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -1416,10 +1457,12 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         let json_id = Uuid::now_v7();
-        let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        let json_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "json_success".to_string(),
             name: None,
@@ -1444,6 +1487,8 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
         });
 
         clickhouse
@@ -1492,7 +1537,7 @@ mod list_datapoints_tests {
         // Create 3 datapoints
         let mut inserts = vec![];
         for i in 0..3 {
-            inserts.push(DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: dataset_name.clone(),
                 function_name: "basic_test".to_string(),
                 name: None,
@@ -1518,6 +1563,8 @@ mod list_datapoints_tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
             }));
         }
 

@@ -4,12 +4,11 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
-    MockDatasetQueries,
+    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetQueries, DatasetQueryParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
-use crate::endpoints::datasets::StoredDatapoint;
+use crate::db::stored_datapoint::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
 
@@ -69,7 +68,7 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.count_datasets().await
     }
 
-    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
+    async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
 

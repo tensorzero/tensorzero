@@ -6,7 +6,7 @@ use tensorzero::{
     ClientExt, FunctionTool, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
     StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
 };
-use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
+use tensorzero_core::db::stored_datapoint::StoredJsonInferenceDatapoint;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
