@@ -403,7 +403,7 @@ export function prepareInferenceActionRequest(
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
-    const Input = resolvedInputToInput(args.resource.input);
+    const input = resolvedInputToInput(args.resource.input);
     // TODO: this is unsupported in Node bindings for now
     // const extra_body =
     //   args.source === "inference" ? args.resource.extra_body : undefined;
@@ -411,7 +411,7 @@ export function prepareInferenceActionRequest(
     return {
       ...baseParams,
       function_name: args.resource.function_name,
-      input: Input,
+      input,
       variant_name: args.variant,
     };
   }
@@ -421,14 +421,14 @@ function prepareDefaultFunctionRequest(
   inference: ParsedInferenceRow,
   selectedVariant: string,
 ): Partial<ClientInferenceParams> {
-  const Input = resolvedInputToInput(inference.input);
+  const input = resolvedInputToInput(inference.input);
   if (inference.function_type === "chat") {
     const tool_choice = inference.tool_params?.tool_choice;
     const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
     const tools_available = inference.tool_params?.tools_available;
     return {
       model_name: selectedVariant,
-      input: Input,
+      input,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls || undefined,
       // We need to add all tools as additional for the default function
@@ -439,7 +439,7 @@ function prepareDefaultFunctionRequest(
     const output_schema = inference.output_schema;
     return {
       model_name: selectedVariant,
-      input: Input,
+      input,
       output_schema: output_schema || null,
     };
   }
@@ -447,7 +447,7 @@ function prepareDefaultFunctionRequest(
   // Fallback case
   return {
     model_name: selectedVariant,
-    input: Input,
+    input,
   };
 }
 
