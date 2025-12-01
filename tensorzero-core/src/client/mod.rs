@@ -624,27 +624,35 @@ impl ClientBuilder {
     }
 
     /// Creates a client from a historical ConfigSnapshot.
+    ///
     /// This allows replaying inferences with the exact configuration that was used
-    /// at the time the snapshot was created.
+    /// at the time the snapshot was created. The semantic configuration (functions,
+    /// models, variants, templates, etc.) comes from the snapshot, while runtime
+    /// infrastructure settings are overlaid from the live config.
     ///
     /// # Parameters
-    /// - `snapshot`: The ConfigSnapshot to load from
+    /// - `snapshot`: The ConfigSnapshot to load from (historical semantic config)
+    /// - `live_config`: Reference to the current live gateway config. Runtime fields
+    ///   (`gateway`, `object_store_info`, `postgres`, `rate_limiting`, `http_client`)
+    ///   are copied from this config to override the snapshot's values, since these
+    ///   represent current infrastructure rather than historical behavior.
     /// - `clickhouse_url`: Current ClickHouse connection (not from snapshot)
     /// - `postgres_url`: Current Postgres connection (not from snapshot)
     /// - `verify_credentials`: Whether to validate model provider credentials
     /// - `timeout`: Optional timeout for gateway operations
     ///
     /// # Returns
-    /// A Client configured with historical settings but current runtime parameters
+    /// A Client configured with historical semantic settings but current runtime parameters
     pub async fn from_config_snapshot(
         snapshot: ConfigSnapshot,
+        live_config: &Config,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
         // Load config from snapshot
-        let config_load_info = Box::pin(Config::load_from_snapshot(snapshot, verify_credentials))
+        let unwritten_config = Box::pin(Config::load_from_snapshot(snapshot, verify_credentials))
             .await
             .map_err(|e| ClientBuilderError::ConfigParsing {
                 error: TensorZeroError::Other { source: e.into() },
@@ -652,19 +660,25 @@ impl ClientBuilder {
             })?;
 
         // Setup ClickHouse with runtime URL
-        let clickhouse_connection_info = setup_clickhouse(&config_load_info, clickhouse_url, true)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
             })?;
 
         // Convert config_load_info into Config with hash
-        let config = config_load_info
+        let mut config = unwritten_config
             .into_config(&clickhouse_connection_info)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
             })?;
+
+        // Overlay runtime config from live gateway.
+        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
+        // reflect the current environment rather than historical snapshot values.
+        config.overlay_runtime_config(live_config);
+
         let config = Arc::new(config);
 
         // Validate embedded gateway configuration
@@ -676,9 +690,7 @@ impl ClientBuilder {
                 ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
             })?;
 
-        // TODO (Viraj, now): overwrite config that is irrelevant from historical data
-
-        // Use HTTP client from config
+        // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
 
         // Build client using FromComponents pattern

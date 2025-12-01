@@ -1418,6 +1418,26 @@ impl Config {
             })?
             .clone())
     }
+
+    /// Overlays runtime-specific configuration from a live config onto this config.
+    ///
+    /// When using a config loaded from a historical snapshot, certain fields should
+    /// reflect the current runtime environment rather than the snapshot's values:
+    /// - `gateway`: Runtime gateway settings (bind address, auth, observability, etc.)
+    /// - `object_store_info`: Current object store configuration
+    /// - `postgres`: Current postgres settings
+    /// - `rate_limiting`: Current rate limiting rules
+    /// - `http_client`: Current HTTP client configuration
+    ///
+    /// These fields are infrastructure/runtime concerns that should not be replayed
+    /// from historical data.
+    pub fn overlay_runtime_config(&mut self, live_config: &Config) {
+        self.gateway = live_config.gateway.clone();
+        self.object_store_info = live_config.object_store_info.clone();
+        self.postgres = live_config.postgres.clone();
+        self.rate_limiting = live_config.rate_limiting.clone();
+        self.http_client = live_config.http_client.clone();
+    }
 }
 
 pub enum ConfigInput {

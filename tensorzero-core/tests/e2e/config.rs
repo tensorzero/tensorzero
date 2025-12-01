@@ -486,9 +486,11 @@ model = "test_model_{random_id}"
         .await
         .unwrap();
 
-    // Build new client from snapshot
+    // Build new client from snapshot with a default live config for runtime settings
+    let live_config = Config::default();
     let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
+        &live_config,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
         false, // Don't verify credentials
