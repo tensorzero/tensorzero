@@ -1061,7 +1061,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .dangerous_into_config_without_writing(),
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components
@@ -1112,7 +1112,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .dangerous_into_config_without_writing(),
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components

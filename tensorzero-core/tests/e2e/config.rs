@@ -100,7 +100,7 @@ async fn test_from_components_basic() {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing(),
+        .into_config_without_writing_for_tests(),
     );
 
     // Create components

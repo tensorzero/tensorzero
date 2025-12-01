@@ -116,7 +116,7 @@ pub async fn test_dicl_optimization_chat() {
     )
     .await
     .unwrap()
-    .dangerous_into_config_without_writing();
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(
@@ -401,7 +401,7 @@ pub async fn test_dicl_optimization_json() {
     )
     .await
     .unwrap()
-    .dangerous_into_config_without_writing();
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(

@@ -456,7 +456,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing()
+        .into_config_without_writing_for_tests()
     }
 
     /// Tests the simplest possible query: list inferences for a function with no filters

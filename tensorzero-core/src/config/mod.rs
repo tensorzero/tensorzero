@@ -1302,6 +1302,11 @@ pub mod unwritten_config {
             Ok(config)
         }
 
+        #[cfg(any(test, feature = "e2e_tests"))]
+        pub fn into_config_without_writing_for_tests(self) -> Config {
+            self.config
+        }
+
         pub fn dangerous_into_config_without_writing(self) -> Config {
             self.config
         }

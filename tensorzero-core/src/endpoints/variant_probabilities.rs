@@ -131,7 +131,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 
