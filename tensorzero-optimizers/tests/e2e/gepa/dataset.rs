@@ -64,6 +64,11 @@ async fn test_create_chat_dataset() {
     assert!(!first_datapoint.is_deleted);
     assert!(first_datapoint.output.is_some());
 
+    // Verify tags are preserved
+    assert!(first_datapoint.tags.is_some());
+    let tags = first_datapoint.tags.as_ref().unwrap();
+    assert_eq!(tags.get("test_key"), Some(&"test_value".to_string()));
+
     // Clean up
     cleanup_dataset(&clickhouse, &dataset_name).await;
 }
@@ -123,79 +128,7 @@ async fn test_create_json_dataset() {
     assert!(output.raw.is_some());
     assert!(output.parsed.is_some());
 
-    // Clean up
-    cleanup_dataset(&clickhouse, &dataset_name).await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_create_dataset_preserves_tags() {
-    let clickhouse = get_clickhouse().await;
-    let http_client = TensorzeroHttpClient::new_testing().unwrap();
-    let config = get_e2e_config().await;
-    let dataset_name = "test_create_dataset_tags".to_string();
-
-    // Clean up any leftover data
-    cleanup_dataset(&clickhouse, &dataset_name).await;
-
-    // Create test sample with tags
-    let samples = vec![create_test_chat_rendered_sample("input 1", "output 1")];
-
-    // Create dataset
-    let _response =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name)
-            .await
-            .expect("Failed to create evaluation dataset");
-
-    // Give ClickHouse a moment to process
-    sleep(Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
-
-    // Verify tags are preserved
-    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-
-    assert!(!datapoints.is_empty());
-    let first_datapoint = &datapoints[0];
-    assert!(first_datapoint.tags.is_some());
-    let tags = first_datapoint.tags.as_ref().unwrap();
-    assert_eq!(tags.get("test_key"), Some(&"test_value".to_string()));
-
-    // Clean up
-    cleanup_dataset(&clickhouse, &dataset_name).await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_create_dataset_preserves_output_schema() {
-    let clickhouse = get_clickhouse().await;
-    let http_client = TensorzeroHttpClient::new_testing().unwrap();
-    let config = get_e2e_config().await;
-    let dataset_name = "test_create_dataset_schema".to_string();
-
-    // Clean up any leftover data
-    cleanup_dataset(&clickhouse, &dataset_name).await;
-
-    // Create test JSON sample (which has output_schema)
-    let samples = vec![create_test_json_rendered_sample(
-        "input 1",
-        r#"{"answer": "output 1"}"#,
-    )];
-
-    // Create dataset
-    let _response =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name)
-            .await
-            .expect("Failed to create evaluation dataset");
-
-    // Give ClickHouse a moment to process
-    sleep(Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
-
     // Verify output_schema is preserved
-    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-
-    assert!(!datapoints.is_empty());
-    let first_datapoint = &datapoints[0];
     assert!(first_datapoint.output_schema.get("type").is_some());
     assert_eq!(first_datapoint.output_schema.get("type").unwrap(), "object");
 
