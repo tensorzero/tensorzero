@@ -173,7 +173,7 @@ pub async fn test_gepa_optimization_json() {
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
         evaluation_name: "test_gepa_pinocchio_json".to_string(),
-        initial_variants: Some(vec!["openai".to_string()]),
+        initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some(variant_prefix.clone()),
         batch_size: 4,
         max_iterations: 3,
