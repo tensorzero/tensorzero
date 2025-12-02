@@ -28,7 +28,7 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use crate::gepa::{analyze::Analysis, validate::FunctionContext};
+use crate::gepa::{analyze::Analysis, validate::FunctionContext, GEPAVariant};
 
 /// Helper struct to deserialize the JSON response that matches the output schema.
 /// The schema defines templates as an array of objects with name and content fields.
@@ -137,26 +137,18 @@ fn build_mutate_input(
 /// Takes aggregated analyses and calls the built-in `tensorzero::optimization::gepa::mutate`
 /// function to synthesize improved prompt templates.
 ///
-/// Returns a HashMap with a single entry: the variant name mapped to its UninitializedChatCompletionConfig
-/// containing the improved templates. The variant name follows the pattern: `{prefix}-iter-{iteration}-{parent_name}`.
+/// Returns a GEPAVariant containing the improved templates.
+/// The variant name follows the pattern: `{prefix}-iter-{iteration}-{parent_name}`.
 ///
 /// Returns error if mutation fails (LLM call fails, invalid response format, etc.).
 pub async fn mutate_variant(
     gateway_client: &Client,
     analyses: &[Analysis],
     function_context: &FunctionContext,
-    parent: HashMap<&String, &UninitializedChatCompletionConfig>,
+    parent: &GEPAVariant,
     gepa_config: &GEPAConfig,
     iteration: usize,
-) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
-    // Extract the single entry from the HashMap
-    let (parent_name, parent_config) =
-        parent.iter().next().map(|(k, v)| (*k, *v)).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidRequest {
-                message: "parent HashMap must contain exactly one entry".to_string(),
-            })
-        })?;
-
+) -> Result<GEPAVariant, Error> {
     let mutation_model = &gepa_config.mutation_model;
     tracing::info!(
         "Generating improved templates using {} analyses with model '{}'",
@@ -172,7 +164,7 @@ pub async fn mutate_variant(
     };
 
     // Build input Arguments for the mutate function
-    let arguments = build_mutate_input(analyses, function_context, parent_config)?;
+    let arguments = build_mutate_input(analyses, function_context, &parent.config)?;
 
     // Create ClientInferenceParams for the mutate function
     let params = ClientInferenceParams {
@@ -260,7 +252,7 @@ pub async fn mutate_variant(
         .collect();
 
     // Validate that all parent templates are present
-    for parent_template_name in parent_config.templates.inner.keys() {
+    for parent_template_name in parent.config.templates.inner.keys() {
         if !templates.contains_key(parent_template_name) {
             return Err(Error::new(ErrorDetails::Inference {
                 message: format!(
@@ -272,7 +264,7 @@ pub async fn mutate_variant(
 
     // Validate that no extra templates were added
     for template_name in templates.keys() {
-        if !parent_config.templates.inner.contains_key(template_name) {
+        if !parent.config.templates.inner.contains_key(template_name) {
             return Err(Error::new(ErrorDetails::Inference {
                 message: format!(
                     "Mutate function returned unexpected template '{template_name}' not present in parent"
@@ -286,11 +278,11 @@ pub async fn mutate_variant(
         "{}-iter-{}-{}",
         gepa_config.variant_prefix.as_deref().unwrap_or("gepa"),
         iteration,
-        parent_name
+        parent.name
     );
 
     // Clone parent config
-    let mut mutated_config = parent_config.clone();
+    let mut mutated_config = parent.config.clone();
 
     // Set retry configuration from GEPA config
     mutated_config.retries = gepa_config.retries;
@@ -312,9 +304,10 @@ pub async fn mutate_variant(
         );
     }
 
-    let mut output = HashMap::new();
-    output.insert(mutated_variant_name, mutated_config);
-    Ok(output)
+    Ok(GEPAVariant {
+        name: mutated_variant_name,
+        config: mutated_config,
+    })
 }
 
 #[cfg(test)]
