@@ -51,7 +51,7 @@ fn resolved_input_message_content_to_client_input_message_content(
             let detail = file.detail;
             let filename = file.filename;
 
-            let base64_file = Base64File::new(None, mime_type, data, detail, filename)?;
+            let base64_file = Base64File::new(None, Some(mime_type), data, detail, filename)?;
             InputMessageContent::File(File::Base64(base64_file))
         }
         ResolvedInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),

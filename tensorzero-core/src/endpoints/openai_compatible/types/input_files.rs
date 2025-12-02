@@ -89,8 +89,13 @@ pub fn convert_image_url_to_file(image_url: OpenAICompatibleImageUrl) -> Result<
     if image_url.url.scheme() == "data" {
         let image_url_str = image_url.url.to_string();
         let (mime_type, data) = parse_base64_file_data_url(&image_url_str)?;
-        let base64_file =
-            Base64File::new(None, mime_type, data.to_string(), image_url.detail, None)?;
+        let base64_file = Base64File::new(
+            None,
+            Some(mime_type),
+            data.to_string(),
+            image_url.detail,
+            None,
+        )?;
         Ok(File::Base64(base64_file))
     } else {
         Ok(File::Url(UrlFile {
@@ -107,7 +112,8 @@ pub fn convert_image_url_to_file(image_url: OpenAICompatibleImageUrl) -> Result<
 /// Parses the data URL and extracts MIME type and base64 data.
 pub fn convert_file_to_base64(file: OpenAICompatibleFile) -> Result<File, Error> {
     let (mime_type, data) = parse_base64_file_data_url(&file.file_data)?;
-    let base64_file = Base64File::new(None, mime_type, data.to_string(), None, file.filename)?;
+    let base64_file =
+        Base64File::new(None, Some(mime_type), data.to_string(), None, file.filename)?;
     Ok(File::Base64(base64_file))
 }
 
@@ -183,7 +189,7 @@ pub fn convert_input_audio_to_file(input_audio: OpenAICompatibleInputAudio) -> R
     };
 
     // Create Base64File with the inferred MIME type and original base64 data
-    let base64_file = Base64File::new(None, mime_type, input_audio.data, None, None)?;
+    let base64_file = Base64File::new(None, Some(mime_type), input_audio.data, None, None)?;
     Ok(File::Base64(base64_file))
 }
 

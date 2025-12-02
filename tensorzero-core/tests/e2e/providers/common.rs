@@ -1766,7 +1766,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    mime::APPLICATION_PDF,
+                                    Some(mime::APPLICATION_PDF),
                                     pdf_data.clone(),
                                     None,
                                     None,
@@ -1832,7 +1832,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     InputMessageContent::File(File::Base64(
                         Base64File::new(
                             None,
-                            mime::IMAGE_PNG,
+                            Some(mime::IMAGE_PNG),
                             image_data.clone(),
                             Some(Detail::Low),
                             None,
@@ -1895,7 +1895,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = InputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
+        Base64File::new(None, Some(mime::IMAGE_PNG), updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 

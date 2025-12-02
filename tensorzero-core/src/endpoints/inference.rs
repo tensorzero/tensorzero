@@ -1826,7 +1826,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1853,7 +1853,7 @@ mod tests {
         let file_base64 = File::Base64(
             Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "fake_base64_data".to_string(),
                 None,
                 None,
@@ -1925,7 +1925,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1993,8 +1993,14 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                Some(mime::IMAGE_JPEG),
+                "abcdef".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
 
         let serialized = serde_json::to_string(&original).unwrap();
