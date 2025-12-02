@@ -59,16 +59,24 @@ export default function DatasetRowTable({
   const activeFetcher = useFetcher();
   const navigate = useNavigate();
   const functions = useAllFunctionConfigs();
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
+    null,
+  );
+
+  // The filters applied to the table come from the route's querystring. `rows` is already filtered.
+  //
+  // The local state below corresponds to the filter form in the side sheet.
+  // It allows users to edit filters without repeatedly navigating and querying the database.
+  // The initial values match the values from the URL querystring.
+  // When you submit the form in the side sheet, the local state is synchronized with the URL querystring.
   const [filterFunctionName, setFilterFunctionName] = useState<string | null>(
     function_name ?? null,
   );
   const [filterSearchQuery, setFilterSearchQuery] = useState(
     search_query ?? "",
-  );
-  const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
-    null,
   );
   const [filterAdvanced, setFilterAdvanced] = useState<
     DatapointFilter | undefined
