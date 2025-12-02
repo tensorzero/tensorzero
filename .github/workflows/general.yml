@@ -866,7 +866,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-clickhouse
+        run: cargo test-clickhouse ${{ matrix.replicated && '' || '-j 4' }}
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
