@@ -6,16 +6,17 @@ from tensorzero import (
     AndFilter,
     AsyncTensorZeroGateway,
     BooleanMetricFilter,
-    ContentBlockChatOutputText,
-    ContentBlockChatOutputToolCall,
+    ContentBlockText,
+    ContentBlockToolResult,
+    ContentBlockValidatedToolCall,
     FloatMetricFilter,
+    ContentBlockValidatedToolCall,
+    MessageContentToolCall,
     NotFilter,
-    OrderBy,
+    OrderByMetric,
+    OrderByTimestamp,
     OrFilter,
     StoredInferenceJson,
-    StoredInputMessageContentText,
-    StoredInputMessageContentToolCall,
-    StoredInputMessageContentToolResult,
     TagFilter,
     TensorZeroGateway,
     TimeFilter,
@@ -23,7 +24,7 @@ from tensorzero import (
 
 
 def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
-    order_by = [OrderBy(by="timestamp", direction="descending")]
+    order_by = [OrderByTimestamp(direction="descending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -76,7 +77,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
         value=0.5,
         comparison_operator=">",
     )
-    order_by = [OrderBy(by="metric", name="jaccard_similarity", direction="descending")]
+    order_by = [OrderByMetric(name="jaccard_similarity", direction="descending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -97,7 +98,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
 
 
 def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
-    order_by = [OrderBy(by="timestamp", direction="ascending")]
+    order_by = [OrderByTimestamp(direction="ascending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="write_haiku",
         variant_name="better_prompt_haiku_3_5",
@@ -128,7 +129,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         output_0 = output[0]
         assert output_0.type == "text"
         # Type narrowing: we know it's a Text block
-        assert isinstance(output_0, ContentBlockChatOutputText)
+        assert isinstance(output_0, ContentBlockText)
         assert output_0.text is not None
         inference_id = inference.inference_id
         assert isinstance(inference_id, str)
@@ -174,17 +175,17 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
             for content in message.content:
                 assert content.type in ["text", "tool_call", "tool_result"]
                 if content.type == "tool_call":
-                    assert isinstance(content, StoredInputMessageContentToolCall)
+                    assert isinstance(content, MessageContentToolCall)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.arguments is not None
                 elif content.type == "tool_result":
-                    assert isinstance(content, StoredInputMessageContentToolResult)
+                    assert isinstance(content, ContentBlockToolResult)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.result is not None
                 elif content.type == "text":
-                    assert isinstance(content, StoredInputMessageContentText)
+                    assert isinstance(content, ContentBlockText)
                     assert content.text is not None
                 else:
                     assert False
@@ -195,10 +196,10 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
-                assert isinstance(output_item, ContentBlockChatOutputText)
+                assert isinstance(output_item, ContentBlockText)
                 assert output_item.text is not None
             elif output_item.type == "tool_call":
-                assert isinstance(output_item, ContentBlockChatOutputToolCall)
+                assert isinstance(output_item, ContentBlockValidatedToolCall)
                 assert output_item.id is not None
                 assert output_item.name is not None
                 assert output_item.arguments is not None
@@ -342,8 +343,8 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
         comparison_operator=">",
     )
     order_by = [
-        OrderBy(by="metric", name="exact_match", direction="descending"),
-        OrderBy(by="timestamp", direction="ascending"),
+        OrderByMetric(name="exact_match", direction="descending"),
+        OrderByTimestamp(direction="ascending"),
     ]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
@@ -463,7 +464,7 @@ def test_list_render_chat_inferences(embedded_sync_client: TensorZeroGateway):
 async def test_simple_list_json_inferences_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    order_by = [OrderBy(by="timestamp", direction="descending")]
+    order_by = [OrderByTimestamp(direction="descending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -516,7 +517,7 @@ async def test_simple_query_with_float_filter_async(
         value=0.5,
         comparison_operator=">",
     )
-    order_by = [OrderBy(by="metric", name="jaccard_similarity", direction="descending")]
+    order_by = [OrderByMetric(name="jaccard_similarity", direction="descending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -541,7 +542,7 @@ async def test_simple_query_with_float_filter_async(
 async def test_simple_query_chat_function_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    order_by = [OrderBy(by="timestamp", direction="ascending")]
+    order_by = [OrderByTimestamp(direction="ascending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="write_haiku",
         variant_name="better_prompt_haiku_3_5",
@@ -571,7 +572,7 @@ async def test_simple_query_chat_function_async(
         output_0 = output[0]
         assert output_0.type == "text"
         # Type narrowing: we know it's a Text block
-        assert isinstance(output_0, ContentBlockChatOutputText)
+        assert isinstance(output_0, ContentBlockText)
         assert output_0.text is not None
         assert isinstance(inference.inference_id, str)
         assert isinstance(inference.episode_id, str)
@@ -731,8 +732,8 @@ async def test_simple_time_filter_async(
         comparison_operator=">",
     )
     order_by = [
-        OrderBy(by="metric", name="exact_match", direction="descending"),
-        OrderBy(by="timestamp", direction="ascending"),
+        OrderByMetric(name="exact_match", direction="descending"),
+        OrderByTimestamp(direction="ascending"),
     ]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",

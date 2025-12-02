@@ -6,7 +6,9 @@ use futures::FutureExt;
 use futures::future::Shared;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 use url::Url;
 
 use super::{
@@ -22,13 +24,6 @@ use crate::inference::types::stored_input::{
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, Template};
 use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
-
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{
-    resolved_content_block_to_python, resolved_input_message_content_to_python, serialize_to_dict,
-};
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct LazyResolvedInput {
@@ -124,23 +119,22 @@ pub enum LazyResolvedInputMessageContent {
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
-#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
-#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+// #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+// #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
+// #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct ResolvedInput {
-    #[cfg_attr(
-        any(feature = "pyo3", test),
-        serde(skip_serializing_if = "Option::is_none")
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub system: Option<System>,
 
-    #[cfg_attr(any(feature = "pyo3", test), serde(default))]
+    #[serde(default)]
     pub messages: Vec<ResolvedInputMessage>,
 }
 
@@ -264,40 +258,15 @@ impl ResolvedInput {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl std::fmt::Display for ResolvedInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedInput {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_system<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(serialize_to_dict(py, self.system.clone())?.into_bound(py))
-    }
-
-    #[getter]
-    pub fn get_messages(&self) -> Vec<ResolvedInputMessage> {
-        self.messages.clone()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
-#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
-#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+// #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[serde(deny_unknown_fields)]
+// #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[derive(ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
@@ -335,49 +304,27 @@ impl std::fmt::Display for ResolvedInputMessage {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedInputMessage {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    #[getter]
-    pub fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-        self.content
-            .iter()
-            .map(|content| {
-                resolved_input_message_content_to_python(py, content.clone())
-                    .map(|pyobj| pyobj.into_bound(py))
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-// TODO - should we remove the Serialize impl entirely, rather than rely on it
-// for the Pyo3 'str' impl?
-#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
-#[cfg_attr(
-    any(feature = "pyo3", test),
-    serde(tag = "type", rename_all = "snake_case")
-)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
 pub enum ResolvedInputMessageContent {
+    #[schemars(title = "ContentBlockText")]
     Text(Text),
+    #[schemars(title = "ContentBlockTemplate")]
     Template(Template),
+    #[schemars(title = "MessageContentToolCall")]
     ToolCall(ToolCall),
+    #[schemars(title = "ContentBlockToolResult")]
     ToolResult(ToolResult),
+    #[schemars(title = "ContentBlockRawText")]
     RawText(RawText),
+    #[schemars(title = "ContentBlockThought")]
     Thought(Thought),
-    #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
+    #[schemars(title = "MessageContentObjectStorageFile")]
+    #[serde(alias = "image")]
     File(Box<ObjectStorageFile>),
+    #[schemars(title = "ContentBlockUnknown")]
     Unknown(Unknown),
 }
 
@@ -457,9 +404,7 @@ impl RateLimitedInputContent for LazyFile {
 }
 
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct ResolvedRequestMessage {
     pub role: Role,
     pub content: Vec<ResolvedContentBlock>,
@@ -475,30 +420,5 @@ impl ResolvedRequestMessage {
                 .map(ResolvedContentBlock::into_content_block)
                 .collect(),
         }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedRequestMessage {
-    #[getter]
-    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        use pyo3::types::PyList;
-
-        let content = self
-            .content
-            .iter()
-            .map(|c| resolved_content_block_to_python(py, c))
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(Bound::into_any)
-    }
-
-    #[getter]
-    fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }

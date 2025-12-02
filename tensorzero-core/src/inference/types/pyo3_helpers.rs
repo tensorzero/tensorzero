@@ -10,9 +10,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
-use crate::inference::types::{
-    ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
-};
+use crate::inference::types::{ContentBlockChatOutput, Unknown};
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
@@ -21,7 +19,7 @@ use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::stored_inference::{
-    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
+    SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };
 use pyo3::types::PyNone;
 
@@ -111,62 +109,6 @@ fn import_unknown_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("UnknownContentBlock")?.unbind())
     })
-}
-
-pub fn resolved_content_block_to_python(
-    py: Python<'_>,
-    content_block: &ResolvedContentBlock,
-) -> PyResult<Py<PyAny>> {
-    match content_block {
-        ResolvedContentBlock::Text(text) => {
-            let text_content_block = import_text_content_block(py)?;
-            text_content_block.call1(py, (text.text.clone(),))
-        }
-        ResolvedContentBlock::File(resolved) => {
-            let file_content_block = import_file_content_block(py)?;
-            file_content_block.call1(
-                py,
-                (resolved.data.clone(), resolved.file.mime_type.to_string()),
-            )
-        }
-        ResolvedContentBlock::ToolCall(tool_call) => {
-            let tool_call_content_block = import_tool_call_content_block(py)?;
-            tool_call_content_block.call1(
-                py,
-                (
-                    tool_call.id.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
-                    tool_call.arguments.clone(),
-                    tool_call.name.clone(),
-                ),
-            )
-        }
-        ResolvedContentBlock::Thought(thought) => {
-            let thought_content_block = import_thought_content_block(py)?;
-            thought_content_block.call1(py, (thought.text.clone(),))
-        }
-        ResolvedContentBlock::ToolResult(tool_result) => {
-            let tool_result_content_block = import_tool_result_content_block(py)?;
-            tool_result_content_block.call1(
-                py,
-                (
-                    tool_result.name.clone(),
-                    tool_result.result.clone(),
-                    tool_result.id.clone(),
-                ),
-            )
-        }
-        ResolvedContentBlock::Unknown(Unknown {
-            data,
-            model_name,
-            provider_name,
-        }) => {
-            let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
-        }
-    }
 }
 
 pub fn content_block_chat_output_to_python(
@@ -272,74 +214,6 @@ pub fn stored_input_message_content_to_python(
     }
 }
 
-pub fn resolved_input_message_content_to_python(
-    py: Python<'_>,
-    content: ResolvedInputMessageContent,
-) -> PyResult<Py<PyAny>> {
-    match content {
-        ResolvedInputMessageContent::Text(text) => {
-            let text_content_block = import_text_content_block(py)?;
-            let kwargs = [(intern!(py, "text"), text.text)].into_py_dict(py)?;
-            text_content_block.call(py, (), Some(&kwargs))
-        }
-        ResolvedInputMessageContent::Template(template) => {
-            let template_content_block = import_template_content_block(py)?;
-            let arguments_py = serialize_to_dict(py, template.arguments)?;
-            template_content_block.call1(py, (template.name, arguments_py))
-        }
-        ResolvedInputMessageContent::ToolCall(tool_call) => {
-            let tool_call_content_block = import_tool_call_content_block(py)?;
-            let parsed_arguments_py = JSON_LOADS
-                .get(py)
-                .ok_or_else(|| {
-                    PyRuntimeError::new_err(
-                        "TensorZero: JSON_LOADS was not initialized. This should never happen",
-                    )
-                })?
-                .call1(py, (tool_call.arguments.clone().into_pyobject(py)?,))
-                .ok();
-            tool_call_content_block.call1(
-                py,
-                (
-                    tool_call.id,
-                    tool_call.arguments,
-                    tool_call.name.clone(),
-                    parsed_arguments_py,
-                    tool_call.name,
-                ),
-            )
-        }
-        ResolvedInputMessageContent::ToolResult(tool_result) => {
-            let tool_result_content_block = import_tool_result_content_block(py)?;
-            tool_result_content_block
-                .call1(py, (tool_result.name, tool_result.result, tool_result.id))
-        }
-        ResolvedInputMessageContent::Thought(thought) => {
-            let thought_content_block = import_thought_content_block(py)?;
-            thought_content_block.call1(py, (thought.text,))
-        }
-        ResolvedInputMessageContent::RawText(raw_text) => {
-            let raw_text_content_block = import_raw_text_content_block(py)?;
-            raw_text_content_block.call1(py, (raw_text.value,))
-        }
-        ResolvedInputMessageContent::File(resolved) => {
-            let file_content_block = import_file_content_block(py)?;
-            file_content_block.call1(
-                py,
-                (resolved.data.clone(), resolved.file.mime_type.to_string()),
-            )
-        }
-        ResolvedInputMessageContent::Unknown(unknown) => {
-            let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(
-                py,
-                (serialized_data, &unknown.model_name, &unknown.provider_name),
-            )
-        }
-    }
-}
-
 /// Serializes a Rust type to JSON via serde_json, then converts to a Python dictionary
 /// using `json.loads`
 pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> PyResult<Py<PyAny>> {
@@ -422,20 +296,6 @@ pub fn deserialize_from_stored_sample<'a>(
 
     // Fall back to generic deserialization
     deserialize_from_pyobj(py, obj)
-}
-
-/// In the `experimental_launch_optimization` function, we need to be able to accept
-/// either an arbitrary Python object that matches the serialization pattern of the
-/// `RenderedSample` type or a `RenderedSample` object.
-pub fn deserialize_from_rendered_sample<'a>(
-    py: Python<'a>,
-    obj: &Bound<'a, PyAny>,
-) -> PyResult<RenderedSample> {
-    if obj.is_instance_of::<RenderedSample>() {
-        Ok(obj.extract()?)
-    } else {
-        deserialize_from_pyobj(py, obj)
-    }
 }
 
 pub fn deserialize_optimization_config(

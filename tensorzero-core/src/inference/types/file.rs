@@ -59,8 +59,6 @@ use crate::{
     inference::types::{resolved_input::LazyFile, storage::StoragePath, stored_input::StoredFile},
 };
 use aws_smithy_types::base64;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
 use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -83,7 +81,6 @@ pub enum Detail {
 
 /// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 #[export_schema]
 pub struct Base64File {
@@ -92,15 +89,20 @@ pub struct Base64File {
     #[ts(optional)]
     #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
+
+    // It's a bit of a lie in the type - we accept empty mime_type as input and can infer it in Rust.
     #[ts(type = "string")]
-    #[schemars(with = "String")]
+    #[schemars(with = "Option<String>")]
     pub mime_type: MediaType,
+
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
     data: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub filename: Option<String>,
@@ -151,7 +153,6 @@ impl<'de> Deserialize<'de> for Base64File {
 /// Like `Base64File`, but without the data field.
 #[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
@@ -268,23 +269,6 @@ impl Base64File {
         &self.data
     }
 }
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Base64File {
-    #[getter(url)]
-    pub fn url_string(&self) -> Option<String> {
-        self.source_url.as_ref().map(Url::to_string)
-    }
-
-    #[getter(mime_type)]
-    pub fn mime_type_string(&self) -> String {
-        self.mime_type.to_string()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
 
 /// A file that can be located at a URL
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
@@ -306,7 +290,7 @@ pub struct UrlFile {
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+/// Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -329,7 +313,7 @@ pub struct ObjectStoragePointer {
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
-/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+/// Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[export_schema]
 #[ts(export)]
@@ -427,7 +411,7 @@ pub enum File {
     Base64(Base64File), // a base64-encoded file
     #[schemars(title = "FileObjectStoragePointer")]
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
-    #[schemars(title = "FileObjectStorage")]
+    #[schemars(title = "FileObjectStorageFile")]
     ObjectStorage(ObjectStorageFile), // a file from object storage (metadata + data)
     #[schemars(title = "FileObjectStorageError")]
     ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)

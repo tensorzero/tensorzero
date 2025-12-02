@@ -1,5 +1,4 @@
 import typing as t
-import warnings
 from importlib.metadata import version
 
 import httpx
@@ -17,9 +16,15 @@ from .generated_types import (
     AlwaysExtraBodyDelete,
     AlwaysExtraHeader,
     AlwaysExtraHeaderDelete,
+    ChatInferenceResponse,
     ContentBlockChatOutput,
-    ContentBlockChatOutputText,
-    ContentBlockChatOutputToolCall,
+    ContentBlockRawText,
+    ContentBlockTemplate,
+    ContentBlockText,
+    ContentBlockThought,
+    ContentBlockToolResult,
+    ContentBlockUnknown,
+    ContentBlockValidatedToolCall,
     CreateDatapointRequest,
     CreateDatapointRequestChat,
     CreateDatapointRequestJson,
@@ -29,6 +34,7 @@ from .generated_types import (
     DeleteDatapointsResponse,
     ExtraBody,
     ExtraHeader,
+    FinishReason,
     FunctionTool,
     GetDatapointsResponse,
     GetInferencesRequest,
@@ -41,22 +47,39 @@ from .generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
+    InferenceResponse,
     Input,
     InputMessage,
-    InputMessageContentTemplate,
-    InputMessageContentText,
     JsonDatapointOutputUpdate,
     JsonInferenceOutput,
+    JsonInferenceResponse,
     ListDatapointsRequest,
     ListInferencesRequest,
+    MessageContentInputFileBase64,
+    MessageContentInputFileObjectStorageError,
+    MessageContentInputFileObjectStorageFile,
+    MessageContentInputFileObjectStoragePointer,
+    MessageContentInputFileUrlFile,
+    MessageContentObjectStorageFile,
+    MessageContentStoredFile,
+    MessageContentToolCall,
     ModelProviderExtraBody,
     ModelProviderExtraBodyDelete,
     ModelProviderExtraHeader,
     ModelProviderExtraHeaderDelete,
+    OpenAICustomTool,
+    OrderByMetric,
+    OrderBySearchRelevance,
+    OrderByTimestamp,
     ProviderExtraBody,  # DEPRECATED
     ProviderExtraBodyDelete,  # DEPRECATED
     ProviderExtraHeader,  # DEPRECATED
     ProviderExtraHeaderDelete,  # DEPRECATED
+    RenderedSample,
+    ResolvedInput,
+    ResolvedInputMessage,
+    ResolvedInputMessageContent,
+    ResolvedRequestMessage,
     StorageKind,
     StorageKindDisabled,
     StorageKindFilesystem,
@@ -67,15 +90,12 @@ from .generated_types import (
     StoredInferenceJson,
     StoredInput,
     StoredInputMessage,
-    StoredInputMessageContentFile,
-    StoredInputMessageContentTemplate,
-    StoredInputMessageContentText,
-    StoredInputMessageContentThought,
-    StoredInputMessageContentToolCall,
-    StoredInputMessageContentToolResult,
-    StoredInputMessageContentUnknown,
+    ThoughtSummaryBlock,
+    ThoughtSummaryBlockSummaryText,
+    Tool,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
+    Usage,
     VariantExtraBody,
     VariantExtraBodyDelete,
     VariantExtraHeader,
@@ -100,85 +120,89 @@ from .tensorzero import (
     OptimizationJobHandle,
     OptimizationJobInfo,
     OptimizationJobStatus,
-    RenderedSample,
-    ResolvedInput,
-    ResolvedInputMessage,
     TogetherSFTConfig,
     VariantsConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
+
+# pyright: reportDeprecated=false
 from .types import (
-    AndFilter,  # pyright: ignore[reportDeprecated]
+    AndFilter,  # DEPRECATED
     BaseTensorZeroError,
-    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
+    BooleanMetricFilter,  # DEPRECATED
+    ChatChunk,
     ChatDatapointInsert,
-    ChatInferenceResponse,
-    ContentBlock,
+    ContentBlock,  # DEPRECATED
+    ContentBlockChatOutputText,  # DEPRECATED
+    ContentBlockChatOutputToolCall,  # DEPRECATED
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
     FeedbackResponse,
-    FileBase64,
-    FileUrl,
-    FinishReason,
-    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
-    ImageBase64,
-    ImageUrl,
+    File,  # DEPRECATED
+    FloatMetricFilter,  # DEPRECATED
     InferenceChunk,
+    InferenceFilterTreeNode,  # DEPRECATED
     InferenceInput,
-    InferenceResponse,
+    InputContentBlockTemplate,  # DEPRECATED
+    InputContentBlockText,  # DEPRECATED
+    JsonChunk,
     JsonDatapointInsert,
-    JsonInferenceResponse,
     Message,
-    NotFilter,  # pyright: ignore[reportDeprecated]
-    OrderBy,
-    OrFilter,  # pyright: ignore[reportDeprecated]
-    RawText,
+    NotFilter,  # DEPRECATED
+    OrderBy,  # DEPRECATED
+    OrFilter,  # DEPRECATED
+    RawText,  # DEPRECATED
+    RenderedStoredInference,  # DEPRECATED
+    StoredInputContentBlockTemplate,  # DEPRECATED
+    StoredInputContentBlockText,  # DEPRECATED
+    StoredInputContentBlockThought,  # DEPRECATED
+    StoredInputContentBlockToolResult,  # DEPRECATED
+    StoredInputContentBlockUnknown,  # DEPRECATED
+    StoredInputMessageContentFile,  # DEPRECATED
+    StoredInputMessageContentToolCall,  # DEPRECATED
     System,
-    TagFilter,  # pyright: ignore[reportDeprecated]
-    Template,
+    TagFilter,  # DEPRECATED
+    Template,  # DEPRECATED
     TensorZeroError,
     TensorZeroInternalError,
-    Text,
+    Text,  # DEPRECATED
     TextChunk,
-    Thought,
+    Thought,  # DEPRECATED
     ThoughtChunk,
-    TimeFilter,  # pyright: ignore[reportDeprecated]
-    Tool,
-    ToolCall,
+    TimeFilter,  # DEPRECATED
+    ToolCall,  # DEPRECATED
     ToolCallChunk,
     ToolChoice,
-    ToolParams,
-    ToolResult,
-    UnknownContentBlock,
-    Usage,
+    ToolResult,  # DEPRECATED
+    Unknown,  # DEPRECATED
+    UnknownContentBlock,  # DEPRECATED
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
 
-# DEPRECATED: use RenderedSample instead
-RenderedStoredInference = RenderedSample
+# NOTE(shuyangli): Unclear if this is intentional, but `deprecated` mutates the `DICLConfig` class in place.
+DiclConfig = deprecated("Deprecated; use DICLConfig instead. This alias will be removed in a future version.")(
+    DICLConfig
+)
+"""Deprecated: Use DICLConfig instead."""
+
+
+# Deprecated optimization aliases (cannot subclass native PyO3 types)
+DiclOptimizationConfig = DICLOptimizationConfig
+"""Deprecated: Use DICLOptimizationConfig instead."""
+
+
 # Type aliases to preserve backward compatibility with main
 ChatDatapoint = LegacyDatapoint.Chat
 JsonDatapoint = LegacyDatapoint.Json
 
-
-# CAREFUL: deprecated
-class DiclOptimizationConfig:
-    def __new__(cls, *args: Any, **kwargs: Any):
-        warnings.warn(
-            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return DICLOptimizationConfig(*args, **kwargs)
-
-
-# CAREFUL: deprecated alias
-DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
-
+FileBase64 = MessageContentInputFileBase64
+FileUrl = MessageContentInputFileUrlFile
+ImageBase64 = MessageContentInputFileBase64
+ImageUrl = MessageContentInputFileUrlFile
 
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
@@ -197,22 +221,23 @@ __all__ = [
     "AlwaysExtraBodyDelete",
     "AlwaysExtraHeader",
     "AlwaysExtraHeaderDelete",
-    "AndFilter",
+    "AndFilter",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
     "BestOfNSamplingConfig",
-    "BooleanMetricFilter",
+    "BooleanMetricFilter",  # DEPRECATED
     "ChainOfThoughtConfig",
+    "ChatChunk",
     "ChatCompletionConfig",
     "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceResponse",
     "Config",
-    "ContentBlock",
+    "ContentBlock",  # DEPRECATED
     "ContentBlockChatOutput",
-    "ContentBlockChatOutputText",
-    "ContentBlockChatOutputToolCall",
+    "ContentBlockChatOutputText",  # DEPRECATED
+    "ContentBlockChatOutputToolCall",  # DEPRECATED
     "CreateDatapointRequest",
     "CreateDatapointRequestChat",
     "CreateDatapointRequestJson",
@@ -220,8 +245,8 @@ __all__ = [
     "CreateDatapointsResponse",
     "DatapointMetadataUpdate",
     "DeleteDatapointsResponse",
-    "DICLConfig",
     "DiclConfig",  # DEPRECATED
+    "DICLConfig",  # DEPRECATED
     "DICLOptimizationConfig",
     "DiclOptimizationConfig",  # DEPRECATED
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
@@ -230,11 +255,12 @@ __all__ = [
     "ExtraBody",
     "ExtraHeader",
     "FeedbackResponse",
+    "File",  # DEPRECATED
     "FileBase64",
     "FileUrl",
     "FinishReason",
     "FireworksSFTConfig",
-    "FloatMetricFilter",
+    "FloatMetricFilter",  # DEPRECATED
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",
@@ -254,12 +280,15 @@ __all__ = [
     "InferenceFilterOr",
     "InferenceFilterTag",
     "InferenceFilterTime",
+    "InferenceFilterTreeNode",  # DEPRECATED
     "InferenceInput",
     "InferenceResponse",
+    "ContentBlockValidatedToolCall",
     "Input",
     "InputMessage",
-    "InputMessageContentTemplate",
-    "InputMessageContentText",
+    "InputContentBlockTemplate",  # DEPRECATED
+    "InputContentBlockText",  # DEPRECATED
+    "JsonChunk",
     "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonDatapointOutputUpdate",
@@ -269,30 +298,50 @@ __all__ = [
     "ListDatapointsRequest",
     "ListInferencesRequest",
     "Message",
+    "MessageContentInputFileBase64",
+    "MessageContentInputFileObjectStorageError",
+    "MessageContentInputFileObjectStorageFile",
+    "MessageContentInputFileObjectStoragePointer",
+    "MessageContentInputFileUrlFile",
+    "MessageContentObjectStorageFile",
+    "ContentBlockRawText",
+    "MessageContentStoredFile",
+    "ContentBlockTemplate",
+    "ContentBlockText",
+    "ContentBlockThought",
+    "MessageContentToolCall",
+    "ContentBlockToolResult",
+    "ContentBlockUnknown",
     "MixtureOfNConfig",
     "ModelProviderExtraBody",
     "ModelProviderExtraBodyDelete",
     "ModelProviderExtraHeader",
     "ModelProviderExtraHeaderDelete",
-    "NotFilter",
+    "NotFilter",  # DEPRECATED
+    "OpenAICustomTool",
     "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationConfig",
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
-    "OrderBy",
-    "OrFilter",
+    "OrderBy",  # DEPRECATED
+    "OrderByMetric",
+    "OrderBySearchRelevance",
+    "OrderByTimestamp",
+    "OrFilter",  # DEPRECATED
     "patch_openai_client",
     "ProviderExtraBody",  # DEPRECATED
     "ProviderExtraBodyDelete",  # DEPRECATED
     "ProviderExtraHeader",  # DEPRECATED
     "ProviderExtraHeaderDelete",  # DEPRECATED
-    "RawText",
+    "RawText",  # DEPRECATED
     "RenderedSample",
     "RenderedStoredInference",  # DEPRECATED
     "ResolvedInput",
     "ResolvedInputMessage",
+    "ResolvedInputMessageContent",
+    "ResolvedRequestMessage",
     "StorageKind",
     "StorageKindDisabled",
     "StorageKindFilesystem",
@@ -303,32 +352,34 @@ __all__ = [
     "StoredInferenceJson",
     "StoredInput",
     "StoredInputMessage",
-    "StoredInputMessageContentFile",
-    "StoredInputMessageContentTemplate",
-    "StoredInputMessageContentText",
-    "StoredInputMessageContentThought",
-    "StoredInputMessageContentToolCall",
-    "StoredInputMessageContentToolResult",
-    "StoredInputMessageContentUnknown",
+    "StoredInputMessageContentFile",  # DEPRECATED
+    "StoredInputContentBlockTemplate",  # DEPRECATED
+    "StoredInputContentBlockText",  # DEPRECATED
+    "StoredInputContentBlockThought",  # DEPRECATED
+    "StoredInputMessageContentToolCall",  # DEPRECATED
+    "StoredInputContentBlockToolResult",  # DEPRECATED
+    "StoredInputContentBlockUnknown",  # DEPRECATED
     "System",
-    "TagFilter",
-    "Template",
+    "TagFilter",  # DEPRECATED
+    "Template",  # DEPRECATED
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
-    "Text",
+    "Text",  # DEPRECATED
     "TextChunk",
-    "Thought",
+    "Thought",  # DEPRECATED
     "ThoughtChunk",
-    "TimeFilter",
+    "ThoughtSummaryBlock",
+    "ThoughtSummaryBlockSummaryText",
+    "TimeFilter",  # DEPRECATED
     "TogetherSFTConfig",
     "Tool",
-    "ToolCall",
+    "ToolCall",  # DEPRECATED
     "ToolCallChunk",
     "ToolChoice",
-    "ToolParams",
-    "ToolResult",
-    "UnknownContentBlock",
+    "ToolResult",  # DEPRECATED
+    "Unknown",  # DEPRECATED
+    "UnknownContentBlock",  # DEPRECATED
     "UpdateDatapointMetadataRequest",
     "UpdateDatapointsResponse",
     "Usage",

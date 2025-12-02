@@ -27,7 +27,7 @@ class BooleanMetricFilter:
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutputText:
+class ContentBlockText:
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -417,6 +417,9 @@ ExtraHeader = (
 )
 
 
+FinishReason = Literal["stop", "stop_sequence", "length", "tool_call", "content_filter", "unknown"]
+
+
 FloatComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 
@@ -462,13 +465,12 @@ InferenceOutputSource = str
 
 
 @dataclass(kw_only=True)
-class InferenceResponseToolCall:
+class ContentBlockValidatedToolCallInternal:
     """
-    An InferenceResponseToolCall is a request by a model to call a Tool
-    in the form that we return to the client / ClickHouse
+    A request by a model to call a Tool that TensorZero has parsed and validated.
     This includes some synactic sugar (parsing / validation of the tool arguments)
     in the `arguments` field and the name in the `name` field.
-    We support looping this back through the TensorZero inference API via the ToolCallWrapper
+    We support looping this back through the TensorZero inference API.
     """
 
     id: str
@@ -494,31 +496,19 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentText:
-    """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
-    """
-
-    text: str
-    type: Literal["text"] = "text"
-
-
-@dataclass(kw_only=True)
-class InputMessageContentTemplate:
+class ContentBlockTemplate:
     arguments: dict[str, Any]
     name: str
     type: Literal["template"] = "template"
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolResult:
+class ContentBlockValidatedToolCall(ContentBlockValidatedToolCallInternal):
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class ContentBlockToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -530,7 +520,7 @@ class InputMessageContentToolResult:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentRawText:
+class ContentBlockRawText:
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
@@ -660,58 +650,11 @@ class StoragePath:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentText:
-    """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
-    """
-
-    text: str
-    type: Literal["text"] = "text"
-
-
-@dataclass(kw_only=True)
-class StoredInputMessageContentTemplate:
-    arguments: dict[str, Any]
-    name: str
-    type: Literal["template"] = "template"
-
-
-@dataclass(kw_only=True)
-class StoredInputMessageContentToolResult:
-    """
-    A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-    """
-
-    id: str
-    name: str
-    result: str
-    type: Literal["tool_result"] = "tool_result"
-
-
-@dataclass(kw_only=True)
-class StoredInputMessageContentRawText:
-    """
-    Struct that represents raw text content that should be passed directly to the model
-    without any template processing or validation
-    """
-
-    type: Literal["raw_text"] = "raw_text"
-    value: str
-
-
-@dataclass(kw_only=True)
-class StoredInputMessageContentFile:
+class MessageContentStoredFile:
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
     """
 
     mime_type: str
@@ -814,9 +757,6 @@ class ToolCall:
     name: str
 
 
-ToolCallWrapper = ToolCall | InferenceResponseToolCall
-
-
 @dataclass(kw_only=True)
 class ToolChoiceSpecific:
     """
@@ -843,8 +783,9 @@ class ToolResult:
 @dataclass(kw_only=True)
 class Unknown:
     """
-    Struct that represents an unknown provider-specific content block.
-    We pass this along as-is without any validation or transformation.
+    Struct that represents an unknown provider-specific content block (e.g. Anthropic's `redacted_thinking`) in and out
+    of TensorZero. We pass this along as-is without any validation or transformation.
+    The `data` field holds the original content block from the provider.
     """
 
     data: Any
@@ -919,33 +860,26 @@ class UrlFile:
 
 
 @dataclass(kw_only=True)
+class Usage:
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+@dataclass(kw_only=True)
 class Base64File:
     """
     A file already encoded as base64
     """
 
     data: str
-    mime_type: str
     detail: Detail | None = None
     filename: str | None = None
+    mime_type: str | None = None
     source_url: str | None = None
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
-    """
-    Defines the types of content block that can come from a `chat` function
-    """
-
-    type: Literal["tool_call"] = "tool_call"
-
-
-@dataclass(kw_only=True)
-class ContentBlockChatOutputUnknown(Unknown):
-    """
-    Defines the types of content block that can come from a `chat` function
-    """
-
+class ContentBlockUnknown(Unknown):
     type: Literal["unknown"] = "unknown"
 
 
@@ -1062,21 +996,39 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolCall:
+class ContentBlockInputToolCall(ToolCall):
     type: Literal["tool_call"] = "tool_call"
 
 
 @dataclass(kw_only=True)
-class InputMessageContentUnknown(Unknown):
+class ContentBlockInputFileUrlFile(UrlFile):
     """
-    An unknown content block type, used to allow passing provider-specific
-    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    of TensorZero.
-    The `data` field holds the original content block from the provider,
-    without any validation or transformation by TensorZero.
+    A file for an inference or a datapoint.
     """
 
-    type: Literal["unknown"] = "unknown"
+    type: Literal["file"] = "file"
+    file_type: Literal["url"] = "url"
+
+
+@dataclass(kw_only=True)
+class ContentBlockInputFileBase64(Base64File):
+    """
+    A file for an inference or a datapoint.
+    """
+
+    type: Literal["file"] = "file"
+    file_type: Literal["base64"] = "base64"
+
+
+@dataclass(kw_only=True)
+class JsonInferenceResponse:
+    episode_id: str
+    inference_id: str
+    output: JsonInferenceOutput
+    usage: Usage
+    variant_name: str
+    finish_reason: FinishReason | None = None
+    original_response: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -1099,7 +1051,7 @@ class ObjectStorageFile:
     """
     A file stored in an object storage backend, with data.
     This struct can NOT be stored in the database.
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
     """
 
     data: str
@@ -1115,7 +1067,7 @@ class ObjectStoragePointer:
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
     """
 
     mime_type: str
@@ -1185,13 +1137,13 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentToolCall(ToolCall):
+class MessageContentToolCall(ToolCall):
     type: Literal["tool_call"] = "tool_call"
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentUnknown(Unknown):
-    type: Literal["unknown"] = "unknown"
+class MessageContentObjectStorageFile(ObjectStorageFile):
+    type: Literal["file"] = "file"
 
 
 @dataclass(kw_only=True)
@@ -1216,20 +1168,11 @@ class Thought:
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutputThought(Thought):
-    """
-    Defines the types of content block that can come from a `chat` function
-    """
-
+class ContentBlockThought(Thought):
     type: Literal["thought"] = "thought"
 
 
-ContentBlockChatOutput = (
-    ContentBlockChatOutputText
-    | ContentBlockChatOutputToolCall
-    | ContentBlockChatOutputThought
-    | ContentBlockChatOutputUnknown
-)
+ContentBlockChatOutput = ContentBlockText | ContentBlockValidatedToolCall | ContentBlockThought | ContentBlockUnknown
 
 
 @dataclass(kw_only=True)
@@ -1242,7 +1185,7 @@ class FileObjectStoragePointer(ObjectStoragePointer):
 
 
 @dataclass(kw_only=True)
-class FileObjectStorage(ObjectStorageFile):
+class FileObjectStorageFile(ObjectStorageFile):
     """
     A file for an inference or a datapoint.
     """
@@ -1259,28 +1202,53 @@ class FileObjectStorageError(ObjectStorageError):
     file_type: Literal["object_storage_error"] = "object_storage_error"
 
 
-File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorage | FileObjectStorageError
+File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorageFile | FileObjectStorageError
 
 
 @dataclass(kw_only=True)
-class InputMessageContentThought(Thought):
-    type: Literal["thought"] = "thought"
+class ContentBlockInputFileObjectStoragePointer(ObjectStoragePointer):
+    """
+    A file for an inference or a datapoint.
+    """
 
-
-@dataclass(kw_only=True)
-class InputMessageContentFile:
     type: Literal["file"] = "file"
+    file_type: Literal["object_storage_pointer"] = "object_storage_pointer"
+
+
+@dataclass(kw_only=True)
+class ContentBlockInputFileObjectStorageFile(ObjectStorageFile):
+    """
+    A file for an inference or a datapoint.
+    """
+
+    type: Literal["file"] = "file"
+    file_type: Literal["object_storage"] = "object_storage"
+
+
+@dataclass(kw_only=True)
+class ContentBlockInputFileObjectStorageError(ObjectStorageError):
+    """
+    A file for an inference or a datapoint.
+    """
+
+    type: Literal["file"] = "file"
+    file_type: Literal["object_storage_error"] = "object_storage_error"
 
 
 InputMessageContent = (
-    InputMessageContentText
-    | InputMessageContentTemplate
-    | InputMessageContentToolCall
-    | InputMessageContentToolResult
-    | InputMessageContentRawText
-    | InputMessageContentThought
-    | InputMessageContentFile
-    | InputMessageContentUnknown
+    ContentBlockText
+    | ContentBlockTemplate
+    | ContentBlockInputToolCall
+    | ContentBlockValidatedToolCall
+    | ContentBlockToolResult
+    | ContentBlockRawText
+    | ContentBlockThought
+    | ContentBlockInputFileUrlFile
+    | ContentBlockInputFileBase64
+    | ContentBlockInputFileObjectStoragePointer
+    | ContentBlockInputFileObjectStorageFile
+    | ContentBlockInputFileObjectStorageError
+    | ContentBlockUnknown
 )
 
 
@@ -1299,21 +1267,51 @@ class ProviderTool:
     scope: ProviderToolScope | None = None
 
 
+ResolvedContentBlock = (
+    ContentBlockText
+    | MessageContentToolCall
+    | ContentBlockToolResult
+    | MessageContentObjectStorageFile
+    | ContentBlockThought
+    | ContentBlockUnknown
+)
+
+
+ResolvedInputMessageContent = (
+    ContentBlockText
+    | ContentBlockTemplate
+    | MessageContentToolCall
+    | ContentBlockToolResult
+    | ContentBlockRawText
+    | ContentBlockThought
+    | MessageContentObjectStorageFile
+    | ContentBlockUnknown
+)
+
+
 @dataclass(kw_only=True)
-class StoredInputMessageContentThought(Thought):
-    type: Literal["thought"] = "thought"
+class ResolvedRequestMessage:
+    """
+    Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
+    """
+
+    content: list[ResolvedContentBlock]
+    role: Role
 
 
 StoredInputMessageContent = (
-    StoredInputMessageContentText
-    | StoredInputMessageContentTemplate
-    | StoredInputMessageContentToolCall
-    | StoredInputMessageContentToolResult
-    | StoredInputMessageContentRawText
-    | StoredInputMessageContentThought
-    | StoredInputMessageContentFile
-    | StoredInputMessageContentUnknown
+    ContentBlockText
+    | ContentBlockTemplate
+    | MessageContentToolCall
+    | ContentBlockToolResult
+    | ContentBlockRawText
+    | ContentBlockThought
+    | MessageContentStoredFile
+    | ContentBlockUnknown
 )
+
+
+StoredOutput = list[ContentBlockChatOutput] | JsonInferenceOutput
 
 
 @dataclass(kw_only=True)
@@ -1374,6 +1372,17 @@ class UpdateDynamicToolParamsRequest:
     If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
+
+
+@dataclass(kw_only=True)
+class ChatInferenceResponse:
+    content: list[ContentBlockChatOutput]
+    episode_id: str
+    inference_id: str
+    usage: Usage
+    variant_name: str
+    finish_reason: FinishReason | None = None
+    original_response: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -1472,6 +1481,9 @@ class DynamicToolParams:
     """
 
 
+InferenceResponse = ChatInferenceResponse | JsonInferenceResponse
+
+
 @dataclass(kw_only=True)
 class InputMessage:
     """
@@ -1481,6 +1493,22 @@ class InputMessage:
     """
 
     content: list[InputMessageContent]
+    role: Role
+
+
+@dataclass(kw_only=True)
+class ModelInput:
+    """
+    For use in rendering for optimization purposes
+    """
+
+    messages: list[ResolvedRequestMessage]
+    system: str | None = None
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessage:
+    content: list[ResolvedInputMessageContent]
     role: Role
 
 
@@ -1527,6 +1555,18 @@ class JsonInferenceDatapoint:
     source_inference_id: str | None = None
     staled_at: str | None = None
     tags: dict[str, Any] | None = None
+
+
+@dataclass(kw_only=True)
+class ResolvedInput:
+    """
+    Like `Input`, but with all network resources resolved.
+    Currently, this is just used to fetch image URLs in the image input,
+    so that we always pass a base64-encoded image to the model provider.
+    """
+
+    messages: list[ResolvedInputMessage] | None = field(default_factory=lambda: [])
+    system: System | None = None
 
 
 @dataclass(kw_only=True)
@@ -1872,6 +1912,51 @@ class GetDatapointsResponse:
     datapoints: list[Datapoint]
     """
     The retrieved datapoints.
+    """
+
+
+@dataclass(kw_only=True)
+class RenderedSample:
+    """
+    Represents an inference that has been prepared for fine-tuning.
+    This is constructed by rendering a StoredInference with a variant for messages
+    and by resolving all network resources (e.g. images).
+    This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
+    """
+
+    dispreferred_outputs: list[list[ContentBlockChatOutput]]
+    function_name: str
+    input: ModelInput
+    stored_input: StoredInput
+    tags: dict[str, str]
+    additional_tools: list[Tool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    episode_id: str | None = None
+    inference_id: str | None = None
+    output: list[ContentBlockChatOutput] | None = None
+    output_schema: Any | None = None
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
+    stored_output: StoredOutput | None = None
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
     """
 
 

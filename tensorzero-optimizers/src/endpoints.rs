@@ -136,8 +136,7 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[derive(ts_rs::TS, Debug, Deserialize)]
-#[ts(export)]
+#[derive(Debug, Deserialize)]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,

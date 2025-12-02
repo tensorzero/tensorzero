@@ -16,17 +16,16 @@ from time import sleep
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ContentBlockChatOutputText,
+    ContentBlockTemplate,
+    ContentBlockText,
     CreateDatapointRequestChat,
     CreateDatapointRequestJson,
     CreateDatapointsFromInferenceRequestParamsInferenceIds,
     Input,
     InputMessage,
-    InputMessageContentTemplate,
-    InputMessageContentText,
     JsonDatapointOutputUpdate,
     ListDatapointsRequest,
-    OrderBy,
+    OrderByTimestamp,
     TensorZeroGateway,
     UpdateDatapointMetadataRequest,
 )
@@ -43,17 +42,17 @@ def test_sync_get_datapoints_by_ids(sync_client: TensorZeroGateway):
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="First message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="First message")])],
             ),
-            output=[ContentBlockChatOutputText(text="First response")],
+            output=[ContentBlockText(text="First response")],
         ),
         CreateDatapointRequestChat(
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Second message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="Second message")])],
             ),
-            output=[ContentBlockChatOutputText(text="Second response")],
+            output=[ContentBlockText(text="Second response")],
         ),
         CreateDatapointRequestJson(
             function_name="json_success",
@@ -61,7 +60,7 @@ def test_sync_get_datapoints_by_ids(sync_client: TensorZeroGateway):
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Canada"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "Canada"})]
                     )
                 ],
             ),
@@ -105,7 +104,7 @@ async def test_async_get_datapoints_by_ids(async_client: AsyncTensorZeroGateway)
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "AsyncBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Async message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="Async message")])],
             ),
         ),
         CreateDatapointRequestJson(
@@ -114,7 +113,7 @@ async def test_async_get_datapoints_by_ids(async_client: AsyncTensorZeroGateway)
                 system={"assistant_name": "AsyncJson"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Mexico"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "Mexico"})]
                     )
                 ],
             ),
@@ -146,17 +145,17 @@ def test_sync_get_datapoints_by_ids_with_dataset_name(sync_client: TensorZeroGat
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="First message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="First message")])],
             ),
-            output=[ContentBlockChatOutputText(text="First response")],
+            output=[ContentBlockText(text="First response")],
         ),
         CreateDatapointRequestChat(
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Second message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="Second message")])],
             ),
-            output=[ContentBlockChatOutputText(text="Second response")],
+            output=[ContentBlockText(text="Second response")],
         ),
         CreateDatapointRequestJson(
             function_name="json_success",
@@ -164,7 +163,7 @@ def test_sync_get_datapoints_by_ids_with_dataset_name(sync_client: TensorZeroGat
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Canada"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "Canada"})]
                     )
                 ],
             ),
@@ -208,7 +207,7 @@ async def test_async_get_datapoints_by_ids_with_dataset_name(async_client: Async
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "AsyncBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Async message")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="Async message")])],
             ),
         ),
         CreateDatapointRequestJson(
@@ -217,7 +216,7 @@ async def test_async_get_datapoints_by_ids_with_dataset_name(async_client: Async
                 system={"assistant_name": "AsyncJson"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Mexico"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "Mexico"})]
                     )
                 ],
             ),
@@ -249,14 +248,14 @@ def test_sync_list_datapoints_with_filters(sync_client: TensorZeroGateway):
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Bot1"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="msg1")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="msg1")])],
             ),
         ),
         CreateDatapointRequestChat(
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Bot2"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="msg2")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="msg2")])],
             ),
         ),
         CreateDatapointRequestJson(
@@ -265,7 +264,7 @@ def test_sync_list_datapoints_with_filters(sync_client: TensorZeroGateway):
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Brazil"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "Brazil"})]
                     )
                 ],
             ),
@@ -308,14 +307,14 @@ async def test_async_list_datapoints_with_filters(async_client: AsyncTensorZeroG
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Filter1"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="test1")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="test1")])],
             ),
         ),
         CreateDatapointRequestChat(
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Filter2"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="test2")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="test2")])],
             ),
         ),
     ]
@@ -345,7 +344,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "MetaBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="original")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text="original")])],
             ),
             name="original_name",
         ),
@@ -409,7 +408,7 @@ async def test_async_update_datapoints_metadata(async_client: AsyncTensorZeroGat
                 system={"assistant_name": "AsyncMeta"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "France"})]
+                        role="user", content=[ContentBlockTemplate(name="user", arguments={"country": "France"})]
                     )
                 ],
             ),
@@ -449,7 +448,7 @@ def test_sync_delete_multiple_datapoints(sync_client: TensorZeroGateway):
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "DeleteBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text=f"message {i}")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text=f"message {i}")])],
             ),
         )
         for i in range(5)
@@ -494,7 +493,7 @@ async def test_async_delete_multiple_datapoints(async_client: AsyncTensorZeroGat
                 messages=[
                     InputMessage(
                         role="user",
-                        content=[InputMessageContentTemplate(name="user", arguments={"country": f"Country{i}"})],
+                        content=[ContentBlockTemplate(name="user", arguments={"country": f"Country{i}"})],
                     )
                 ],
             ),
@@ -529,7 +528,7 @@ def test_sync_delete_entire_dataset(sync_client: TensorZeroGateway):
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "ToDelete"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text=f"data {i}")])],
+                messages=[InputMessage(role="user", content=[ContentBlockText(text=f"data {i}")])],
             ),
         )
         for i in range(10)
@@ -573,7 +572,7 @@ async def test_async_delete_entire_dataset(async_client: AsyncTensorZeroGateway)
                 messages=[
                     InputMessage(
                         role="user",
-                        content=[InputMessageContentTemplate(name="user", arguments={"country": f"Country{i}"})],
+                        content=[ContentBlockTemplate(name="user", arguments={"country": f"Country{i}"})],
                     )
                 ],
             ),
@@ -601,7 +600,7 @@ async def test_async_delete_entire_dataset(async_client: AsyncTensorZeroGateway)
 def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZeroGateway):
     """Test creating dataset from inference results."""
     # First, list a few existing inferences
-    order_by = [OrderBy(by="timestamp", direction="descending")]
+    order_by = [OrderByTimestamp(direction="descending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
@@ -644,7 +643,7 @@ def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZero
 @pytest.mark.asyncio
 async def test_async_create_datapoints_from_inferences(embedded_async_client: AsyncTensorZeroGateway):
     """Test async version of create_datapoints_from_inferences."""
-    order_by = [OrderBy(by="timestamp", direction="descending")]
+    order_by = [OrderByTimestamp(direction="descending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,

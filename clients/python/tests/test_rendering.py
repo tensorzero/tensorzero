@@ -1,25 +1,26 @@
 from datetime import datetime, timezone
 
 import pytest
+
+# pyright: reportDeprecated=false
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ContentBlockChatOutputText,
+    ContentBlockTemplate,
+    ContentBlockText,
+    ContentBlockThought,
+    ContentBlockToolResult,
+    ContentBlockUnknown,
     FileBase64,
     FunctionTool,
     JsonInferenceOutput,
+    MessageContentStoredFile,
+    MessageContentToolCall,
     StorageKindS3Compatible,
     StoragePath,
     StoredInferenceChat,
     StoredInferenceJson,
     StoredInput,
     StoredInputMessage,
-    StoredInputMessageContentFile,
-    StoredInputMessageContentTemplate,
-    StoredInputMessageContentText,
-    StoredInputMessageContentThought,
-    StoredInputMessageContentToolCall,
-    StoredInputMessageContentToolResult,
-    StoredInputMessageContentUnknown,
     TensorZeroGateway,
     Text,
     Thought,
@@ -42,9 +43,9 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                         StoredInputMessage(
                             role="user",
                             content=[
-                                StoredInputMessageContentThought(type="thought", text="hmmm"),
-                                StoredInputMessageContentText(type="text", text="bar"),
-                                StoredInputMessageContentToolCall(
+                                ContentBlockThought(type="thought", text="hmmm"),
+                                ContentBlockText(type="text", text="bar"),
+                                MessageContentToolCall(
                                     type="tool_call",
                                     id="123",
                                     arguments='{"foo": "bar"}',
@@ -55,20 +56,20 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                         StoredInputMessage(
                             role="assistant",
                             content=[
-                                StoredInputMessageContentText(type="text", text="Hello world"),
-                                StoredInputMessageContentToolResult(
+                                ContentBlockText(type="text", text="Hello world"),
+                                ContentBlockToolResult(
                                     type="tool_result",
                                     id="123",
                                     name="test_tool",
                                     result="test",
                                 ),
-                                StoredInputMessageContentUnknown(type="unknown", data=[{"woo": "hoo"}]),
+                                ContentBlockUnknown(type="unknown", data=[{"woo": "hoo"}]),
                             ],
                         ),
                         StoredInputMessage(
                             role="user",
                             content=[
-                                StoredInputMessageContentFile(
+                                MessageContentStoredFile(
                                     type="file",
                                     mime_type="image/png",
                                     storage_path=StoragePath(
@@ -85,7 +86,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                         ),
                     ],
                 ),
-                output=[ContentBlockChatOutputText(text="Hello world")],
+                output=[ContentBlockText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 additional_tools=[
@@ -98,7 +99,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 ],
                 tool_choice="auto",
                 parallel_tool_calls=False,
-                dispreferred_outputs=[[ContentBlockChatOutputText(text="goodbye")]],
+                dispreferred_outputs=[[ContentBlockText(text="goodbye")]],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
@@ -110,7 +111,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                     messages=[
                         StoredInputMessage(
                             role="user",
-                            content=[StoredInputMessageContentTemplate(name="user", arguments={"country": "Japan"})],
+                            content=[ContentBlockTemplate(name="user", arguments={"country": "Japan"})],
                         ),
                     ],
                 ),
@@ -196,6 +197,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     assert len(rendered_samples[0].additional_tools) == 1
     tool = rendered_samples[0].additional_tools[0]
     assert tool.name == "test"
+    assert isinstance(tool, FunctionTool)
     assert tool.description == "test"
     assert tool.parameters == {"foo": "bar"}
     assert not tool.strict
@@ -264,11 +266,11 @@ def test_sync_render_samples_nonexistent_function(
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -298,11 +300,11 @@ def test_sync_render_samples_unspecified_function(
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -330,11 +332,11 @@ def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway)
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -364,11 +366,11 @@ def test_sync_render_samples_missing_variable(
                     messages=[
                         StoredInputMessage(
                             role="user",
-                            content=[StoredInputMessageContentText(type="text", text="bar")],
+                            content=[ContentBlockText(type="text", text="bar")],
                         )
                     ],
                 ),
-                output=[ContentBlockChatOutputText(text="Hello world")],
+                output=[ContentBlockText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 tool_choice="auto",
@@ -399,9 +401,9 @@ async def test_async_render_samples_success(
                         StoredInputMessage(
                             role="user",
                             content=[
-                                StoredInputMessageContentThought(type="thought", text="hmmm"),
-                                StoredInputMessageContentText(type="text", text="bar"),
-                                StoredInputMessageContentToolCall(
+                                ContentBlockThought(type="thought", text="hmmm"),
+                                ContentBlockText(type="text", text="bar"),
+                                MessageContentToolCall(
                                     type="tool_call",
                                     id="123",
                                     arguments='{"foo": "bar"}',
@@ -412,20 +414,20 @@ async def test_async_render_samples_success(
                         StoredInputMessage(
                             role="assistant",
                             content=[
-                                StoredInputMessageContentText(type="text", text="Hello world"),
-                                StoredInputMessageContentToolResult(
+                                ContentBlockText(type="text", text="Hello world"),
+                                ContentBlockToolResult(
                                     type="tool_result",
                                     id="123",
                                     name="test_tool",
                                     result="test",
                                 ),
-                                StoredInputMessageContentUnknown(type="unknown", data=[{"woo": "hoo"}]),
+                                ContentBlockUnknown(type="unknown", data=[{"woo": "hoo"}]),
                             ],
                         ),
                         StoredInputMessage(
                             role="user",
                             content=[
-                                StoredInputMessageContentFile(
+                                MessageContentStoredFile(
                                     type="file",
                                     mime_type="image/png",
                                     storage_path=StoragePath(
@@ -442,7 +444,7 @@ async def test_async_render_samples_success(
                         ),
                     ],
                 ),
-                output=[ContentBlockChatOutputText(text="Hello world")],
+                output=[ContentBlockText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 additional_tools=[
@@ -467,7 +469,7 @@ async def test_async_render_samples_success(
                     messages=[
                         StoredInputMessage(
                             role="user",
-                            content=[StoredInputMessageContentTemplate(name="user", arguments={"country": "Japan"})],
+                            content=[ContentBlockTemplate(name="user", arguments={"country": "Japan"})],
                         )
                     ],
                 ),
@@ -552,6 +554,7 @@ async def test_async_render_samples_success(
     assert len(rendered_samples[0].additional_tools) == 1
     tool = rendered_samples[0].additional_tools[0]
     assert tool.name == "test"
+    assert isinstance(tool, FunctionTool)
     assert tool.description == "test"
     assert tool.parameters == {"foo": "bar"}
     assert not tool.strict
@@ -622,11 +625,11 @@ async def test_async_render_samples_nonexistent_function(
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -657,11 +660,11 @@ async def test_async_render_samples_unspecified_function(
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -692,11 +695,11 @@ async def test_async_render_samples_no_variant(
                         messages=[
                             StoredInputMessage(
                                 role="user",
-                                content=[StoredInputMessageContentText(type="text", text="bar")],
+                                content=[ContentBlockText(type="text", text="bar")],
                             )
                         ],
                     ),
-                    output=[ContentBlockChatOutputText(text="Hello world")],
+                    output=[ContentBlockText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
                     tool_choice="auto",
@@ -727,11 +730,11 @@ async def test_async_render_samples_missing_variable(
                     messages=[
                         StoredInputMessage(
                             role="user",
-                            content=[StoredInputMessageContentText(type="text", text="bar")],
+                            content=[ContentBlockText(type="text", text="bar")],
                         )
                     ],
                 ),
-                output=[ContentBlockChatOutputText(text="Hello world")],
+                output=[ContentBlockText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 tool_choice="auto",

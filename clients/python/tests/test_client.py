@@ -37,40 +37,40 @@ import tensorzero
 from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from pytest import CaptureFixture
+
+# pyright: reportDeprecated=false
 from tensorzero import (
     AlwaysExtraBody,
     AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
+    ChatChunk,
     ChatInferenceResponse,
+    ContentBlockTemplate,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
     FileUrl,
-    FinishReason,
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    JsonChunk,
     JsonInferenceResponse,
     ModelProviderExtraBody,
     ModelProviderExtraBodyDelete,
     RawText,
+    Template,
     TensorZeroError,
     TensorZeroGateway,
     TensorZeroInternalError,
     Text,
     TextChunk,
+    Thought,
     ThoughtChunk,
     ToolCall,
+    ToolCallChunk,
     ToolResult,
     VariantExtraBody,
     VariantExtraBodyDelete,
-)
-from tensorzero.types import (
-    ChatChunk,
-    JsonChunk,
-    Template,
-    Thought,
-    ToolCallChunk,
 )
 from uuid_utils import uuid7
 
@@ -208,7 +208,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
-    assert result.finish_reason == FinishReason.STOP
+    assert result.finish_reason == "stop"
     time.sleep(1)
 
     # Test caching
@@ -230,7 +230,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 0  # should be cached
     assert usage.output_tokens == 0  # should be cached
-    assert result.finish_reason == FinishReason.STOP
+    assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -267,7 +267,7 @@ async def test_async_client_build_http_sync():
         usage = result.usage
         assert usage.input_tokens == 10
         assert usage.output_tokens == 1
-        assert result.finish_reason == FinishReason.STOP
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -305,7 +305,7 @@ async def test_async_client_build_embedded_sync():
         usage = result.usage
         assert usage.input_tokens == 10
         assert usage.output_tokens == 1
-        assert result.finish_reason == FinishReason.STOP
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -377,29 +377,6 @@ async def test_async_thought_signature_only_input(
         result.content[0].text
         == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
     )
-
-
-def test_display_thought():
-    t1 = Thought(signature="my_signature")
-    print("str t1")
-    print(str(t1))
-    print("repr t1")
-    print(repr(t1))
-    assert str(t1) == "Thought(text=None, type='thought', signature='my_signature', summary=None, provider_type=None)"
-    assert repr(t1) == "Thought(text=None, type='thought', signature='my_signature', summary=None, provider_type=None)"
-
-    t2 = Thought(text="my_text", signature="my_signature")
-    assert (
-        str(t2) == "Thought(text='my_text', type='thought', signature='my_signature', summary=None, provider_type=None)"
-    )
-    assert (
-        repr(t2)
-        == "Thought(text='my_text', type='thought', signature='my_signature', summary=None, provider_type=None)"
-    )
-
-    t3 = Thought(text="my_text")
-    assert str(t3) == "Thought(text='my_text', type='thought', signature=None, summary=None, provider_type=None)"
-    assert repr(t3) == "Thought(text='my_text', type='thought', signature=None, summary=None, provider_type=None)"
 
 
 @pytest.mark.asyncio
@@ -565,7 +542,7 @@ async def test_async_inference_streaming(async_client: AsyncTensorZeroGateway):
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
-            assert chunk.finish_reason == FinishReason.STOP
+            assert chunk.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -644,7 +621,7 @@ async def test_async_reasoning_inference_streaming(
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 18
-            assert chunk.finish_reason == FinishReason.STOP
+            assert chunk.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -722,7 +699,7 @@ async def test_async_tool_call_inference(async_client: AsyncTensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
-    assert result.finish_reason == FinishReason.TOOL_CALL
+    assert result.finish_reason == "tool_call"
 
 
 @pytest.mark.asyncio
@@ -810,7 +787,7 @@ async def test_async_tool_call_streaming(async_client: AsyncTensorZeroGateway):
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 5
-            assert chunk.finish_reason == FinishReason.TOOL_CALL
+            assert chunk.finish_reason == "tool_call"
 
 
 @pytest.mark.asyncio
@@ -2331,7 +2308,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
                 {
                     "role": "user",
                     "content": [
-                        Text(type="text", arguments={"foo": "bar"}),
+                        ContentBlockTemplate(name="user", arguments={"foo": "bar"}),
                         ToolResult(name="drill", result="screwed", id="aaaa"),
                     ],
                 },
@@ -2593,7 +2570,7 @@ def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
     assert isinstance(content[0], Text)
     assert content[0].text is not None
     usage = result.usage
-    assert usage.output_tokens <= 10
+    assert usage.output_tokens is not None and usage.output_tokens <= 10
 
 
 def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
@@ -3212,63 +3189,6 @@ async def test_async_multi_turn_parallel_tool_use(
     assert "30" in assistant_message
 
 
-def test_text_arguments_deprecation_1170_warning(
-    sync_client: TensorZeroGateway,
-):
-    """Test that using Text with dictionary for text parameter works but emits DeprecationWarning for #1170."""
-
-    with pytest.warns(
-        DeprecationWarning,
-        match=r"Please use `ContentBlock\(type=\"text\", arguments=...\)` when providing arguments for a prompt template/schema. In a future release, `Text\(type=\"text\", text=...\)` will require a string literal.",
-    ):
-        response = sync_client.inference(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "Alfred Pennyworth"},
-                "messages": [
-                    {
-                        "role": "user",
-                        # Intentionally ignore the type error to check the deprecation warning
-                        "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
-                        ],
-                    }
-                ],
-            },
-        )
-
-    assert isinstance(response, JsonInferenceResponse)
-    assert response.variant_name == "test"
-    assert response.output.raw == '{"answer":"Hello"}'
-    assert response.output.parsed == {"answer": "Hello"}
-    assert response.usage.input_tokens == 10
-    assert response.usage.output_tokens == 1
-    assert response.finish_reason == FinishReason.STOP
-
-
-def test_content_block_text_init_validation():
-    """Test Text initialization validation for text and arguments parameters."""
-
-    # Test providing neither `text` nor `arguments` fails
-    with pytest.raises(ValueError, match=r"Either `text` or `arguments` must be provided."):
-        Text(type="text")
-
-    # Test providing both `text` and `arguments` fails
-    with pytest.raises(ValueError, match=r"Only one of `text` or `arguments` must be provided."):
-        Text(type="text", text="Hello", arguments={"foo": "bar"})
-
-    # Test with valid `text` parameter
-    text = Text(type="text", text="Hello")
-    assert text.text == "Hello"
-    assert text.arguments is None
-
-    # Test with valid `arguments` parameter
-    arguments = {"foo": "bar"}
-    text = Text(type="text", arguments=arguments)
-    assert text.text is None
-    assert text.arguments == arguments
-
-
 def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
     response = sync_client.dynamic_evaluation_run(
         variants={"basic_test": "test2"},
@@ -3475,7 +3395,7 @@ def test_sync_clickhouse_batch_writes():
         )
         assert len(clickhouse_result) == num_inferences  # type: ignore
 
-        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        actual_inference_ids = set(str(row.id) for row in clickhouse_result.iloc)  # type: ignore
         assert actual_inference_ids == expected_inference_ids
 
 
@@ -3522,7 +3442,7 @@ async def test_async_clickhouse_batch_writes():
         )
         assert len(clickhouse_result) == num_inferences  # type: ignore
 
-        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        actual_inference_ids = set(str(row.id) for row in clickhouse_result.iloc)  # type: ignore
         assert actual_inference_ids == expected_inference_ids
 
 

@@ -4,11 +4,7 @@ import typing as t
 
 import pytest
 from pytest import CaptureFixture
-from tensorzero import (
-    AsyncTensorZeroGateway,
-    TensorZeroGateway,
-)
-from tensorzero.types import ChatChunk, TextChunk
+from tensorzero import AsyncTensorZeroGateway, ChatChunk, TensorZeroGateway, TextChunk
 
 
 def test_drop_sync_stream_with_completion(capfd: CaptureFixture[str]):

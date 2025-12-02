@@ -22,7 +22,7 @@ use pyo3::{
 };
 use python_helpers::{
     convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
+    parse_tool, parse_workflow_evaluation_run_episode_response,
     parse_workflow_evaluation_run_response, python_uuid_to_uuid,
 };
 
@@ -31,13 +31,10 @@ use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
-    inference::types::{
-        ResolvedInput, ResolvedInputMessage,
-        pyo3_helpers::{
-            JSON_DUMPS, JSON_LOADS, deserialize_from_pyobj, deserialize_from_rendered_sample,
-            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
-            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class,
-        },
+    inference::types::pyo3_helpers::{
+        JSON_DUMPS, JSON_LOADS, deserialize_from_pyobj, deserialize_from_stored_sample,
+        deserialize_optimization_config, serialize_to_dict, tensorzero_core_error,
+        tensorzero_core_error_class, tensorzero_error_class,
     },
     optimization::{
         OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
@@ -65,9 +62,10 @@ use tensorzero_core::{
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
-    Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    InferenceParams, InferenceResponse, InferenceStream, Input, LaunchOptimizationParams,
+    ListDatapointsRequest, ListInferencesParams, OptimizationJobHandle, RenderedSample,
+    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http,
+    observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -99,7 +97,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedSample>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -109,8 +106,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
-    m.add_class::<ResolvedInput>()?;
-    m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
     m.add_class::<FunctionsConfigPyClass>()?;
     m.add_class::<FunctionConfigChatPyClass>()?;
@@ -829,7 +824,15 @@ impl TensorZeroGateway {
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         let resp = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
         match resp {
-            InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+            InferenceOutput::NonStreaming(data) => convert_response_to_python_dataclass(
+                this.py(),
+                &data,
+                "tensorzero",
+                match data {
+                    InferenceResponse::Chat(_) => "ChatInferenceResponse",
+                    InferenceResponse::Json(_) => "JsonInferenceResponse",
+                },
+            ),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
                 _gateway: this.into_pyobject(py)?.into_any().unbind(),
@@ -1622,9 +1625,9 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedSample>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
-        let config = client.config().ok_or_else(|| {
+        let config: &tensorzero_rust::Config = client.config().ok_or_else(|| {
             PyValueError::new_err(
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
@@ -1644,7 +1647,22 @@ impl TensorZeroGateway {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+
+        // Convert each RenderedSample back to Python
+        let py_objects: Vec<_> = response
+            .iter()
+            .map(|rendered_sample| {
+                convert_response_to_python_dataclass(
+                    this.py(),
+                    rendered_sample,
+                    "tensorzero",
+                    "RenderedSample",
+                )
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(PyList::new(this.py(), py_objects)?.unbind())
     }
 
     /// Launch an optimization job.
@@ -1663,12 +1681,12 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let train_samples = train_samples
             .iter()
-            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .map(|x| deserialize_from_pyobj::<RenderedSample>(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         let val_samples = val_samples
             .map(|x| {
                 x.iter()
-                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .map(|x| deserialize_from_pyobj::<RenderedSample>(this.py(), x))
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
@@ -1961,7 +1979,15 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| {
                 let output = res.map_err(|e| convert_error(py, e))?;
                 match output {
-                    InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+                    InferenceOutput::NonStreaming(data) => convert_response_to_python_dataclass(
+                        py,
+                        &data,
+                        "tensorzero",
+                        match data {
+                            InferenceResponse::Chat(_) => "ChatInferenceResponse",
+                            InferenceResponse::Json(_) => "JsonInferenceResponse",
+                        },
+                    ),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
                         _gateway: gateway,
@@ -2905,7 +2931,20 @@ impl AsyncTensorZeroGateway {
                 .experimental_render_samples(stored_samples, variants)
                 .await;
             Python::attach(|py| match res {
-                Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
+                Ok(rendered_samples) => {
+                    let py_objects: Vec<_> = rendered_samples
+                        .iter()
+                        .map(|rendered_sample| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                rendered_sample,
+                                "tensorzero",
+                                "RenderedSample",
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+                    Ok(PyList::new(py, py_objects)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2927,13 +2966,13 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let train_samples = train_samples
             .iter()
-            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .map(|x| deserialize_from_pyobj::<RenderedSample>(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         let val_samples = val_samples
             .as_ref()
             .map(|x| {
                 x.iter()
-                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .map(|x| deserialize_from_pyobj::<RenderedSample>(this.py(), x))
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;

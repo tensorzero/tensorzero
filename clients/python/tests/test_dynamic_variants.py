@@ -10,9 +10,12 @@ Tests run in both HTTP gateway mode and embedded gateway mode via parameterized 
 """
 
 import pytest
+
+# pyright: reportDeprecated=false
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    ContentBlockText,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -404,7 +407,7 @@ async def test_async_dynamic_best_of_n(async_client: AsyncTensorZeroGateway):
     content = response.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockText)
     text = content[0].text
     assert text is not None
     # The best_of_n always picks a candidate

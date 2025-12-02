@@ -10,10 +10,6 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
-};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
@@ -24,13 +20,10 @@ use crate::tool::{
 };
 use crate::variant::{VariantConfig, chat_completion::prepare_model_input};
 use chrono::{DateTime, Utc};
-#[cfg(feature = "pyo3")]
-use pyo3::types::PyList;
-#[cfg(feature = "pyo3")]
-use pyo3::{IntoPyObjectExt, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 /// This trait is used to represent a stored sample of data.
@@ -413,7 +406,8 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[serde(untagged)]
 pub enum StoredOutput {
@@ -425,10 +419,9 @@ pub enum StoredOutput {
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
 /// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[ts(export)]
+#[export_schema]
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
@@ -438,6 +431,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
+    #[serde(flatten)]
     pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
@@ -525,128 +519,6 @@ pub struct LazyRenderedSample {
     pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RenderedSample {
-    #[getter]
-    pub fn get_function_name(&self) -> &str {
-        &self.function_name
-    }
-
-    #[getter]
-    pub fn get_input(&self) -> ModelInput {
-        self.input.clone()
-    }
-
-    #[getter]
-    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(output) = &self.output {
-            let output = output
-                .iter()
-                .map(|x| content_block_chat_output_to_python(py, x.clone()))
-                .collect::<PyResult<Vec<_>>>()?;
-            PyList::new(py, output).map(Bound::into_any)
-        } else {
-            Ok(py.None().into_bound(py))
-        }
-    }
-
-    #[getter]
-    pub fn get_stored_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(stored_output) = &self.stored_output {
-            match stored_output {
-                StoredOutput::Chat(output) => {
-                    let output = output
-                        .iter()
-                        .map(|x| content_block_chat_output_to_python(py, x.clone()))
-                        .collect::<PyResult<Vec<_>>>()?;
-                    PyList::new(py, output).map(Bound::into_any)
-                }
-                StoredOutput::Json(output) => Ok(output.clone().into_py_any(py)?.into_bound(py)),
-            }
-        } else {
-            Ok(py.None().into_bound(py))
-        }
-    }
-
-    #[getter]
-    pub fn get_dispreferred_outputs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let dispreferred_outputs = self
-            .dispreferred_outputs
-            .iter()
-            .map(|x| {
-                x.iter()
-                    .map(|y| content_block_chat_output_to_python(py, y.clone()))
-                    .collect::<PyResult<Vec<_>>>()
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, dispreferred_outputs).map(Bound::into_any)
-    }
-
-    #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
-    }
-
-    #[getter]
-    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
-        self.tool_params.allowed_tools.clone()
-    }
-
-    #[getter]
-    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.tool_params
-            .additional_tools
-            .clone()
-            .into_bound_py_any(py)
-    }
-
-    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
-
-    #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
-        self.tool_params.parallel_tool_calls
-    }
-
-    #[getter]
-    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.tool_params
-            .provider_tools
-            .clone()
-            .into_bound_py_any(py)
-    }
-
-    #[getter]
-    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.episode_id {
-            Some(id) => uuid_to_python(py, id),
-            None => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    #[getter]
-    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.inference_id {
-            Some(id) => uuid_to_python(py, id),
-            None => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_tags(&self) -> HashMap<String, String> {
-        self.tags.clone()
-    }
-
-    #[getter]
-    pub fn get_stored_input(&self) -> StoredInput {
-        self.stored_input.clone()
-    }
 }
 
 impl std::fmt::Display for RenderedSample {
