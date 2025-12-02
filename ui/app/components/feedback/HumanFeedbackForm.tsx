@@ -16,6 +16,7 @@ import {
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
+import { isJsonOutput } from "~/utils/clickhouse/inference";
 
 export interface HumanFeedbackFormSharedProps {
   inferenceOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
@@ -111,8 +112,8 @@ export function HumanFeedbackForm({
         selectedMetricType === "demonstration" &&
         (demonstrationValue ? (
           <div className="mt-4">
-            {Array.isArray(demonstrationValue) ? (
-              <ChatOutputElement
+            {isJsonOutput(demonstrationValue) ? (
+              <JsonOutputElement
                 output={demonstrationValue}
                 isEditing={true}
                 onOutputChange={(updatedOutput) => {
@@ -125,7 +126,7 @@ export function HumanFeedbackForm({
                 }}
               />
             ) : (
-              <JsonOutputElement
+              <ChatOutputElement
                 output={demonstrationValue}
                 isEditing={true}
                 onOutputChange={(updatedOutput) => {
@@ -196,8 +197,9 @@ export function HumanFeedbackForm({
 function getDemonstrationValueToSubmit(
   demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
 ) {
-  if (Array.isArray(demonstrationValue)) {
+  if (isJsonOutput(demonstrationValue)) {
+    return demonstrationValue.parsed;
+  } else {
     return demonstrationValue;
   }
-  return demonstrationValue.parsed;
 }

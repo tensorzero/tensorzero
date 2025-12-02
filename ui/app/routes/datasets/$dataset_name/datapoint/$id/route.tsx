@@ -39,6 +39,7 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { loadFileDataForInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { validateJsonSchema } from "~/utils/jsonschema";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
@@ -103,20 +104,6 @@ export function validateJsonOutput(
           "Invalid JSON in output. Please fix the JSON format before saving.",
       };
     }
-  }
-  return { valid: true };
-}
-
-export function validateJsonSchema(
-  schema: JsonValue,
-): { valid: true } | { valid: false; error: string } {
-  // Schema must be valid JSON (which it always is since it's JsonValue)
-  // But we still validate it's a proper object for a JSON schema
-  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
-    return {
-      valid: false,
-      error: "Output schema must be a JSON object.",
-    };
   }
   return { valid: true };
 }
@@ -396,6 +383,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
+  // State Management for Editing
+  //
+  // We keep track of the original values and current values in the form (when editing).
+  // This allows us to detect if there were any changes (to enable/disable the save button) or discard changes if the user cancels the edits
+  // When you save, we check `XXX` (`input`, `output`, `tags`) against `originalXXX` and submit `XXX` to the update datapoint endpoint.
   const [originalInput, setOriginalInput] = useState(resolvedInput);
   const [input, setInput] = useState<Input>(resolvedInput);
 

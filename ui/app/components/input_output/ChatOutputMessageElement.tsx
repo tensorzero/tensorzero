@@ -70,6 +70,8 @@ export function ChatOutputMessageElement({
   );
 }
 
+/// This component is a row of buttons for creating new content blocks.
+/// When you create a new content block, we create one with empty state.
 function AddContentBlockButtons({
   onAdd,
 }: {

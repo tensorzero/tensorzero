@@ -61,7 +61,7 @@ export const UpdateDatapointFormDataSchema = z.object({
   dataset_name: z.string().min(1, "Dataset name is required"),
   function_name: z.string().min(1, "Function name is required"),
   id: z.string().uuid("Invalid datapoint ID format"),
-  episode_id: z.string().uuid("Invalid episode ID format").optional(),
+  episode_id: z.string().uuid("Invalid episode ID format").nullish(),
   input: z.custom<Input>((val) => val !== null && typeof val === "object", {
     message: "Input must be a valid object",
   }),
