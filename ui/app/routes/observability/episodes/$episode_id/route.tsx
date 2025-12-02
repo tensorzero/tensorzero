@@ -1,7 +1,6 @@
 import {
   countInferencesForEpisode,
-  queryInferenceTableBounds,
-  queryInferenceTable,
+  listInferencesWithPagination,
 } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
@@ -69,8 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         limit,
       });
 
-  let inferences,
-    inference_bounds,
+  let inferenceResult,
     feedbacks,
     feedbackBounds,
     num_inferences,
@@ -80,16 +78,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (newFeedbackId) {
     // When there's new feedback, wait for polling to complete before querying
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
-    [inferences, inference_bounds, feedbacks, num_inferences, num_feedbacks] =
+    [inferenceResult, feedbacks, num_inferences, num_feedbacks] =
       await Promise.all([
-        queryInferenceTable({
+        listInferencesWithPagination({
           episode_id,
           before: beforeInference ?? undefined,
           after: afterInference ?? undefined,
           limit,
-        }),
-        queryInferenceTableBounds({
-          episode_id,
         }),
         feedbackDataPromise,
         countInferencesForEpisode(episode_id),
@@ -106,22 +101,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   } else {
     // Normal case: execute all queries in parallel
     [
-      inferences,
-      inference_bounds,
+      inferenceResult,
       feedbacks,
       feedbackBounds,
       num_inferences,
       num_feedbacks,
       latestFeedbackByMetric,
     ] = await Promise.all([
-      queryInferenceTable({
+      listInferencesWithPagination({
         episode_id,
         before: beforeInference ?? undefined,
         after: afterInference ?? undefined,
         limit,
-      }),
-      queryInferenceTableBounds({
-        episode_id,
       }),
       feedbackDataPromise,
       dbClient.queryFeedbackBoundsByTargetId({
@@ -134,7 +125,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       queryLatestFeedbackIdByMetric({ target_id: episode_id }),
     ]);
   }
-  if (inferences.length === 0) {
+  if (inferenceResult.inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
       status: 404,
     });
@@ -142,8 +133,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     episode_id,
-    inferences,
-    inference_bounds,
+    inferences: inferenceResult.inferences,
+    hasNextInferencePage: inferenceResult.hasNextPage,
+    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
     feedbacks,
     feedbackBounds,
     num_inferences,
@@ -185,7 +177,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
     episode_id,
     inferences,
-    inference_bounds,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     feedbacks,
     feedbackBounds,
     num_inferences,
@@ -199,23 +192,20 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
   const handleNextInferencePage = () => {
+    if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
+    searchParams.set("beforeInference", bottomInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
+    if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
+    searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousInferencePage =
-    inference_bounds?.last_id === topInference.id;
-  const disableNextInferencePage =
-    inference_bounds?.first_id === bottomInference.id;
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as
@@ -310,8 +300,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
-            disablePrevious={disablePreviousInferencePage}
-            disableNext={disableNextInferencePage}
+            disablePrevious={!hasPreviousInferencePage}
+            disableNext={!hasNextInferencePage}
           />
         </SectionLayout>
 

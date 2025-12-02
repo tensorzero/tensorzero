@@ -15,6 +15,7 @@ import type {
   ContentBlockChatOutput,
   TableBoundsWithCount,
   InternalInferenceMetadata,
+  StoredInference,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -32,6 +33,7 @@ import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { getTensorZeroClient } from "../tensorzero.server";
+import { isTensorZeroServerError } from "../tensorzero";
 
 /**
  * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
@@ -98,6 +100,111 @@ export async function queryInferenceTableBounds(params?: {
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
     throw data("Error querying inference table bounds", { status: 500 });
+  }
+}
+
+/**
+ * Result type for listInferencesWithPagination with pagination info.
+ */
+export type ListInferencesResult = {
+  inferences: StoredInference[];
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+/**
+ * Lists inferences using the public v1 API with cursor-based pagination.
+ * Implements the limit+1 pattern to detect if there are more pages.
+ *
+ * @param params - Query parameters for listing inferences
+ * @returns Inferences with pagination info (hasNextPage, hasPreviousPage)
+ */
+export async function listInferencesWithPagination(params: {
+  limit: number;
+  before?: string; // UUIDv7 string - get inferences before this ID (going to older)
+  after?: string; // UUIDv7 string - get inferences after this ID (going to newer)
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+}): Promise<ListInferencesResult> {
+  const { limit, before, after, function_name, variant_name, episode_id } =
+    params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  try {
+    const client = getTensorZeroClient();
+
+    // Request limit + 1 to detect if there are more pages
+    const response = await client.listInferences({
+      output_source: "inference",
+      limit: limit + 1,
+      before,
+      after,
+      function_name,
+      variant_name,
+      episode_id,
+    });
+
+    // Determine if there are more pages based on whether we got more than limit results
+    const hasMore = response.inferences.length > limit;
+
+    // Only return up to limit inferences (hide the extra one used for detection)
+    // For 'after' pagination, the extra item is at the BEGINNING after the backend reverses
+    // For 'before' pagination (or no pagination), the extra item is at the END
+    let inferences: typeof response.inferences;
+    if (hasMore) {
+      if (after) {
+        // Extra item is at position 0, so take items from position 1 onwards
+        inferences = response.inferences.slice(1, limit + 1);
+      } else {
+        // Extra item is at the end, so take first 'limit' items
+        inferences = response.inferences.slice(0, limit);
+      }
+    } else {
+      inferences = response.inferences;
+    }
+
+    // Pagination direction logic:
+    // - When using 'before': we're going to older inferences (next page = older)
+    // - When using 'after': we're going to newer inferences (previous page = newer)
+    // - When neither: we're on the first page (most recent)
+    let hasNextPage: boolean;
+    let hasPreviousPage: boolean;
+
+    if (before) {
+      // Going backwards in time (older). hasMore means there are older pages.
+      hasNextPage = hasMore;
+      // We came from a newer page, so there's always a previous (newer) page
+      hasPreviousPage = true;
+    } else if (after) {
+      // Going forwards in time (newer). hasMore means there are newer pages.
+      // But since results are displayed newest first, "previous" button goes to newer
+      hasPreviousPage = hasMore;
+      // We came from an older page, so there's always a next (older) page
+      hasNextPage = true;
+    } else {
+      // Initial page load - showing most recent
+      hasNextPage = hasMore;
+      hasPreviousPage = false;
+    }
+
+    return {
+      inferences,
+      hasNextPage,
+      hasPreviousPage,
+    };
+  } catch (error) {
+    logger.error("Failed to list inferences:", error);
+    if (isTensorZeroServerError(error)) {
+      throw data("Error listing inferences", {
+        status: error.status,
+        statusText: error.statusText ?? undefined,
+      });
+    }
+    throw data("Error listing inferences", { status: 500 });
   }
 }
 
