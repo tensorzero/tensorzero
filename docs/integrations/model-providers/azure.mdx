@@ -118,3 +118,26 @@ Azure AI Foundry provides access to models from multiple providers (Meta Llama, 
 The same `azure` provider works with Azure AI Foundry.
 The key difference is the endpoint URL.
 All other configuration options (credentials, Docker Compose, inference) work the same as Azure OpenAI Service above.
+
+## Call the OpenAI Responses API with Azure
+
+You can call with OpenAI Responses API with Azure by setting `api_base` in your configuration to your Azure deployment URL.
+
+```toml
+[models.azure-gpt-5-mini-responses]
+routing = ["azure"]
+
+[models.azure-gpt-5-mini-responses.providers.azure]
+type = "openai"  # CAREFUL: not `azure`!
+api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_OPENAI_API_KEY"
+model_name = "gpt-5-mini"
+api_type = "responses"
+```
+
+<Warning>
+
+The `azure` model provider does not support the Responses API.
+You must use the `openai` provider with a custom `api_base` instead.
+
+</Warning>

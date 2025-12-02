@@ -11,3 +11,19 @@ provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
 extra_body = [
     { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
 ]
+
+[models.azure-gpt-5-mini-responses-web-search]
+routing = ["azure"]
+
+[models.azure-gpt-5-mini-responses-web-search.providers.azure]
+type = "openai"  # CAREFUL: not `azure`!
+api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_OPENAI_API_KEY"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]
