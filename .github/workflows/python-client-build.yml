@@ -170,12 +170,10 @@ jobs:
     strategy:
       matrix:
         platform:
-          # TODO - add back x86_64 support
           - runner: macos-14
+            target: x86_64
+          - runner: macos-15
             target: aarch64
-          # TODO - add this back (without the conflicting artifact upload)
-          #- runner: macos-15
-          #  target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
@@ -253,6 +251,6 @@ jobs:
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*
-          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 6
+          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 7
           # If we add new platforms / python versions, update this number
-          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6
+          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 7
