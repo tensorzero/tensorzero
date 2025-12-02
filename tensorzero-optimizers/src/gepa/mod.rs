@@ -204,6 +204,11 @@ impl Optimizer for GEPAConfig {
         for result in val_evaluation_results {
             match result {
                 Ok((variant_name, eval_results)) => {
+                    tracing::debug!(
+                        "Initial evaluation stats for '{}': {:#?}",
+                        variant_name,
+                        eval_results.evaluation_stats
+                    );
                     let scores = eval_results.per_datapoint_scores();
                     if !scores.is_empty() {
                         initial_scores.insert(variant_name.clone(), scores);
@@ -346,6 +351,13 @@ impl Optimizer for GEPAConfig {
                 }
             };
 
+            tracing::debug!(
+                "GEPA iteration {}: parent '{}' minibatch evaluation stats: {:#?}",
+                iteration,
+                parent.name,
+                parent_evaluation_results.evaluation_stats
+            );
+
             tracing::info!(
                 "GEPA iteration {}: analyzing {} parent inferences",
                 iteration,
@@ -442,6 +454,13 @@ impl Optimizer for GEPAConfig {
                 }
             };
 
+            tracing::debug!(
+                "GEPA iteration {}: child '{}' minibatch evaluation stats: {:#?}",
+                iteration,
+                child.name,
+                child_evaluation_results.evaluation_stats
+            );
+
             tracing::info!(
                 "GEPA iteration {}: child variant '{}' minibatch evaluation complete",
                 iteration,
@@ -476,6 +495,12 @@ impl Optimizer for GEPAConfig {
                 .await
                 {
                     Ok(val_mutation_evaluation_results) => {
+                        tracing::debug!(
+                            "GEPA iteration {}: child '{}' validation evaluation stats: {:#?}",
+                            iteration,
+                            child.name,
+                            val_mutation_evaluation_results.evaluation_stats
+                        );
                         let child_val_scores =
                             val_mutation_evaluation_results.per_datapoint_scores();
                         let mut candidate = HashMap::new();
@@ -530,6 +555,7 @@ impl Optimizer for GEPAConfig {
             "GEPA optimization complete: created {} new variant(s)",
             new_variants.len()
         );
+        tracing::debug!("New variants: {:#?}", new_variants);
 
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
