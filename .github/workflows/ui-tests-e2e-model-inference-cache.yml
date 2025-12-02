@@ -305,7 +305,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: playwright-report-auth-${{ matrix.auth_enabled }}-merge-group-${{ inputs.is_merge_group }}
+          name: playwright-report-auth-${{ matrix.auth_enabled }}-merge-group-${{ inputs.is_merge_group }}-regen-cache-${{ inputs.regen_cache }}
           path: |
             ui/playwright-report/
             ui/test-results/
