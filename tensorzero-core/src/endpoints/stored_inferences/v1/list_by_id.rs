@@ -5,7 +5,7 @@ use serde::Deserialize;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::inferences::{InferenceQueries, ListInferencesByIdParams, PaginateByIdCondition};
+use crate::db::inferences::{InferenceQueries, ListInferencesByIdParams, PaginationParams};
 use crate::endpoints::stored_inferences::v1::types::{
     InternalInferenceMetadata, InternalListInferencesByIdResponse,
 };
@@ -49,8 +49,8 @@ pub async fn list_inferences_by_id_handler(
                 message: "Cannot specify both before and after parameters".to_string(),
             }));
         }
-        (Some(before), None) => Some(PaginateByIdCondition::Before { id: before }),
-        (None, Some(after)) => Some(PaginateByIdCondition::After { id: after }),
+        (Some(before), None) => Some(PaginationParams::Before { id: before }),
+        (None, Some(after)) => Some(PaginationParams::After { id: after }),
         _ => None,
     };
 

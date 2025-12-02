@@ -2166,6 +2166,18 @@ class ListInferencesRequest:
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
     """
+    after: str | None = None
+    """
+    Optional inference ID to paginate after (exclusive).
+    Returns inferences with IDs after this one (later in time).
+    Cannot be used together with `before` or `offset`.
+    """
+    before: str | None = None
+    """
+    Optional inference ID to paginate before (exclusive).
+    Returns inferences with IDs before this one (earlier in time).
+    Cannot be used together with `after` or `offset`.
+    """
     episode_id: str | None = None
     """
     Optional episode ID to filter inferences by.
