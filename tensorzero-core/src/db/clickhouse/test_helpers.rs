@@ -86,7 +86,8 @@ pub async fn select_chat_datapoint_clickhouse(
             is_custom,
             source_inference_id,
             staled_at,
-            updated_at
+            updated_at,
+            snapshot_hash
         FROM ChatInferenceDatapoint FINAL
         WHERE id = '{inference_id}'
         LIMIT 1
@@ -148,7 +149,8 @@ pub async fn select_chat_dataset_clickhouse(
             is_custom,
             source_inference_id,
             staled_at,
-            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
+            snapshot_hash
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL
         FORMAT JSONEachRow"
