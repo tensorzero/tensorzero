@@ -630,6 +630,12 @@ impl<'a> Migration for Migration0043<'a> {
         // DynamicEvaluationRunEpisodeByRunIdView references DynamicEvaluationRunEpisode
         instructions.push_str(&format!("ALTER TABLE DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(run_id) AS run_id_uint, episode_id_uint, variant_pins, tags, datapoint_name, is_deleted, updated_at FROM DynamicEvaluationRunEpisode ORDER BY run_id_uint, episode_id_uint;\n"));
 
+        // ModelProviderStatisticsView references ModelInference. ClickHouse Cloud revalidates views
+        // when columns are dropped from source tables, and stricter versions reject GROUP BY (a, b, c)
+        // tuple syntax. We modify the view to use GROUP BY a, b, c before dropping the column.
+        let qs = super::migration_0037::quantiles_sql_args();
+        instructions.push_str(&format!("ALTER TABLE ModelProviderStatisticsView{on_cluster_name} MODIFY QUERY SELECT model_name, model_provider_name, toStartOfMinute(timestamp) as minute, quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles, quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles, sumState(input_tokens) as total_input_tokens, sumState(output_tokens) as total_output_tokens, countState() as count FROM ModelInference GROUP BY model_name, model_provider_name, minute;\n"));
+
         instructions.push_str(&format!(
             "DROP TABLE ConfigSnapshot{on_cluster_name} SYNC;\n"
         ));
