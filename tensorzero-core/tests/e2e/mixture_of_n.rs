@@ -1042,7 +1042,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 
@@ -1063,7 +1064,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 }
@@ -1203,7 +1205,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 }
