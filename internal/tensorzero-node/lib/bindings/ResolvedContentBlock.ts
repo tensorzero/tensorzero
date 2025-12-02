@@ -4,7 +4,7 @@ import type { Text } from "./Text";
 import type { Thought } from "./Thought";
 import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
-import type { JsonValue } from "./serde_json/JsonValue";
+import type { Unknown } from "./Unknown";
 
 /**
  * Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
@@ -16,4 +16,4 @@ export type ResolvedContentBlock =
   | ({ type: "tool_result" } & ToolResult)
   | ({ type: "file" } & ObjectStorageFile)
   | ({ type: "thought" } & Thought)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
+  | ({ type: "unknown" } & Unknown);

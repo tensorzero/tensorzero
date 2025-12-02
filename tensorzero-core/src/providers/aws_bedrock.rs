@@ -867,10 +867,7 @@ async fn bedrock_content_block_from_content_block(
                 Ok(None)
             }
         }
-        ContentBlock::Unknown {
-            data: _,
-            model_provider_name: _,
-        } => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+        ContentBlock::Unknown(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
             content_block_type: "unknown".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
         })),

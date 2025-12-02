@@ -33,3 +33,4 @@ We recommend using Python 3.10+ and a virtual environment.
 
 ```bash
 pip install -r requirements.txt
+```

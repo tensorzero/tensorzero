@@ -634,9 +634,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Set up Helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112  # v4.3.0
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
         with:
-          version: "3.18.6"  # Conservatively match the `Helm 3.2.0+` version specified in examples/production-deployment-k8s-helm/README.md
+          version: "3.18.6" # Conservatively match the `Helm 3.2.0+` version specified in examples/production-deployment-k8s-helm/README.md
 
       - name: Install helm-values-schema-json plugin
         run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
@@ -1034,7 +1034,12 @@ jobs:
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-ui-container, build-mock-inference-container]
+    needs:
+      [
+        build-gateway-container,
+        build-ui-container,
+        build-mock-inference-container,
+      ]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

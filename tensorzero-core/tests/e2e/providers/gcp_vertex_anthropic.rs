@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use futures::StreamExt;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::ClientInferenceParams;
-use tensorzero::ClientInput;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
 use tensorzero::InferenceResponseChunk;
+use tensorzero::Input;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
 use tensorzero::Role;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 use crate::providers::anthropic::test_redacted_thinking_helper;
@@ -181,11 +181,11 @@ async fn test_global_region_non_streaming() {
         .inference(ClientInferenceParams {
             model_name: Some("claude".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -228,11 +228,11 @@ async fn test_global_region_streaming() {
         .inference(ClientInferenceParams {
             model_name: Some("claude".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],

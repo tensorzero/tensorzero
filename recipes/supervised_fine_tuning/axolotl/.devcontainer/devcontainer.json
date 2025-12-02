@@ -1,7 +1,7 @@
 {
   "name": "Axolotl Container",
   "image": "axolotlai/axolotl-base:main-base-py3.11-cu126-2.6.0",
-  "features":  {
+  "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
   "customizations": {
@@ -23,9 +23,6 @@
     }
   },
   "postCreateCommand": "curl -Ls https://astral.sh/uv/install.sh | sh && curl -sfL https://direnv.net/install.sh | bash && echo 'eval \"$(direnv hook bash)\"' >> ~/.bashrc && echo 'eval \"$(direnv hook zsh)\"' >> ~/.zshrc",
-  "runArgs": [
-    "--gpus=all",
-    "--network=host"
-  ],
+  "runArgs": ["--gpus=all", "--network=host"],
   "remoteUser": "root"
 }

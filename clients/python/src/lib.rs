@@ -65,11 +65,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
-    WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientExt, ClientInferenceParams, ClientSecretString, Datapoint,
+    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input,
+    LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -510,7 +509,7 @@ impl BaseTensorZeroGateway {
                 None
             };
 
-        let input: ClientInput = deserialize_from_pyobj(py, &input)?;
+        let input: Input = deserialize_from_pyobj(py, &input)?;
 
         Ok(ClientInferenceParams {
             function_name,

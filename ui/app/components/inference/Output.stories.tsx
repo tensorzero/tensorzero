@@ -266,7 +266,6 @@ export const ChatFunctionWithUnknownContent: Story = {
       {
         type: "unknown",
         data: null,
-        model_provider_name: null,
       },
       {
         type: "unknown",
@@ -275,7 +274,6 @@ export const ChatFunctionWithUnknownContent: Story = {
           data: 123,
           structure: ["is", "not", "validated"],
         },
-        model_provider_name: "openai",
       },
       { type: "text", text: "This text comes after unknown content." },
     ],

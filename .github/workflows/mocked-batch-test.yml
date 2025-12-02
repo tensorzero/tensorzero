@@ -82,7 +82,7 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Download mock-inference-container
-        continue-on-error: true  # Skip if missing (e.g. triggered via `workflow_dispatch`)
+        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           name: build-mock-inference-container
@@ -90,12 +90,12 @@ jobs:
 
       - name: Load mock-inference-container
         id: load-mock-inference
-        continue-on-error: true  # Skip if missing (e.g. triggered via `workflow_dispatch`)
+        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
           docker load < mock-inference-container.tar
 
       - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
-        if: steps.load-mock-inference.outcome == 'success'  # Only run if artifact was successfully loaded
+        if: steps.load-mock-inference.outcome == 'success' # Only run if artifact was successfully loaded
         run: |
           echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 

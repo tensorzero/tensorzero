@@ -16,14 +16,14 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceResponse,
+    ClientExt, ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
-use tensorzero_core::inference::types::{Arguments, StoredInput, System};
+use tensorzero_core::inference::types::{Arguments, StoredInput, System, Template};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
@@ -34,7 +34,7 @@ use tensorzero_core::{
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
-        StoredInputMessageContent, StoredRequestMessage, Text, TextKind,
+        StoredInputMessageContent, StoredRequestMessage, Text, Unknown,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -109,9 +109,8 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
                         {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
@@ -170,10 +169,9 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]
@@ -221,16 +219,16 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]
@@ -252,9 +250,8 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
                         {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
@@ -318,10 +315,9 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]
@@ -372,16 +368,16 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]
@@ -1368,14 +1364,15 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
     let error = client
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1414,14 +1411,15 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
                             ("quantity".to_string(), 13.into()),
@@ -1761,14 +1759,14 @@ base_path = "{root}"
 
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1806,14 +1804,14 @@ model = "dummy::good"
 
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1879,10 +1877,10 @@ model_name = "json"
 
     let params = ClientInferenceParams {
         function_name: Some("best_of_n".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1951,10 +1949,10 @@ model = "dummy::flaky_model"
 
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -2580,14 +2578,14 @@ pub async fn test_raw_text(client: tensorzero::Client) {
         .inference(ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::RawText(RawText {
+                    content: vec![InputMessageContent::RawText(RawText {
                         value: "This is not the normal input".into(),
                     })],
                 }],
@@ -2899,11 +2897,11 @@ async fn test_dummy_only_embedded_gateway_no_config() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -2940,11 +2938,11 @@ async fn test_dummy_only_replicated_clickhouse() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -3216,15 +3214,15 @@ async fn test_image_inference_without_object_store() {
     let err_msg = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(
+                        InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
                                 mime::IMAGE_PNG,
@@ -3391,15 +3389,15 @@ async fn test_tool_call_input_no_warning() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+                        InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                             id: "0".to_string(),
                             name: "get_temperature".to_string(),
                             arguments: json!({
@@ -3907,11 +3905,11 @@ async fn test_clickhouse_bulk_insert() {
                 .inference(ClientInferenceParams {
                     episode_id: Some(episode_id),
                     model_name: Some("dummy::my-model".to_string()),
-                    input: ClientInput {
+                    input: Input {
                         system: None,
-                        messages: vec![ClientInputMessage {
+                        messages: vec![InputMessage {
                             role: Role::User,
-                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            content: vec![InputMessageContent::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             })],
                         }],
