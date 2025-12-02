@@ -230,7 +230,7 @@ impl Optimizer for GEPAConfig {
 
         // Initialize Pareto frontier with validation datapoint IDs and evaluator configs
         let mut pareto_frontier = ParetoFrontier::new(
-            val_create_datapoints_response.ids.clone(),
+            val_create_datapoints_response.ids,
             evaluator_configs,
             self.seed.map(|s| s as u64),
         );

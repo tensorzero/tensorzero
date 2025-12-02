@@ -46,7 +46,7 @@ async fn test_pareto_frontier_new() {
 
     // Initialize ParetoFrontier
     let pareto_frontier = ParetoFrontier::new(
-        response.ids.clone(),
+        response.ids,
         evaluator_configs,
         gepa_config.seed.map(|s| s as u64),
     );
@@ -125,7 +125,7 @@ async fn test_pareto_frontier_update_with_initial_variants() {
 
     // Initialize Pareto frontier
     let mut pareto_frontier = ParetoFrontier::new(
-        response.ids.clone(),
+        response.ids,
         evaluator_configs,
         gepa_config.seed.map(|s| s as u64),
     );
@@ -243,7 +243,7 @@ async fn test_pareto_frontier_sample_by_frequency() {
 
     // Initialize and seed Pareto frontier
     let mut pareto_frontier = ParetoFrontier::new(
-        response.ids.clone(),
+        response.ids,
         evaluator_configs,
         gepa_config.seed.map(|s| s as u64),
     );
@@ -358,7 +358,7 @@ async fn test_pareto_frontier_maintains_valid_state() {
 
     // Initialize and seed Pareto frontier
     let mut pareto_frontier = ParetoFrontier::new(
-        response.ids.clone(),
+        response.ids,
         evaluator_configs,
         gepa_config.seed.map(|s| s as u64),
     );
