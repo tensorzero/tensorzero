@@ -13,16 +13,16 @@ use aws_sdk_bedrockruntime::types::{
 };
 use aws_smithy_types::{error::display::DisplayErrorContext, Document, Number};
 use aws_types::region::Region;
-use secrecy::ExposeSecret;
-use url::Url;
 use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest::StatusCode;
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
+use url::Url;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
@@ -31,8 +31,6 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
-use crate::model::{CredentialLocation, CredentialLocationWithFallback, EndpointLocation};
-use secrecy::SecretString;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
@@ -49,7 +47,9 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
+use crate::model::{CredentialLocation, CredentialLocationWithFallback, EndpointLocation};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use secrecy::SecretString;
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -90,7 +90,6 @@ pub enum AWSBedrockRegion {
     Dynamic(String),
 }
 
-
 #[derive(Clone, Debug)]
 pub struct AWSBedrockCredentials {
     access_key_location: CredentialLocationWithFallback,
@@ -108,7 +107,7 @@ impl AWSBedrockCredentials {
             dynamic_credentials,
             "access_key",
         )?;
-        
+
         // Resolve secret key
         let secret_key = resolve_credential_location(
             &self.secret_key_location,
@@ -116,10 +115,7 @@ impl AWSBedrockCredentials {
             "secret_key",
         )?;
 
-        Ok((
-            access_key.expose_secret().to_string(),
-            secret_key,
-        ))
+        Ok((access_key.expose_secret().to_string(), secret_key))
     }
 }
 
@@ -320,9 +316,7 @@ impl AWSBedrockProvider {
                 })?;
                 let url = Url::parse(&url_str).map_err(|e| {
                     Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Invalid endpoint URL from env var '{env_var}': {e}"
-                        ),
+                        message: format!("Invalid endpoint URL from env var '{env_var}': {e}"),
                     })
                 })?;
                 Some(AWSBedrockEndpoint::Static(url))
@@ -338,23 +332,17 @@ impl AWSBedrockProvider {
             Some(EndpointLocation::Static(region_str)) => {
                 Some(AWSBedrockRegion::Static(Region::new(region_str)))
             }
-            Some(EndpointLocation::Env(env_var)) => {
-                Some(AWSBedrockRegion::Env(env_var))
-            }
-            Some(EndpointLocation::Dynamic(key_name)) => {
-                Some(AWSBedrockRegion::Dynamic(key_name))
-            }
+            Some(EndpointLocation::Env(env_var)) => Some(AWSBedrockRegion::Env(env_var)),
+            Some(EndpointLocation::Dynamic(key_name)) => Some(AWSBedrockRegion::Dynamic(key_name)),
             None => None,
         };
 
         // Parse credentials - store CredentialLocationWithFallback for runtime resolution
         let credentials = match (access_key_location, secret_key_location) {
-            (Some(access_key_loc), Some(secret_key_loc)) => {
-                Some(AWSBedrockCredentials {
-                    access_key_location: access_key_loc,
-                    secret_key_location: secret_key_loc,
-                })
-            }
+            (Some(access_key_loc), Some(secret_key_loc)) => Some(AWSBedrockCredentials {
+                access_key_location: access_key_loc,
+                secret_key_location: secret_key_loc,
+            }),
             (None, None) => None,
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
@@ -365,8 +353,10 @@ impl AWSBedrockProvider {
 
         // Validate region requirement
         // If region is Dynamic, it will be resolved at inference time, so no validation needed during initialization
-        let region_will_be_provided_dynamically = matches!(region, Some(AWSBedrockRegion::Dynamic(_)));
-        let effective_allow_auto_detect = allow_auto_detect_region || region_will_be_provided_dynamically;
+        let region_will_be_provided_dynamically =
+            matches!(region, Some(AWSBedrockRegion::Dynamic(_)));
+        let effective_allow_auto_detect =
+            allow_auto_detect_region || region_will_be_provided_dynamically;
         if region.is_none() && !effective_allow_auto_detect {
             return Err(Error::new(ErrorDetails::Config {
                 message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string(),
@@ -376,11 +366,7 @@ impl AWSBedrockProvider {
         // Build initial client with static values
         let static_region = match &region {
             Some(AWSBedrockRegion::Static(r)) => Some(r.clone()),
-            Some(AWSBedrockRegion::Env(env_var)) => {
-                std::env::var(env_var)
-                    .ok()
-                    .map(|r| Region::new(r))
-            }
+            Some(AWSBedrockRegion::Env(env_var)) => std::env::var(env_var).ok().map(Region::new),
             _ => None,
         };
 
@@ -390,7 +376,10 @@ impl AWSBedrockProvider {
             let access_key_loc = creds.access_key_location.default_location();
             let secret_key_loc = creds.secret_key_location.default_location();
             match (access_key_loc, secret_key_loc) {
-                (CredentialLocation::Env(access_key_env), CredentialLocation::Env(secret_key_env)) => {
+                (
+                    CredentialLocation::Env(access_key_env),
+                    CredentialLocation::Env(secret_key_env),
+                ) => {
                     let access_key = std::env::var(access_key_env).ok();
                     let secret_key = std::env::var(secret_key_env)
                         .ok()
@@ -415,7 +404,11 @@ impl AWSBedrockProvider {
         .await
         {
             Ok(config) => config,
-            Err(e) if effective_allow_auto_detect && static_region.is_none() && e.to_string().contains("Failed to determine AWS region") => {
+            Err(e)
+                if effective_allow_auto_detect
+                    && static_region.is_none()
+                    && e.to_string().contains("Failed to determine AWS region") =>
+            {
                 // Use default region for initialization if auto-detection fails
                 // The actual region will be resolved during inference
                 aws_common::config_with_region_and_credentials(
@@ -438,7 +431,7 @@ impl AWSBedrockProvider {
 
         let config = config_builder
             .http_client(super::aws_http_client::Client::new(http_client.clone()))
-        .build();
+            .build();
         let client = Arc::new(aws_sdk_bedrockruntime::Client::from_conf(config));
 
         Ok(Self {
@@ -461,14 +454,24 @@ impl AWSBedrockProvider {
         dynamic_credentials: &InferenceCredentials,
     ) -> Result<Arc<aws_sdk_bedrockruntime::Client>, Error> {
         // Check if we need to resolve anything dynamically
-        let needs_dynamic_resolution = 
-            matches!(self.endpoint, Some(AWSBedrockEndpoint::Dynamic(_)))
-            || matches!(self.region, Some(AWSBedrockRegion::Dynamic(_)))
-            || matches!(self.region, Some(AWSBedrockRegion::Env(_)))
-            || (self.credentials.is_some() && matches!(
-                self.credentials.as_ref().unwrap().access_key_location.default_location(),
+        let credentials_need_dynamic_resolution = match &self.credentials {
+            Some(creds) => matches!(
+                creds.access_key_location.default_location(),
                 CredentialLocation::Dynamic(_) | CredentialLocation::Env(_)
-            ));
+            ),
+            None => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "AWS Bedrock credentials are required but were not provided"
+                        .to_string(),
+                }));
+            }
+        };
+
+        let needs_dynamic_resolution =
+            matches!(self.endpoint, Some(AWSBedrockEndpoint::Dynamic(_)))
+                || matches!(self.region, Some(AWSBedrockRegion::Dynamic(_)))
+                || matches!(self.region, Some(AWSBedrockRegion::Env(_)))
+                || credentials_need_dynamic_resolution;
 
         if needs_dynamic_resolution {
             // Resolve region
@@ -504,22 +507,23 @@ impl AWSBedrockProvider {
             };
 
             // Resolve credentials
-            let (resolved_access_key, resolved_secret_key) = if let Some(ref creds) = self.credentials {
-                match creds.get_credentials(dynamic_credentials) {
-                    Ok((access_key, secret_key)) => (Some(access_key), Some(secret_key)),
-                    Err(e) => {
-                        return Err(e.log());
+            let (resolved_access_key, resolved_secret_key) =
+                if let Some(ref creds) = self.credentials {
+                    match creds.get_credentials(dynamic_credentials) {
+                        Ok((access_key, secret_key)) => (Some(access_key), Some(secret_key)),
+                        Err(e) => {
+                            return Err(e.log());
+                        }
                     }
-                }
-            } else {
-                (None, None)
-            };
+                } else {
+                    (None, None)
+                };
 
             // Resolve endpoint
             let endpoint_url_str = match &self.endpoint {
                 Some(AWSBedrockEndpoint::Static(url)) => Some(url.as_str().to_string()),
-                Some(AWSBedrockEndpoint::Dynamic(_)) => {
-                    Some(self.endpoint.as_ref().unwrap().get_endpoint(dynamic_credentials)?.to_string())
+                Some(endpoint @ AWSBedrockEndpoint::Dynamic(_)) => {
+                    Some(endpoint.get_endpoint(dynamic_credentials)?.to_string())
                 }
                 None => None,
             };
@@ -540,7 +544,9 @@ impl AWSBedrockProvider {
             }
 
             let config = config_builder
-                .http_client(super::aws_http_client::Client::new(self.http_client.clone()))
+                .http_client(super::aws_http_client::Client::new(
+                    self.http_client.clone(),
+                ))
                 .build();
             Ok(Arc::new(aws_sdk_bedrockruntime::Client::from_conf(config)))
         } else {

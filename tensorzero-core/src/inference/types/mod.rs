@@ -1859,7 +1859,7 @@ impl ProviderInferenceResponse {
 }
 
 impl InferenceResult {
-     pub fn provider_name(&self) -> Option<String> {
+    pub fn provider_name(&self) -> Option<String> {
         match self {
             InferenceResult::Chat(result) => result
                 .model_inference_results

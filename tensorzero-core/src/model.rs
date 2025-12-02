@@ -1151,20 +1151,18 @@ impl UninitializedProviderConfig {
                 endpoint,
                 access_key,
                 secret_key,
-            } => {
-                ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(
-                        model_id,
-                        region,
-                        allow_auto_detect_region,
-                        endpoint,
-                        access_key,
-                        secret_key,
-                        http_client,
-                    )
-                    .await?,
+            } => ProviderConfig::AWSBedrock(
+                AWSBedrockProvider::new(
+                    model_id,
+                    region,
+                    allow_auto_detect_region,
+                    endpoint,
+                    access_key,
+                    secret_key,
+                    http_client,
                 )
-            }
+                .await?,
+            ),
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
                 region,
