@@ -186,6 +186,9 @@ jobs:
           done
         shell: bash
 
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
         with:
