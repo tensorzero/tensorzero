@@ -1,4 +1,3 @@
-import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
@@ -35,12 +34,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [counts, getDatapointsResponse] = await Promise.all([
-    getDatasetMetadata({}),
+  const [datasetMetadata, getDatapointsResponse] = await Promise.all([
+    getTensorZeroClient().listDatasets({}),
     getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
   ]);
-  const count_info = counts.find(
-    (count) => count.dataset_name === dataset_name,
+  const count_info = datasetMetadata.datasets.find(
+    (dataset) => dataset.dataset_name === dataset_name,
   );
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
@@ -87,13 +86,13 @@ export async function action({ request, params }: Route.ActionArgs) {
     await getTensorZeroClient().deleteDatapoints(dataset_name, [datapoint_id]);
 
     // Check if this was the last datapoint in the dataset
-    const counts = await getDatasetMetadata({});
-    const count_info = counts.find(
-      (count) => count.dataset_name === dataset_name,
+    const datasetMetadata = await getTensorZeroClient().listDatasets({});
+    const count_info = datasetMetadata.datasets.find(
+      (dataset) => dataset.dataset_name === dataset_name,
     );
 
     // If no datapoints remain, redirect to datasets list
-    if (!count_info || count_info.count === 0) {
+    if (!count_info || count_info.datapoint_count === 0) {
       return redirect("/datasets");
     }
 
@@ -148,7 +147,7 @@ export default function DatasetDetailPage({
       <PageHeader
         heading={`Dataset`}
         name={count_info.dataset_name}
-        count={count_info.count}
+        count={count_info.datapoint_count}
       >
         <div className="flex justify-start">
           <DeleteButton
@@ -166,7 +165,7 @@ export default function DatasetDetailPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + limit >= count_info.count}
+          disableNext={offset + limit >= count_info.datapoint_count}
         />
       </SectionLayout>
     </PageLayout>
