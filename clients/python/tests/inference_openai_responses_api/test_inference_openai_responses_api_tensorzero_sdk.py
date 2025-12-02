@@ -8,17 +8,15 @@ import typing as t
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatChunk,
     ChatInferenceResponse,
     InferenceChunk,
     Text,
     TextChunk,
-    ThoughtChunk,
-    ToolCall,
-)
-from tensorzero.types import (
-    ChatChunk,
     Thought,
+    ThoughtChunk,
     ThoughtSummaryBlock,
+    ToolCall,
     ToolCallChunk,
     UnknownContentBlock,
 )
@@ -47,7 +45,7 @@ async def test_openai_responses_basic_inference(async_client: AsyncTensorZeroGat
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
     # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
-    # assert response.finish_reason == FinishReason.STOP
+    # assert response.finish_reason == "stop"
 
 
 @pytest.mark.asyncio

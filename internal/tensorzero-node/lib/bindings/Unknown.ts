@@ -2,8 +2,9 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * Struct that represents an unknown provider-specific content block.
- * We pass this along as-is without any validation or transformation.
+ * Struct that represents an unknown provider-specific content block (e.g. Anthropic's `redacted_thinking`) in and out
+ * of TensorZero. We pass this along as-is without any validation or transformation.
+ * The `data` field holds the original content block from the provider.
  */
 export type Unknown = {
   /**

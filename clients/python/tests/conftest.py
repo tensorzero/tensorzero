@@ -14,17 +14,16 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapointInsert,
-    ContentBlockChatOutputText,
     FunctionTool,
     JsonDatapointInsert,
     JsonInferenceOutput,
+    MessageContentText,
+    MessageContentThought,
     RenderedSample,
     StoredInferenceChat,
     StoredInferenceJson,
     StoredInput,
     StoredInputMessage,
-    StoredInputMessageContentText,
-    StoredInputMessageContentThought,
     TensorZeroGateway,
     patch_openai_client,
 )
@@ -113,13 +112,13 @@ def mixed_rendered_samples(
                 StoredInputMessage(
                     role="user",
                     content=[
-                        StoredInputMessageContentThought(type="thought", text="hmmm"),
-                        StoredInputMessageContentText(type="text", text="bar"),
+                        MessageContentThought(type="thought", text="hmmm"),
+                        MessageContentText(type="text", text="bar"),
                     ],
                 )
             ],
         ),
-        output=[ContentBlockChatOutputText(text="Hello world")],
+        output=[MessageContentText(text="Hello world")],
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -148,7 +147,7 @@ def mixed_rendered_samples(
             messages=[
                 StoredInputMessage(
                     role="user",
-                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                    content=[MessageContentText(type="text", text='{"country": "Japan"}')],
                 )
             ],
         ),
@@ -183,11 +182,11 @@ def chat_function_rendered_samples(
             messages=[
                 StoredInputMessage(
                     role="user",
-                    content=[StoredInputMessageContentText(type="text", text="What is the capital of France?")],
+                    content=[MessageContentText(type="text", text="What is the capital of France?")],
                 )
             ],
         ),
-        output=[ContentBlockChatOutputText(text="The capital of France is Paris.")],
+        output=[MessageContentText(text="The capital of France is Paris.")],
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -217,7 +216,7 @@ def json_function_rendered_samples(
             messages=[
                 StoredInputMessage(
                     role="user",
-                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                    content=[MessageContentText(type="text", text='{"country": "Japan"}')],
                 )
             ],
         ),

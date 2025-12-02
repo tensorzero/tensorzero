@@ -4,9 +4,6 @@ import type { Text } from "./Text";
 import type { Thought } from "./Thought";
 import type { Unknown } from "./Unknown";
 
-/**
- * Defines the types of content block that can come from a `chat` function
- */
 export type ContentBlockChatOutput =
   | ({ type: "text" } & Text)
   | ({ type: "tool_call" } & InferenceResponseToolCall)

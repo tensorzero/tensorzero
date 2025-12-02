@@ -245,22 +245,22 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[ts(export)]
 #[export_schema]
 pub enum StoredInputMessageContent {
-    #[schemars(title = "StoredInputMessageContentText")]
+    #[schemars(title = "MessageContentText")]
     Text(Text),
-    #[schemars(title = "StoredInputMessageContentTemplate")]
+    #[schemars(title = "MessageContentTemplate")]
     Template(Template),
-    #[schemars(title = "StoredInputMessageContentToolCall")]
+    #[schemars(title = "MessageContentToolCall")]
     ToolCall(ToolCall),
-    #[schemars(title = "StoredInputMessageContentToolResult")]
+    #[schemars(title = "MessageContentToolResult")]
     ToolResult(ToolResult),
-    #[schemars(title = "StoredInputMessageContentRawText")]
+    #[schemars(title = "MessageContentRawText")]
     RawText(RawText),
-    #[schemars(title = "StoredInputMessageContentThought")]
+    #[schemars(title = "MessageContentThought")]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
+    #[schemars(title = "MessageContentStoredFile", with = "ObjectStoragePointer")]
     File(Box<StoredFile>),
-    #[schemars(title = "StoredInputMessageContentUnknown")]
+    #[schemars(title = "MessageContentUnknown")]
     Unknown(Unknown),
 }
 
