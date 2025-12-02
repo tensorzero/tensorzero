@@ -115,7 +115,7 @@ impl Optimizer for GEPAConfig {
 
         // Create validation dataset for Pareto filtering
         let run_id = Uuid::now_v7();
-        let val_dataset_name = format!("{}_gepa_val_{}", self.evaluation_name, run_id.clone());
+        let val_dataset_name = format!("{}_gepa_val_{}", self.evaluation_name, run_id);
 
         // Track all temporary datasets for cleanup at the end
         let mut temporary_datasets = vec![val_dataset_name.clone()];
@@ -156,7 +156,7 @@ impl Optimizer for GEPAConfig {
 
         // Evaluate all initial variants in parallel. Errors are returned from each future
         // and collected by join_all(), allowing us to proceed with any variants that succeed
-        // rather than failing fast. The safety check below (lines 220-224) ensures at least
+        // rather than failing fast. The safety check below (lines 225-229) ensures at least
         // one variant succeeded before proceeding with optimization.
         let evaluation_futures: Vec<_> = original_variants
             .iter()
@@ -294,9 +294,7 @@ impl Optimizer for GEPAConfig {
 
             let mutation_dataset_name = format!(
                 "{}_gepa_mutation_{}_{}",
-                self.evaluation_name,
-                iteration,
-                run_id.clone(),
+                self.evaluation_name, iteration, run_id,
             );
             temporary_datasets.push(mutation_dataset_name.clone());
 
