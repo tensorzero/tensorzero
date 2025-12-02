@@ -78,15 +78,18 @@ pub enum AuthResult {
     MissingKey,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
     pub workspace: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     pub disabled_at: Option<DateTime<Utc>>,
 }
 

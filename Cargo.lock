@@ -6099,6 +6099,7 @@ dependencies = [
  "sqlx 0.9.0-alpha.1",
  "thiserror 2.0.17",
  "tracing",
+ "ts-rs",
 ]
 
 [[package]]

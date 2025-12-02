@@ -22,6 +22,7 @@ axum = { workspace = true }
 moka = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }
+ts-rs = { workspace = true }
 
 [lints]
 workspace = true
