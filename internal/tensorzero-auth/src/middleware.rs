@@ -29,7 +29,7 @@ pub struct TensorzeroAuthMiddlewareStateInner {
     /// Routes that should not require authentication
     /// We apply authentication to all routes *except* these ones, to make it difficult
     /// to accidentally skip running authentication on a route, especially if we later refactor
-    /// how we build up our router.I
+    /// how we build up our router.
     pub unauthenticated_routes: &'static [&'static str],
     pub auth_cache: Option<Cache<String, AuthResult>>,
     pub pool: Option<sqlx::PgPool>,
