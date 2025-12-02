@@ -226,7 +226,7 @@ export function JsonOutputElement({
   );
 }
 
-function AddOutputButtons({ onAdd: onAdd }: { onAdd: () => void }) {
+function AddOutputButtons({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="flex items-center gap-2 py-2">
       <AddButton label="Output" onAdd={onAdd} />
