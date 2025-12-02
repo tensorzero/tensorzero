@@ -13,34 +13,34 @@ import type {
 /**
  * JSON types
  */
-export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+export const ZodJsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
     z.number(),
     z.boolean(),
     z.null(),
-    z.record(JsonValueSchema),
-    z.array(JsonValueSchema),
+    z.record(ZodJsonValueSchema),
+    z.array(ZodJsonValueSchema),
   ]),
 );
 
 export const roleSchema = z.enum(["user", "assistant"]);
-export type Role = z.infer<typeof roleSchema>;
+export type ZodRole = z.infer<typeof roleSchema>;
 
 export const legacyTextSchema = z.object({
   type: z.literal("text"),
   // TODO: get rid of this type completely, we should not run queries in the UI...
-  value: JsonValueSchema.optional(),
+  value: ZodJsonValueSchema.optional(),
   text: z.string().optional(),
 });
-export type LegacyTextInput = z.infer<typeof legacyTextSchema>;
+export type ZodLegacyTextInput = z.infer<typeof legacyTextSchema>;
 
 export const templateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(JsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema.optional()),
 });
-export type Template = z.infer<typeof templateSchema>;
+export type ZodTemplate = z.infer<typeof templateSchema>;
 
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
@@ -48,22 +48,22 @@ export const displayTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
-export type DisplayTextInput = z.infer<typeof displayTextInputSchema>;
+export type ZodDisplayTextInput = z.infer<typeof displayTextInputSchema>;
 
 // 2) uses templates
 export const displayTemplateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(JsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema.optional()),
 });
-export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
+export type ZodDisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 // 3) is missing from the config so we don't know
 export const displayMissingFunctionTextInputSchema = z.object({
   type: z.literal("missing_function_text"),
   value: z.string(),
 });
-export type DisplayMissingFunctionTextInput = z.infer<
+export type ZodDisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
 >;
 
@@ -71,7 +71,7 @@ export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
-export type ModelInferenceTextInput = z.infer<
+export type ZodModelInferenceTextInput = z.infer<
   typeof modelInferenceTextInputSchema
 >;
 
@@ -79,13 +79,13 @@ export const rawTextInputSchema = z.object({
   type: z.literal("raw_text"),
   value: z.string(),
 });
-export type RawTextInput = z.infer<typeof rawTextInputSchema>;
+export type ZodRawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtSummaryBlockSchema = z.object({
   text: z.string(),
   type: z.literal("summary_text"),
 });
-export type ThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
+export type ZodThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
@@ -103,14 +103,15 @@ export const thoughtContentSchema = z.object({
     .transform((val) => val ?? undefined),
   _internal_provider_type: z.string().optional(),
 });
-export type ThoughtContent = z.infer<typeof thoughtContentSchema>;
+export type ZodThoughtContent = z.infer<typeof thoughtContentSchema>;
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
-  data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  data: ZodJsonValueSchema,
+  model_name: z.string().optional(),
+  provider_name: z.string().optional(),
 });
-export type Unknown = z.infer<typeof unknownSchema>;
+export type ZodUnknown = z.infer<typeof unknownSchema>;
 
 export const toolCallSchema = z
   .object({
@@ -119,7 +120,7 @@ export const toolCallSchema = z
     id: z.string(),
   })
   .strict();
-export type ToolCall = z.infer<typeof toolCallSchema>;
+export type ZodToolCall = z.infer<typeof toolCallSchema>;
 
 export const toolCallContentSchema = z
   .object({
@@ -127,7 +128,7 @@ export const toolCallContentSchema = z
     ...toolCallSchema.shape,
   })
   .strict();
-export type ToolCallContent = z.infer<typeof toolCallContentSchema>;
+export type ZodToolCallContent = z.infer<typeof toolCallContentSchema>;
 
 export const toolResultSchema = z
   .object({
@@ -136,7 +137,7 @@ export const toolResultSchema = z
     id: z.string(),
   })
   .strict();
-export type ToolResult = z.infer<typeof toolResultSchema>;
+export type ZodToolResult = z.infer<typeof toolResultSchema>;
 
 export const toolResultContentSchema = z
   .object({
@@ -144,13 +145,13 @@ export const toolResultContentSchema = z
     ...toolResultSchema.shape,
   })
   .strict();
-export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
+export type ZodToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64FileSchema = z.object({
   url: z.string().url().nullish(),
   mime_type: z.string(),
 });
-export type Base64File = z.infer<typeof base64FileSchema>;
+export type ZodBase64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
   data: z
@@ -161,7 +162,7 @@ export const resolvedBase64FileSchema = z.object({
     }),
   mime_type: z.string(),
 });
-export type ResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
+export type ZodResolvedBase64File = z.infer<typeof resolvedBase64FileSchema>;
 
 export const storageKindSchema = z.discriminatedUnion("type", [
   z
@@ -185,13 +186,13 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type StorageKind = z.infer<typeof storageKindSchema>;
+export type ZodStorageKind = z.infer<typeof storageKindSchema>;
 
 export const storagePathSchema = z.object({
   kind: storageKindSchema,
   path: z.string(),
 });
-export type StoragePath = z.infer<typeof storagePathSchema>;
+export type ZodStoragePath = z.infer<typeof storagePathSchema>;
 
 export const imageContentSchema = z.object({
   type: z.literal("image"),
@@ -200,21 +201,21 @@ export const imageContentSchema = z.object({
 });
 // Legacy 'image' content block stored in the database
 // All new images are written out with the 'file' content block type
-export type ImageContent = z.infer<typeof imageContentSchema>;
+export type ZodImageContent = z.infer<typeof imageContentSchema>;
 
 export const fileContentSchema = z.object({
   type: z.literal("file"),
   file: base64FileSchema,
   storage_path: storagePathSchema,
 });
-export type FileContent = z.infer<typeof fileContentSchema>;
+export type ZodFileContent = z.infer<typeof fileContentSchema>;
 
 export const resolvedFileContentSchema = z.object({
   type: z.literal("file"),
   file: resolvedBase64FileSchema,
   storage_path: storagePathSchema,
 });
-export type ResolvedFileContent = z.infer<typeof resolvedFileContentSchema>;
+export type ZodResolvedFileContent = z.infer<typeof resolvedFileContentSchema>;
 
 export const resolvedFileContentErrorSchema = z.object({
   type: z.literal("file_error"),
@@ -222,7 +223,7 @@ export const resolvedFileContentErrorSchema = z.object({
   storage_path: storagePathSchema,
   error: z.string(),
 });
-export type ResolvedImageContentError = z.infer<
+export type ZodResolvedImageContentError = z.infer<
   typeof resolvedFileContentErrorSchema
 >;
 
@@ -238,7 +239,7 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
   thoughtContentSchema,
   unknownSchema,
 ]);
-export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
+export type ZodInputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
 export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
   "type",
@@ -253,7 +254,7 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     unknownSchema,
   ],
 );
-export type ModelInferenceInputMessageContent = z.infer<
+export type ZodModelInferenceInputMessageContent = z.infer<
   typeof modelInferenceInputMessageContentSchema
 >;
 
@@ -270,7 +271,7 @@ export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   unknownSchema,
 ]);
 
-export type DisplayInputMessageContent = z.infer<
+export type ZodDisplayInputMessageContent = z.infer<
   typeof displayInputMessageContentSchema
 >;
 
@@ -280,7 +281,7 @@ export const inputMessageSchema = z
     content: z.array(inputMessageContentSchema),
   })
   .strict();
-export type InputMessage = z.infer<typeof inputMessageSchema>;
+export type ZodInputMessage = z.infer<typeof inputMessageSchema>;
 
 export const modelInferenceInputMessageSchema = z
   .object({
@@ -288,7 +289,7 @@ export const modelInferenceInputMessageSchema = z
     content: z.array(modelInferenceInputMessageContentSchema),
   })
   .strict();
-export type ModelInferenceInputMessage = z.infer<
+export type ZodModelInferenceInputMessage = z.infer<
   typeof modelInferenceInputMessageSchema
 >;
 
@@ -306,7 +307,7 @@ export const displayModelInferenceInputMessageSchema = z.object({
   role: roleSchema,
   content: z.array(displayModelInferenceInputMessageContentSchema),
 });
-export type DisplayModelInferenceInputMessage = z.infer<
+export type ZodDisplayModelInferenceInputMessage = z.infer<
   typeof displayModelInferenceInputMessageSchema
 >;
 
@@ -316,7 +317,7 @@ export const displayInputMessageSchema = z
     content: z.array(displayInputMessageContentSchema),
   })
   .strict();
-export type DisplayInputMessage = z.infer<typeof displayInputMessageSchema>;
+export type ZodDisplayInputMessage = z.infer<typeof displayInputMessageSchema>;
 
 export const inputSchema = z
   .object({
@@ -324,7 +325,7 @@ export const inputSchema = z
     messages: z.array(inputMessageSchema).default([]),
   })
   .strict();
-export type Input = z.infer<typeof inputSchema>;
+export type ZodInput = z.infer<typeof inputSchema>;
 
 export const modelInferenceInputSchema = z
   .object({
@@ -332,7 +333,7 @@ export const modelInferenceInputSchema = z
     messages: z.array(modelInferenceInputMessageSchema).default([]),
   })
   .strict();
-export type ModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
+export type ZodModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
 
 export const displayInputSchema = z
   .object({
@@ -340,14 +341,14 @@ export const displayInputSchema = z
     messages: z.array(displayInputMessageSchema).default([]),
   })
   .strict();
-export type DisplayInput = z.infer<typeof displayInputSchema>;
+export type ZodDisplayInput = z.infer<typeof displayInputSchema>;
 
 // Types for main intermediate representations (content blocks and request messages)
 export const textContentSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
-export type TextContent = z.infer<typeof textContentSchema>;
+export type ZodTextContent = z.infer<typeof textContentSchema>;
 
 export const contentBlockOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
@@ -359,13 +360,13 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 export const jsonInferenceOutputSchema = z.object({
   // These fields are explicitly nullable, not undefined.
   raw: z.string().nullable(),
-  parsed: JsonValueSchema.nullable(),
+  parsed: ZodJsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const inferenceResponseToolCallSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: JsonValueSchema.nullable(),
+    arguments: ZodJsonValueSchema.nullable(),
     id: z.string(),
     name: z.string().nullable(),
     raw_arguments: z.string(),
@@ -373,7 +374,7 @@ export const inferenceResponseToolCallSchema = z
   })
   .strict();
 
-export type InferenceResponseToolCall = z.infer<
+export type ZodInferenceResponseToolCall = z.infer<
   typeof inferenceResponseToolCallSchema
 >;
 
@@ -394,7 +395,7 @@ export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   ],
 );
 
-export type ModelInferenceOutputContentBlock = z.infer<
+export type ZodModelInferenceOutputContentBlock = z.infer<
   typeof modelInferenceOutputContentBlockSchema
 >;
 
@@ -427,12 +428,6 @@ export const TableBoundsSchema = z.object({
   first_id: z.string().uuid().nullable(), // UUIDv7 string
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
-export type TableBounds = z.infer<typeof TableBoundsSchema>;
-
-export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
-  count: z.number(),
-});
-export type TableBoundsWithCount = z.infer<typeof TableBoundsWithCountSchema>;
 
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({
@@ -442,19 +437,19 @@ export const FeedbackBoundsSchema = TableBoundsSchema.extend({
     comment: TableBoundsSchema,
   }),
 });
-export type FeedbackBounds = z.infer<typeof FeedbackBoundsSchema>;
+export type ZodFeedbackBounds = z.infer<typeof FeedbackBoundsSchema>;
 
 export const CountSchema = z.object({
   count: z.number(),
 });
-export type Count = z.infer<typeof CountSchema>;
+export type ZodCount = z.infer<typeof CountSchema>;
 
 /**
  * Converts frontend StorageKind to backend StorageKind.
  * Handles differences in nullish vs optional fields.
  */
 function storageKindToBackendStorageKind(
-  kind: StorageKind,
+  kind: ZodStorageKind,
 ): BackendStorageKind {
   if (kind.type === "s3_compatible") {
     return {
@@ -472,7 +467,7 @@ function storageKindToBackendStorageKind(
  * Converts frontend StoragePath to backend StoragePath.
  */
 function storagePathToBackendStoragePath(
-  path: StoragePath,
+  path: ZodStoragePath,
 ): BackendStoragePath {
   return {
     kind: storageKindToBackendStorageKind(path.kind),
@@ -486,7 +481,7 @@ function storagePathToBackendStoragePath(
  * the display form back into something we can write to ClickHouse.
  */
 function displayInputMessageContentToStoredInputMessageContent(
-  content: DisplayInputMessageContent,
+  content: ZodDisplayInputMessageContent,
 ): StoredInputMessageContent {
   switch (content.type) {
     case "text":
@@ -518,7 +513,7 @@ function displayInputMessageContentToStoredInputMessageContent(
 }
 
 function displayInputMessageToStoredInputMessage(
-  message: DisplayInputMessage,
+  message: ZodDisplayInputMessage,
 ): StoredInputMessage {
   return {
     role: message.role,
@@ -534,7 +529,7 @@ function displayInputMessageToStoredInputMessage(
  * 3. StorageKind currently has a null / undefined mismatch, so we convert everything to undefined before going to the backend.
  */
 export function displayInputToStoredInput(
-  displayInput: DisplayInput,
+  displayInput: ZodDisplayInput,
 ): StoredInput {
   return {
     system: displayInput.system,

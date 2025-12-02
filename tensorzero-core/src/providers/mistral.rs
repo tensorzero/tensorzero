@@ -37,12 +37,12 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
     get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
+    OpenAISystemRequestMessage, OpenAIToolType,
 };
 
 lazy_static! {
@@ -448,7 +448,7 @@ pub(super) struct MistralSpecificToolChoice<'a> {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-pub(super) struct MistralSpecificToolFunction<'a> {
+struct MistralSpecificToolFunction<'a> {
     name: &'a str,
 }
 
@@ -474,11 +474,15 @@ pub(super) struct MistralTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         MistralTool {
-            r#type: tool.r#type,
-            function: tool.function,
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
+            },
         }
     }
 }
@@ -487,24 +491,24 @@ impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
 /// Otherwise convert the tool choice and tools to Mistral format
 pub(super) fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> PreparedMistralToolsResult<'a> {
+) -> Result<PreparedMistralToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
-                    .map(|t| MistralTool::from(OpenAITool::from(t)))
+                    .strict_tools_available()?
+                    .map(Into::into)
                     .collect(),
             );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Mistral does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            (tools, tool_choice, parallel_tool_calls)
+            Ok((tools, tool_choice, parallel_tool_calls))
         }
     }
 }
@@ -592,7 +596,7 @@ impl<'a> MistralRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_mistral_tools(request);
+        let (tools, tool_choice, _) = prepare_mistral_tools(request)?;
 
         let mut mistral_request = MistralRequest {
             messages,
@@ -936,6 +940,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {
@@ -966,7 +971,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify only allowed tools are returned (strict_tools_available respects allowed_tools)
         let tools = tools.unwrap();
@@ -991,6 +996,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1018,7 +1024,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1043,6 +1049,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1070,7 +1077,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1093,6 +1100,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1120,7 +1128,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools are still returned
         let tools = tools.unwrap();
@@ -1161,7 +1169,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();

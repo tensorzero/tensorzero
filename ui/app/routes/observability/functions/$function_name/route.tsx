@@ -1,7 +1,6 @@
 import {
   countInferencesForFunction,
-  queryInferenceTableBoundsByFunctionName,
-  queryInferenceTableByFunctionName,
+  listInferencesWithPagination,
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
@@ -70,14 +69,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
-  const inferencePromise = queryInferenceTableByFunctionName({
+  const inferencePromise = listInferencesWithPagination({
     function_name,
     before: beforeInference || undefined,
     after: afterInference || undefined,
     limit,
-  });
-  const tableBoundsPromise = queryInferenceTableBoundsByFunctionName({
-    function_name,
   });
   const numInferencesPromise = countInferencesForFunction(
     function_name,
@@ -143,8 +139,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   })();
 
   const [
-    inferences,
-    inference_bounds,
+    inferenceResult,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -154,7 +149,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_sampling_probabilities,
   ] = await Promise.all([
     inferencePromise,
-    tableBoundsPromise,
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
@@ -209,8 +203,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
-    inferences,
-    inference_bounds,
+    inferences: inferenceResult.inferences,
+    hasNextInferencePage: inferenceResult.hasNextPage,
+    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -225,7 +220,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
     inferences,
-    inference_bounds,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -251,7 +247,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
+    searchParams.set("beforeInference", bottomInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -259,15 +255,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
+    searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  // Modify pagination disable logic to handle empty inferences
-  const disablePreviousInferencePage =
-    !topInference || inference_bounds.last_id === topInference.id;
-  const disableNextInferencePage =
-    !bottomInference || inference_bounds.first_id === bottomInference.id;
 
   const metric_name = searchParams.get("metric_name") || "";
 
@@ -349,8 +339,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
-            disablePrevious={disablePreviousInferencePage}
-            disableNext={disableNextInferencePage}
+            disablePrevious={!hasPreviousInferencePage}
+            disableNext={!hasNextInferencePage}
           />
         </SectionLayout>
       </SectionsGroup>

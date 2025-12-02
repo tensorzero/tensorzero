@@ -2,27 +2,22 @@ import { describe, expect, test, beforeEach, vi } from "vitest";
 import { v7 as uuid } from "uuid";
 import {
   deleteDatapoint,
-  saveDatapoint,
+  updateDatapoint,
   renameDatapoint,
 } from "./datapointOperations.server";
+import type { UpdateDatapointFormData } from "./formDataUtils";
 import type {
-  ParsedChatInferenceDatapointRow,
-  ParsedJsonInferenceDatapointRow,
-} from "~/utils/clickhouse/datasets";
-import type { Datapoint } from "~/utils/tensorzero";
-import type {
-  GetDatasetMetadataParams,
-  DatasetMetadata,
-  StaleDatapointParams,
   UpdateDatapointsMetadataRequest,
+  UpdateDatapointRequest,
+  ListDatasetsResponse,
 } from "~/types/tensorzero";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
 // Mock TensorZero client at the module boundary
 const mockUpdateDatapoint = vi.fn(
-  async (_datasetName: string, datapoint: Datapoint) => ({
-    id: datapoint.id,
+  async (_datasetName: string, _request: UpdateDatapointRequest) => ({
+    id: uuid(), // Generate a new ID to simulate the backend creating a new datapoint
   }),
 );
 const mockUpdateDatapointsMetadata = vi.fn(
@@ -30,25 +25,23 @@ const mockUpdateDatapointsMetadata = vi.fn(
     ids: [],
   }),
 );
+const mockDeleteDatapoints = vi.fn(
+  async (_datasetName: string, _datapointIds: string[]) => ({
+    num_deleted_datapoints: BigInt(_datapointIds.length),
+  }),
+);
+const mockListDatasets = vi.fn(
+  async (): Promise<ListDatasetsResponse> => ({
+    datasets: [],
+  }),
+);
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
     updateDatapoint: mockUpdateDatapoint,
     updateDatapointsMetadata: mockUpdateDatapointsMetadata,
+    deleteDatapoints: mockDeleteDatapoints,
+    listDatasets: mockListDatasets,
   })),
-}));
-
-// Mock the datasets server functions
-const mockGetDatasetMetadata = vi.hoisted(() =>
-  vi.fn<(params: GetDatasetMetadataParams) => Promise<DatasetMetadata[]>>(
-    async () => [],
-  ),
-);
-const mockStaleDatapoint = vi.hoisted(() =>
-  vi.fn<(params: StaleDatapointParams) => Promise<void>>(async () => {}),
-);
-vi.mock("~/utils/clickhouse/datasets.server", () => ({
-  staleDatapoint: mockStaleDatapoint,
-  getDatasetMetadata: mockGetDatasetMetadata,
 }));
 
 describe("datapointOperations", () => {
@@ -57,9 +50,9 @@ describe("datapointOperations", () => {
   });
 
   describe("deleteDatapoint", () => {
-    test("should call staleDatapoint and redirect to /datasets when dataset is empty", async () => {
-      // Mock getDatasetMetadata to return empty array (no datasets)
-      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([]);
+    test("should call deleteDatapoints and redirect to /datasets when dataset is empty", async () => {
+      // Mock listDatasets to return empty array (no datasets)
+      vi.mocked(mockListDatasets).mockResolvedValueOnce({ datasets: [] });
 
       const datasetName = "nonexistent_dataset";
       const datapointId = uuid();
@@ -67,14 +60,11 @@ describe("datapointOperations", () => {
       const result = await deleteDatapoint({
         dataset_name: datasetName,
         id: datapointId,
-        functionType: "chat",
       });
 
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         datapointId,
-        "chat",
-      );
+      ]);
       expect(result.redirectTo).toBe("/datasets");
     });
 
@@ -82,197 +72,35 @@ describe("datapointOperations", () => {
       const datasetName = "foo";
       const datapointId = uuid();
 
-      // Mock getDatasetMetadata to return a dataset with count
-      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([
-        {
-          dataset_name: datasetName,
-          count: 10,
-          last_updated: "2025-04-15T02:33:58Z",
-        },
-      ]);
+      // Mock listDatasets to return a dataset with count
+      vi.mocked(mockListDatasets).mockResolvedValueOnce({
+        datasets: [
+          {
+            dataset_name: datasetName,
+            datapoint_count: 10,
+            last_updated: "2025-04-15T02:33:58Z",
+          },
+        ],
+      });
 
       const result = await deleteDatapoint({
         dataset_name: datasetName,
         id: datapointId,
-        functionType: "json",
       });
 
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         datapointId,
-        "json",
-      );
+      ]);
       expect(result.redirectTo).toBe(`/datasets/${datasetName}`);
     });
   });
 
-  describe("saveDatapoint - chat", () => {
-    test("should generate new ID, call updateDatapoint, and stale old datapoint", async () => {
-      const datasetName = "test_dataset";
-      const originalId = uuid();
-      const sourceInferenceId = uuid();
-      const episodeId = uuid();
-
-      const parsedFormData: ParsedChatInferenceDatapointRow = {
-        dataset_name: datasetName,
-        function_name: "write_haiku",
-        name: "test_datapoint",
-        id: originalId,
-        episode_id: episodeId,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Write a haiku about coding",
-                },
-              ],
-            },
-          ],
-        },
-        output: [{ type: "text", text: "Code flows like water" }],
-        tags: { environment: "test" },
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: sourceInferenceId,
-        is_custom: false,
-      };
-
-      const { newId } = await saveDatapoint({
-        parsedFormData,
-        functionType: "chat",
-      });
-
-      // Verify new ID is different from original
-      expect(newId).not.toBe(originalId);
-
-      // Verify updateDatapoint was called with relevant customizations.
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        expect.objectContaining({
-          id: newId,
-          function_name: "write_haiku",
-          episode_id: undefined,
-          // TODO: should assert on input and output
-          tags: { environment: "test" },
-          is_custom: true,
-          source_inference_id: sourceInferenceId,
-          auxiliary: "",
-          name: "test_datapoint",
-          staled_at: undefined,
-        }),
-      );
-
-      // Verify staleDatapoint was called with original ID
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        originalId,
-        "chat",
-      );
-    });
-  });
-
-  describe("saveDatapoint - json", () => {
-    test("should generate new ID, call updateDatapoint with output_schema, and stale old datapoint", async () => {
-      const datasetName = "test_dataset";
-      const originalId = uuid();
-      const sourceInferenceId = uuid();
-      const episodeId = uuid();
-
-      const parsedFormData: ParsedJsonInferenceDatapointRow = {
-        dataset_name: datasetName,
-        function_name: "extract_entities",
-        name: "test_json_datapoint",
-        id: originalId,
-        episode_id: episodeId,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "John works at Google in Mountain View",
-                },
-              ],
-            },
-          ],
-        },
-        output: {
-          raw: '{"person":["John"],"organization":["Google"],"location":["Mountain View"],"miscellaneous":[]}',
-          parsed: {
-            person: ["John"],
-            organization: ["Google"],
-            location: ["Mountain View"],
-            miscellaneous: [],
-          },
-        },
-        output_schema: {
-          type: "object",
-          properties: {
-            person: { type: "array", items: { type: "string" } },
-            organization: { type: "array", items: { type: "string" } },
-            location: { type: "array", items: { type: "string" } },
-            miscellaneous: { type: "array", items: { type: "string" } },
-          },
-          required: ["person", "organization", "location", "miscellaneous"],
-        },
-        tags: { source: "test" },
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: sourceInferenceId,
-        is_custom: false,
-      };
-
-      const { newId } = await saveDatapoint({
-        parsedFormData,
-        functionType: "json",
-      });
-
-      // Verify new ID is different from original
-      expect(newId).not.toBe(originalId);
-
-      // Verify updateDatapoint was called with relevant customizations.
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        expect.objectContaining({
-          id: newId,
-          episode_id: undefined,
-          function_name: "extract_entities",
-          tags: { source: "test" },
-          // TODO: should assert on input and output.
-          input: expect.any(Object),
-          output: expect.any(Object),
-          is_custom: true,
-          source_inference_id: sourceInferenceId,
-          output_schema: parsedFormData.output_schema,
-          auxiliary: "",
-          name: "test_json_datapoint",
-          staled_at: undefined,
-        }),
-      );
-
-      // Verify mockStaleDatapoint was called with original ID
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        originalId,
-        "json",
-      );
-    });
-
+  describe("updateDatapoint - json", () => {
     test("should handle json datapoint with null output", async () => {
-      const parsedFormData: ParsedJsonInferenceDatapointRow = {
+      const parsedFormData: Omit<UpdateDatapointFormData, "action"> = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
-        name: undefined,
         id: uuid(),
-        episode_id: undefined,
         input: {
           messages: [
             {
@@ -282,39 +110,28 @@ describe("datapointOperations", () => {
           ],
         },
         output: undefined,
-        output_schema: {
-          type: "object",
-          properties: {},
-        },
         tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
       };
 
-      await saveDatapoint({
+      await updateDatapoint({
         parsedFormData,
         functionType: "json",
       });
 
+      // When output is undefined, it should be omitted from the request
       expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         "test_dataset",
-        expect.objectContaining({
-          output: null,
+        expect.not.objectContaining({
+          output: expect.anything(),
         }),
       );
     });
 
     test("should handle mismatched function type by treating as chat datapoint", async () => {
-      const parsedFormData: ParsedJsonInferenceDatapointRow = {
+      const parsedFormData: Omit<UpdateDatapointFormData, "action"> = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
-        name: undefined,
         id: uuid(),
-        episode_id: undefined,
         input: {
           messages: [
             {
@@ -324,22 +141,12 @@ describe("datapointOperations", () => {
           ],
         },
         output: undefined,
-        output_schema: {
-          type: "object",
-          properties: {},
-        },
         tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
       };
 
       // When passing functionType="chat" with a JSON datapoint (which has output_schema),
       // the code treats it as a chat datapoint and loses the output_schema field
-      const result = await saveDatapoint({
+      const result = await updateDatapoint({
         parsedFormData,
         functionType: "chat",
       });
@@ -375,16 +182,14 @@ describe("datapointOperations", () => {
           datapoints: [
             {
               id: datapointId,
-              metadata: {
-                name: newName,
-              },
+              name: newName,
             },
           ],
         }),
       );
 
-      // Verify staleDatapoint was NOT called (rename doesn't stale)
-      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+      // Verify deleteDatapoints was NOT called (rename doesn't delete)
+      expect(mockDeleteDatapoints).not.toHaveBeenCalled();
     });
   });
 
@@ -407,16 +212,14 @@ describe("datapointOperations", () => {
           datapoints: [
             {
               id: datapointId,
-              metadata: {
-                name: newName,
-              },
+              name: newName,
             },
           ],
         }),
       );
 
-      // Verify staleDatapoint was NOT called
-      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+      // Verify deleteDatapoints was NOT called
+      expect(mockDeleteDatapoints).not.toHaveBeenCalled();
     });
   });
 });

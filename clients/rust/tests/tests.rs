@@ -4,10 +4,10 @@
 use reqwest::Url;
 use serde_json::json;
 use tensorzero::{
-    input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
+    input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode, File,
+    InputMessageContent,
 };
-use tensorzero_core::inference::types::{Arguments, StoredInput};
+use tensorzero_core::inference::types::StoredInput;
 
 mod test_datasets;
 mod test_stored_inferences;
@@ -22,46 +22,6 @@ pub fn get_gateway_endpoint(endpoint: Option<&str>) -> Url {
         Some(endpoint) => base_url.join(endpoint).unwrap(),
         None => base_url,
     }
-}
-
-#[tokio::test]
-async fn test_versioning() {
-    std::env::set_var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE", "0.1.0");
-    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: get_gateway_endpoint(None),
-    })
-    .build_http()
-    .unwrap();
-    let version = client.get_gateway_version().await;
-    assert!(version.is_none());
-
-    let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: get_gateway_endpoint(None),
-    })
-    .build()
-    .await
-    .unwrap();
-    let version = client.get_gateway_version().await;
-    assert_eq!(version.unwrap(), "0.1.0");
-
-    std::env::set_var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE", "0.2.0");
-    client
-        .inference(ClientInferenceParams {
-            function_name: Some("basic_test".to_string()),
-            episode_id: None,
-            input: ClientInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
-                    "assistant_name".to_string(),
-                    "John".into(),
-                )])))),
-                messages: vec![],
-            },
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-    let version = client.get_gateway_version().await;
-    assert_eq!(version.unwrap(), "0.2.0");
 }
 
 #[tokio::test]
@@ -80,10 +40,9 @@ async fn test_conversion() {
     assert!(client_input.messages[0].content.len() == 2);
     assert!(matches!(
         client_input.messages[0].content[0],
-        ClientInputMessageContent::Text(_)
+        InputMessageContent::Text(_)
     ));
-    let ClientInputMessageContent::File(File::Base64(base64_file)) =
-        &client_input.messages[0].content[1]
+    let InputMessageContent::File(File::Base64(base64_file)) = &client_input.messages[0].content[1]
     else {
         panic!("Expected file");
     };

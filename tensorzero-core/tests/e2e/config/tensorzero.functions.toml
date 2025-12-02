@@ -1,0 +1,677 @@
+[functions.basic_test_model_timeout]
+type = "chat"
+
+[functions.basic_test_model_timeout.variants.slow_variant]
+type = "chat_completion"
+model = "slow_model_timeout"
+
+[functions.basic_test_model_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk_timeout"
+
+[functions.basic_test_variant_timeout]
+type = "chat"
+
+[functions.basic_test_variant_timeout.variants.slow_timeout]
+type = "chat_completion"
+model = "slow"
+
+[functions.basic_test_variant_timeout.variants.slow_timeout.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[functions.basic_test_variant_timeout.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "slow_timeout", "reasoner"]
+
+[functions.basic_test_variant_timeout.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+
+[functions.basic_test_variant_timeout.variants.good]
+type = "chat_completion"
+model = "dummy::good"
+
+[functions.basic_test_variant_timeout.variants.reasoner]
+type = "chat_completion"
+model = "dummy::reasoner"
+
+# Model provider timeout tests
+
+[functions.basic_test_timeout]
+type = "chat"
+
+[functions.basic_test_timeout.variants.slow_second_chunk]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_timeout.variants.good]
+type = "chat_completion"
+model = "dummy::good"
+
+[functions.basic_test_timeout.variants.reasoner]
+type = "chat_completion"
+model = "dummy::reasoner"
+
+[functions.basic_test_timeout.variants.timeout]
+type = "chat_completion"
+model = "slow_with_timeout"
+
+[functions.basic_test_timeout.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "timeout", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout]
+type = "experimental_best_of_n_sampling"
+candidates = ["good", "reasoner"]
+
+[functions.basic_test_timeout.variants.best_of_n_judge_timeout.evaluator]
+model = "slow_with_timeout"
+
+[functions.basic_test_template_no_schema]
+type = "chat"
+
+[functions.basic_test_template_no_schema.variants.test]
+type = "chat_completion"
+model = "dummy::echo_request_messages"
+input_wrappers.system = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template.minijinja"
+assistant_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template.minijinja"
+user_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template.minijinja"
+templates.my_custom_template.path = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/my_custom_template.minijinja"
+
+[functions.basic_test_template_no_schema.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+candidates = ["test", "test"]
+
+[functions.basic_test_template_no_schema.variants.mixture_of_n.fuser]
+model = "dummy::echo_request_messages"
+system_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
+input_wrappers.assistant = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
+user_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
+
+[functions.basic_test_template_no_schema.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+candidates = ["test", "test"]
+
+[functions.basic_test_template_no_schema.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template_2.minijinja"
+assistant_template = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template_2.minijinja"
+input_wrappers.user = "../../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template_2.minijinja"
+
+[functions.basic_test_no_system_schema]
+type = "chat"
+
+[functions.basic_test_no_system_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
+[functions.model_fallback_test]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.model_fallback_test.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test_fallback"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.json_fail]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_fail.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.json_success_no_input_schema]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_success_no_input_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "json"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.variant_failover]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+user_schema = "../../../fixtures/config/functions/variant_failover/user_schema.json"
+
+[functions.variant_failover.variants.good]
+type = "chat_completion"
+weight = 0.5
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover.variants.error]
+type = "chat_completion"
+weight = 0.5
+model = "error"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+user_schema = "../../../fixtures/config/functions/variant_failover/user_schema.json"
+
+[functions.variant_failover_zero_weight.variants.first_error]
+type = "chat_completion"
+weight = 0.5
+model = "dummy::error_1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.second_error]
+type = "chat_completion"
+weight = 0.5
+model = "dummy::error_2"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.no_weight]
+type = "chat_completion"
+model = "dummy::error_no_weight"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.zero_weight]
+type = "chat_completion"
+weight = 0
+model = "dummy::error_zero_weight"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.prometheus_test1]
+type = "chat"
+
+[functions.prometheus_test1.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
+[functions.prometheus_test2]
+type = "chat"
+
+[functions.prometheus_test2.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
+[functions.prometheus_test3]
+type = "chat"
+
+[functions.prometheus_test3.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
+[functions.prometheus_test4]
+type = "chat"
+
+[functions.prometheus_test4.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
+[functions.null_chat]
+type = "chat"
+
+[functions.null_chat.variants.variant]
+type = "chat_completion"
+model = "null"
+max_tokens = 100
+
+[functions.null_json]
+type = "json"
+output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.null_json.variants.variant]
+type = "chat_completion"
+model = "null"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.weather_helper_parallel]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/weather_helper_parallel/system_schema.json"
+tools = ["get_temperature", "get_humidity"]
+tool_choice = "auto"
+# We use an inference-time parameter to set `parallel_tool_calls = true` for the test
+
+[functions.weather_helper_parallel.variants.openai]
+type = "chat_completion"
+weight = 1
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper_parallel.variants.gpt-5-mini]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-5-mini"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 1000
+
+[functions.weather_helper_parallel.variants.openai-responses]
+type = "chat_completion"
+weight = 1
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper_parallel.variants.openai-o1]
+type = "chat_completion"
+weight = 1
+model = "o1-2024-12-17"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 1000
+
+[functions.weather_helper_parallel.variants.openrouter]
+type = "chat_completion"
+weight = 1
+model = "gpt_4_o_mini_openrouter"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.anthropic]
+type = "chat_completion"
+weight = 1
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.groq]
+type = "chat_completion"
+weight = 1
+model = "groq-qwen"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.together-tool]
+type = "chat_completion"
+weight = 1
+model = "llama3.1-405b-instruct-turbo-together"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.vllm]
+type = "chat_completion"
+weight = 1
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.weather_helper_parallel.variants.gcp-vertex-haiku]
+type = "chat_completion"
+weight = 1
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
+[functions.required_tool]
+type = "chat"
+tool_choice = "required"
+
+[functions.required_tool.variants.variant]
+type = "chat_completion"
+model = "test"
+
+[functions.specific_tool]
+type = "chat"
+tool_choice.specific = "get_temperature"
+
+[functions.specific_tool.variants.variant]
+type = "chat_completion"
+model = "test"
+
+[functions.best_of_n]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.best_of_n.variants.best_of_n_variant.evaluator]
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.best_of_n_variant_extra_body]
+type = "experimental_best_of_n_sampling"
+weight = 0
+candidates = ["variant0", "variant1"]
+
+[functions.best_of_n.variants.best_of_n_variant_extra_body.evaluator]
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
+
+[functions.best_of_n.variants.flaky_best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.best_of_n.variants.flaky_best_of_n_variant.evaluator]
+model = "flaky_best_of_n_judge"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+retries = { num_retries = 5, max_delay_s = 0.1 }
+
+[functions.best_of_n_json]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/best_of_n_json/output_schema.json"
+
+[functions.best_of_n_json.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json.variants.variant2]
+type = "chat_completion"
+weight = 0
+model = "json_goodbye"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json.variants.best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1", "variant2"]
+
+[functions.best_of_n_json.variants.best_of_n_variant.evaluator]
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json.variants.best_of_n_variant_implicit_tool]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1", "variant2"]
+
+[functions.best_of_n_json.variants.best_of_n_variant_implicit_tool.evaluator]
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "tool"
+
+[functions.best_of_n_json_repeated]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/best_of_n_json/output_schema.json"
+
+[functions.best_of_n_json_repeated.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::random_answer"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json_repeated.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json_repeated.variants.best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant0", "variant1"]
+
+[functions.best_of_n_json_repeated.variants.best_of_n_variant.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_single_candidate]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_single_candidate.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0"]
+
+[functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "alternate"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant0"]
+
+[functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser.fuser]
+model = "dummy::error"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_extra_body]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_extra_body.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n_extra_body.variants.variant0]
+type = "chat_completion"
+model = "o1-2024-12-17"
+weight = 0
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_extra_body.variants.variant1]
+type = "chat_completion"
+model = "test"
+weight = 0
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_extra_body.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.mixture_of_n_json]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/mixture_of_n_json/output_schema.json"
+
+[functions.mixture_of_n_json.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "json_beatles_1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json_beatles_2"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n_json.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.multi_hop_rag_agent]
+type = "chat"
+tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+tool_choice = "required"
+parallel_tool_calls = false
+
+[functions.multi_hop_rag_agent.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "../../../fixtures/config/functions/multi_hop_rag_agent/baseline/system_template.txt"
+
+[functions.write_haiku]
+type = "chat"
+user_schema = "../../../fixtures/config/functions/write_haiku/user_schema.json"
+
+[functions.write_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.write_haiku.variants.aws_bedrock]
+weight = 0
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+user_template = "../../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.extract_entities]
+type = "json"
+output_schema = "../../../fixtures/config/functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.dummy_error]
+type = "chat_completion"
+model = "dummy::error"
+system_template = "../../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json_repeated]
+type = "json"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_json_repeated.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::random_answer"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json_repeated.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant0", "variant1"]
+
+[functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant.fuser]
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.openai_responses_gpt5]
+type = "chat"
+
+[functions.openai_responses_gpt5.variants.openai]
+type = "chat_completion"
+model = "responses-gpt-5"
+
+[functions.openai_with_assistant_schema]
+type = "chat"
+assistant_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.openai_with_assistant_schema.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+assistant_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

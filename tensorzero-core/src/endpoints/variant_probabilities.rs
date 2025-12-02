@@ -130,7 +130,8 @@ mod tests {
             false,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .config;
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 

@@ -9,7 +9,8 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -20,29 +21,23 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-};
-use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseArgs,
+    batch::StartBatchProviderInferenceResponse, ContentBlockChunk, ContentBlockOutput, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
-};
-use crate::inference::types::{
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::openai::OpenAIMessagesConfig;
-use crate::tool::ToolCallChunk;
-
-use super::helpers::convert_stream_error;
-use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, prepare_system_or_developer_message,
+use crate::providers::openai::{
+    get_chat_url, handle_openai_error, prepare_system_or_developer_message,
     tensorzero_to_openai_messages, OpenAIAssistantRequestMessage, OpenAIContentBlock,
     OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
-    SystemOrDeveloper,
+    OpenAIUsage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
 };
+use crate::tool::ToolCallChunk;
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
@@ -365,9 +360,9 @@ struct DeepSeekRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<DeepSeekResponseFormat>,
 }
@@ -445,7 +440,7 @@ impl<'a> DeepSeekRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, false)?;
 
         let mut deepseek_request = DeepSeekRequest {
             messages,
@@ -842,9 +837,13 @@ mod tests {
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
+    };
     use crate::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+        OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -885,16 +884,19 @@ mod tests {
         let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             deepseek_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {
@@ -936,16 +938,19 @@ mod tests {
         let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             deepseek_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {

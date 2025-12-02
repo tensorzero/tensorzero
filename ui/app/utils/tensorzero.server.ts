@@ -8,7 +8,6 @@ import {
 import type { JsonValue } from "~/types/tensorzero";
 import { getEnv } from "./env.server";
 import { getFeedbackConfig } from "./config/feedback";
-import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 
@@ -163,20 +162,5 @@ export async function addJudgeDemonstration(formData: FormData) {
     internal: true,
   });
   const response = await getTensorZeroClient().feedback(feedbackRequest);
-  return response;
-}
-
-export async function listDatapoints(
-  datasetName: string,
-  functionName?: string,
-  limit?: number,
-  offset?: number,
-): Promise<TensorZeroDatapoint[]> {
-  const response = await getTensorZeroClient().listDatapoints(
-    datasetName,
-    functionName,
-    limit,
-    offset,
-  );
   return response;
 }

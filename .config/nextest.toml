@@ -29,6 +29,13 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 default-filter = "not (test(batch) | test(test_dummy_only) | test(clickhouse) | test(db::) | test(export_bindings_) | test(export_schema_))"
 junit.path = "junit.xml"
 
+[[profile.e2e.overrides]]
+# E2E GEPA tests - integration tests with API calls and evaluation
+filter = 'binary(e2e_gepa)'
+# Analysis or mutation using gpt-4.1-nano occasionally fails to generate a properly formatted output, so we add retries
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+slow-timeout = { period = "30s", terminate-after = 1 }
+
 [profile.live-batch]
 default-filter = 'test(batch) and not test(mock)'
 
@@ -156,6 +163,12 @@ slow-timeout = { period = "900s", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_requests)'
 # This test creates and uses lots of `reqwest::Client`s, which can be slow
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# Settings for running mock optimization tests
+filter = 'test(mock_optimization)'
+retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]

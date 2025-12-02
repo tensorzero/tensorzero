@@ -1,4 +1,4 @@
-use clap::{Args, Parser};
+use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
@@ -6,7 +6,6 @@ use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -14,56 +13,22 @@ use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::observability::{self, LogFormat};
+use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
+mod cli;
+mod router;
 mod routes;
+
+use cli::GatewayArgs;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-#[derive(Parser, Debug)]
-#[command(version, about)]
-struct GatewayArgs {
-    /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
-    #[arg(long)]
-    config_file: Option<PathBuf>,
-
-    /// Use a default config file. Incompatible with `--config-file`
-    #[arg(long)]
-    default_config: bool,
-
-    /// Sets the log format used for all gateway logs.
-    #[arg(long)]
-    #[arg(value_enum)]
-    #[clap(default_value_t = LogFormat::default())]
-    log_format: LogFormat,
-
-    #[command(flatten)]
-    migration_commands: MigrationCommands,
-}
-
-#[derive(Args, Debug)]
-#[group(multiple = false)]
-struct MigrationCommands {
-    /// Run ClickHouse migrations manually then exit.
-    // TODO: remove
-    #[arg(long, alias = "run-migrations")]
-    run_clickhouse_migrations: bool,
-
-    /// Run PostgreSQL migrations manually then exit.
-    #[arg(long)]
-    run_postgres_migrations: bool,
-
-    /// Create an API key then exit.
-    #[arg(long)]
-    create_api_key: bool,
-}
 
 #[expect(clippy::print_stdout)]
 fn print_key(key: &secrecy::SecretString) {
@@ -101,14 +66,14 @@ async fn main() {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
-    if args.migration_commands.create_api_key {
+    if args.early_exit_commands.create_api_key {
         handle_create_api_key()
             .await
             .expect_pretty("Failed to create API key");
         return;
     }
 
-    if args.migration_commands.run_clickhouse_migrations {
+    if args.early_exit_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
@@ -116,7 +81,7 @@ async fn main() {
         return;
     }
 
-    if args.migration_commands.run_postgres_migrations {
+    if args.early_exit_commands.run_postgres_migrations {
         manual_run_postgres_migrations()
             .await
             .expect_pretty("Failed to run PostgreSQL migrations");
@@ -129,7 +94,7 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Handle `--config-file` or `--default-config`
-    let (config, glob) = match (args.default_config, args.config_file) {
+    let (config_load_info, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
             std::process::exit(1);
@@ -141,11 +106,9 @@ async fn main() {
         (true, None) => {
             tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
             (
-                Arc::new(
-                    Config::new_empty()
-                        .await
-                        .expect_pretty("Failed to load default config"),
-                ),
+                Config::new_empty()
+                    .await
+                    .expect_pretty("Failed to load default config"),
                 None,
             )
         }
@@ -153,7 +116,7 @@ async fn main() {
             let glob = ConfigFileGlob::new_from_path(&path)
                 .expect_pretty("Failed to process config file glob");
             (
-                Arc::new(
+
                     Config::load_and_verify_from_path(&glob)
                         .await
                         .ok() // Don't print the error here, since it was already printed when it was constructed
@@ -162,11 +125,15 @@ async fn main() {
                             glob.glob,
                             glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
                         )),
-                ),
                 Some(glob),
             )
         }
     };
+    let ConfigLoadInfo {
+        config,
+        snapshot: _, // TODO: write the snapshot
+    } = config_load_info;
+    let config = Arc::new(config);
 
     if config.gateway.debug {
         delayed_log_config
@@ -245,7 +212,7 @@ async fn main() {
     }
     let base_path = base_path.trim_end_matches("/");
 
-    let (router, in_flight_requests_counter) = routes::build_axum_router(
+    let (router, in_flight_requests_counter) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),

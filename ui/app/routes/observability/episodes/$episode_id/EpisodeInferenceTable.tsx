@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { StoredInference } from "~/types/tensorzero";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -19,7 +19,7 @@ import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
 export default function EpisodeInferenceTable({
   inferences,
 }: {
-  inferences: InferenceByIdRow[];
+  inferences: StoredInference[];
 }) {
   return (
     <Table>
@@ -36,17 +36,17 @@ export default function EpisodeInferenceTable({
           <TableEmptyState message="No inferences found" />
         ) : (
           inferences.map((inference) => (
-            <TableRow key={inference.id} id={inference.id}>
+            <TableRow key={inference.inference_id} id={inference.inference_id}>
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
-                  id={inference.id}
-                  link={toInferenceUrl(inference.id)}
+                  id={inference.inference_id}
+                  link={toInferenceUrl(inference.inference_id)}
                 />
               </TableCell>
               <TableCell>
                 <TableItemFunction
                   functionName={inference.function_name}
-                  functionType={inference.function_type}
+                  functionType={inference.type}
                   link={toFunctionUrl(inference.function_name)}
                 />
               </TableCell>

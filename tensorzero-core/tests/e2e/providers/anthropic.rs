@@ -7,9 +7,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
-    UrlFile,
+    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, File, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent, Role, UrlFile,
 };
 use url::Url;
 use uuid::Uuid;
@@ -22,7 +21,7 @@ use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, TextKind},
+    inference::types::{ContentBlockChatOutput, Text},
 };
 
 use super::common::ModelTestProvider;
@@ -275,14 +274,16 @@ async fn test_thinking_inference_extra_header_128k() {
             ]},
         "extra_headers": [
             {
-                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
+                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "provider_name": "anthropic",
                 "name": "anthropic-beta",
                 "value": "output-128k-2025-02-19"
             }
         ],
         "extra_body": [
             {
-                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
+                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "provider_name": "anthropic",
                 "pointer": "/stop_sequences",
                 "value": [
                     "my_custom_stop",
@@ -750,6 +751,196 @@ pub async fn test_redacted_thinking_helper(
     assert_eq!(content_blocks[1]["type"], "text");
 }
 
+#[tokio::test]
+async fn test_beta_structured_outputs_json_streaming() {
+    test_beta_structured_outputs_json_helper(true).await;
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_json_non_streaming() {
+    test_beta_structured_outputs_json_helper(false).await;
+}
+
+async fn test_beta_structured_outputs_json_helper(stream: bool) {
+    let client = Client::new();
+    let payload = json!({
+        "function_name": "anthropic_beta_structured_outputs_json",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]
+        },
+        "stream": stream,
+    });
+
+    let inference_id = if stream {
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut first_inference_id = None;
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
+                    if let Some(inference_id) = chunk_json
+                        .get("inference_id")
+                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+                    {
+                        first_inference_id = Some(inference_id);
+                    }
+                }
+            }
+        }
+        first_inference_id.unwrap()
+    } else {
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let response_text = response.text().await.unwrap();
+        println!("Response text: {response_text}");
+        let response_json: Value = serde_json::from_str(&response_text).unwrap();
+        assert_eq!(status, StatusCode::OK);
+        let inference_id = response_json
+            .get("inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        Uuid::parse_str(&inference_id).unwrap()
+    };
+
+    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("Result: {result_json}");
+
+    // Check that the result is valid JSON
+    println!("Result JSON: {result_json}");
+    let output = result_json.get("output");
+    println!("Output: {output:?}");
+
+    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    if stream {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+    } else {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+    }
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_strict_tool_streaming() {
+    test_beta_structured_outputs_strict_tool_helper(true).await;
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_strict_tool_non_streaming() {
+    test_beta_structured_outputs_strict_tool_helper(false).await;
+}
+
+async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
+    let client = Client::new();
+    let payload = json!({
+        "function_name": "anthropic_beta_structured_outputs_chat",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]
+        },
+        "stream": stream,
+    });
+
+    let inference_id = if stream {
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut first_inference_id = None;
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
+                    if let Some(inference_id) = chunk_json
+                        .get("inference_id")
+                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+                    {
+                        first_inference_id = Some(inference_id);
+                    }
+                }
+            }
+        }
+        first_inference_id.unwrap()
+    } else {
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let response_text = response.text().await.unwrap();
+        println!("Response text: {response_text}");
+        let response_json: Value = serde_json::from_str(&response_text).unwrap();
+        assert_eq!(status, StatusCode::OK);
+        let inference_id = response_json
+            .get("inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        Uuid::parse_str(&inference_id).unwrap()
+    };
+
+    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("Result: {result_json}");
+
+    // Check that the result is valid JSON
+    println!("Result JSON: {result_json}");
+    let output = result_json.get("output");
+    println!("Output: {output:?}");
+
+    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    if stream {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+    } else {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+    }
+}
+
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
@@ -1056,11 +1247,11 @@ async fn test_forward_image_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-3-haiku-20240307".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the image".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
@@ -1135,11 +1326,11 @@ async fn test_forward_file_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-sonnet-4-5-20250929".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the PDF".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,

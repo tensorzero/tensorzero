@@ -3,6 +3,7 @@ include:
 
 services:
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -15,11 +16,6 @@ services:
       - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     ports:
       - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
 
   fixtures:
     build:

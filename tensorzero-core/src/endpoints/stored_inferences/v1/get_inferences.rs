@@ -3,9 +3,7 @@ use axum::Json;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::inferences::{
-    InferenceQueries, ListInferencesParams, DEFAULT_INFERENCE_QUERY_LIMIT,
-};
+use crate::db::inferences::{InferenceQueries, ListInferencesParams};
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -39,11 +37,11 @@ pub async fn get_inferences(
         return Ok(GetInferencesResponse { inferences: vec![] });
     }
 
+    // TODO(shuyangli): Consider restricting the number of inferences to return to avoid unbounded queries.
     let params = ListInferencesParams {
         ids: Some(&request.ids),
         function_name: request.function_name.as_deref(),
         output_source: request.output_source,
-        // Return all inferences matching the IDs.
         limit: u32::MAX,
         offset: 0,
         ..Default::default()
@@ -81,18 +79,7 @@ pub async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    let params = ListInferencesParams {
-        ids: None, // List all inferences, not filtering by ID
-        function_name: request.function_name.as_deref(),
-        variant_name: request.variant_name.as_deref(),
-        episode_id: request.episode_id.as_ref(),
-        filters: request.filter.as_ref(),
-        output_source: request.output_source,
-        limit: request.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
-        offset: request.offset.unwrap_or(0),
-        order_by: request.order_by.as_deref(),
-    };
-
+    let params = request.as_list_inferences_params()?;
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
@@ -106,7 +93,9 @@ pub async fn list_inferences(
 mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
-    use crate::db::inferences::{InferenceOutputSource, MockInferenceQueries};
+    use crate::db::inferences::{
+        InferenceOutputSource, MockInferenceQueries, DEFAULT_INFERENCE_QUERY_LIMIT,
+    };
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat};
     use crate::inference::types::{ContentBlockChatOutput, StoredInput, Text};

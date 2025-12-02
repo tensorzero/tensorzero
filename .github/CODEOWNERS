@@ -1,0 +1,8 @@
+/clients/python/tensorzero/generated_types.py @GabrielBianconi
+/clients/python/tensorzero/tensorzero.pyi @GabrielBianconi
+/clients/python/tensorzero/types.py @GabrielBianconi
+/evaluations/src/cli.rs @GabrielBianconi
+/gateway/src/cli.rs @GabrielBianconi
+/gateway/src/routes/external.rs @GabrielBianconi
+
+/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta

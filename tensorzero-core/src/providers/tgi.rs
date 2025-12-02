@@ -8,9 +8,9 @@ use async_trait::async_trait;
 /// Second, TGI doesn't handle multiple tools in a single request, because it doesn't return correct tool names. See the docs [here](https://huggingface.co/docs/text-generation-inference/main/en/basic_tutorials/using_guidance#the-tools-parameter)
 /// for an example.
 /// Third, TGI doesn't support tool responses being sent back at all.
-/// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `implicit_tool` as the json mode
+/// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `tool` as the json mode
 ///
-/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
+/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
@@ -26,8 +26,8 @@ use url::Url;
 
 use super::helpers::convert_stream_error;
 use super::openai::{
-    get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
-    OpenAIToolChoice, OpenAIToolType, StreamOptions, SystemOrDeveloper,
+    get_chat_url, prepare_openai_messages, OpenAIRequestMessage, OpenAIToolType, StreamOptions,
+    SystemOrDeveloper,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -49,6 +49,8 @@ use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 use crate::model::{Credential, ModelProvider};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -448,9 +450,9 @@ struct TGIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -492,9 +494,9 @@ impl<'a> TGIRequest<'a> {
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
-        // You can get JSON mode through `implicit_tool` instead.
+        // You can get JSON mode through `tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
+            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"tool\"` instead.");
         }
 
         let stream_options = if request.stream {
@@ -520,7 +522,8 @@ impl<'a> TGIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_chat_completion_tools(request, false)?;
 
         let mut tgi_request = TGIRequest {
             messages,
@@ -828,7 +831,10 @@ mod tests {
     use crate::{
         inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
         providers::{
-            openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
+            chat_completions::{
+                ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+                ChatCompletionToolChoice, ChatCompletionToolType,
+            },
             test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
     };
@@ -918,16 +924,19 @@ mod tests {
         assert!(!tgi_request.stream);
         assert!(tgi_request.tools.is_some());
         let tools = tgi_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             tgi_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         // Test request with strict JSON mode with no output schema

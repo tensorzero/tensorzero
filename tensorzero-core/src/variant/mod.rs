@@ -119,7 +119,8 @@ pub enum JsonMode {
     Off,
     On,
     Strict,
-    ImplicitTool,
+    #[serde(alias = "implicit_tool")] // Legacy name (stored in CH --> permanent alias)
+    Tool,
 }
 
 /// Configuration that applies to the current inference request.
@@ -604,7 +605,6 @@ impl Variant for VariantInfo {
 }
 
 #[expect(clippy::too_many_arguments)]
-#[expect(clippy::unnecessary_wraps)]
 fn prepare_model_inference_request<'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
@@ -623,14 +623,33 @@ fn prepare_model_inference_request<'request>(
 
     Ok(match function {
         FunctionConfig::Chat(_) => {
+            // For chat functions with `json_mode="tool"`, create a tool config based on the output schema
+            let tool_config = match json_mode {
+                Some(JsonMode::Tool) => {
+                    // We know dynamic_output_schema exists because validation already checked this
+                    match &inference_config.dynamic_output_schema {
+                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
+                            schema.value.clone(),
+                        ))),
+                        None => {
+                            return Err(ErrorDetails::InvalidRequest {
+                                message: "JSON mode `tool` requires `output_schema` to be provided at inference time.".to_string(),
+                            }
+                            .into());
+                        }
+                    }
+                }
+                _ => inference_config
+                    .tool_config
+                    .as_ref()
+                    .map(|arc| Cow::Borrowed(arc.as_ref())),
+            };
+
             ModelInferenceRequest {
                 messages,
                 system,
                 inference_id: inference_config.ids.inference_id,
-                tool_config: inference_config
-                    .tool_config
-                    .as_ref()
-                    .map(|arc| Cow::Borrowed(arc.as_ref())),
+                tool_config,
                 temperature: inference_params.chat_completion.temperature,
                 top_p: inference_params.chat_completion.top_p,
                 max_tokens: inference_params.chat_completion.max_tokens,
@@ -666,11 +685,11 @@ fn prepare_model_inference_request<'request>(
         }
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
-                Some(JsonMode::ImplicitTool) => match &inference_config.dynamic_output_schema {
+                Some(JsonMode::Tool) => match &inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
                         schema.value.clone(),
                     ))),
-                    None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
+                    None => Some(Cow::Borrowed(&json_config.json_mode_tool_call_config)),
                 },
                 _ => None,
             };
@@ -911,7 +930,7 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let stream = false;
 
         // Define a dummy tool config for testing
@@ -1012,13 +1031,13 @@ mod tests {
             "required": ["answer"],
         });
         let output_schema = StaticJSONSchema::from_value(output_schema_value.clone()).unwrap();
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
 
         let function_config_json = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: output_schema.clone(),
-            implicit_tool_call_config: implicit_tool_call_config.clone(),
+            json_mode_tool_call_config: json_mode_tool_call_config.clone(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1074,7 +1093,7 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
-        let json_mode = JsonMode::ImplicitTool;
+        let json_mode = JsonMode::Tool;
 
         let result = prepare_model_inference_request(
             messages.clone(),
@@ -1162,7 +1181,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,
@@ -1299,7 +1318,7 @@ mod tests {
                 "required": ["answer"]
             }))
             .unwrap(),
-            implicit_tool_call_config: ToolCallConfig::default(),
+            json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1468,7 +1487,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,

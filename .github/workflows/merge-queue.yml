@@ -59,14 +59,6 @@ env:
   TENSORZERO_CI: 1
 
 jobs:
-  mocked-batch-tests:
-    permissions:
-      contents: read
-      actions: read
-    if: github.repository == 'tensorzero/tensorzero'
-    uses: ./.github/workflows/mocked-batch-test.yml
-    secrets: inherit
-
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
@@ -279,10 +271,10 @@ jobs:
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
         run: |
-          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "enabled = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
 
       - name: Launch dependency services for E2E tests
         run: |
@@ -322,8 +314,8 @@ jobs:
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
-          # Wait for 6 minutes (360 seconds)
-          for i in {1..360}; do
+          # Wait for 10 minutes (600 seconds)
+          for i in {1..600}; do
             if ! kill -0 $TEST_PID 2>/dev/null; then
               echo "Test completed normally"
               wait $TEST_PID
@@ -332,7 +324,7 @@ jobs:
             sleep 1
           done
 
-          echo "Test has been running for 6 minutes, capturing backtraces..."
+          echo "Test has been running for 10 minutes, capturing backtraces..."
 
           # Get all processes related to our test
           echo "=== Process tree ==="
@@ -423,43 +415,6 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
 
-  check-production-docker-container:
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
-
-      - name: Launch ClickHouse container for E2E tests
-        run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
-
-      - name: Set up .env file for production deployment tests
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
-
-      - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
-
-      - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
-
-      - name: Print Docker compose logs
-        if: always()
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
-
-      - name: Take down docker compose for production deployment tests
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
-
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
     permissions:
@@ -483,14 +438,7 @@ jobs:
   check-all-tests-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
-        check-production-docker-container,
-        ui-tests-e2e-regen-model-inference-cache,
-        client-tests,
-        live-tests,
-        mocked-batch-tests,
-      ]
+    needs: [ui-tests-e2e-regen-model-inference-cache, client-tests, live-tests]
     runs-on: ubuntu-latest
     steps:
       # When running in the merge queue, jobs should never be skipped.

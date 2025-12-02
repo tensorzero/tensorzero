@@ -6,23 +6,49 @@ on:
 jobs:
   build-mock-inference-container:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
 
     steps:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        with:
+          wait-for-builder: true
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
       - name: Build `mock-inference-provider` container
         run: |
-          docker build -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t mock-inference-provider:latest
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t tensorzero/mock-inference-provider:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
 
       - name: Save `mock-inference-provider` container
-        run: docker save mock-inference-provider:latest > mock-inference-container.tar
+        run: docker save tensorzero/mock-inference-provider:sha-${{ github.sha }} > mock-inference-container.tar
 
       - name: Upload `mock-inference-provider` container as an artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: build-mock-inference-container
           path: mock-inference-container.tar
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+
+      - name: Push `mock-inference` container to Namespace registry
+        run:
+          docker push nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}

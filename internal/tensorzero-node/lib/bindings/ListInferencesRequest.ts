@@ -39,6 +39,18 @@ export type ListInferencesRequest = {
    */
   offset?: number;
   /**
+   * Optional inference ID to paginate before (exclusive).
+   * Returns inferences with IDs before this one (earlier in time).
+   * Cannot be used together with `after` or `offset`.
+   */
+  before?: string;
+  /**
+   * Optional inference ID to paginate after (exclusive).
+   * Returns inferences with IDs after this one (later in time).
+   * Cannot be used together with `before` or `offset`.
+   */
+  after?: string;
+  /**
    * Optional filter to apply when querying inferences.
    * Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
    */
@@ -48,4 +60,19 @@ export type ListInferencesRequest = {
    * Supports multiple sort criteria (e.g., sort by timestamp then by metric).
    */
   order_by?: Array<OrderBy>;
+  /**
+   * Text query to filter. Case-insensitive substring search over the inferences' input and output.
+   *
+   * THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+   * We recommend against depending on this feature for critical use cases.
+   *
+   * Important limitations:
+   * - This requires an exact substring match; we do not tokenize this query string.
+   * - This doesn't search for any content in the template itself.
+   * - Quality is based on term frequency > 0, without any relevance scoring.
+   * - There are no performance guarantees (it's best effort only). Today, with no other
+   *   filters, it will perform a full table scan, which may be extremely slow depending
+   *   on the data volume.
+   */
+  search_query_experimental?: string;
 };

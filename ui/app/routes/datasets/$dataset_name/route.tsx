@@ -1,7 +1,3 @@
-import {
-  getDatasetMetadata,
-  getDatasetRows,
-} from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
@@ -19,7 +15,7 @@ import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
-import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
 
@@ -38,16 +34,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [counts, rows] = await Promise.all([
-    getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, limit, offset }),
+  const [datasetMetadata, getDatapointsResponse] = await Promise.all([
+    getTensorZeroClient().listDatasets({}),
+    getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
   ]);
-  const count_info = counts.find(
-    (count) => count.dataset_name === dataset_name,
+  const count_info = datasetMetadata.datasets.find(
+    (dataset) => dataset.dataset_name === dataset_name,
   );
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
+  const rows = getDatapointsResponse.datapoints;
   return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
 }
 
@@ -67,7 +64,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (action === "delete_datapoint") {
-    const datapoint_id = formData.get("datapoint_id");
+    const datapoint_id = formData.get("datapoint_id") as string;
     const function_name = formData.get("function_name");
     const function_type = formData.get("function_type");
 
@@ -86,20 +83,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw data("Function configuration not found", { status: 404 });
     }
 
-    await staleDatapoint(
-      dataset_name,
-      datapoint_id as string,
-      functionConfig.type,
-    );
+    await getTensorZeroClient().deleteDatapoints(dataset_name, [datapoint_id]);
 
     // Check if this was the last datapoint in the dataset
-    const counts = await getDatasetMetadata({});
-    const count_info = counts.find(
-      (count) => count.dataset_name === dataset_name,
+    const datasetMetadata = await getTensorZeroClient().listDatasets({});
+    const count_info = datasetMetadata.datasets.find(
+      (dataset) => dataset.dataset_name === dataset_name,
     );
 
     // If no datapoints remain, redirect to datasets list
-    if (!count_info || count_info.count === 0) {
+    if (!count_info || count_info.datapoint_count === 0) {
       return redirect("/datasets");
     }
 
@@ -154,7 +147,7 @@ export default function DatasetDetailPage({
       <PageHeader
         heading={`Dataset`}
         name={count_info.dataset_name}
-        count={count_info.count}
+        count={count_info.datapoint_count}
       >
         <div className="flex justify-start">
           <DeleteButton
@@ -172,7 +165,7 @@ export default function DatasetDetailPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + limit >= count_info.count}
+          disableNext={offset + limit >= count_info.datapoint_count}
         />
       </SectionLayout>
     </PageLayout>

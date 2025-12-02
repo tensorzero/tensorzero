@@ -4,8 +4,14 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
-use crate::db::inferences::InferenceOutputSource;
+use crate::db::inferences::{
+    InferenceOutputSource, ListInferencesParams, PaginationParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+};
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
+
+// Re-exported for backwards compatibility.
+pub use crate::endpoints::shared_types::OrderDirection;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
@@ -87,16 +93,6 @@ pub enum TagComparisonOperator {
     NotEqual,
 }
 
-/// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
-#[ts(export)]
-pub enum OrderDirection {
-    #[serde(rename = "ascending")]
-    Asc,
-    #[serde(rename = "descending")]
-    Desc,
-}
-
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
@@ -105,13 +101,24 @@ pub enum OrderDirection {
 pub enum OrderByTerm {
     // These titles become the names of the top-level OrderBy structs in the generated
     // schema, because it's flattened.
+    /// Creation timestamp of the item.
     #[schemars(title = "OrderByTimestamp")]
     Timestamp,
+
+    /// Value of a metric.
     #[schemars(title = "OrderByMetric")]
     Metric {
         /// The name of the metric to order by.
         name: String,
     },
+
+    /// Relevance score of the search query in the input and output of the item.
+    /// Requires a search query (experimental). If it's not provided, we return an error.
+    ///
+    /// Current relevance metric is very rudimentary (just term frequency), but we plan
+    /// to improve it in the future.
+    #[schemars(title = "OrderBySearchRelevance")]
+    SearchRelevance,
 }
 
 /// Order by clauses for querying inferences.
@@ -191,6 +198,16 @@ pub struct ListInferencesRequest {
     /// Defaults to 0.
     pub offset: Option<u32>,
 
+    /// Optional inference ID to paginate before (exclusive).
+    /// Returns inferences with IDs before this one (earlier in time).
+    /// Cannot be used together with `after` or `offset`.
+    pub before: Option<Uuid>,
+
+    /// Optional inference ID to paginate after (exclusive).
+    /// Returns inferences with IDs after this one (later in time).
+    /// Cannot be used together with `before` or `offset`.
+    pub after: Option<Uuid>,
+
     /// Optional filter to apply when querying inferences.
     /// Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
     pub filter: Option<InferenceFilter>,
@@ -198,6 +215,59 @@ pub struct ListInferencesRequest {
     /// Optional ordering criteria for the results.
     /// Supports multiple sort criteria (e.g., sort by timestamp then by metric).
     pub order_by: Option<Vec<OrderBy>>,
+
+    /// Text query to filter. Case-insensitive substring search over the inferences' input and output.
+    ///
+    /// THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    /// We recommend against depending on this feature for critical use cases.
+    ///
+    /// Important limitations:
+    /// - This requires an exact substring match; we do not tokenize this query string.
+    /// - This doesn't search for any content in the template itself.
+    /// - Quality is based on term frequency > 0, without any relevance scoring.
+    /// - There are no performance guarantees (it's best effort only). Today, with no other
+    ///   filters, it will perform a full table scan, which may be extremely slow depending
+    ///   on the data volume.
+    pub search_query_experimental: Option<String>,
+}
+
+impl ListInferencesRequest {
+    /// Convert the request to a `ListInferencesParams` struct for the database query layer.
+    pub fn as_list_inferences_params<'a>(&'a self) -> Result<ListInferencesParams<'a>, Error> {
+        // Construct cursor-based pagination params, and validate that before and after are mutually exclusive
+        let pagination = match (self.before, self.after) {
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both 'before' and 'after' parameters".to_string(),
+                }))
+            }
+            (Some(before), None) => Some(PaginationParams::Before { id: before }),
+            (None, Some(after)) => Some(PaginationParams::After { id: after }),
+            (None, None) => None,
+        };
+
+        // Validate that offset and cursor pagination are mutually exclusive
+        if pagination.is_some() && self.offset.is_some() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "Cannot use 'offset' with cursor pagination ('before' or 'after')"
+                    .to_string(),
+            }));
+        }
+
+        Ok(ListInferencesParams {
+            ids: None,
+            function_name: self.function_name.as_deref(),
+            variant_name: self.variant_name.as_deref(),
+            episode_id: self.episode_id.as_ref(),
+            filters: self.filter.as_ref(),
+            output_source: self.output_source,
+            limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+            offset: self.offset.unwrap_or(0),
+            pagination,
+            order_by: self.order_by.as_deref(),
+            search_query_experimental: self.search_query_experimental.as_deref(),
+        })
+    }
 }
 
 /// Request to get specific inferences by their IDs.
@@ -228,4 +298,52 @@ pub struct GetInferencesRequest {
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
+}
+
+/// Response containing the inference table bounds.
+/// Used by the `GET /internal/inferences/bounds` endpoint.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[serde_with::skip_serializing_none]
+#[ts(export, optional_fields)]
+pub struct GetInferenceBoundsResponse {
+    /// The most recent inference ID (MAX id_uint).
+    pub latest_id: Option<Uuid>,
+
+    /// The oldest inference ID (MIN id_uint).
+    pub earliest_id: Option<Uuid>,
+
+    /// The total number of inferences matching the filter criteria.
+    pub count: u64,
+}
+
+/// Metadata about an inference.
+/// Used by the `GET /internal/inferences` endpoint.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS, Clone, PartialEq)]
+#[ts(export)]
+pub struct InternalInferenceMetadata {
+    /// The ID of the inference.
+    pub id: Uuid,
+
+    /// The function name of the inference.
+    pub function_name: String,
+
+    /// The variant name of the inference.
+    pub variant_name: String,
+
+    /// The episode ID of the inference.
+    pub episode_id: Uuid,
+
+    /// The function type of the inference.
+    pub function_type: String,
+
+    /// The timestamp of the inference.
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Response containing the list of inferences by ID.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InternalListInferencesByIdResponse {
+    /// The list of inferences.
+    pub inferences: Vec<InternalInferenceMetadata>,
 }

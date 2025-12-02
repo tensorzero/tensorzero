@@ -30,7 +30,7 @@ import {
 } from "~/components/ui/command";
 import { Input } from "~/components/ui/input";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import clsx from "clsx";
@@ -119,6 +119,9 @@ export default function CurationMetricSelector<
 
   const metricsLoading = metricsFetcher.state === "loading";
 
+  const metricLabelId = useId();
+  const metricComboboxId = `${metricLabelId}-combobox`;
+
   // Inform parent when the internal metrics fetcher loading state changes
   useEffect(() => {
     onMetricsLoadingChange?.(metricsLoading);
@@ -147,7 +150,9 @@ export default function CurationMetricSelector<
       name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col justify-center">
-          <FormLabel>Metric</FormLabel>
+          <FormLabel id={`${metricLabelId}-label`} htmlFor={metricComboboxId}>
+            Metric
+          </FormLabel>
           <div className="items-top grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
@@ -157,6 +162,9 @@ export default function CurationMetricSelector<
                     role="combobox"
                     aria-expanded={open}
                     aria-busy={metricsLoading}
+                    aria-label="Metric"
+                    aria-labelledby={`${metricLabelId}-label`}
+                    id={metricComboboxId}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
                     disabled={!functionValue || metricsLoading}
                   >

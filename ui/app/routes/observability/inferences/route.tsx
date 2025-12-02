@@ -1,6 +1,5 @@
 import {
-  queryInferenceTable,
-  queryInferenceTableBounds,
+  listInferencesWithPagination,
   countInferencesByFunction,
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
@@ -24,28 +23,29 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [inferences, bounds, countsInfo] = await Promise.all([
-    queryInferenceTable({
+  const [inferenceResult, countsInfo] = await Promise.all([
+    listInferencesWithPagination({
       before: before || undefined,
       after: after || undefined,
       limit,
     }),
-    queryInferenceTableBounds(),
     countInferencesByFunction(),
   ]);
 
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
 
   return {
-    inferences,
+    inferences: inferenceResult.inferences,
+    hasNextPage: inferenceResult.hasNextPage,
+    hasPreviousPage: inferenceResult.hasPreviousPage,
     limit,
-    bounds,
     totalInferences,
   };
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  const { inferences, limit, bounds, totalInferences } = loaderData;
+  const { inferences, hasNextPage, hasPreviousPage, limit, totalInferences } =
+    loaderData;
 
   const navigate = useNavigate();
 
@@ -54,7 +54,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     if (bottomInference) {
-      navigate(`?before=${bottomInference.id}&limit=${limit}`, {
+      navigate(`?before=${bottomInference.inference_id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }
@@ -62,17 +62,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const handlePreviousPage = () => {
     if (topInference) {
-      navigate(`?after=${topInference.id}&limit=${limit}`, {
+      navigate(`?after=${topInference.inference_id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }
   };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious =
-    !bounds?.last_id || bounds.last_id === topInference?.id;
-  const disableNext =
-    !bounds?.first_id || bounds.first_id === bottomInference?.id;
 
   return (
     <PageLayout>
@@ -83,8 +77,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
-          disablePrevious={disablePrevious}
-          disableNext={disableNext}
+          disablePrevious={!hasPreviousPage}
+          disableNext={!hasNextPage}
         />
       </SectionLayout>
     </PageLayout>

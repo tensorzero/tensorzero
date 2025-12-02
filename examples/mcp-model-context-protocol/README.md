@@ -42,6 +42,7 @@ The configuration specifies a straightforward chat function `clickhouse_copilot`
 ### MCP Server
 
 We provide a sample configuration for the MCP server in `config/mcp-clickhouse.toml`.
+
 ### Prerequisites
 
 1. Install Docker.

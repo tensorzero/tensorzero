@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use futures::StreamExt;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::ClientInferenceParams;
-use tensorzero::ClientInput;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
 use tensorzero::InferenceResponseChunk;
+use tensorzero::Input;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
 use tensorzero::Role;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 use crate::providers::anthropic::test_redacted_thinking_helper;
@@ -42,8 +42,8 @@ async fn get_providers() -> E2ETestProviders {
 
     let pdf_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "gcp-vertex-sonnet".to_string(),
-        model_name: "claude-sonnet-4-5-gcp-vertex".into(),
+        variant_name: "gcp_vertex_anthropic".to_string(),
+        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publishers/anthropic/models/claude-sonnet-4-5@20250929".into(),
         model_provider_name: "gcp_vertex_anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -130,7 +130,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: vec![],
+        parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
@@ -181,11 +181,11 @@ async fn test_global_region_non_streaming() {
         .inference(ClientInferenceParams {
             model_name: Some("claude".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -228,11 +228,11 @@ async fn test_global_region_streaming() {
         .inference(ClientInferenceParams {
             model_name: Some("claude".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
