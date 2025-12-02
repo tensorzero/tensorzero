@@ -12,7 +12,7 @@ import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
-export async function loader({}: Route.LoaderArgs) {
+export async function loader(_args: Route.LoaderArgs) {
   const datasetMetadata = await getTensorZeroClient().listDatasets({});
   return { datasets: datasetMetadata.datasets };
 }
