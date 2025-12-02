@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use super::use_mock_inference_provider;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
-    RenderedSample, Role, System,
+    ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
+    Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
+    Role, System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, ConfigLoadInfo, UninitializedVariantConfig},
@@ -22,7 +22,7 @@ use tensorzero_core::{
     inference::types::{
         Arguments, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, Usage,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -205,14 +205,14 @@ pub async fn test_dicl_optimization_chat() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -489,14 +489,14 @@ pub async fn test_dicl_optimization_json() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -631,7 +631,7 @@ fn create_inference_params(
     function_name: &str,
     variant_name: &str,
     episode_id: Uuid,
-    input: ClientInput,
+    input: Input,
     stream: bool,
 ) -> ClientInferenceParams {
     ClientInferenceParams {

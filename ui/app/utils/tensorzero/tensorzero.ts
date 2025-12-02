@@ -22,6 +22,7 @@ import type {
   GetInferenceBoundsResponse,
   InternalListInferencesByIdResponse,
   ListDatapointsRequest,
+  ListDatasetsResponse,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -493,6 +494,34 @@ export class TensorZeroClient {
     }
     const body = (await response.json()) as GetDatapointsResponse;
     return body;
+  }
+
+  async listDatasets(params: {
+    function_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return await response.json();
   }
 
   async updateDatapointsMetadata(

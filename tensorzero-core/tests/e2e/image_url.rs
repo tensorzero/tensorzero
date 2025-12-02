@@ -9,15 +9,15 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse, Role,
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
+    InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::{Base64File, File, UrlFile};
 use url::Url;
 use uuid::Uuid;
@@ -156,15 +156,15 @@ async fn test_image_url_with_fetch_true() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -234,15 +234,15 @@ async fn test_image_url_with_fetch_false() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: Some(mime::IMAGE_PNG),
                             detail: None,
@@ -288,15 +288,15 @@ async fn test_base64_image_with_fetch_true() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(
+                        InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
                                 mime::IMAGE_PNG,
@@ -368,15 +368,15 @@ async fn test_base64_image_with_fetch_false() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(
+                        InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
                                 mime::IMAGE_PNG,
@@ -450,15 +450,15 @@ async fn test_wikipedia_image_url_with_fetch_true() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -526,15 +526,15 @@ async fn test_wikipedia_image_url_with_fetch_false() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -604,15 +604,15 @@ async fn test_image_url_403_error() {
             function_name: Some("describe_image".to_string()),
             variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        ClientInputMessageContent::Text(TextKind::Text {
+                        InputMessageContent::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url(UrlFile {
+                        InputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,

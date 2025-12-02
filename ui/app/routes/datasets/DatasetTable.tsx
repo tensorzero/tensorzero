@@ -62,7 +62,7 @@ export default function DatasetTable({
           </Link>
         ),
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("datapoint_count", {
         header: "Datapoint Count",
         cell: (info) => info.getValue(),
       }),

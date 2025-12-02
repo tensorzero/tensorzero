@@ -1,6 +1,7 @@
 //! Internal route definitions for the TensorZero Gateway API.
 //!
-//! These routes are for internal use. They are unstable and might change without notice.
+//! These routes are for internal use. They are unstable and might change without notice,
+//! and do not export any OpenTelemetry spans.
 
 use axum::{
     routing::{get, post, put},
@@ -9,7 +10,7 @@ use axum::{
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
 
-pub fn build_internal_routes() -> Router<AppStateData> {
+pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
     Router::new()
         // Deprecated (#4652): Remove the endpoint without the `/internal` prefix.
         .route(
@@ -43,5 +44,9 @@ pub fn build_internal_routes() -> Router<AppStateData> {
         .route(
             "/internal/inferences",
             get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
+        )
+        .route(
+            "/internal/datasets",
+            get(endpoints::datasets::v1::list_datasets_handler),
         )
 }

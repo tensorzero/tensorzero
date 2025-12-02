@@ -15,7 +15,7 @@ pub use stats::{
     EvaluatorStats, PerEvaluatorStats,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::ClientInput;
+use tensorzero_core::client::Input;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
@@ -668,7 +668,7 @@ struct InferDatapointParams<'a> {
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a Datapoint,
-    input: &'a ClientInput,
+    input: &'a Input,
     evaluation_name: &'a str,
     config: &'a Config,
     inference_cache: CacheEnabledMode,
