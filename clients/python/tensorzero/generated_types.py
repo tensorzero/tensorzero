@@ -1202,7 +1202,7 @@ class Thought:
 
     field_internal_provider_type: str | None = None
     """
-    When set, this 'Thought' block will only be used for providers
+    When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
     """
