@@ -57,7 +57,7 @@ paste = "1.0.15"
 tempfile = "3.21.0"
 base64 = "0.22.1"
 tokio-stream = { workspace = true }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [[test]]
 name = "optimization-live"
