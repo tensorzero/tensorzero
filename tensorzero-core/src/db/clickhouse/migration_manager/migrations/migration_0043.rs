@@ -630,7 +630,9 @@ impl<'a> Migration for Migration0043<'a> {
         // DynamicEvaluationRunEpisodeByRunIdView references DynamicEvaluationRunEpisode
         instructions.push_str(&format!("ALTER TABLE DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(run_id) AS run_id_uint, episode_id_uint, variant_pins, tags, datapoint_name, is_deleted, updated_at FROM DynamicEvaluationRunEpisode ORDER BY run_id_uint, episode_id_uint;\n"));
 
-        instructions.push_str(&format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n"));
+        instructions.push_str(&format!(
+            "DROP TABLE ConfigSnapshot{on_cluster_name} SYNC;\n"
+        ));
 
         for table in SNAPSHOT_TRACKED_TABLES {
             instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
