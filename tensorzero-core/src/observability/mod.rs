@@ -41,6 +41,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero_auth::key::TensorZeroAuthError;
 
 use once_cell::sync::OnceCell;
 #[cfg(feature = "e2e_tests")]
@@ -799,6 +800,10 @@ fn handle_response<B>(res: &Response<B>, span: &Span) {
     span.record("http.response.status_code", res.status().as_u16() as i64);
     if res.status().is_server_error() {
         if let Some(error) = res.extensions().get::<Error>() {
+            span.set_status(Status::Error {
+                description: Cow::Owned(error.to_string()),
+            });
+        } else if let Some(error) = res.extensions().get::<TensorZeroAuthError>() {
             span.set_status(Status::Error {
                 description: Cow::Owned(error.to_string()),
             });

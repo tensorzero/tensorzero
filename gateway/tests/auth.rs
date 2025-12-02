@@ -36,7 +36,7 @@ async fn test_tensorzero_auth_enabled() {
         "
     [gateway.observability]
     enabled = true
-    
+
     [gateway.auth]
     enabled = true
     [gateway.auth.cache]
@@ -188,7 +188,7 @@ async fn test_tensorzero_auth_enabled() {
     let status = inference_response.status();
     let text = inference_response.text().await.unwrap();
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"));
+    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"));
 }
 
 #[tokio::test]
@@ -292,7 +292,7 @@ async fn test_tensorzero_missing_auth() {
         let text = response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header is required\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header is required\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -310,7 +310,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_auth_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header must start with 'Bearer '\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header must start with 'Bearer '\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -328,7 +328,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_key_format_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
+            "{\"error\":\"TensorZero authentication error: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -349,7 +349,7 @@ async fn test_tensorzero_missing_auth() {
         let text = missing_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -370,7 +370,7 @@ async fn test_tensorzero_missing_auth() {
         let text = disabled_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"),
+            format!("{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -633,7 +633,7 @@ async fn test_auth_cache_requires_full_key_match() {
     );
     assert_eq!(
         text,
-        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+        "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
     );
 
     // Verify the original valid key still works (cache should still be valid)
@@ -751,7 +751,7 @@ async fn test_rate_limit_auth_single_key() {
             r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 
@@ -885,7 +885,7 @@ async fn test_rate_limit_auth_each_key() {
         r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 

@@ -10,8 +10,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
 };
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /*
  * The high level flow for our rate limiting system is:
