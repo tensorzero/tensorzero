@@ -390,7 +390,7 @@ async def test_async_gepa_json(
 ):
     optimization_config = GEPAConfig(
         function_name="json_success",
-        evaluation_name="test_evaluation",
+        evaluation_name="json_evaluation",
         analysis_model="openai::gpt-4o-mini",
         mutation_model="openai::gpt-4o-mini",
         initial_variants=["anthropic", "openai"],
