@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use std::{collections::HashMap, sync::Arc, time::Duration};
+use uuid::Uuid;
 
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
@@ -19,6 +20,7 @@ use tensorzero_core::{
         OptimizationJobInfo, OptimizerOutput,
     },
     stored_inference::RenderedSample,
+    variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
 use crate::{JobHandle, Optimizer};
@@ -41,7 +43,7 @@ use validate::{get_uninitialized_variant_configs, validate_examples, validate_ge
 #[derive(Debug)]
 pub struct GEPAVariant {
     pub name: VariantName,
-    pub config: tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig,
+    pub config: UninitializedChatCompletionConfig,
 }
 
 #[async_trait]
@@ -97,7 +99,7 @@ impl Optimizer for GEPAConfig {
 
         tracing::debug!("Gateway client built successfully for GEPA optimization");
 
-        // Uninitialize baseline variants for optimization
+        // Get uninitialized baseline variants for optimization
         // These will be used as the starting pool for GEPA iterations
         let original_variants = get_uninitialized_variant_configs(self, &function_context)?;
 
@@ -112,8 +114,8 @@ impl Optimizer for GEPAConfig {
         );
 
         // Create validation dataset for Pareto filtering
-        let val_dataset_name =
-            format!("{}_gepa_val_{}", self.evaluation_name, uuid::Uuid::now_v7());
+        let run_id = Uuid::now_v7();
+        let val_dataset_name = format!("{}_gepa_val_{}", self.evaluation_name, run_id.clone());
 
         // Track all temporary datasets for cleanup at the end
         let mut temporary_datasets = vec![val_dataset_name.clone()];
@@ -294,7 +296,7 @@ impl Optimizer for GEPAConfig {
                 "{}_gepa_mutation_{}_{}",
                 self.evaluation_name,
                 iteration,
-                uuid::Uuid::now_v7()
+                run_id.clone(),
             );
             temporary_datasets.push(mutation_dataset_name.clone());
 
