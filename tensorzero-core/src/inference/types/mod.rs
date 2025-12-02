@@ -1008,7 +1008,7 @@ pub struct Thought {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub summary: Option<Vec<ThoughtSummaryBlock>>,
-    /// When set, this 'Thought' block will only be used for providers
+    /// When set, this `Thought` block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
     #[serde(
