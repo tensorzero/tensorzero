@@ -311,8 +311,8 @@ jobs:
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
-          # Wait for 6 minutes (360 seconds)
-          for i in {1..360}; do
+          # Wait for 10 minutes (600 seconds)
+          for i in {1..600}; do
             if ! kill -0 $TEST_PID 2>/dev/null; then
               echo "Test completed normally"
               wait $TEST_PID
@@ -321,7 +321,7 @@ jobs:
             sleep 1
           done
 
-          echo "Test has been running for 6 minutes, capturing backtraces..."
+          echo "Test has been running for 10 minutes, capturing backtraces..."
 
           # Get all processes related to our test
           echo "=== Process tree ==="

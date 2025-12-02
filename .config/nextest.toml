@@ -31,8 +31,9 @@ junit.path = "junit.xml"
 
 [[profile.e2e.overrides]]
 # E2E GEPA tests - integration tests with API calls and evaluation
-filter = 'test(test_gepa_chat) | test(test_gepa_json)'
-retries = 0
+filter = 'binary(e2e_gepa)'
+# Analysis or mutation using gpt-4.1-nano occasionally fails to generate a properly formatted output, so we add retries
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 1 }
 
 [profile.live-batch]

@@ -20,8 +20,11 @@ import type {
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetInferenceBoundsResponse,
+  GetInferencesResponse,
   InternalListInferencesByIdResponse,
   ListDatapointsRequest,
+  ListDatasetsResponse,
+  ListInferencesRequest,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -495,6 +498,34 @@ export class TensorZeroClient {
     return body;
   }
 
+  async listDatasets(params: {
+    function_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return await response.json();
+  }
+
   async updateDatapointsMetadata(
     datasetName: string,
     datapoints: UpdateDatapointsMetadataRequest,
@@ -658,6 +689,27 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InternalListInferencesByIdResponse;
+  }
+
+  /**
+   * Lists inferences with optional filtering, pagination, and sorting.
+   * Uses the public v1 API endpoint.
+   * @param request - The list inferences request parameters
+   * @returns A promise that resolves with the inferences response
+   * @throws Error if the request fails
+   */
+  async listInferences(
+    request: ListInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/list_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetInferencesResponse;
   }
 
   private async fetch(

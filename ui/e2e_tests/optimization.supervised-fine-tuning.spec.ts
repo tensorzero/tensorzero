@@ -62,10 +62,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .filter({ hasText: "Select a function" })
           .click();
         await page.getByRole("option", { name: "extract_entities" }).click();
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a metric" })
-          .click();
+        await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
         await page
           .getByRole("combobox")
@@ -115,10 +112,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
     await page
       .getByRole("combobox")
@@ -174,10 +168,7 @@ model_name = "mock-inference-finetune-1234"
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "image_judger" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByRole("option", { name: "None" }).click();
     await page
       .getByRole("combobox")
@@ -233,10 +224,7 @@ model_name = "mock-inference-finetune-1234"
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Open metric selector
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
 
     // Verify demonstration option is visible and can be selected
     await expect(
@@ -261,10 +249,7 @@ test.describe("Error handling", () => {
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();
     await page
       .getByRole("combobox")

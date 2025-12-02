@@ -140,6 +140,9 @@ test("should be able to add a datapoint from the evaluation page", async ({
   await viewButton.waitFor({ state: "visible" });
   await viewButton.click();
 
+  // Wait for 500ms. TODO - figure out why waitForURL and waitForLoadState("networkidle") are not enough.
+  await page.waitForTimeout(500);
+
   // Wait for navigation to the new datapoint page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 5000,
