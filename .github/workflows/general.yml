@@ -778,10 +778,10 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull nscr.io/tenant_igvf4asmf8kri/gateway:sha-${{ github.sha }} nscr.io/tenant_igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
           # Retag the images to what we expect the names to be
-          docker tag nscr.io/tenant_igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/tenant_igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }} tensorzero/mock-inference-provider:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }} tensorzero/mock-inference-provider:sha-${{ github.sha }}
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
