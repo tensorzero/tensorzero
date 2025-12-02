@@ -135,7 +135,7 @@ jobs:
 
   client-tests:
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
@@ -230,13 +230,6 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-
-      - name: Configure Namespace cache for Python (uv), and pnpm
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            pnpm
-            uv
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
