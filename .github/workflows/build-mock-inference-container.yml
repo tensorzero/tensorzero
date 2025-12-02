@@ -45,3 +45,12 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+
+      - name: Upload `mock-inference` container as an artifact to Namespace
+        uses: namespace-actions/upload-artifact@10157a8677fceee2ec821ff1a02f86b8dc401b61
+        with:
+          name: build-mock-inference-container
+          path: mock-inference-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
