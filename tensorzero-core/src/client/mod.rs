@@ -21,7 +21,6 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
-pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 pub use input_handling::resolved_input_to_client_input;
 
 pub use crate::cache::CacheParamsOptions;
@@ -39,7 +38,6 @@ pub use crate::inference::types::{
 pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
-pub mod client_input;
 pub mod input_handling;
 
 pub enum ClientMode {

@@ -787,3 +787,383 @@ async fn test_search_query_order_by_search_relevance() {
         }
     }
 }
+
+// Tests for cursor-based pagination
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_with_before_cursor() {
+    // First, get some inferences without cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected some inferences");
+
+    // Get the ID of the third inference to use as cursor
+    let cursor_id = initial_res[2]["inference_id"].as_str().unwrap();
+
+    // Now request inferences before this cursor
+    // Note: cannot use order_by with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    // Verify we got results
+    assert!(
+        !cursor_res.is_empty(),
+        "Expected results with before cursor"
+    );
+
+    // Verify all returned inferences have IDs less than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id < cursor_uuid,
+            "Inference ID should be less than cursor ID"
+        );
+    }
+
+    // Verify results are still in descending timestamp order
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_with_after_cursor() {
+    // First, get some inferences without cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 10,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert_eq!(initial_res.len(), 10, "Expected 10 write_haiku inferences");
+
+    // Get the ID of the (0-indexed) 4th inference to use as cursor, so we return the 5th-9th inferences.
+    let cursor_id = initial_res[4]["inference_id"].as_str().unwrap();
+
+    // Now request inferences after this cursor
+    // Note: cannot use order_by with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "after": cursor_id,
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    assert!(!cursor_res.is_empty(), "Expected results with after cursor");
+
+    // Verify all returned inferences have IDs greater than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id > cursor_uuid,
+            "Inference ID should be greater than cursor ID"
+        );
+    }
+
+    // Verify results are still in descending timestamp order
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_pagination_prevents_offset() {
+    let http_client = Client::new();
+
+    // First, get an inference ID to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 1,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Try to use both cursor and offset - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "offset": 10, // This should cause an error
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with both cursor and offset should fail"
+    );
+
+    let error_body = resp.text().await.unwrap();
+    assert!(
+        error_body.contains("Cannot use 'offset' with cursor pagination"),
+        "Error message should mention cursor/offset conflict"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_mutually_exclusive() {
+    let http_client = Client::new();
+
+    // First, get inference IDs to use as cursors
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 2,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(
+        initial_res.len() >= 2,
+        "Expected at least two inferences for test"
+    );
+    let cursor_id_1 = initial_res[0]["inference_id"].as_str().unwrap();
+    let cursor_id_2 = initial_res[1]["inference_id"].as_str().unwrap();
+
+    // Try to use both before and after - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id_1,
+        "after": cursor_id_2, // This should cause an error
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with both before and after should fail"
+    );
+
+    let error_body = resp.text().await.unwrap();
+    assert!(
+        error_body.contains("Cannot specify both 'before' and 'after'"),
+        "Error message should mention before/after conflict"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_filters() {
+    // Test that cursor pagination works with filters
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 3,
+        "filter": {
+            "type": "tag",
+            "key": "tensorzero::dataset_name",
+            "value": "foo",
+            "comparison_operator": "="
+        },
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+
+    // Get the ID of the first inference to use as cursor
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Request inferences before this cursor with the same filter
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 3,
+        "before": cursor_id,
+        "filter": {
+            "type": "tag",
+            "key": "tensorzero::dataset_name",
+            "value": "foo",
+            "comparison_operator": "="
+        },
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    assert!(
+        !cursor_res.is_empty(),
+        "Expected results with before cursor and filter"
+    );
+
+    // Verify all returned inferences have IDs less than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id < cursor_uuid,
+            "Inference ID should be less than cursor ID"
+        );
+        // Verify the filter is still applied
+        assert_eq!(inference["function_name"], "write_haiku");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_timestamp_ordering_succeeds() {
+    // First, get some inferences to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[2]["inference_id"].as_str().unwrap();
+
+    // Timestamp ordering should work with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    // Should get results successfully
+    assert!(
+        !cursor_res.is_empty(),
+        "Should get results with timestamp ordering and cursor"
+    );
+
+    // Verify results are ordered by timestamp descending
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
+    let http_client = Client::new();
+
+    // First, get an inference ID to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 1,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Try to use cursor with metric ordering - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "order_by": [
+            {
+                "by": "metric",
+                "name": "test_metric",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with cursor and metric ordering should fail"
+    );
+}

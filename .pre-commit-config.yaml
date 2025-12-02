@@ -93,6 +93,16 @@ repos:
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
+      - id: "prettier: root"
+        name: "prettier: root"
+        entry: bash -c 'pnpm run format'
+        language: node
+        language_version: "24.11.0"
+        types_or: [json, markdown, yaml]
+        additional_dependencies:
+          - prettier
+        pass_filenames: false
+
       - id: "eslint: ui"
         name: "eslint: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'

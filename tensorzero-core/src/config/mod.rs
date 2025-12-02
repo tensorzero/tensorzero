@@ -1410,7 +1410,6 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_storage: Option<StorageKind>,
-
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]

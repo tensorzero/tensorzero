@@ -399,7 +399,6 @@ const COMPLEX_INPUT: Input = {
             custom_field: "This is a custom content block",
             provider_specific: true,
           },
-          model_provider_name: "custom_provider",
         },
       ],
     },
