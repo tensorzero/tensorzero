@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
 use crate::inference::types::{
-    ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent,
+    ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
@@ -158,13 +158,14 @@ pub fn resolved_content_block_to_python(
                 ),
             )
         }
-        ResolvedContentBlock::Unknown {
+        ResolvedContentBlock::Unknown(Unknown {
             data,
-            model_provider_name,
-        } => {
+            model_name,
+            provider_name,
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
         }
     }
 }
@@ -195,13 +196,14 @@ pub fn content_block_chat_output_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockChatOutput::Unknown {
+        ContentBlockChatOutput::Unknown(Unknown {
             data,
-            model_provider_name,
-        } => {
+            model_name,
+            provider_name,
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
         }
     }
 }
@@ -263,7 +265,10 @@ pub fn stored_input_message_content_to_python(
         StoredInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            unknown_content_block.call1(
+                py,
+                (serialized_data, &unknown.model_name, &unknown.provider_name),
+            )
         }
     }
 }
@@ -328,7 +333,10 @@ pub fn resolved_input_message_content_to_python(
         ResolvedInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            unknown_content_block.call1(
+                py,
+                (serialized_data, &unknown.model_name, &unknown.provider_name),
+            )
         }
     }
 }

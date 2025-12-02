@@ -1,16 +1,16 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const url = new URL(request.url);
     const functionName = url.searchParams.get("function") ?? undefined;
-    const datasetMetadata = await getDatasetMetadata({
+    const datasetMetadata = await getTensorZeroClient().listDatasets({
       function_name: functionName,
     });
-    const datasets = datasetMetadata.map((d) => ({
+    const datasets = datasetMetadata.datasets.map((d) => ({
       name: d.dataset_name,
-      count: d.count,
+      count: d.datapoint_count,
       lastUpdated: d.last_updated,
     }));
     return data({ datasets });

@@ -358,7 +358,6 @@ jobs:
         run: |
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
-
   validate-python:
     permissions:
       contents: read
@@ -447,7 +446,6 @@ jobs:
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
-
 
   validate-node:
     permissions:
@@ -581,7 +579,6 @@ jobs:
         run: |
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
-
   validate:
     permissions:
       contents: read
@@ -636,6 +633,14 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: "3.18.6" # Conservatively match the `Helm 3.2.0+` version specified in examples/production-deployment-k8s-helm/README.md
+
+      - name: Install helm-values-schema-json plugin
+        run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
+
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
 
@@ -665,6 +670,12 @@ jobs:
 
       - name: detect‑private‑key
         run: uv run --with pre-commit pre-commit run detect-private-key --all-files
+
+      - name: helm-values-schema
+        run: uv run --with pre-commit pre-commit run helm-schema --all-files
+
+      - name: Check helm schema sync
+        run: ./ci/check-helm-schema-sync.sh
 
       # We don't run these two because we want to allow template files to have trailing whitespace
       # TODO: how do we exclude minijinja files using pre-commit in GHA?
@@ -1023,7 +1034,12 @@ jobs:
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-ui-container, build-mock-inference-container]
+    needs:
+      [
+        build-gateway-container,
+        build-ui-container,
+        build-mock-inference-container,
+      ]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

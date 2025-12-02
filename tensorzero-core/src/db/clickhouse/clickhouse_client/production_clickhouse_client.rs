@@ -238,6 +238,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
         database_url
             .query_pairs_mut()
             .append_pair("alter_sync", "2");
+        database_url
+            .query_pairs_mut()
+            .append_pair("join_algorithm", "auto");
         let res = self
             .client
             .post(database_url)

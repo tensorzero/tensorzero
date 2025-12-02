@@ -7,10 +7,9 @@ import {
 } from "./datapointOperations.server";
 import type { UpdateDatapointFormData } from "./formDataUtils";
 import type {
-  GetDatasetMetadataParams,
-  DatasetMetadata,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointRequest,
+  ListDatasetsResponse,
 } from "~/types/tensorzero";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
@@ -31,22 +30,18 @@ const mockDeleteDatapoints = vi.fn(
     num_deleted_datapoints: BigInt(_datapointIds.length),
   }),
 );
+const mockListDatasets = vi.fn(
+  async (): Promise<ListDatasetsResponse> => ({
+    datasets: [],
+  }),
+);
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
     updateDatapoint: mockUpdateDatapoint,
     updateDatapointsMetadata: mockUpdateDatapointsMetadata,
     deleteDatapoints: mockDeleteDatapoints,
+    listDatasets: mockListDatasets,
   })),
-}));
-
-// Mock the datasets server functions
-const mockGetDatasetMetadata = vi.hoisted(() =>
-  vi.fn<(params: GetDatasetMetadataParams) => Promise<DatasetMetadata[]>>(
-    async () => [],
-  ),
-);
-vi.mock("~/utils/clickhouse/datasets.server", () => ({
-  getDatasetMetadata: mockGetDatasetMetadata,
 }));
 
 describe("datapointOperations", () => {
@@ -56,8 +51,8 @@ describe("datapointOperations", () => {
 
   describe("deleteDatapoint", () => {
     test("should call deleteDatapoints and redirect to /datasets when dataset is empty", async () => {
-      // Mock getDatasetMetadata to return empty array (no datasets)
-      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([]);
+      // Mock listDatasets to return empty array (no datasets)
+      vi.mocked(mockListDatasets).mockResolvedValueOnce({ datasets: [] });
 
       const datasetName = "nonexistent_dataset";
       const datapointId = uuid();
@@ -77,14 +72,16 @@ describe("datapointOperations", () => {
       const datasetName = "foo";
       const datapointId = uuid();
 
-      // Mock getDatasetMetadata to return a dataset with count
-      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([
-        {
-          dataset_name: datasetName,
-          count: 10,
-          last_updated: "2025-04-15T02:33:58Z",
-        },
-      ]);
+      // Mock listDatasets to return a dataset with count
+      vi.mocked(mockListDatasets).mockResolvedValueOnce({
+        datasets: [
+          {
+            dataset_name: datasetName,
+            datapoint_count: 10,
+            last_updated: "2025-04-15T02:33:58Z",
+          },
+        ],
+      });
 
       const result = await deleteDatapoint({
         dataset_name: datasetName,

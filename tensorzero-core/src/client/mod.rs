@@ -20,7 +20,6 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
-pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 pub use input_handling::resolved_input_to_client_input;
 
 pub use crate::cache::CacheParamsOptions;
@@ -38,7 +37,6 @@ pub use crate::inference::types::{
 pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
-pub mod client_input;
 pub mod input_handling;
 
 pub enum ClientMode {
@@ -866,7 +864,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let res = crate::endpoints::inference::inference(
+                    let res = Box::pin(crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
@@ -876,7 +874,7 @@ impl Client {
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
                         None,
-                    )
+                    ))
                     .await
                     .map_err(err_to_http)?;
                     match res {

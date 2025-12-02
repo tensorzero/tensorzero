@@ -4,7 +4,9 @@ import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { SaveButton } from "~/components/utils/SaveButton";
 import { CancelButton } from "~/components/utils/CancelButton";
+import { CloneDatapointButton } from "~/components/datapoint/CloneDatapointButton";
 import { useReadOnly } from "~/context/read-only";
+import type { Datapoint } from "~/types/tensorzero";
 
 interface DatapointActionsProps {
   variants: string[];
@@ -19,6 +21,7 @@ interface DatapointActionsProps {
   onReset: () => void;
   showTryWithButton: boolean;
   isStale: boolean;
+  datapoint: Datapoint;
 }
 
 export function DatapointActions({
@@ -34,6 +37,7 @@ export function DatapointActions({
   onReset,
   showTryWithButton,
   isStale,
+  datapoint,
 }: DatapointActionsProps) {
   const isReadOnly = useReadOnly();
   const handleCancel = () => {
@@ -49,6 +53,7 @@ export function DatapointActions({
           isLoading={variantInferenceIsLoading}
         />
       )}
+      {!isEditing && <CloneDatapointButton datapoint={datapoint} />}
       {isEditing ? (
         <>
           <CancelButton onClick={handleCancel} />

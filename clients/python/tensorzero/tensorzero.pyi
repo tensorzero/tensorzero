@@ -813,11 +813,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def get_datapoints(
         self,
         *,
+        dataset_name: str | None = ...,
         ids: Sequence[str],
     ) -> GetDatapointsResponse:
         """
         Get specific datapoints by their IDs.
 
+        :param dataset_name: Optional dataset name containing the datapoints. Including this improves
+            query performance because the dataset is part of the sorting key.
         :param ids: A sequence of datapoint IDs to retrieve. They should be in UUID format.
         :return: A `GetDatapointsResponse` object.
         """
@@ -1357,11 +1360,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def get_datapoints(
         self,
         *,
+        dataset_name: str | None = ...,
         ids: Sequence[str],
     ) -> GetDatapointsResponse:
         """
         Get specific datapoints by their IDs.
 
+        :param dataset_name: Optional dataset name containing the datapoints. Including this improves
+            query performance because the dataset is part of the sorting key.
         :param ids: A sequence of datapoint IDs to retrieve. They should be in UUID format.
         :return: A `GetDatapointsResponse` object.
         """

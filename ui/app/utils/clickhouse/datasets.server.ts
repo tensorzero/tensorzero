@@ -1,14 +1,6 @@
 import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
-import type {
-  DatasetMetadata,
-  DatasetQueryParams,
-  DatasetDetailRow,
-  GetDatasetMetadataParams,
-  GetDatasetRowsParams,
-} from "~/types/tensorzero";
+import type { DatasetQueryParams } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "../config/index.server";
-
-// TODO(shuyangli): Consider removing this file and fully use DatabaseClient from tensorzero-node/lib.
 
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
@@ -46,28 +38,9 @@ export async function countRowsForDataset(
   return await dbClient.countRowsForDataset(params);
 }
 
-/*
-Get name and count for all datasets.
-This function should sum the counts of chat and json inferences for each dataset.
-The groups should be ordered by last_updated in descending order.
-*/
-export async function getDatasetMetadata(
-  params: GetDatasetMetadataParams,
-): Promise<DatasetMetadata[]> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatasetMetadata(params);
-}
-
 export async function countDatasets(): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
   return await dbClient.countDatasets();
-}
-
-export async function getDatasetRows(
-  params: GetDatasetRowsParams,
-): Promise<DatasetDetailRow[]> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatasetRows(params);
 }
 
 export async function countDatapointsForDatasetFunction(

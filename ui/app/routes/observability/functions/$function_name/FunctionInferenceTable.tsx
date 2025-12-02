@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InternalInferenceMetadata } from "~/types/tensorzero";
+import type { StoredInference } from "~/types/tensorzero";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
@@ -15,7 +15,7 @@ import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
 export default function FunctionInferenceTable({
   inferences,
 }: {
-  inferences: InternalInferenceMetadata[];
+  inferences: StoredInference[];
 }) {
   return (
     <Table>
@@ -32,11 +32,11 @@ export default function FunctionInferenceTable({
           <TableEmptyState message="No inferences found" />
         ) : (
           inferences.map((inference) => (
-            <TableRow key={inference.id} id={inference.id}>
+            <TableRow key={inference.inference_id} id={inference.inference_id}>
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
-                  id={inference.id}
-                  link={toInferenceUrl(inference.id)}
+                  id={inference.inference_id}
+                  link={toInferenceUrl(inference.inference_id)}
                 />
               </TableCell>
               <TableCell>

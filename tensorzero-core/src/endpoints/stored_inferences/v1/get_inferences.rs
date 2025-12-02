@@ -79,7 +79,7 @@ pub async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    let params = request.as_list_inferences_params();
+    let params = request.as_list_inferences_params()?;
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()

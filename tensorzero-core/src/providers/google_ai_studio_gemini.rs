@@ -33,11 +33,11 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, UnknownChunk,
+    Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -515,7 +515,7 @@ impl<'a> GeminiContent<'a> {
                                     raw_response: None,
                                 }));
                             }
-                            Some(ContentBlock::Unknown { .. }) => {
+                            Some(ContentBlock::Unknown(_)) => {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -534,7 +534,7 @@ impl<'a> GeminiContent<'a> {
                                             data: FlattenUnknown::Normal(part),
                                         });
                                     }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
                                             message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
@@ -648,10 +648,7 @@ async fn convert_non_thought_content_block(
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
             message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
         })),
-        ContentBlock::Unknown {
-            data,
-            model_provider_name: _,
-        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
     }
 }
 
@@ -716,12 +713,22 @@ impl<'a> GoogleAIStudioGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Auto,
-                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some() {
+                    GeminiFunctionCallingMode::Any
+                } else {
+                    GeminiFunctionCallingMode::Auto
+                };
+                GoogleAIStudioGeminiToolConfig {
+                    function_calling_config: GeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::Any,
@@ -1088,7 +1095,8 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1124,7 +1132,7 @@ fn convert_part_to_output(
                 }));
             }
             _ => {
-                output.push(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -1132,8 +1140,9 @@ fn convert_part_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                });
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
+                }));
             }
         }
         return Ok(());
@@ -1171,10 +1180,11 @@ fn convert_part_to_output(
             }));
         }
         FlattenUnknown::Unknown(part) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
     }
     Ok(())
@@ -1711,7 +1721,7 @@ mod tests {
             }
         );
 
-        // Test Auto mode with specific allowed tools (new behavior)
+        // Test Auto mode with specific allowed tools - should use Any mode
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
@@ -1729,7 +1739,7 @@ mod tests {
         let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GeminiFunctionCallingMode::Auto
+            GeminiFunctionCallingMode::Any
         );
         let mut allowed_names = tool_config
             .function_calling_config

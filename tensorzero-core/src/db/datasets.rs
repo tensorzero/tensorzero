@@ -8,6 +8,7 @@ use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
+use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::endpoints::datasets::{DatapointKind, StoredDatapoint};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -186,16 +187,8 @@ pub struct DatasetQueryParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct GetDatasetRowsParams {
-    pub dataset_name: String,
-    pub limit: u32,
-    pub offset: u32,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+/// Parameters to query for dataset metadata (by aggregating over the datapoint tables).
+#[derive(Deserialize)]
 pub struct GetDatasetMetadataParams {
     /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
@@ -207,20 +200,7 @@ pub struct GetDatasetMetadataParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct DatasetDetailRow {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub row_type: String,
-    pub function_name: String,
-    pub name: Option<String>,
-    pub episode_id: Option<String>,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DatasetMetadata {
     pub dataset_name: String,
     pub count: u32,
@@ -275,6 +255,14 @@ pub struct GetDatapointsParams {
     /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
     #[serde(default)]
     pub filter: Option<DatapointFilter>,
+
+    /// Optional ordering criteria for the results.
+    #[serde(default)]
+    pub order_by: Option<Vec<DatapointOrderBy>>,
+
+    /// Text query to filter. Case-insensitive substring search.
+    #[serde(default)]
+    pub search_query_experimental: Option<String>,
 }
 
 #[async_trait]
@@ -286,12 +274,6 @@ pub trait DatasetQueries {
     /// Inserts rows into a dataset table by selecting from the inference tables
     /// Returns the number of rows inserted
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
-
-    /// Gets rows from a dataset with pagination
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error>;
 
     /// Gets dataset metadata (name, count, last updated)
     async fn get_dataset_metadata(
