@@ -235,7 +235,6 @@ async fn write_workflow_evaluation_run(
     let variant_pins_str = to_map_literal(&variant_pins);
     let tags_str = to_map_literal(&tags);
     let run_id_str = run_id.to_string();
-    let snapshot_hash_str = snapshot_hash.if_enabled().map(|h| h.to_string());
     params.insert("run_id", run_id_str.as_str());
     params.insert("variant_pins", variant_pins_str.as_str());
     params.insert("tags", tags_str.as_str());
@@ -244,10 +243,7 @@ async fn write_workflow_evaluation_run(
         "run_display_name",
         run_display_name.as_deref().unwrap_or("\\N"),
     ); // Use \\N to indicate NULL
-    params.insert(
-        "snapshot_hash",
-        snapshot_hash_str.as_deref().unwrap_or("\\N"),
-    ); // Use \\N to indicate NULL
+    params.insert("snapshot_hash", snapshot_hash);
     clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
@@ -297,16 +293,12 @@ async fn write_workflow_evaluation_run_episode(
     let mut query_params = HashMap::new();
     let run_id_str = run_id.to_string();
     let episode_id_str = episode_id.to_string();
-    let snapshot_hash_str = snapshot_hash.if_enabled().map(|h| h.to_string());
     query_params.insert("run_id", run_id_str.as_str());
     query_params.insert("episode_id", episode_id_str.as_str());
     query_params.insert("datapoint_name", task_name.unwrap_or("\\N")); // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
     let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
-    query_params.insert(
-        "snapshot_hash",
-        snapshot_hash_str.as_deref().unwrap_or("\\N"),
-    );
+    query_params.insert("snapshot_hash", &**snapshot_hash);
     clickhouse
         .run_query_synchronous(query.to_string(), &query_params)
         .await?;

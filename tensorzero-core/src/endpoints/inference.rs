@@ -152,7 +152,6 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
-    pub snapshot_hash: SnapshotHash,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -625,7 +624,6 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             fetch_and_encode_input_files_before_inference: config
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
-            snapshot_hash: config.hash.clone(),
         };
 
         let stream = create_stream(
@@ -895,7 +893,6 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
-                snapshot_hash,
             } = metadata;
 
             let config = config.clone();
@@ -942,7 +939,7 @@ fn create_stream(
                         ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
-                        snapshot_hash: snapshot_hash.clone(),
+                        snapshot_hash: config.hash.clone(),
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1044,7 +1041,7 @@ async fn write_inference(
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_responses: Vec<serde_json::Value> = result
-        .get_serialized_model_inferences(metadata.snapshot_hash.if_enabled())
+        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
         .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
@@ -1606,7 +1603,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1662,7 +1658,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

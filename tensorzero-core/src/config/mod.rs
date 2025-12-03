@@ -1263,10 +1263,6 @@ pub async fn write_config_snapshot(
     clickhouse: &ClickHouseConnectionInfo,
     snapshot: ConfigSnapshot,
 ) -> Result<(), Error> {
-    // Feature flag: only write if TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1
-    if std::env::var("TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT").unwrap_or_default() != "1" {
-        return Ok(());
-    }
     // Define the row structure for serialization
     #[derive(Serialize)]
     struct ConfigSnapshotRow<'a> {

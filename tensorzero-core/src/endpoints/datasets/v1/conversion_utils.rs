@@ -67,7 +67,7 @@ impl CreateChatDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
-            snapshot_hash: config.hash.if_enabled(),
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
@@ -148,7 +148,7 @@ impl CreateJsonDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
-            snapshot_hash: config.hash.if_enabled(),
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
