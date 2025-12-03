@@ -244,9 +244,10 @@ async fn write_workflow_evaluation_run(
         "run_display_name",
         run_display_name.as_deref().unwrap_or("\\N"),
     ); // Use \\N to indicate NULL
-    if let Some(snapshot_hash_str) = snapshot_hash_str.as_ref() {
-        params.insert("snapshot_hash", snapshot_hash_str.as_str());
-    }
+    params.insert(
+        "snapshot_hash",
+        snapshot_hash_str.as_deref().unwrap_or("\\N"),
+    ); // Use \\N to indicate NULL
     clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
@@ -302,9 +303,10 @@ async fn write_workflow_evaluation_run_episode(
     query_params.insert("datapoint_name", task_name.unwrap_or("\\N")); // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
     let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
-    if let Some(snapshot_hash_str) = snapshot_hash_str.as_ref() {
-        query_params.insert("snapshot_hash", snapshot_hash_str.as_str());
-    }
+    query_params.insert(
+        "snapshot_hash",
+        snapshot_hash_str.as_deref().unwrap_or("\\N"),
+    );
     clickhouse
         .run_query_synchronous(query.to_string(), &query_params)
         .await?;
