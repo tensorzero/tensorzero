@@ -569,3 +569,57 @@ model_name = "test"
         "Expected 'unknown field' error for deprecated timeouts, got: {err}"
     );
 }
+
+/// Test that built-in functions are included in config snapshots.
+/// This verifies that when a config is loaded and written to ClickHouse,
+/// built-in functions are serialized into the snapshot.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_config_snapshot_includes_built_in_functions() {
+    let clickhouse = get_clickhouse().await;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    // Write a minimal config (no user-defined functions)
+    std::fs::write(&config_path, "[gateway]").unwrap();
+
+    // Load the config - this injects built-in functions in process_config_input
+    let loaded = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new(config_path.to_string_lossy().to_string()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    // Write snapshot to ClickHouse and get the config with its hash
+    let config = loaded.into_config(&clickhouse).await.unwrap();
+
+    // Wait for data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Query the snapshot from ClickHouse using config.hash
+    let hash = &config.hash;
+    let query = format!(
+        "SELECT config FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash}') FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    let stored_config = row["config"].as_str().unwrap();
+
+    // Verify built-in functions are in the stored config
+    assert!(
+        stored_config.contains("tensorzero::optimization::gepa::analyze"),
+        "Snapshot should contain GEPA analyze function. Config:\n{stored_config}"
+    );
+    assert!(
+        stored_config.contains("tensorzero::hello_chat"),
+        "Snapshot should contain hello_chat function. Config:\n{stored_config}"
+    );
+    assert!(
+        stored_config.contains("tensorzero::hello_json"),
+        "Snapshot should contain hello_json function. Config:\n{stored_config}"
+    );
+}
