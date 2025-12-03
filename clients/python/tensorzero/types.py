@@ -90,14 +90,14 @@ class RawText(ContentBlock):
 @dataclass
 class ImageBase64(ContentBlock):
     data: Optional[str]
-    mime_type: str
+    mime_type: Optional[str] = None
     type: str = "image"
 
 
 @dataclass
 class FileBase64(ContentBlock):
     data: Optional[str]
-    mime_type: str
+    mime_type: Optional[str] = None
     type: str = "file"
 
 
