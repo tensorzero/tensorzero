@@ -773,6 +773,12 @@ jobs:
         if: matrix.replicated == true
         run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
 
+      - name: Setup Namespace caching for Clickhouse fixtures
+        uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures/
+
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 

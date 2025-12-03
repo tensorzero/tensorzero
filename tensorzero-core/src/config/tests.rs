@@ -21,7 +21,7 @@ async fn test_config_from_toml_table_valid() {
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
-    let ConfigLoadInfo { config, .. } = Config::load_from_toml(config)
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -265,10 +265,7 @@ async fn test_config_gateway_bind_address() {
     let mut config = get_sample_valid_config();
 
     // Test with a valid bind address
-    let ConfigLoadInfo {
-        config: parsed_config,
-        ..
-    } = Config::load_from_toml(config.clone()).await.unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert_eq!(
         parsed_config.gateway.bind_address.unwrap().to_string(),
         "0.0.0.0:3000"
@@ -276,10 +273,7 @@ async fn test_config_gateway_bind_address() {
 
     // Test with missing gateway section
     config.remove("gateway");
-    let ConfigLoadInfo {
-        config: parsed_config,
-        ..
-    } = Config::load_from_toml(config.clone()).await.unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with missing bind_address
@@ -287,10 +281,7 @@ async fn test_config_gateway_bind_address() {
         "gateway".to_string(),
         toml::Value::Table(toml::Table::new()),
     );
-    let ConfigLoadInfo {
-        config: parsed_config,
-        ..
-    } = Config::load_from_toml(config.clone()).await.unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with invalid bind address
@@ -570,7 +561,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         .remove("output_schema");
 
     let result = Config::load_from_toml(config).await;
-    let ConfigLoadInfo { config, .. } = result.unwrap();
+    let config = result.unwrap();
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
@@ -1261,12 +1252,12 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 #[tokio::test]
 async fn test_get_all_templates() {
     let config_table = get_sample_valid_config();
-    let ConfigLoadInfo { config, .. } = Config::load_from_toml(config_table)
+    let config = Config::load_from_toml(config_table)
         .await
         .expect("Failed to load config");
 
     // Get all templates
-    let templates = config.get_templates();
+    let templates = Config::get_templates(&config.functions);
 
     // Check if all expected templates are present
     assert_eq!(
@@ -1773,7 +1764,7 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
             [functions]"#
     )
     .unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
         false,
     )
@@ -2612,7 +2603,7 @@ async fn test_glob_relative_path() {
     )
     .unwrap();
 
-    let ConfigLoadInfo { config, .. } = Config::load_and_verify_from_path(
+    let config = Config::load_and_verify_from_path(
         &ConfigFileGlob::new_from_path(temp_dir.path().join("**/*.toml").as_path()).unwrap(),
     )
     .await
@@ -3077,7 +3068,7 @@ async fn test_config_file_glob_recursive() {
 async fn test_built_in_functions_loaded() {
     // Load a minimal config (empty table)
     let config = toml::Table::new();
-    let ConfigLoadInfo { config, .. } = Config::load_from_toml(config)
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -3111,7 +3102,7 @@ async fn test_built_in_functions_loaded() {
 #[tokio::test]
 async fn test_get_built_in_function() {
     let config = toml::Table::new();
-    let ConfigLoadInfo { config, .. } = Config::load_from_toml(config)
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -3125,7 +3116,7 @@ async fn test_get_built_in_function() {
 async fn test_built_in_and_user_functions_coexist() {
     let config = get_sample_valid_config();
 
-    let ConfigLoadInfo { config, .. } = Config::load_from_toml(config)
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 

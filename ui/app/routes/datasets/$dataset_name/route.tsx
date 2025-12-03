@@ -18,6 +18,7 @@ import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
+import type { DatapointFilter } from "~/types/tensorzero";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -29,6 +30,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
   const rowsSkipped =
     rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
+  const function_name = url.searchParams.get("function_name") || undefined;
+  const search_query = url.searchParams.get("search_query") || undefined;
+  const filterParam = url.searchParams.get("filter");
+  let filter: DatapointFilter | undefined;
+  if (filterParam) {
+    try {
+      filter = JSON.parse(filterParam) as DatapointFilter;
+    } catch {
+      // Invalid JSON, ignore
+    }
+  }
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
@@ -36,7 +48,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const [datasetMetadata, getDatapointsResponse] = await Promise.all([
     getTensorZeroClient().listDatasets({}),
-    getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
+    getTensorZeroClient().listDatapoints(dataset_name, {
+      limit: limit + 1, // Request one extra to check if there are more
+      offset,
+      function_name,
+      search_query_experimental:
+        search_query && search_query.length > 0 ? search_query : undefined,
+      filter,
+    }),
   ]);
   const count_info = datasetMetadata.datasets.find(
     (dataset) => dataset.dataset_name === dataset_name,
@@ -44,8 +63,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  const rows = getDatapointsResponse.datapoints;
-  return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
+  const allRows = getDatapointsResponse.datapoints;
+  const hasMore = allRows.length > limit;
+  const rows = hasMore ? allRows.slice(0, limit) : allRows;
+  return {
+    rows,
+    hasMore,
+    count_info,
+    limit,
+    offset,
+    rowsAdded,
+    rowsSkipped,
+    function_name,
+    search_query,
+    filter,
+  };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -105,8 +137,18 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, limit, offset, rowsAdded, rowsSkipped } =
-    loaderData;
+  const {
+    rows,
+    hasMore,
+    count_info,
+    limit,
+    offset,
+    rowsAdded,
+    rowsSkipped,
+    function_name,
+    search_query,
+    filter,
+  } = loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
   const fetcher = useFetcher();
@@ -160,12 +202,18 @@ export default function DatasetDetailPage({
 
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
+        <DatasetRowTable
+          rows={rows}
+          dataset_name={count_info.dataset_name}
+          function_name={function_name}
+          search_query={search_query}
+          filter={filter}
+        />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + limit >= count_info.datapoint_count}
+          disableNext={!hasMore}
         />
       </SectionLayout>
     </PageLayout>

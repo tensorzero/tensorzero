@@ -17,7 +17,7 @@ async fn test_base_path_no_trailing_slash() {
     )
     .await;
 
-    test_base_path(child_data).await;
+    Box::pin(test_base_path(child_data)).await;
 }
 
 #[tokio::test]
@@ -30,7 +30,7 @@ async fn test_base_path_with_trailing_slash() {
     )
     .await;
 
-    test_base_path(child_data).await;
+    Box::pin(test_base_path(child_data)).await;
 }
 
 async fn test_base_path(child_data: ChildData) {

@@ -6086,15 +6086,19 @@ dependencies = [
 name = "tensorzero-auth"
 version = "2025.11.6"
 dependencies = [
+ "axum",
  "chrono",
  "futures",
  "hex",
+ "moka",
  "rand 0.9.2",
  "secrecy",
  "serde",
+ "serde_json",
  "sha2",
  "sqlx 0.9.0-alpha.1",
  "thiserror 2.0.17",
+ "tracing",
  "ts-rs",
 ]
 
@@ -6150,6 +6154,7 @@ dependencies = [
  "minijinja-utils",
  "mockall",
  "moka",
+ "num-bigint",
  "object_store",
  "once_cell",
  "opentelemetry",

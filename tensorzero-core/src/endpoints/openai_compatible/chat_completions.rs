@@ -13,9 +13,9 @@ use axum::Json;
 use axum::{debug_handler, Extension};
 
 use crate::endpoints::inference::{inference, InferenceOutput, Params};
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
 use super::types::streaming::prepare_serialized_openai_compatible_events;

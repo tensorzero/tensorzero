@@ -91,7 +91,7 @@ async fn run_evaluations_json() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args(), evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -289,7 +289,7 @@ async fn run_evaluations_json() {
     // Check that the human feedback affects the next eval run results
     // Run the evaluation again but now it should read the human feedback that was sent
     let mut output = Vec::new();
-    run_evaluation(args(), evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -362,7 +362,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
     };
 
     let mut output = Vec::new();
-    let result = run_evaluation(args_both, evaluation_run_id, &mut output).await;
+    let result = Box::pin(run_evaluation(args_both, evaluation_run_id, &mut output)).await;
     assert!(
         result.is_err(),
         "Should fail when both dataset_name and datapoint_ids are provided"
@@ -388,7 +388,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
     };
 
     let mut output = Vec::new();
-    let result = run_evaluation(args_neither, evaluation_run_id, &mut output).await;
+    let result = Box::pin(run_evaluation(args_neither, evaluation_run_id, &mut output)).await;
     assert!(
         result.is_err(),
         "Should fail when neither dataset_name nor datapoint_ids are provided"
@@ -425,7 +425,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     };
 
     let mut output = Vec::new();
-    let result = run_evaluation(args, evaluation_run_id, &mut output).await;
+    let result = Box::pin(run_evaluation(args, evaluation_run_id, &mut output)).await;
     assert!(
         result.is_err(),
         "Should fail when both datapoint_ids and max_datapoints are provided"
@@ -526,7 +526,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -620,7 +620,7 @@ async fn run_exact_match_evaluation_chat() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -761,7 +761,7 @@ async fn run_llm_judge_evaluation_chat() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args(), evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -907,7 +907,7 @@ async fn run_llm_judge_evaluation_chat() {
     sleep(Duration::from_secs(5)).await;
     // Run the evaluation again but now it should read the human feedback that was sent
     let mut output = Vec::new();
-    run_evaluation(args(), evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -985,7 +985,7 @@ async fn run_image_evaluation() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -1203,7 +1203,7 @@ async fn check_invalid_image_evaluation() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -1308,7 +1308,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
 
     let mut output = Vec::new();
     // Let's make sure this threshold passes and the output is reasonable
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     sleep(Duration::from_secs(5)).await;
@@ -1354,7 +1354,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
 
     let mut output = Vec::new();
     // Let's make sure this threshold fails and the output is reasonable
-    let err = run_evaluation(args, evaluation_run_id, &mut output)
+    let err = Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap_err();
     sleep(Duration::from_secs(5)).await;
@@ -1554,7 +1554,7 @@ async fn run_evaluations_errors() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -1978,7 +1978,7 @@ async fn run_evaluations_best_of_3() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -2169,7 +2169,7 @@ async fn run_evaluations_mixture_of_3() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -2363,7 +2363,7 @@ async fn run_evaluations_dicl() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -2854,7 +2854,7 @@ async fn test_cli_args_max_datapoints() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
 
@@ -2914,7 +2914,7 @@ async fn test_cli_args_precision_targets() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
 
