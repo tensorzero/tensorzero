@@ -89,13 +89,6 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
             extra_body,
         } = stored;
 
-        // Emit deprecation warning if old format detected
-        if timeouts.non_streaming.total_ms.is_some() {
-            crate::utils::deprecation_warning(
-                "`timeouts` is deprecated for embedding providers. Use `timeout_ms` instead.",
-            );
-        }
-
         Self {
             config,
             // Migration: prefer new field, fall back to deprecated
