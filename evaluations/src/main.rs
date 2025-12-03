@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
 
     setup_logging(&args)?;
 
-    let result = run_evaluation(args, evaluation_run_id, &mut writer).await;
+    let result = Box::pin(run_evaluation(args, evaluation_run_id, &mut writer)).await;
 
     match &result {
         Ok(()) => {

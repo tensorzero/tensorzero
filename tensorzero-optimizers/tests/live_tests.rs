@@ -16,12 +16,12 @@ optimization_test_case!(together_sft, common::together_sft::TogetherSFTTestCase(
 // DICL Tests
 #[tokio::test(flavor = "multi_thread")]
 async fn test_slow_optimization_dicl() {
-    test_dicl_optimization_chat().await;
+    Box::pin(test_dicl_optimization_chat()).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_slow_optimization_dicl_json() {
-    test_dicl_optimization_json().await;
+    Box::pin(test_dicl_optimization_json()).await;
 }
 
 // GEPA Tests
