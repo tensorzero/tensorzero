@@ -674,6 +674,9 @@ jobs:
       - name: detect‑private‑key
         run: uv run --with pre-commit pre-commit run detect-private-key --all-files
 
+      - name: end‑of‑file‑fixer
+        run: uv run --with pre-commit pre-commit run end-of-file-fixer --all-files
+
       - name: helm-values-schema
         run: uv run --with pre-commit pre-commit run helm-schema --all-files
 
