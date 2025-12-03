@@ -3225,7 +3225,7 @@ async fn test_image_inference_without_object_store() {
                         InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
-                                mime::IMAGE_PNG,
+                                Some(mime::IMAGE_PNG),
                                 BASE64_STANDARD.encode(FERRIS_PNG),
                                 None,
                                 None,

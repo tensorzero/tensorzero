@@ -635,7 +635,7 @@ mod tests {
             let file = File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
                     None,
                     None,

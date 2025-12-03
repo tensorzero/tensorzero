@@ -139,7 +139,7 @@ impl<'de> Deserialize<'de> for Base64File {
 
         Base64File::new(
             helper.source_url,
-            helper.mime_type,
+            Some(helper.mime_type),
             helper.data,
             helper.detail,
             helper.filename,
@@ -215,9 +215,10 @@ impl std::fmt::Display for Base64File {
 
 impl Base64File {
     /// Create a new Base64File with validation
+    /// If `mime_type` is not provided, we will try to detect it from the file data.
     pub fn new(
         source_url: Option<Url>,
-        mime_type: MediaType,
+        mime_type: Option<MediaType>,
         data: String,
         detail: Option<Detail>,
         filename: Option<String>,
@@ -228,6 +229,31 @@ impl Base64File {
                 message: "The `data` field for a `Base64File` must not contain `data:` prefix. Data should be pure base64-encoded content only.".to_string(),
             }));
         }
+
+        let mime_type = if let Some(mime_type) = mime_type {
+            mime_type
+        } else {
+            // TODO - avoid decoding entire file if the `infer` crate ever supports some kind of 'streaming'/`Read` API
+            let inferred = infer::get(&base64::decode(&data).map_err(|e| {
+                Error::new(ErrorDetails::Base64 {
+                    message: format!("Failed to decode base64 data: {e}"),
+                })
+            })?);
+            if let Some(inferred_type) = inferred {
+                inferred_type
+                    .mime_type()
+                    .parse::<MediaType>()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Base64 {
+                            message: format!("Inferred mime type is not valid: {e}"),
+                        })
+                    })?
+            } else {
+                return Err(Error::new(ErrorDetails::Base64 {
+                    message: "No mime type provided and unable to infer from data".to_string(),
+                }));
+            }
+        };
 
         Ok(Self {
             source_url,
@@ -428,7 +454,7 @@ impl<'de> Deserialize<'de> for File {
                 filename: Option<String>,
             },
             Base64 {
-                mime_type: MediaType,
+                mime_type: Option<MediaType>,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,
@@ -464,7 +490,7 @@ impl<'de> Deserialize<'de> for File {
                 filename: Option<String>,
             },
             Base64 {
-                mime_type: MediaType,
+                mime_type: Option<MediaType>,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,
@@ -1210,8 +1236,14 @@ mod tests {
         fn test_roundtrip_serialization() {
             // Test that serialize -> deserialize maintains data integrity
             let original = File::Base64(
-                Base64File::new(None, mime::IMAGE_JPEG, "base64data".to_string(), None, None)
-                    .expect("test data should be valid"),
+                Base64File::new(
+                    None,
+                    Some(mime::IMAGE_JPEG),
+                    "base64data".to_string(),
+                    None,
+                    None,
+                )
+                .expect("test data should be valid"),
             );
 
             let serialized = serde_json::to_string(&original).unwrap();
@@ -1225,7 +1257,7 @@ mod tests {
             // Test that Base64File::new rejects data with data: prefix
             let result = Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
                 None,
                 None,
@@ -1241,7 +1273,7 @@ mod tests {
             // Test that Base64File::new accepts pure base64 data
             let result = Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
                 None,
                 None,

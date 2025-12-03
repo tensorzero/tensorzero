@@ -120,7 +120,7 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                             InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    "audio/mpeg".parse().unwrap(),
+                                    Some("audio/mpeg".parse().unwrap()),
                                     audio_data.clone(),
                                     None,
                                     None,
