@@ -13,7 +13,6 @@ receivers:
           cert_file: /self-signed-certs/otlp-collector.crt
           key_file: /self-signed-certs/otlp-collector.key
 
-
 extensions:
   zpages:
     endpoint: 0.0.0.0:55679

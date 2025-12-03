@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, Role,
+    ClientBuilder, ClientInferenceParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent, Role,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
@@ -17,7 +17,7 @@ use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -109,7 +109,7 @@ async fn test_from_components_basic() {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing(),
+        .into_config_without_writing_for_tests(),
     );
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -446,11 +446,11 @@ model = "test_model_{random_id}"
     // Perform first inference
     let params = ClientInferenceParams {
         function_name: Some(format!("basic_test_{random_id}")),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -502,11 +502,11 @@ model = "test_model_{random_id}"
     // Perform second inference with new client
     let params2 = ClientInferenceParams {
         function_name: Some(format!("basic_test_{random_id}")),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello again!".to_string(),
                 })],
             }],
@@ -577,11 +577,11 @@ model = "test_model_{random_id}"
     // Perform an inference to ensure snapshot is written
     let params = ClientInferenceParams {
         function_name: Some(format!("basic_test_{random_id}")),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],

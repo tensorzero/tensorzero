@@ -222,8 +222,12 @@ async fn test_gcp_pro_tool_choice_none() {
         .find(|block| block.get("type").unwrap() == "unknown")
         .expect("Missing 'unknown' block in output: {output}");
     assert_eq!(
-        unknown_block.get("model_provider_name").unwrap().as_str(),
-        Some("tensorzero::model_name::gcp-gemini-2.5-pro::provider_name::gcp_vertex_gemini")
+        unknown_block.get("model_name").unwrap().as_str(),
+        Some("gcp-gemini-2.5-pro")
+    );
+    assert_eq!(
+        unknown_block.get("provider_name").unwrap().as_str(),
+        Some("gcp_vertex_gemini")
     );
     assert!(unknown_block
         .get("data")

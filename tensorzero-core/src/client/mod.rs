@@ -1,7 +1,7 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::snapshot::ConfigSnapshot;
-use crate::config::unwritten_config::UnwrittenConfig;
+use crate::config::unwritten::UnwrittenConfig;
 use crate::config::ConfigFileGlob;
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
@@ -22,7 +22,6 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
-pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 pub use input_handling::resolved_input_to_client_input;
 
 pub use crate::cache::CacheParamsOptions;
@@ -40,7 +39,6 @@ pub use crate::inference::types::{
 pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
-pub mod client_input;
 pub mod input_handling;
 
 pub enum ClientMode {
@@ -1147,7 +1145,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .dangerous_into_config_without_writing(),
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components
@@ -1198,7 +1196,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .dangerous_into_config_without_writing(),
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components

@@ -150,7 +150,7 @@ async fn test_write_poll_batch_inference() {
     let config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
 
     // Write a pending batch
     let poll_inference_response = write_poll_batch_inference(
@@ -348,7 +348,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
@@ -586,7 +586,7 @@ async fn test_write_read_completed_batch_inference_json() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;

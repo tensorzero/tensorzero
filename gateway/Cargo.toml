@@ -9,7 +9,7 @@ license.workspace = true
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 axum = { workspace = true }
-tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
+tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
 mimalloc = "0.1.48"
 clap = { workspace = true }

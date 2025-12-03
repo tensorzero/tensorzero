@@ -5,8 +5,8 @@ use std::{
 
 use serde_json::json;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
+    ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -15,7 +15,7 @@ use tensorzero_core::{
         select_workflow_evaluation_run_episode_clickhouse,
     },
     endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    inference::types::{Arguments, System, TextKind},
+    inference::types::{Arguments, System, Text},
 };
 use uuid::{Timestamp, Uuid};
 
@@ -93,14 +93,14 @@ async fn test_workflow_evaluation() {
         let inference_params = ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
                 )])))),
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],
@@ -225,6 +225,20 @@ async fn test_workflow_evaluation() {
             "DynamicEvaluationRunEpisode should have snapshot_hash"
         );
 
+        // Assert DynamicEvaluationRunEpisodeByRunId materialized view has snapshot_hash
+        let query = format!(
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisodeByRunId WHERE run_id_uint = toUInt128(toUUID('{run_id}')) AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "DynamicEvaluationRunEpisodeByRunId should have snapshot_hash"
+        );
+
         // Send feedback for the dynamic evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
@@ -295,14 +309,14 @@ async fn test_workflow_evaluation_other_function() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -368,14 +382,14 @@ async fn test_workflow_evaluation_variant_error() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -423,14 +437,14 @@ async fn test_workflow_evaluation_override_variant_tags() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -481,14 +495,14 @@ async fn test_bad_workflow_evaluation_run() {
     let inference_params = ClientInferenceParams {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "AskJeeves".into(),
             )])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],

@@ -11,8 +11,11 @@ export type Unknown = {
    */
   data: JsonValue;
   /**
-   * A fully-qualified name specifying when this content block should
-   * be included in the model provider input.
+   * A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
    */
-  model_provider_name: string | null;
+  model_name?: string;
+  /**
+   * A provider name for the model you specified (e.g. `my_openai`)
+   */
+  provider_name?: string;
 };

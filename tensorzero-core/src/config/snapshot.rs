@@ -87,6 +87,14 @@ impl std::fmt::Display for SnapshotHash {
     }
 }
 
+impl std::ops::Deref for SnapshotHash {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl SnapshotHash {
     pub fn new_test() -> SnapshotHash {

@@ -48,7 +48,6 @@ Some providers (notably OpenAI) natively support restricting allowed tools.
 For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
 For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
 
-
 #### `cache_options`
 
 - **Type:** object

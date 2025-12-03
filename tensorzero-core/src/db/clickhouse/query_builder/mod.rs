@@ -5,7 +5,10 @@ use std::{
 
 use crate::{
     config::{Config, MetricConfigType},
-    db::{clickhouse::query_builder::parameters::add_parameter, inferences::ListInferencesParams},
+    db::{
+        clickhouse::query_builder::parameters::add_parameter,
+        inferences::{ListInferencesParams, PaginationParams},
+    },
     error::{Error, ErrorDetails},
 };
 
@@ -63,6 +66,13 @@ impl OrderDirection {
         match self {
             OrderDirection::Asc => "ASC",
             OrderDirection::Desc => "DESC",
+        }
+    }
+
+    pub fn inverted(&self) -> Self {
+        match self {
+            OrderDirection::Asc => OrderDirection::Desc,
+            OrderDirection::Desc => OrderDirection::Asc,
         }
     }
 }
@@ -337,13 +347,28 @@ pub fn generate_order_by_sql(
     param_idx_counter: &mut usize,
     joins: &mut JoinRegistry,
 ) -> Result<String, Error> {
+    // Build a fallback "order by id" as tie-breaker for deterministic ordering
+    // For before/after pagination, the direction depends on the pagination type
+    // For offset pagination or no pagination, use DESC (most recent first)
+    let order_by_id_clause = if let Some(pagination) = &opts.pagination {
+        match pagination {
+            PaginationParams::After { .. } => "toUInt128(i.id) ASC".to_string(),
+            PaginationParams::Before { .. } => "toUInt128(i.id) DESC".to_string(),
+        }
+    } else {
+        // Add id tie-breaker when ordering to ensure deterministic results
+        "toUInt128(i.id) DESC".to_string()
+    };
+
+    // If we have cursor pagination but no user-specified ordering, just use the id clause
     let Some(order_by) = opts.order_by else {
-        return Ok(String::new());
+        return Ok(format!("\nORDER BY {order_by_id_clause}"));
     };
     if order_by.is_empty() {
-        return Ok(String::new());
+        return Ok(format!("\nORDER BY {order_by_id_clause}"));
     }
 
+    // Validate the order by clauses.
     for term in order_by {
         // TODO(shuyangli): Validate that if ORDER BY includes a metric, we should have an appropriate
         // metric inference filter.
@@ -359,6 +384,10 @@ pub fn generate_order_by_sql(
             }));
         }
     }
+
+    // Build the explicit ordering clauses.
+    // For "After" pagination, we need to invert all ordering directions because we'll reverse the list in memory
+    let should_invert_directions = matches!(opts.pagination, Some(PaginationParams::After { .. }));
 
     let mut order_by_clauses = Vec::new();
     for term in order_by {
@@ -386,9 +415,19 @@ pub fn generate_order_by_sql(
                 "total_term_frequency".to_string()
             }
         };
-        let direction = term.direction.to_clickhouse_direction();
+        // Invert direction for "After" pagination since we'll reverse the list
+        let effective_direction = if should_invert_directions {
+            term.direction.inverted()
+        } else {
+            term.direction
+        };
+        let direction = effective_direction.to_clickhouse_direction();
         order_by_clauses.push(format!("{sql_expr} {direction} NULLS LAST"));
     }
+
+    // Add the tie-breaker clause.
+    order_by_clauses.push(order_by_id_clause);
+
     let joined_clauses = order_by_clauses.join(", ");
     Ok(format!("\nORDER BY {joined_clauses}"))
 }
@@ -456,7 +495,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing()
+        .into_config_without_writing_for_tests()
     }
 
     /// Tests the simplest possible query: list inferences for a function with no filters
@@ -490,8 +529,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -502,10 +542,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -541,8 +577,9 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -553,10 +590,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -606,8 +639,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -626,10 +660,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -704,8 +734,9 @@ FROM
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -716,10 +747,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -768,8 +795,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -788,10 +816,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -840,8 +864,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -860,10 +885,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -937,8 +958,9 @@ LEFT JOIN (
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
-OFFSET {p7:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -969,10 +991,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p7".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1053,8 +1071,9 @@ LEFT JOIN (
 ) AS j2 ON i.episode_id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1089,10 +1108,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p7".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p8".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1151,8 +1166,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p4:UInt64}
-OFFSET {p5:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1175,10 +1191,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p4".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p5".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1265,11 +1277,12 @@ LEFT JOIN (
 ) AS j2 ON i.id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 9); // p0 (function) + 6 metric-related params + 2 limit/offset params
+        assert_eq!(params.len(), 8); // p0 (function) + 6 metric-related params + 1 limit param (no offset when 0)
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1342,11 +1355,12 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 9); // p0 (function) + 6 filter-related params + 2 limit/offset params
+        assert_eq!(params.len(), 8); // p0 (function) + 6 filter-related params + 1 limit param (no offset when 0)
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1381,8 +1395,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1397,10 +1412,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1438,6 +1449,7 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
 OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
@@ -1515,8 +1527,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {{p3:UInt64}}
-OFFSET {{p4:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -1536,10 +1548,6 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p3".to_string(),
                     value: "20".to_string(),
-                },
-                QueryParameter {
-                    name: "p4".to_string(),
-                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -1582,8 +1590,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1602,10 +1611,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1647,8 +1652,9 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1667,10 +1673,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1721,8 +1723,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
-OFFSET {p6:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1749,10 +1752,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p5".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p6".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1811,8 +1810,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
-OFFSET {p6:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1839,10 +1839,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p5".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p6".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1916,6 +1912,7 @@ LEFT JOIN (
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value = {p5:Bool}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
 OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
@@ -1993,8 +1990,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -2009,10 +2007,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2064,8 +2058,8 @@ FROM
     ChatInference AS i
 WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {{p2:UInt64}}
-OFFSET {{p3:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -2081,10 +2075,6 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p2".to_string(),
                     value: "20".to_string(),
-                },
-                QueryParameter {
-                    name: "p3".to_string(),
-                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -2149,8 +2139,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
-OFFSET {p7:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -2181,10 +2172,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "10".to_string(),
-            },
-            QueryParameter {
-                name: "p7".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2552,9 +2539,9 @@ FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
-ORDER BY i.timestamp DESC NULLS LAST
+ORDER BY i.timestamp DESC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2566,10 +2553,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2621,9 +2604,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String}
-ORDER BY j0.value ASC NULLS LAST
+ORDER BY j0.value ASC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2639,10 +2622,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2700,9 +2679,9 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String}
-ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
+ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2718,10 +2697,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2768,9 +2743,9 @@ FROM ChatInference AS i
 WHERE
     i.function_name = {p0:String}
     AND total_term_frequency > 0
-ORDER BY total_term_frequency DESC NULLS LAST
+ORDER BY total_term_frequency DESC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 

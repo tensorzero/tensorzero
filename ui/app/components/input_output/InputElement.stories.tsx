@@ -4,10 +4,21 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { Input, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 import { getBase64File } from "./content_blocks/FileContentBlock.stories";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/InputElement",
   component: InputElement,
+  decorators: [
+    (Story) => (
+      <TooltipProvider>
+        <GlobalToastProvider>
+          <Story />
+        </GlobalToastProvider>
+      </TooltipProvider>
+    ),
+  ],
 } satisfies Meta<typeof InputElement>;
 
 export default meta;
@@ -331,6 +342,22 @@ const COMPLEX_INPUT: Input = {
           })),
         },
         {
+          type: "file",
+          file_type: "url",
+          url: "https://example.com/document.pdf",
+          mime_type: "application/pdf",
+          filename: "report.pdf",
+          detail: "high",
+        },
+        {
+          type: "file",
+          file_type: "base64",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          mime_type: "image/png",
+          filename: "pixel.png",
+          detail: "auto",
+        },
+        {
           type: "template",
           name: "location_context",
           arguments: {
@@ -399,7 +426,6 @@ const COMPLEX_INPUT: Input = {
             custom_field: "This is a custom content block",
             provider_specific: true,
           },
-          model_provider_name: "custom_provider",
         },
       ],
     },

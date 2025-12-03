@@ -110,7 +110,8 @@ Multiple IDs should be separated by commas.
 Use this flag when you want to evaluate a specific subset of datapoints rather than an entire dataset.
 
 <Note>
-This flag is mutually exclusive with `--dataset-name` and `--max-datapoints`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
+  This flag is mutually exclusive with `--dataset-name` and `--max-datapoints`.
+  You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
 </Note>
 
 #### `--dataset-name NAME` (`-d`)
@@ -122,7 +123,8 @@ This flag specifies the dataset to use for evaluation.
 The dataset should be stored in your ClickHouse database.
 
 <Note>
-This flag is mutually exclusive with `--datapoint-ids`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
+  This flag is mutually exclusive with `--datapoint-ids`. You must provide
+  either `--dataset-name` or `--datapoint-ids`, but not both.
 </Note>
 
 #### `--evaluation-name NAME` (`-e`)
@@ -170,7 +172,8 @@ See [Inference Caching](/gateway/guides/inference-caching/) for more information
 This flag specifies the maximum number of datapoints to evaluate from the dataset.
 
 <Note>
-This flag can only be used with `--dataset-name`. It cannot be used with `--datapoint-ids`.
+  This flag can only be used with `--dataset-name`. It cannot be used with
+  `--datapoint-ids`.
 </Note>
 
 #### `--variant-name NAME` (`-v`)

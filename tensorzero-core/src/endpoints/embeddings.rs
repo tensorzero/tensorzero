@@ -10,12 +10,13 @@ use crate::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
-    endpoints::{inference::InferenceClients, RequestApiKeyExtension},
+    endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
     rate_limiting::ScopeInfo,
 };
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 #[cfg(test)]
 use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;

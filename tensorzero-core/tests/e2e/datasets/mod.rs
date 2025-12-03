@@ -88,6 +88,14 @@ async fn test_datapoint_insert_synthetic_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -598,6 +606,14 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     let updated_at = chrono::NaiveDateTime::parse_from_str(
         updated_at.as_str().unwrap(),
         CLICKHOUSE_DATETIME_FORMAT,
@@ -1499,6 +1515,15 @@ async fn test_datapoint_insert_output_inherit_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
@@ -1620,6 +1645,14 @@ async fn test_datapoint_insert_output_none_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -1793,6 +1826,14 @@ async fn test_datapoint_insert_output_demonstration_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     println!(
         "Datapoint: {}",
@@ -2305,6 +2346,15 @@ async fn test_datapoint_insert_missing_output_chat() {
         .await
         .unwrap();
 
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     datapoint
         .as_object_mut()
         .unwrap()
@@ -2375,7 +2425,14 @@ async fn test_datapoint_insert_null_output_chat() {
     let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
-
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     datapoint
         .as_object_mut()
         .unwrap()

@@ -1334,6 +1334,80 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     ]
 
 
+def test_file_inference_base64_infer_mime_type(sync_client: TensorZeroGateway):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileBase64(
+                        data=ferris_png,
+                        mime_type=None,
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "Base64": {
+                "source_url": None,
+                "mime_type": "image/png",
+                "data": ferris_png,
+                "storage_path": {
+                    "kind": {"type": "disabled"},
+                    "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                },
+            }
+        }
+    ]
+
+
+def test_file_inference_base64_bad_content_no_mime_type(sync_client: TensorZeroGateway):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    FileBase64(
+                        data=base64.b64encode(b"Hello, world!").decode("ascii"),
+                        mime_type=None,
+                    )
+                ],
+            }
+        ],
+    }
+    with pytest.raises(TensorZeroInternalError) as exc_info:
+        sync_client.inference(
+            model_name="dummy::extract_images",
+            input=input,
+            episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+            # because the gateway validates some of the properties needed
+        )
+    assert (
+        str(exc_info.value)
+        == "Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: Error decoding base64: No mime type provided and unable to infer from data at line 1 column 177"
+    )
+
+
 def test_file_inference_base64(sync_client: TensorZeroGateway):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
@@ -2308,7 +2382,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "id": "1",
     }
     assert request["input"]["messages"][2]["content"][0] == {
-        "type": "text",
+        "type": "template",
+        "name": "user",
         "arguments": {"foo": "bar"},
     }
     assert request["input"]["messages"][2]["content"][1] == {
@@ -3321,7 +3396,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_core::client::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
     )
 
 
@@ -3363,7 +3438,7 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                 }
             ],
         },
