@@ -62,6 +62,7 @@ services:
         PROFILE: dev
     environment:
       # Test environment variables
+      TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT: ${TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT:-}
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000/
@@ -175,6 +176,7 @@ services:
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.live
     environment:
       # Test environment variables
+      TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT: ${TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT:-}
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_GATEWAY_HOST: gateway
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests

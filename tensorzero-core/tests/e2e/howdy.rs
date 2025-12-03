@@ -40,7 +40,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         )
         .await
         .unwrap()
-        .config,
+        .into_config_without_writing_for_tests(),
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
