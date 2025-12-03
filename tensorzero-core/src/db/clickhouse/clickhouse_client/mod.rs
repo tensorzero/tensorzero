@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use secrecy::SecretString;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseResponse;
@@ -50,6 +51,10 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
 
     /// Returns the batch writer join handle if batching is enabled
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
+
+    /// Creates a new, independent ClickHouse client with the same settings
+    /// In batch mode, this will create a separate batch sender
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
 
     /// Writes rows to ClickHouse using batched writes (if enabled)
     async fn write_batched_internal(
@@ -116,6 +121,7 @@ mock! {
 
     #[async_trait]
     impl ClickHouseClient for ClickHouseClient {
+        async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
         fn database_url(&self) -> &SecretString;
         fn cluster_name(&self) -> &Option<String>;
         fn database(&self) -> &str;

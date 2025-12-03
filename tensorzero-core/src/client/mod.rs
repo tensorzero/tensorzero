@@ -397,7 +397,11 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
-        /// Already-initialized ClickHouse connection
+        /// Use the settings from this `ClickHouseConnectionInfo` to create a *new* ClickHouseConnectionInfo
+        /// We do *not* re-use this directly,since we block when an embedded client `GatewayHandle` is dropped,
+        /// waiting on all outstanding `ClickHouseConnectionInfo` to get dropped.
+        /// This does not work if two different embedded clients can use the same `ClickHouseConnectionInfo`,
+        /// since one might be in use by Python code with the GIL held
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
         postgres_connection_info: PostgresConnectionInfo,
@@ -582,7 +586,14 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
-                                clickhouse_connection_info.clone(),
+                                // We create a new independent `ClickHouseConnectionInfo` here,
+                                // and do *not* directly use the existing `clickhouse_connection_info`
+                                // See `ClientBuilderMode::FromComponents` for more details
+                                clickhouse_connection_info.recreate().await.map_err(|e| {
+                                    ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                        source: e.into(),
+                                    })
+                                })?,
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
