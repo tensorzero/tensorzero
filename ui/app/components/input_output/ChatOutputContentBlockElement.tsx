@@ -3,6 +3,7 @@ import type { ContentBlockChatOutput } from "~/types/tensorzero";
 import { TextContentBlock } from "~/components/input_output/content_blocks/TextContentBlock";
 import { InferenceResponseToolCallContentBlock } from "~/components/input_output/content_blocks/InferenceResponseToolCallContentBlock";
 import { ThoughtContentBlock } from "~/components/input_output/content_blocks/ThoughtContentBlock";
+import { UnknownContentBlock } from "~/components/input_output/content_blocks/UnknownContentBlock";
 
 interface ChatOutputContentBlockElementProps {
   block: ContentBlockChatOutput;
@@ -57,9 +58,10 @@ export function ChatOutputContentBlockElement({
 
     case "unknown": {
       return (
-        <TextContentBlock
-          label="Unknown"
-          text={JSON.stringify(block.data)}
+        <UnknownContentBlock
+          data={block.data}
+          isEditing={isEditing}
+          onChange={(data) => onChange?.({ ...block, data })}
           actionBar={actionBar}
         />
       );

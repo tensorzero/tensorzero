@@ -106,6 +106,13 @@ function AddContentBlockButtons({
         text: "",
       },
     },
+    {
+      label: "Unknown",
+      emptyBlock: {
+        type: "unknown" as const,
+        data: {},
+      },
+    },
   ];
 
   return (
@@ -117,10 +124,6 @@ function AddContentBlockButtons({
           onAdd={() => onAdd(button.emptyBlock)}
         />
       ))}
-      {/* TODO: we need to support adding other kinds of content blocks */}
-      <span className="text-fg-muted text-xs">
-        Please use the API or SDK for other content block types.
-      </span>
     </div>
   );
 }
