@@ -36,6 +36,7 @@ import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
+import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 
 export interface InferenceDetailData {
   inference: ParsedInferenceRow;
@@ -47,11 +48,27 @@ export interface InferenceDetailData {
   usedVariants: string[];
 }
 
+/**
+ * Props for rendering the header section (BasicInfo + ActionBar).
+ * This allows the parent component to customize how the header is rendered,
+ * e.g., wrapping it in a PageHeader for the full page view.
+ */
+export interface InferenceHeaderProps {
+  basicInfo: ReactNode;
+  actionBar: ReactNode;
+}
+
 interface InferenceDetailContentProps {
   data: InferenceDetailData;
   actionUrl?: string;
   onFeedbackAdded?: (redirectUrl?: string) => void;
   feedbackFooter?: ReactNode;
+  /**
+   * Optional render function for customizing the header layout.
+   * If not provided, BasicInfo and ActionBar are rendered directly.
+   * Use this to wrap the header in a PageHeader for the full page view.
+   */
+  renderHeader?: (props: InferenceHeaderProps) => ReactNode;
 }
 
 type ModalType = "human-feedback" | "variant-response" | null;
@@ -60,11 +77,22 @@ type ActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
+/**
+ * Helper to compute inference usage from model inferences.
+ * Exported for use by the inference detail page.
+ */
+export function getInferenceUsage(
+  model_inferences: ParsedModelInferenceRow[],
+): InferenceUsage {
+  return getTotalInferenceUsage(model_inferences);
+}
+
 export function InferenceDetailContent({
   data,
   actionUrl,
   onFeedbackAdded,
   feedbackFooter,
+  renderHeader,
 }: InferenceDetailContentProps) {
   const {
     inference,
@@ -241,59 +269,76 @@ export function InferenceDetailContent({
 
   const inferenceUsage = getTotalInferenceUsage(model_inferences);
 
+  // Build the header components
+  const basicInfoElement = (
+    <BasicInfo
+      inference={inference}
+      inferenceUsage={inferenceUsage}
+      modelInferences={model_inferences}
+    />
+  );
+
+  const actionBarElement = (
+    <ActionBar>
+      <TryWithButton
+        options={options}
+        onOptionSelect={onSelect}
+        isLoading={variantInferenceIsLoading}
+        isDefaultFunction={isDefault}
+      />
+      <AddToDatasetButton
+        inferenceId={inference.id}
+        functionName={inference.function_name}
+        variantName={inference.variant_name}
+        episodeId={inference.episode_id}
+        hasDemonstration={hasDemonstration}
+      />
+      <HumanFeedbackModal
+        onOpenChange={(isOpen) => {
+          if (humanFeedbackState !== "idle") {
+            return;
+          }
+
+          if (!isOpen) {
+            resetHumanFeedbackFetcher();
+          }
+          setOpenModal(isOpen ? "human-feedback" : null);
+        }}
+        isOpen={openModal === "human-feedback"}
+        trigger={<HumanFeedbackButton />}
+      >
+        <humanFeedbackFetcher.Form
+          method="post"
+          {...(actionUrl ? { action: actionUrl } : {})}
+        >
+          <input type="hidden" name="_action" value="addFeedback" />
+          <HumanFeedbackForm
+            inferenceId={inference.id}
+            inferenceOutput={inference.output}
+            formError={humanFeedbackFormError}
+            isSubmitting={
+              humanFeedbackState === "submitting" ||
+              humanFeedbackState === "loading"
+            }
+          />
+        </humanFeedbackFetcher.Form>
+      </HumanFeedbackModal>
+    </ActionBar>
+  );
+
+  // Allow parent to customize header rendering, or use default layout
+  const headerContent = renderHeader ? (
+    renderHeader({ basicInfo: basicInfoElement, actionBar: actionBarElement })
+  ) : (
+    <>
+      {basicInfoElement}
+      {actionBarElement}
+    </>
+  );
+
   return (
     <>
-      <BasicInfo
-        inference={inference}
-        inferenceUsage={inferenceUsage}
-        modelInferences={model_inferences}
-      />
-
-      <ActionBar>
-        <TryWithButton
-          options={options}
-          onOptionSelect={onSelect}
-          isLoading={variantInferenceIsLoading}
-          isDefaultFunction={isDefault}
-        />
-        <AddToDatasetButton
-          inferenceId={inference.id}
-          functionName={inference.function_name}
-          variantName={inference.variant_name}
-          episodeId={inference.episode_id}
-          hasDemonstration={hasDemonstration}
-        />
-        <HumanFeedbackModal
-          onOpenChange={(isOpen) => {
-            if (humanFeedbackState !== "idle") {
-              return;
-            }
-
-            if (!isOpen) {
-              resetHumanFeedbackFetcher();
-            }
-            setOpenModal(isOpen ? "human-feedback" : null);
-          }}
-          isOpen={openModal === "human-feedback"}
-          trigger={<HumanFeedbackButton />}
-        >
-          <humanFeedbackFetcher.Form
-            method="post"
-            {...(actionUrl ? { action: actionUrl } : {})}
-          >
-            <input type="hidden" name="_action" value="addFeedback" />
-            <HumanFeedbackForm
-              inferenceId={inference.id}
-              inferenceOutput={inference.output}
-              formError={humanFeedbackFormError}
-              isSubmitting={
-                humanFeedbackState === "submitting" ||
-                humanFeedbackState === "loading"
-              }
-            />
-          </humanFeedbackFetcher.Form>
-        </HumanFeedbackModal>
-      </ActionBar>
+      {headerContent}
 
       <SectionsGroup>
         <SectionLayout>

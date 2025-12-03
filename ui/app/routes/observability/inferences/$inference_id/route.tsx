@@ -12,50 +12,24 @@ import {
   data,
   isRouteErrorResponse,
   Link,
-  useFetcher,
   useNavigate,
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import BasicInfo from "./InferenceBasicInfo";
-import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
-import { ParameterCard } from "./InferenceParameters";
-import { TagsTable } from "~/components/tags/TagsTable";
-import { ModelInferencesTable } from "./ModelInferencesTable";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { useConfig, useFunctionConfig } from "~/context/config";
-import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import {
-  PageHeader,
-  PageLayout,
-  SectionHeader,
-  SectionLayout,
-  SectionsGroup,
-} from "~/components/layout/PageLayout";
+import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import {
-  prepareInferenceActionRequest,
-  useInferenceActionFetcher,
-  type VariantResponseInfo,
-} from "~/routes/api/tensorzero/inference.utils";
-import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithButton } from "~/components/inference/TryWithButton";
-import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
-import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
-import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
-import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 import { logger } from "~/utils/logger";
-import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import {
+  InferenceDetailContent,
+  type InferenceDetailData,
+} from "~/components/inference/InferenceDetailContent";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -212,8 +186,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
-type ModalType = "human-feedback" | "variant-response" | null;
-
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
@@ -226,9 +198,18 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
-  const [openModal, setOpenModal] = useState<ModalType | null>(null);
-  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const { toast } = useToast();
 
+  // Show toast when feedback is successfully added
+  useEffect(() => {
+    if (newFeedbackId) {
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
+    }
+    return;
+  }, [newFeedbackId, toast]);
+
+  // Feedback pagination
   const topFeedback = feedback[0] as { id: string } | undefined;
   const bottomFeedback = feedback[feedback.length - 1] as
     | { id: string }
@@ -261,335 +242,41 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
-  const num_feedbacks = feedback.length;
-
-  const functionConfig = useFunctionConfig(inference.function_name);
-  const variants = Object.keys(functionConfig?.variants || {});
-
-  const demonstrationFeedbackFetcher = useFetcher<typeof action>();
-  const demonstrationFeedbackFormError =
-    demonstrationFeedbackFetcher.state === "idle"
-      ? (demonstrationFeedbackFetcher.data?.error ?? null)
-      : null;
-  useEffect(() => {
-    const currentState = demonstrationFeedbackFetcher.state;
-    const data = demonstrationFeedbackFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo);
-      setOpenModal(null);
-      setSelectedVariant(null);
-    }
-  }, [
-    demonstrationFeedbackFetcher.data,
-    demonstrationFeedbackFetcher.state,
-    navigate,
-  ]);
-
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (newFeedbackId) {
-      const { dismiss } = toast.success({ title: "Feedback Added" });
-      return () => dismiss({ immediate: true });
-    }
-    return;
-  }, [newFeedbackId, toast]);
-
-  const variantInferenceFetcher = useInferenceActionFetcher();
-  const [lastRequestArgs, setLastRequestArgs] = useState<
-    Parameters<typeof prepareInferenceActionRequest>[0] | null
-  >(null);
-  const variantSource = "inference";
-  const variantInferenceIsLoading =
-    // only concerned with rendering loading state when the modal is open
-    openModal === "variant-response" &&
-    (variantInferenceFetcher.state === "submitting" ||
-      variantInferenceFetcher.state === "loading");
-
-  const { submit } = variantInferenceFetcher;
-  const processRequest = (
-    option: string,
-    args: Parameters<typeof prepareInferenceActionRequest>[0],
-  ) => {
-    try {
-      const request = prepareInferenceActionRequest(args);
-
-      // Set state and open modal only if request preparation succeeds
-      setSelectedVariant(option);
-      setOpenModal("variant-response");
-      setLastRequestArgs(args);
-
-      try {
-        void submit({ data: JSON.stringify(request) });
-      } catch (stringifyError) {
-        logger.error("Failed to stringify request:", stringifyError);
-        toast.error({
-          title: "Request Error",
-          description: "Failed to prepare the request. Please try again.",
-        });
-        // Reset state on error
-        setSelectedVariant(null);
-        setOpenModal(null);
-      }
-    } catch (error) {
-      logger.error("Failed to prepare inference request:", error);
-
-      // Show user-friendly error message based on the error type
-      let errorMessage = "Failed to prepare the request. Please try again.";
-      if (error instanceof Error) {
-        if (error.message.includes("Extra body is not supported")) {
-          errorMessage =
-            "This inference contains extra body parameters which are not supported in the UI.";
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
-      }
-
-      toast.error({
-        title: "Request Preparation Error",
-        description: errorMessage,
-      });
-    }
+  // Build the data object for InferenceDetailContent
+  const inferenceData: InferenceDetailData = {
+    inference,
+    model_inferences,
+    feedback,
+    feedback_bounds,
+    hasDemonstration,
+    latestFeedbackByMetric,
+    usedVariants,
   };
-
-  const onVariantSelect = (variant: string) => {
-    processRequest(variant, {
-      resource: inference,
-      source: variantSource,
-      variant,
-    });
-  };
-
-  const onModelSelect = (model: string) => {
-    processRequest(model, {
-      resource: inference,
-      source: variantSource,
-      model_name: model,
-    });
-  };
-
-  const handleRefresh = () => {
-    if (!lastRequestArgs) {
-      return;
-    }
-
-    try {
-      const request = prepareInferenceActionRequest(lastRequestArgs);
-      request.cache_options = {
-        ...request.cache_options,
-        enabled: "write_only",
-      };
-      submit({ data: JSON.stringify(request) });
-    } catch (error) {
-      logger.error("Failed to prepare inference request for refresh:", error);
-      toast.error({
-        title: "Request Preparation Error",
-        description: "Failed to refresh inference. Please try again.",
-      });
-    }
-  };
-
-  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
-  const humanFeedbackFormError =
-    humanFeedbackFetcher.state === "idle"
-      ? (humanFeedbackFetcher.data?.error ?? null)
-      : null;
-  useEffect(() => {
-    const currentState = humanFeedbackFetcher.state;
-    const data = humanFeedbackFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo, { state: "humanFeedbackRedirect" });
-      setOpenModal(null);
-    }
-  }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
-
-  const config = useConfig();
-
-  const isDefault = inference.function_name === DEFAULT_FUNCTION;
-
-  const modelsSet = new Set<string>([
-    // models successfully used with default function
-    ...usedVariants,
-    // all configured models in config
-    ...Object.keys(config.models),
-    // TODO(bret): list of popular/common model choices
-    // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
-  ]);
-  const models = [...modelsSet].sort();
-
-  const options = isDefault ? models : variants;
-  const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
   return (
     <PageLayout>
-      <PageHeader label="Inference" name={inference.id}>
-        <BasicInfo
-          inference={inference}
-          inferenceUsage={getTotalInferenceUsage(model_inferences)}
-          modelInferences={model_inferences}
-        />
-
-        <ActionBar>
-          <TryWithButton
-            options={options}
-            onOptionSelect={onSelect}
-            isLoading={variantInferenceIsLoading}
-            isDefaultFunction={isDefault}
-          />
-          <AddToDatasetButton
-            inferenceId={inference.id}
-            functionName={inference.function_name}
-            variantName={inference.variant_name}
-            episodeId={inference.episode_id}
-            hasDemonstration={hasDemonstration}
-          />
-          <HumanFeedbackModal
-            onOpenChange={(isOpen) => {
-              if (humanFeedbackFetcher.state !== "idle") {
-                return;
-              }
-
-              if (!isOpen) {
-                humanFeedbackFetcher.reset();
-              }
-              setOpenModal(isOpen ? "human-feedback" : null);
-            }}
-            isOpen={openModal === "human-feedback"}
-            trigger={<HumanFeedbackButton />}
-          >
-            <humanFeedbackFetcher.Form method="post">
-              <input type="hidden" name="_action" value="addFeedback" />
-              <HumanFeedbackForm
-                inferenceId={inference.id}
-                inferenceOutput={inference.output}
-                formError={humanFeedbackFormError}
-                isSubmitting={
-                  humanFeedbackFetcher.state === "submitting" ||
-                  humanFeedbackFetcher.state === "loading"
-                }
-              />
-            </humanFeedbackFetcher.Form>
-          </HumanFeedbackModal>
-        </ActionBar>
-      </PageHeader>
-
-      <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Input" />
-          <Input
-            system={inference.input.system}
-            messages={inference.input.messages}
-          />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Output" />
-          <Output
-            output={
-              inference.function_type === "json"
-                ? { ...inference.output, schema: inference.output_schema }
-                : inference.output
-            }
-          />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader
-            heading="Feedback"
-            count={num_feedbacks}
-            badge={{
-              name: "inference",
-              tooltip:
-                "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
-            }}
-          />
-          <FeedbackTable
-            feedback={feedback}
-            latestCommentId={feedback_bounds.by_type.comment.last_id!}
-            latestDemonstrationId={
-              feedback_bounds.by_type.demonstration.last_id!
-            }
-            latestFeedbackIdByMetric={latestFeedbackByMetric}
-          />
+      <InferenceDetailContent
+        data={inferenceData}
+        onFeedbackAdded={(redirectUrl) => {
+          if (redirectUrl) {
+            navigate(redirectUrl);
+          }
+        }}
+        feedbackFooter={
           <PageButtons
             onNextPage={handleNextFeedbackPage}
             onPreviousPage={handlePreviousFeedbackPage}
             disableNext={disableNextFeedbackPage}
             disablePrevious={disablePreviousFeedbackPage}
           />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={JSON.stringify(inference.inference_params, null, 2)}
-          />
-        </SectionLayout>
-
-        {inference.function_type === "chat" && (
-          <SectionLayout>
-            <SectionHeader heading="Tool Parameters" />
-            {inference.tool_params && (
-              <ParameterCard
-                parameters={JSON.stringify(inference.tool_params, null, 2)}
-              />
-            )}
-          </SectionLayout>
+        }
+        renderHeader={({ basicInfo, actionBar }) => (
+          <PageHeader label="Inference" name={inference.id}>
+            {basicInfo}
+            {actionBar}
+          </PageHeader>
         )}
-
-        <SectionLayout>
-          <SectionHeader heading="Tags" />
-          <TagsTable tags={inference.tags} isEditing={false} />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Model Inferences" />
-          <ModelInferencesTable modelInferences={model_inferences} />
-        </SectionLayout>
-      </SectionsGroup>
-
-      {selectedVariant && (
-        <VariantResponseModal
-          isOpen={openModal === "variant-response"}
-          isLoading={variantInferenceIsLoading}
-          error={variantInferenceFetcher.error?.message}
-          variantResponse={variantInferenceFetcher.data?.info ?? null}
-          rawResponse={variantInferenceFetcher.data?.raw ?? null}
-          onClose={() => {
-            setOpenModal(null);
-            setSelectedVariant(null);
-            setLastRequestArgs(null);
-          }}
-          item={inference}
-          inferenceUsage={getTotalInferenceUsage(model_inferences)}
-          selectedVariant={selectedVariant}
-          source={variantSource}
-          onRefresh={lastRequestArgs ? handleRefresh : null}
-        >
-          {variantInferenceFetcher.data?.info && (
-            <demonstrationFeedbackFetcher.Form method="post">
-              <input type="hidden" name="_action" value="addFeedback" />
-              <input type="hidden" name="metricName" value="demonstration" />
-              <input type="hidden" name="inferenceId" value={inference.id} />
-              <input
-                type="hidden"
-                name="value"
-                value={JSON.stringify(
-                  prepareDemonstrationFromVariantOutput(
-                    variantInferenceFetcher.data.info,
-                  ),
-                )}
-              />
-              <DemonstrationFeedbackButton
-                isSubmitting={
-                  demonstrationFeedbackFetcher.state === "submitting"
-                }
-                submissionError={demonstrationFeedbackFormError}
-              />
-            </demonstrationFeedbackFetcher.Form>
-          )}
-        </VariantResponseModal>
-      )}
+      />
     </PageLayout>
   );
 }
@@ -654,20 +341,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     </div>
   );
-}
-
-function prepareDemonstrationFromVariantOutput(
-  variantOutput: VariantResponseInfo,
-) {
-  const output = variantOutput.output;
-  // output can either be a JsonInferenceOutput or a ContentBlockChatOutput[] (or undefined)
-  // if it is a JsonInferenceOutput, we need to take the Parsed field and throw if it is missing
-  // if it is a ContentBlockChatOutput[], we can return as is
-  if (Array.isArray(output)) {
-    return output;
-  } else if (output && "parsed" in output) {
-    return output.parsed;
-  } else {
-    throw new Error("Invalid variant output");
-  }
 }

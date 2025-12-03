@@ -7,7 +7,10 @@ import {
   queryInferenceById,
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference.server";
-import { queryLatestFeedbackIdByMetric } from "~/utils/clickhouse/feedback";
+import {
+  pollForFeedbackItem,
+  queryLatestFeedbackIdByMetric,
+} from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
@@ -17,9 +20,12 @@ import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
 
 export async function loader({
+  request,
   params,
 }: LoaderFunctionArgs): Promise<Response> {
   const { inference_id } = params;
+  const url = new URL(request.url);
+  const newFeedbackId = url.searchParams.get("newFeedbackId");
 
   if (!inference_id) {
     throw data("Inference ID is required", { status: 400 });
@@ -28,28 +34,66 @@ export async function loader({
   try {
     const dbClient = await getNativeDatabaseClient();
 
-    // Fetch all data in parallel
-    const [
-      inference,
-      model_inferences,
-      feedback,
-      feedback_bounds,
-      demonstration_feedback,
-      latestFeedbackByMetric,
-    ] = await Promise.all([
-      queryInferenceById(inference_id),
-      queryModelInferencesByInferenceId(inference_id),
-      dbClient.queryFeedbackByTargetId({
-        target_id: inference_id,
-        limit: 10,
-      }),
-      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+    const inferencePromise = queryInferenceById(inference_id);
+    const modelInferencesPromise =
+      queryModelInferencesByInferenceId(inference_id);
+    const demonstrationFeedbackPromise =
       dbClient.queryDemonstrationFeedbackByInferenceId({
-        inference_id: inference_id,
+        inference_id,
         limit: 1,
-      }),
-      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
-    ]);
+      });
+
+    // If there is a freshly inserted feedback, ClickHouse may take some time to
+    // update the feedback table and materialized views as it is eventually consistent.
+    // In this case, we poll for the feedback item until it is found.
+    const feedbackDataPromise = newFeedbackId
+      ? pollForFeedbackItem(inference_id, newFeedbackId, 10)
+      : dbClient.queryFeedbackByTargetId({
+          target_id: inference_id,
+          limit: 10,
+        });
+
+    let inference,
+      model_inferences,
+      demonstration_feedback,
+      feedback_bounds,
+      feedback,
+      latestFeedbackByMetric;
+
+    if (newFeedbackId) {
+      // When there's new feedback, wait for polling to complete before querying
+      // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+      [inference, model_inferences, demonstration_feedback, feedback] =
+        await Promise.all([
+          inferencePromise,
+          modelInferencesPromise,
+          demonstrationFeedbackPromise,
+          feedbackDataPromise,
+        ]);
+
+      // Query these after polling completes to avoid race condition with materialized views
+      [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+        dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+        queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+      ]);
+    } else {
+      // Normal case: execute all queries in parallel
+      [
+        inference,
+        model_inferences,
+        demonstration_feedback,
+        feedback_bounds,
+        feedback,
+        latestFeedbackByMetric,
+      ] = await Promise.all([
+        inferencePromise,
+        modelInferencesPromise,
+        demonstrationFeedbackPromise,
+        dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+        feedbackDataPromise,
+        queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+      ]);
+    }
 
     if (!inference) {
       throw data(`Inference ${inference_id} not found`, { status: 404 });

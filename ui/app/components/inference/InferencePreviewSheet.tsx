@@ -11,6 +11,7 @@ import {
   type InferenceDetailData,
 } from "~/components/inference/InferenceDetailContent";
 import { toInferenceUrl } from "~/utils/urls";
+import { useToast } from "~/hooks/use-toast";
 
 interface InferencePreviewSheetProps {
   inferenceId: string | null;
@@ -28,30 +29,57 @@ export function InferencePreviewSheet({
   onClose,
 }: InferencePreviewSheetProps) {
   const fetcher = useFetcher<InferenceDetailData>();
+  const { toast } = useToast();
 
   // Use a ref to access fetcher.load without causing effect re-runs
   // The fetcher object changes identity on state changes, but the load function is stable
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
+  // Track the previous inference ID to detect when it changes
+  const prevInferenceIdRef = useRef<string | null>(null);
+
   // Extract stable values from fetcher for dependency arrays
   const fetcherState = fetcher.state;
   const fetcherDataInferenceId = fetcher.data?.inference.id;
 
   // Fetch data when sheet opens with an inference ID (only if we don't have data)
+  // Also refetch when inference ID changes to avoid showing stale data
   useEffect(() => {
     if (!isOpen || !inferenceId) return;
-    // Only fetch if we don't have data or the data is for a different inference
-    if (fetcherDataInferenceId === inferenceId) return;
+
+    // Check if inference ID changed - if so, always refetch
+    const inferenceIdChanged = prevInferenceIdRef.current !== inferenceId;
+    prevInferenceIdRef.current = inferenceId;
+
+    // Only fetch if we don't have data, data is for a different inference, or ID changed
+    if (
+      !inferenceIdChanged &&
+      fetcherDataInferenceId === inferenceId &&
+      fetcherState === "idle"
+    ) {
+      return;
+    }
+
     if (fetcherState !== "idle") return;
 
     fetcherRef.current.load(getInferenceApiUrl(inferenceId));
   }, [isOpen, inferenceId, fetcherState, fetcherDataInferenceId]);
 
-  const refreshInferenceData = useCallback(() => {
-    if (!inferenceId) return;
-    fetcherRef.current.load(getInferenceApiUrl(inferenceId));
-  }, [inferenceId]);
+  const refreshInferenceData = useCallback(
+    (redirectUrl?: string) => {
+      if (!inferenceId) return;
+      // Show success toast when feedback is added
+      toast.success({ title: "Feedback Added" });
+      // Load with newFeedbackId if provided in the redirect URL for proper polling
+      if (redirectUrl) {
+        fetcherRef.current.load(redirectUrl);
+      } else {
+        fetcherRef.current.load(getInferenceApiUrl(inferenceId));
+      }
+    },
+    [inferenceId, toast],
+  );
 
   const inferenceData = fetcher.data ?? null;
   const isLoading = fetcher.state === "loading";
