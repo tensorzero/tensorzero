@@ -201,7 +201,18 @@ pub async fn get_tempo_spans(
     let start_time = start_time.timestamp();
     let now = Utc::now().timestamp();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .retry(
+            reqwest::retry::for_host("localhost").classify_fn(|req_resp| {
+                if req_resp.status().is_some_and(|s| s.is_success()) {
+                    req_resp.success()
+                } else {
+                    req_resp.retryable()
+                }
+            }),
+        )
+        .build()
+        .unwrap();
 
     let tempo_base_url = std::env::var("TENSORZERO_TEMPO_URL")
         .unwrap_or_else(|_| "http://localhost:3200".to_string());
