@@ -266,7 +266,6 @@ async fn analyze_inference(
         }
     };
 
-    // Log the generated analysis at debug level
     tracing::debug!("Generated analysis: {}", analysis);
 
     // Conditionally include inference context based on config flag

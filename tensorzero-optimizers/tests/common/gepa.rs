@@ -26,11 +26,6 @@ use uuid::Uuid;
 /// to produce the Pinocchio pattern (lies with nose growth).
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_gepa_optimization_chat() {
-    // Initialize tracing subscriber to capture progress logs
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
-
     let variant_prefix = format!("gepa_pinocchio_test_{}", Uuid::now_v7());
 
     let gepa_config = GEPAConfig {
@@ -163,11 +158,6 @@ pub async fn test_gepa_optimization_chat() {
 /// to produce the Pinocchio pattern (lies with nose growth).
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_gepa_optimization_json() {
-    // Initialize tracing subscriber to capture progress logs
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
-
     let variant_prefix = format!("gepa_pinocchio_json_test_{}", Uuid::now_v7());
 
     let gepa_config = GEPAConfig {
