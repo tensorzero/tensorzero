@@ -37,7 +37,6 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
-use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -800,12 +799,11 @@ impl<'a> AnthropicRequestBody<'a> {
             Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
             None => None,
         };
-        let request_messages: Vec<AnthropicMessage> =
+        let messages: Vec<AnthropicMessage> =
             try_join_all(request.messages.iter().map(|m| {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?;
-        let messages = prepare_messages(request_messages);
         let messages = if needs_json_prefill(request, beta_structured_outputs) {
             prefill_json_message(messages)
         } else {
@@ -954,48 +952,6 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
             raw_response: None,
         }))
     }
-}
-
-/// Modifies the message array to satisfy Anthropic API requirements by:
-/// - Prepending a default User message with "[listening]" if the first message is not from a User
-/// - Appending a default User message with "[listening]" if the last message is from an Assistant
-fn prepare_messages(
-    mut messages: Vec<AnthropicMessage<'_>>,
-) -> std::vec::Vec<providers::anthropic::AnthropicMessage<'_>> {
-    // Anthropic also requires that there is at least one message and it is a User message.
-    // If it's not we will prepend a default User message.
-    match messages.first() {
-        Some(&AnthropicMessage {
-            role: AnthropicRole::User,
-            ..
-        }) => {}
-        _ => {
-            messages.insert(
-                0,
-                AnthropicMessage {
-                    role: AnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "[listening]",
-                    })],
-                },
-            );
-        }
-    }
-
-    // Anthropic will continue any assistant messages passed in.
-    // Since we don't want to do that, we'll append a default User message in the case that the last message was
-    // an assistant message
-    if let Some(last_message) = messages.last() {
-        if last_message.role == AnthropicRole::Assistant {
-            messages.push(AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "[listening]",
-                })],
-            });
-        }
-    }
-    messages
 }
 
 fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
@@ -2223,195 +2179,6 @@ mod tests {
         assert!(body.is_err());
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
-    }
-
-    #[tokio::test]
-    async fn test_prepare_messages() {
-        let listening_message = AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "[listening]",
-            })],
-        };
-
-        // Test case 1: Empty messages - should add listening message
-        let messages = vec![];
-        let result = prepare_messages(messages);
-        assert_eq!(result, vec![listening_message.clone()]);
-
-        // Test case 2: First message is Assistant - should prepend listening message
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-        ];
-        let result = prepare_messages(messages);
-        assert_eq!(
-            result,
-            vec![
-                listening_message.clone(),
-                AnthropicMessage {
-                    role: AnthropicRole::Assistant,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hi"
-                    })],
-                },
-                AnthropicMessage {
-                    role: AnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hello"
-                    })],
-                },
-            ]
-        );
-
-        // Test case 3: Last message is Assistant - should append listening message
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-        ];
-        let result = prepare_messages(messages);
-        assert_eq!(
-            result,
-            vec![
-                AnthropicMessage {
-                    role: AnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hello"
-                    })],
-                },
-                AnthropicMessage {
-                    role: AnthropicRole::Assistant,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hi"
-                    })],
-                },
-                listening_message.clone(),
-            ]
-        );
-
-        // Test case 4: Valid message sequence - no changes needed
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "How are you?",
-                })],
-            },
-        ];
-        let result = prepare_messages(messages.clone());
-        assert_eq!(result, messages);
-
-        // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "How can I help?",
-                })],
-            },
-        ];
-        let result = prepare_messages(messages);
-        assert_eq!(
-            result,
-            vec![
-                listening_message.clone(),
-                AnthropicMessage {
-                    role: AnthropicRole::Assistant,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hi"
-                    })],
-                },
-                AnthropicMessage {
-                    role: AnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hello"
-                    })],
-                },
-                AnthropicMessage {
-                    role: AnthropicRole::Assistant,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "How can I help?"
-                    })],
-                },
-                listening_message.clone(),
-            ]
-        );
-
-        // Test case 6: Single Assistant message - should add listening messages at both ends
-        let messages = vec![AnthropicMessage {
-            role: AnthropicRole::Assistant,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Hi",
-            })],
-        }];
-        let result = prepare_messages(messages);
-        assert_eq!(
-            result,
-            vec![
-                listening_message.clone(),
-                AnthropicMessage {
-                    role: AnthropicRole::Assistant,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "Hi"
-                    })],
-                },
-                listening_message.clone(),
-            ]
-        );
-
-        // Test case 7: Single User message - no changes needed
-        let messages = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Hello",
-            })],
-        }];
-        let result = prepare_messages(messages.clone());
-        assert_eq!(result, messages);
     }
 
     #[test]
