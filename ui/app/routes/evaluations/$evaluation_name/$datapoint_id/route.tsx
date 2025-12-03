@@ -24,7 +24,8 @@ import {
   useFetcher,
   type RouteHandle,
 } from "react-router";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -572,7 +573,11 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              <Output output={result.output} />
+              {Array.isArray(result.output) ? (
+                <ChatOutputElement output={result.output} />
+              ) : (
+                <JsonOutputElement output={result.output} />
+              )}
             </section>
 
             {result.id !== "Reference" &&
