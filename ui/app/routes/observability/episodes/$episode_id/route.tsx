@@ -44,7 +44,7 @@ export const handle: RouteHandle = {
  * Prevent revalidation of this route when actions are submitted to API routes.
  * This is needed because:
  * 1. The InferencePreviewSheet submits feedback to /api/feedback
- * 2. The AddToDatasetButton submits to /api/datapoints
+ * 2. The AddToDatasetButton submits to /api/datasets/datapoints/from-inference
  * 3. By default, React Router revalidates all active loaders after any action
  * 4. We don't want to reload the entire episode page when these actions complete
  *    because the sheet handles its own data refresh
@@ -55,7 +55,7 @@ export function shouldRevalidate({
 }: ShouldRevalidateFunctionArgs) {
   if (
     formAction?.startsWith("/api/feedback") ||
-    formAction?.startsWith("/api/datapoints")
+    formAction?.startsWith("/api/datasets/datapoints/from-inference")
   ) {
     return false;
   }

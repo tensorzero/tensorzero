@@ -89,7 +89,7 @@ export function AddToDatasetButton({
       formData.append("episode_id", episodeId);
       fetcher.submit(formData, {
         method: "post",
-        action: "/api/datapoints",
+        action: "/api/datasets/datapoints/from-inference",
       });
     }
   };

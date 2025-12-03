@@ -49,7 +49,10 @@ export default [
       "routes/api/inference/$inference_id/route.ts",
     ),
 
-    route("datapoints", "routes/api/datapoints/route.ts"),
+    route(
+      "datasets/datapoints/from-inference",
+      "routes/api/datasets/datapoints/from-inference/route.ts",
+    ),
 
     route("feedback", "routes/api/feedback/route.ts"),
   ]),
