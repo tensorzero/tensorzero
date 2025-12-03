@@ -1200,9 +1200,9 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
-    field_internal_provider_type: str | None = None
+    _internal_provider_type: str | None = None
     """
-    When set, this 'Thought' block will only be used for providers
+    When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
     """
@@ -1417,8 +1417,8 @@ class DynamicToolParams:
 
     # Conversion from Storage Format
     Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
-    1. `dynamic_tools` → `additional_tools`
-    2. `allowed_tools` → `allowed_tools` (based on choice enum)
+    1. `dynamic_tools` -> `additional_tools`
+    2. `allowed_tools` -> `allowed_tools` (based on choice enum)
     3. Other fields copied directly
 
     Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
@@ -2165,6 +2165,18 @@ class ListInferencesRequest:
     """
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
+    """
+    after: str | None = None
+    """
+    Optional inference ID to paginate after (exclusive).
+    Returns inferences with IDs after this one (later in time).
+    Cannot be used together with `before` or `offset`.
+    """
+    before: str | None = None
+    """
+    Optional inference ID to paginate before (exclusive).
+    Returns inferences with IDs before this one (earlier in time).
+    Cannot be used together with `after` or `offset`.
     """
     episode_id: str | None = None
     """

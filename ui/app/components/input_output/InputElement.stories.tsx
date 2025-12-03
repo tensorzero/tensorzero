@@ -5,15 +5,18 @@ import type { Input, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 import { getBase64File } from "./content_blocks/FileContentBlock.stories";
 import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/InputElement",
   component: InputElement,
   decorators: [
     (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
+      <TooltipProvider>
+        <GlobalToastProvider>
+          <Story />
+        </GlobalToastProvider>
+      </TooltipProvider>
     ),
   ],
 } satisfies Meta<typeof InputElement>;
@@ -337,6 +340,22 @@ const COMPLEX_INPUT: Input = {
               path: "user-uploads/abc123.png",
             },
           })),
+        },
+        {
+          type: "file",
+          file_type: "url",
+          url: "https://example.com/document.pdf",
+          mime_type: "application/pdf",
+          filename: "report.pdf",
+          detail: "high",
+        },
+        {
+          type: "file",
+          file_type: "base64",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          mime_type: "image/png",
+          filename: "pixel.png",
+          detail: "auto",
         },
         {
           type: "template",

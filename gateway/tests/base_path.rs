@@ -1,9 +1,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
 use reqwest::Url;
-use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
-};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
+use tensorzero_core::inference::types::Text;
 
 use crate::common::{start_gateway_on_random_port, ChildData};
 
@@ -19,7 +17,7 @@ async fn test_base_path_no_trailing_slash() {
     )
     .await;
 
-    test_base_path(child_data).await;
+    Box::pin(test_base_path(child_data)).await;
 }
 
 #[tokio::test]
@@ -32,7 +30,7 @@ async fn test_base_path_with_trailing_slash() {
     )
     .await;
 
-    test_base_path(child_data).await;
+    Box::pin(test_base_path(child_data)).await;
 }
 
 async fn test_base_path(child_data: ChildData) {
@@ -97,10 +95,10 @@ async fn test_base_path(child_data: ChildData) {
     no_trailing_slash_client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good_response".to_string()),
-            input: ClientInput {
-                messages: vec![ClientInputMessage {
+            input: Input {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -122,10 +120,10 @@ async fn test_base_path(child_data: ChildData) {
     with_trailing_slash_client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good_response".to_string()),
-            input: ClientInput {
-                messages: vec![ClientInputMessage {
+            input: Input {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],

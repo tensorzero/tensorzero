@@ -17,6 +17,7 @@ interface DatapointActionsProps {
   toggleEditing: () => void;
   onSave: () => void;
   canSave: boolean;
+  isSaving: boolean;
   isEditing: boolean;
   onReset: () => void;
   showTryWithButton: boolean;
@@ -33,6 +34,7 @@ export function DatapointActions({
   toggleEditing,
   onSave,
   canSave,
+  isSaving,
   isEditing,
   onReset,
   showTryWithButton,
@@ -56,8 +58,12 @@ export function DatapointActions({
       {!isEditing && <CloneDatapointButton datapoint={datapoint} />}
       {isEditing ? (
         <>
-          <CancelButton onClick={handleCancel} />
-          <SaveButton disabled={!canSave || isReadOnly} onClick={onSave} />
+          <CancelButton onClick={handleCancel} disabled={isSaving} />
+          <SaveButton
+            disabled={!canSave || isReadOnly}
+            isLoading={isSaving}
+            onClick={onSave}
+          />
         </>
       ) : (
         <EditButton

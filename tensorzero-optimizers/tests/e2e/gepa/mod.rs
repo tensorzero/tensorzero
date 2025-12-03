@@ -2,14 +2,13 @@
 
 use serde_json::json;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::DynamicToolParams;
-use tensorzero_core::client::{ClientBuilder, ClientBuilderMode};
+use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::{Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
-};
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::endpoints::datasets::v1::delete_dataset;
 use tensorzero_core::http::TensorzeroHttpClient;
@@ -20,23 +19,25 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
-
 use tensorzero_core::utils::retries::RetryConfig;
-use tensorzero_core::variant::VariantConfig;
 use tensorzero_optimizers::gepa::{
-    analyze::analyze_inferences,
-    evaluate::{
-        create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
-    },
-    validate::FunctionContext,
+    evaluate::EvaluationResults,
+    validate::{validate_gepa_config, FunctionContext},
 };
-use uuid::Uuid;
+use tokio::time::sleep;
 
 pub mod analyze;
+pub mod dataset;
+pub mod evaluate;
+pub mod mutate;
+pub mod pareto;
+
+/// Wait time for ClickHouse operations to complete (in milliseconds)
+pub const TEST_CLICKHOUSE_WAIT_MS: u64 = 500;
 
 /// Helper function to load the e2e test config
 async fn get_e2e_config() -> Arc<Config> {
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     Arc::new(
         Config::load_from_path_optional_verify_credentials(
@@ -46,12 +47,13 @@ async fn get_e2e_config() -> Arc<Config> {
         )
         .await
         .expect("Failed to load e2e config")
-        .config,
+        .into_config_without_writing_for_tests(),
     )
 }
 
 /// Helper function to create a test RenderedSample for Chat functions
-fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample {
+#[expect(clippy::missing_panics_doc)]
+pub fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample {
     let output_vec = vec![ContentBlockChatOutput::Text(Text {
         text: output.to_string(),
     })];
@@ -82,8 +84,8 @@ fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: Some(output_vec.clone()),
         stored_output: Some(StoredOutput::Chat(output_vec)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![],
@@ -96,7 +98,8 @@ fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample
 }
 
 /// Helper function to create a test RenderedSample for JSON functions
-fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample {
+#[expect(clippy::missing_panics_doc)]
+pub fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample {
     let json_output = JsonInferenceOutput {
         raw: Some(output.to_string()),
         parsed: Some(serde_json::json!({"answer": output})),
@@ -133,8 +136,8 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: None, // JSON functions don't have chat output
         stored_output: Some(StoredOutput::Json(json_output)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: Some(serde_json::json!({
             "type": "object",
@@ -154,14 +157,90 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
 }
 
 /// Check if analysis contains one of the expected XML tags
-fn contains_expected_xml_tag(analysis: &str) -> bool {
+pub fn contains_expected_xml_tag(analysis: &str) -> bool {
     analysis.contains("<report_error>")
         || analysis.contains("<report_improvement>")
         || analysis.contains("<report_optimal>")
 }
 
+/// Helper function to build a gateway client with standard test configuration
+#[expect(clippy::missing_panics_doc)]
+pub async fn build_gateway_client(
+    config: Arc<Config>,
+    clickhouse: ClickHouseConnectionInfo,
+    http_client: TensorzeroHttpClient,
+    timeout_secs: u64,
+) -> Client {
+    ClientBuilder::new(ClientBuilderMode::FromComponents {
+        config,
+        clickhouse_connection_info: clickhouse,
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        http_client,
+        timeout: Some(Duration::from_secs(timeout_secs)),
+    })
+    .build()
+    .await
+    .expect("Failed to build gateway client")
+}
+
+/// Helper function to create a GEPA config for Chat function tests
+pub fn create_gepa_config_chat() -> GEPAConfig {
+    GEPAConfig {
+        function_name: "basic_test".to_string(),
+        evaluation_name: "test_evaluation".to_string(),
+        initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
+        variant_prefix: Some("gepa_test_chat".to_string()),
+        batch_size: 5,
+        max_iterations: 1,
+        max_concurrency: 5,
+        analysis_model: "openai::gpt-4.1-nano".to_string(),
+        mutation_model: "openai::gpt-4.1-nano".to_string(),
+        seed: None,
+        timeout: 300,
+        include_inference_for_mutation: true,
+        retries: RetryConfig::default(),
+        max_tokens: Some(16_384),
+    }
+}
+
+/// Helper function to create a GEPA config for JSON function tests
+pub fn create_gepa_config_json() -> GEPAConfig {
+    GEPAConfig {
+        function_name: "json_success".to_string(),
+        evaluation_name: "json_evaluation".to_string(),
+        initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
+        variant_prefix: Some("gepa_test_json".to_string()),
+        batch_size: 5,
+        max_iterations: 1,
+        max_concurrency: 5,
+        analysis_model: "openai::gpt-4.1-nano".to_string(),
+        mutation_model: "openai::gpt-4.1-nano".to_string(),
+        seed: None,
+        timeout: 300,
+        include_inference_for_mutation: true,
+        retries: RetryConfig::default(),
+        max_tokens: Some(16_384),
+    }
+}
+
+/// Helper function to validate GEPA config and get FunctionContext
+#[expect(clippy::missing_panics_doc)]
+pub fn get_function_context(gepa_config: &GEPAConfig, config: &Config) -> FunctionContext {
+    validate_gepa_config(gepa_config, config).expect("validate_gepa_config should succeed in test")
+}
+
+/// Helper function to delete a dataset and wait for ClickHouse to process
+pub async fn cleanup_dataset(clickhouse: &ClickHouseConnectionInfo, dataset_name: &str) {
+    let _ = delete_dataset(clickhouse, dataset_name).await;
+    sleep(Duration::from_millis(TEST_CLICKHOUSE_WAIT_MS)).await;
+}
+
 /// Helper function to verify evaluation results have expected structure and valid scores
-fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expected_count: usize) {
+#[expect(clippy::missing_panics_doc)]
+pub fn assert_evaluation_results_valid(
+    evaluation_results: &EvaluationResults,
+    expected_count: usize,
+) {
     let expected_evaluators = ["happy_bool", "sad_bool", "zero", "one"];
 
     // Verify we have stats for all 4 evaluators
@@ -217,445 +296,5 @@ fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expec
                 );
             }
         }
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_chat() {
-    let gepa_config = GEPAConfig {
-        function_name: "basic_test".to_string(),
-        evaluation_name: "test_evaluation".to_string(),
-        initial_variants: None,
-        variant_prefix: None,
-        batch_size: 5,
-        max_iterations: 1,
-        max_concurrency: 5,
-        analysis_model: "openai::gpt-4.1-nano".to_string(),
-        mutation_model: "openai::gpt-4.1-nano".to_string(),
-        seed: None,
-        timeout: 300,
-        include_inference_for_mutation: true,
-        retries: RetryConfig::default(),
-        max_tokens: Some(16_384),
-    };
-
-    let clickhouse = get_clickhouse().await;
-    let http_client = TensorzeroHttpClient::new_testing().unwrap();
-    let config = get_e2e_config().await;
-
-    // Get the test_evaluation config
-    let evaluation_config = config
-        .evaluations
-        .get(&gepa_config.evaluation_name)
-        .expect("test_evaluation should exist in config");
-
-    // Get the variant from the loaded config
-    let variant_name = "openai";
-    let function_config = config
-        .functions
-        .get(&gepa_config.function_name)
-        .expect("basic_test function should exist in config");
-    let variant_info = function_config
-        .variants()
-        .get(variant_name)
-        .expect("openai variant should exist in basic_test function");
-    let internal_dynamic_variant_name = "test_variant";
-    let internal_dynamic_variant_config = match &variant_info.inner {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
-        _ => panic!("Expected ChatCompletion variant"),
-    };
-
-    let function_context = FunctionContext {
-        function_config: Arc::clone(function_config),
-        static_tools: None,
-        evaluation_config: Arc::clone(evaluation_config),
-    };
-
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_chat_{}", Uuid::now_v7());
-
-    // Create test samples
-    let samples = vec![
-        create_test_chat_rendered_sample("test input 1", "test output 1"),
-        create_test_chat_rendered_sample("test input 2", "test output 2"),
-        create_test_chat_rendered_sample("test input 3", "test output 3"),
-    ];
-
-    // Call create_evaluation_dataset
-    let result =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
-
-    assert!(
-        result.is_ok(),
-        "Failed to create evaluation dataset: {:?}",
-        result.err()
-    );
-
-    // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the datapoints were created in ClickHouse
-    let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        datapoints.len(),
-        3,
-        "Expected 3 datapoints to be created, but found {}",
-        datapoints.len()
-    );
-
-    // Verify the structure of the first datapoint
-    let first_datapoint = &datapoints[0];
-    assert_eq!(first_datapoint.dataset_name, dataset_name);
-    assert_eq!(first_datapoint.function_name, "basic_test");
-    assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
-
-    // Verify tags are preserved
-    assert!(first_datapoint.tags.is_some());
-    let tags = first_datapoint.tags.as_ref().unwrap();
-    assert_eq!(tags.get("test_key"), Some(&"test_value".to_string()));
-
-    // Verify output is present
-    assert!(first_datapoint.output.is_some());
-
-    // Test evaluate_variant function
-    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-        config: config.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
-        http_client: http_client.clone(),
-        timeout: Some(Duration::from_secs(gepa_config.timeout)),
-    })
-    .build()
-    .await
-    .expect("Failed to build gateway client");
-
-    // Call evaluate_variant
-    let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
-        evaluation_config: Arc::clone(&function_context.evaluation_config),
-        evaluation_name: gepa_config.evaluation_name.clone(),
-        variant_name: internal_dynamic_variant_name.to_string(),
-        variant_config: internal_dynamic_variant_config.clone(),
-        dataset_name: dataset_name.clone(),
-        concurrency: gepa_config.max_concurrency as usize,
-    };
-
-    let evaluation_result = evaluate_variant(evaluation_params).await;
-    assert!(
-        evaluation_result.is_ok(),
-        "Failed to evaluate variant: {:?}",
-        evaluation_result.err()
-    );
-
-    let evaluation_results = evaluation_result.unwrap();
-
-    // Assert evaluation results
-    assert_eq!(
-        evaluation_results.evaluation_infos.len(),
-        3,
-        "Expected 3 evaluation results, got {}",
-        evaluation_results.evaluation_infos.len()
-    );
-
-    // Verify evaluation results have expected structure and valid scores
-    assert_evaluation_results_valid(&evaluation_results, 3);
-
-    // Delete the dataset
-    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
-    assert!(
-        delete_result.is_ok(),
-        "Failed to delete dataset: {:?}",
-        delete_result.err()
-    );
-    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 3);
-
-    // Give ClickHouse a moment to process the deletion
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the dataset is empty after deletion
-    let datapoints_after_delete = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-    assert!(
-        datapoints_after_delete.is_empty(),
-        "Expected dataset to be empty after deletion, but found {} datapoints",
-        datapoints_after_delete.len()
-    );
-
-    // Run Analyses
-    let analysis_result = analyze_inferences(
-        &gateway_client,
-        &evaluation_results.evaluation_infos,
-        &function_context,
-        &internal_dynamic_variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Should succeed with CHAT function
-    assert!(
-        analysis_result.is_ok(),
-        "analyze_inferences should work with CHAT functions"
-    );
-    let analyses = analysis_result.unwrap();
-    assert_eq!(analyses.len(), 3, "Should return 3 analyses");
-
-    // Verify each analysis has content and expected XML tags
-    for analysis in &analyses {
-        // Verify inference field is populated
-        let inference = analysis
-            .inference
-            .as_ref()
-            .expect("inference should be Some when include_inference_for_mutation is true");
-
-        assert!(
-            inference.output.is_array(),
-            "Chat response content should be serialized as an array"
-        );
-        let content_array = inference.output.as_array().unwrap();
-        assert!(!content_array.is_empty(), "Should have response content");
-
-        assert!(
-            !analysis.analysis.is_empty(),
-            "Each analysis should have non-empty XML content"
-        );
-        assert!(
-            contains_expected_xml_tag(&analysis.analysis),
-            "Analysis should contain one of: <report_error>, <report_improvement>, or <report_optimal>"
-        );
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_json() {
-    let gepa_config = GEPAConfig {
-        function_name: "json_success".to_string(),
-        evaluation_name: "json_evaluation".to_string(),
-        initial_variants: None,
-        variant_prefix: None,
-        batch_size: 5,
-        max_iterations: 1,
-        max_concurrency: 5,
-        analysis_model: "openai::gpt-4.1-nano".to_string(),
-        mutation_model: "openai::gpt-4.1-nano".to_string(),
-        seed: None,
-        timeout: 300,
-        include_inference_for_mutation: true,
-        retries: RetryConfig::default(),
-        max_tokens: Some(16_384),
-    };
-
-    let clickhouse = get_clickhouse().await;
-    let http_client = TensorzeroHttpClient::new_testing().unwrap();
-    let config = get_e2e_config().await;
-
-    // Get the json_evaluation config
-    let evaluation_config = config
-        .evaluations
-        .get(&gepa_config.evaluation_name)
-        .expect("json_evaluation should exist in config");
-
-    // Get the variant from the loaded config
-    let variant_name = "openai";
-    let function_config = config
-        .functions
-        .get(&gepa_config.function_name)
-        .expect("json_success function should exist in config");
-    let variant_info = function_config
-        .variants()
-        .get(variant_name)
-        .expect("openai variant should exist in json_success function");
-    let internal_dynamic_variant_name = "test_variant";
-    let internal_dynamic_variant_config = match &variant_info.inner {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
-        _ => panic!("Expected ChatCompletion variant"),
-    };
-
-    let function_context = FunctionContext {
-        function_config: Arc::clone(function_config),
-        static_tools: None,
-        evaluation_config: Arc::clone(evaluation_config),
-    };
-
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_json_{}", Uuid::now_v7());
-
-    // Create test samples for JSON function
-    let samples = vec![
-        create_test_json_rendered_sample("input 1", r#"{"answer": "output 1"}"#),
-        create_test_json_rendered_sample("input 2", r#"{"answer": "output 2"}"#),
-    ];
-
-    // Call create_evaluation_dataset
-    let result =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
-
-    assert!(
-        result.is_ok(),
-        "Failed to create evaluation dataset: {:?}",
-        result.err()
-    );
-
-    // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the datapoints were created in ClickHouse
-    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        datapoints.len(),
-        2,
-        "Expected 2 datapoints to be created, but found {}",
-        datapoints.len()
-    );
-
-    // Verify the structure of the first datapoint
-    let first_datapoint = &datapoints[0];
-    assert_eq!(first_datapoint.dataset_name, dataset_name);
-    assert_eq!(first_datapoint.function_name, "json_success");
-    assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
-
-    // Verify tags are preserved
-    assert!(first_datapoint.tags.is_some());
-    let tags = first_datapoint.tags.as_ref().unwrap();
-    assert_eq!(tags.get("json_key"), Some(&"json_value".to_string()));
-
-    // Verify output is present and structured correctly
-    assert!(first_datapoint.output.is_some());
-    let output = first_datapoint.output.as_ref().unwrap();
-    assert!(output.raw.is_some());
-    assert!(output.parsed.is_some());
-
-    // Verify output_schema is preserved
-    assert!(first_datapoint.output_schema.get("type").is_some());
-    assert_eq!(first_datapoint.output_schema.get("type").unwrap(), "object");
-
-    // Test evaluate_variant function
-    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
-        config: config.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
-        http_client: http_client.clone(),
-        timeout: Some(Duration::from_secs(gepa_config.timeout)),
-    })
-    .build()
-    .await
-    .expect("Failed to build gateway client");
-
-    // Call evaluate_variant
-    let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
-        evaluation_config: Arc::clone(&function_context.evaluation_config),
-        evaluation_name: gepa_config.evaluation_name.clone(),
-        variant_name: internal_dynamic_variant_name.to_string(),
-        variant_config: internal_dynamic_variant_config.clone(),
-        dataset_name: dataset_name.clone(),
-        concurrency: gepa_config.max_concurrency as usize,
-    };
-
-    let evaluation_result = evaluate_variant(evaluation_params).await;
-    assert!(
-        evaluation_result.is_ok(),
-        "Failed to evaluate variant: {:?}",
-        evaluation_result.err()
-    );
-
-    let evaluation_results = evaluation_result.unwrap();
-
-    // Assert evaluation results
-    assert_eq!(
-        evaluation_results.evaluation_infos.len(),
-        2,
-        "Expected 2 evaluation results, got {}",
-        evaluation_results.evaluation_infos.len()
-    );
-
-    // Verify evaluation results have expected structure and valid scores
-    assert_evaluation_results_valid(&evaluation_results, 2);
-
-    // Delete the dataset
-    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
-    assert!(
-        delete_result.is_ok(),
-        "Failed to delete dataset: {:?}",
-        delete_result.err()
-    );
-    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 2);
-
-    // Give ClickHouse a moment to process the deletion
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the dataset is empty after deletion
-    let datapoints_after_delete = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-    assert!(
-        datapoints_after_delete.is_empty(),
-        "Expected dataset to be empty after deletion, but found {} datapoints",
-        datapoints_after_delete.len()
-    );
-
-    // Run Analyses
-    let analysis_result = analyze_inferences(
-        &gateway_client,
-        &evaluation_results.evaluation_infos,
-        &function_context,
-        &internal_dynamic_variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Should succeed with JSON function
-    assert!(
-        analysis_result.is_ok(),
-        "analyze_inferences should work with JSON functions"
-    );
-    let analyses = analysis_result.unwrap();
-    assert_eq!(analyses.len(), 2, "Should return 2 analyses");
-
-    // Verify each analysis has content and expected XML tags
-    for analysis in &analyses {
-        // Verify the inference is Some and contains Json output
-        let inference = analysis
-            .inference
-            .as_ref()
-            .expect("inference should be Some when include_inference_for_mutation is true");
-
-        assert!(
-            inference.output.is_object(),
-            "JSON response output should be an object"
-        );
-
-        // Verify the output has the expected structure (parsed with 'result' field)
-        let output_obj = inference.output.as_object().unwrap();
-        assert!(
-            output_obj.get("parsed").is_some(),
-            "JSON output should have 'parsed' field"
-        );
-        let parsed = output_obj.get("parsed").unwrap();
-        assert!(
-            parsed.get("answer").is_some(),
-            "Should have 'answer' field in parsed JSON output"
-        );
-
-        assert!(
-            !analysis.analysis.is_empty(),
-            "Each analysis should have non-empty XML content"
-        );
-        assert!(
-            contains_expected_xml_tag(&analysis.analysis),
-            "Analysis should contain one of: <report_error>, <report_improvement>, or <report_optimal>"
-        );
     }
 }

@@ -679,6 +679,26 @@ pub struct DeleteDatapointsResponse {
     pub num_deleted_datapoints: u64,
 }
 
+/// Metadata for a single dataset.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DatasetMetadata {
+    /// The name of the dataset.
+    pub dataset_name: String,
+    /// The total number of datapoints in the dataset.
+    pub datapoint_count: u32,
+    /// The timestamp of the last update (ISO 8601 format).
+    pub last_updated: String,
+}
+
+/// Response containing a list of datasets.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ListDatasetsResponse {
+    /// List of dataset metadata.
+    pub datasets: Vec<DatasetMetadata>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

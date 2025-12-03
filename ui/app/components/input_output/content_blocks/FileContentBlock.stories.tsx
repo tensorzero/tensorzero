@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { File, ObjectStorageFile } from "~/types/tensorzero";
 import mp3Url from "./FileContentBlock.stories.fixture.mp3?url";
 import pdfUrl from "./FileContentBlock.stories.fixture.pdf?url";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/Content Blocks/FileContentBlock",
@@ -12,7 +13,9 @@ const meta = {
     (Story) => (
       <div className="w-[80vw] bg-orange-100 p-8">
         <div className="bg-white p-4">
-          <Story />
+          <TooltipProvider>
+            <Story />
+          </TooltipProvider>
         </div>
       </div>
     ),
@@ -146,6 +149,118 @@ export const Error: Story = {
         },
         path: "observability/files/failed_to_retrieve.png",
       },
+    },
+  },
+};
+
+export const ErrorLong: Story = {
+  name: "Error (Long)",
+  args: {
+    block: {
+      file_type: "object_storage_error",
+      error:
+        "You are not authorized to access this file. Code: " + "01".repeat(100),
+      mime_type: "image/png",
+      storage_path: {
+        kind: {
+          type: "s3_compatible",
+          bucket_name: "tensorzero-e2e-test-images",
+          region: "us-east-1",
+          endpoint: null,
+          allow_http: null,
+        },
+        path: "observability/files/failed_to_retrieve.png",
+      },
+    },
+  },
+};
+
+export const FileUrl: Story = {
+  name: "File URL",
+  args: {
+    block: {
+      file_type: "url",
+      url: "https://example.com/image.png",
+      mime_type: "image/png",
+      filename: "example-image.png",
+      detail: "high",
+    },
+  },
+};
+
+export const FileUrlEmpty: Story = {
+  name: "File URL (Empty)",
+  args: {
+    block: {
+      file_type: "url",
+      url: "",
+      mime_type: null,
+    },
+  },
+};
+
+export const FileUrlEditing: Story = {
+  name: "File URL (Editing)",
+  args: {
+    block: {
+      file_type: "url",
+      url: "https://example.com/image.png",
+      mime_type: "image/png",
+      filename: "example-image.png",
+      detail: "high",
+    },
+    isEditing: true,
+  },
+};
+
+export const FileBase64: Story = {
+  name: "File Base64",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      mime_type: "image/png",
+      filename: "pixel.png",
+      detail: "auto",
+    },
+  },
+};
+
+export const FileBase64Empty: Story = {
+  name: "File Base64 (Empty)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "",
+      mime_type: "",
+    },
+  },
+};
+
+export const FileBase64Editing: Story = {
+  name: "File Base64 (Editing)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      mime_type: "image/png",
+      filename: "pixel.png",
+      detail: "auto",
+    },
+    isEditing: true,
+  },
+};
+
+export const FileBase64Long: Story = {
+  name: "File Base64 (Long Data)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk".repeat(
+        10,
+      ),
+      mime_type: "image/png",
+      filename: "large-image.png",
     },
   },
 };

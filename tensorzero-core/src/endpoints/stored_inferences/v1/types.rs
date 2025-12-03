@@ -5,8 +5,9 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
-    InferenceOutputSource, ListInferencesParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+    InferenceOutputSource, ListInferencesParams, PaginationParams, DEFAULT_INFERENCE_QUERY_LIMIT,
 };
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
 
 // Re-exported for backwards compatibility.
@@ -197,6 +198,16 @@ pub struct ListInferencesRequest {
     /// Defaults to 0.
     pub offset: Option<u32>,
 
+    /// Optional inference ID to paginate before (exclusive).
+    /// Returns inferences with IDs before this one (earlier in time).
+    /// Cannot be used together with `after` or `offset`.
+    pub before: Option<Uuid>,
+
+    /// Optional inference ID to paginate after (exclusive).
+    /// Returns inferences with IDs after this one (later in time).
+    /// Cannot be used together with `before` or `offset`.
+    pub after: Option<Uuid>,
+
     /// Optional filter to apply when querying inferences.
     /// Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
     pub filter: Option<InferenceFilter>,
@@ -222,8 +233,28 @@ pub struct ListInferencesRequest {
 
 impl ListInferencesRequest {
     /// Convert the request to a `ListInferencesParams` struct for the database query layer.
-    pub fn as_list_inferences_params<'a>(&'a self) -> ListInferencesParams<'a> {
-        ListInferencesParams {
+    pub fn as_list_inferences_params<'a>(&'a self) -> Result<ListInferencesParams<'a>, Error> {
+        // Construct cursor-based pagination params, and validate that before and after are mutually exclusive
+        let pagination = match (self.before, self.after) {
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both 'before' and 'after' parameters".to_string(),
+                }))
+            }
+            (Some(before), None) => Some(PaginationParams::Before { id: before }),
+            (None, Some(after)) => Some(PaginationParams::After { id: after }),
+            (None, None) => None,
+        };
+
+        // Validate that offset and cursor pagination are mutually exclusive
+        if pagination.is_some() && self.offset.is_some() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "Cannot use 'offset' with cursor pagination ('before' or 'after')"
+                    .to_string(),
+            }));
+        }
+
+        Ok(ListInferencesParams {
             ids: None,
             function_name: self.function_name.as_deref(),
             variant_name: self.variant_name.as_deref(),
@@ -232,9 +263,10 @@ impl ListInferencesRequest {
             output_source: self.output_source,
             limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
             offset: self.offset.unwrap_or(0),
+            pagination,
             order_by: self.order_by.as_deref(),
             search_query_experimental: self.search_query_experimental.as_deref(),
-        }
+        })
     }
 }
 
@@ -266,52 +298,4 @@ pub struct GetInferencesRequest {
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
-}
-
-/// Response containing the inference table bounds.
-/// Used by the `GET /internal/inferences/bounds` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[serde_with::skip_serializing_none]
-#[ts(export, optional_fields)]
-pub struct GetInferenceBoundsResponse {
-    /// The most recent inference ID (MAX id_uint).
-    pub latest_id: Option<Uuid>,
-
-    /// The oldest inference ID (MIN id_uint).
-    pub earliest_id: Option<Uuid>,
-
-    /// The total number of inferences matching the filter criteria.
-    pub count: u64,
-}
-
-/// Metadata about an inference.
-/// Used by the `GET /internal/inferences` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS, Clone, PartialEq)]
-#[ts(export)]
-pub struct InternalInferenceMetadata {
-    /// The ID of the inference.
-    pub id: Uuid,
-
-    /// The function name of the inference.
-    pub function_name: String,
-
-    /// The variant name of the inference.
-    pub variant_name: String,
-
-    /// The episode ID of the inference.
-    pub episode_id: Uuid,
-
-    /// The function type of the inference.
-    pub function_type: String,
-
-    /// The timestamp of the inference.
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Response containing the list of inferences by ID.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct InternalListInferencesByIdResponse {
-    /// The list of inferences.
-    pub inferences: Vec<InternalInferenceMetadata>,
 }
