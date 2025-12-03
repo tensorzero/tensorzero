@@ -6,6 +6,9 @@ on:
       is_merge_group:
         required: true
         type: boolean
+  push:
+    branches:
+      - aaron/clickhouse-lts-debug
 
 permissions:
   contents: read
@@ -18,7 +21,7 @@ jobs:
 
     strategy:
       matrix:
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["lts", "latest"]') || fromJSON('["lts"]') }}
+        clickhouse_version: ${{ (inputs.is_merge_group || github.event_name == 'push') && fromJSON('["lts", "latest"]') || fromJSON('["lts"]') }}
 
     steps:
       - name: Set DNS
@@ -95,8 +98,70 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 
+          echo "=== Starting ClickHouse ${{ matrix.clickhouse_version }} ==="
+
+          # Check what ClickHouse image version we're actually using
+          echo "=== Pulling ClickHouse image ==="
+          docker pull clickhouse/clickhouse-server:${{ matrix.clickhouse_version }} || echo "Failed to pull specific image"
+          docker images | grep clickhouse || echo "No clickhouse images found"
+
+          # Get the actual version
+          echo "=== ClickHouse version info ==="
+          docker run --rm clickhouse/clickhouse-server:${{ matrix.clickhouse_version }} clickhouse-server --version || echo "Failed to get version"
+
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-inference-provider -d
-          docker compose -f fixtures/docker-compose.yml wait fixtures
+
+          echo "=== Waiting for fixtures to complete (with timeout monitoring) ==="
+          # Monitor fixture loading with timeout
+          timeout=600  # 10 minutes
+          elapsed=0
+          while ! docker compose -f fixtures/docker-compose.yml ps fixtures | grep -q "exited (0)"; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "ERROR: Fixture loading timed out after $timeout seconds"
+              echo "=== Current fixture container status ==="
+              docker compose -f fixtures/docker-compose.yml ps fixtures
+              echo "=== Fixture container logs ==="
+              docker compose -f fixtures/docker-compose.yml logs fixtures
+              exit 1
+            fi
+            if [ $((elapsed % 30)) -eq 0 ]; then
+              echo "Still waiting for fixtures... ($elapsed seconds elapsed)"
+              docker compose -f fixtures/docker-compose.yml ps fixtures
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+          echo "Fixtures loaded successfully in $elapsed seconds"
+
+      - name: Debug ClickHouse connection
+        working-directory: ui
+        run: |
+          echo "=== ClickHouse version: ${{ matrix.clickhouse_version }} ==="
+          echo "=== Docker container status ==="
+          docker compose -f fixtures/docker-compose.yml ps
+
+          echo "=== ClickHouse logs (last 50 lines) ==="
+          docker compose -f fixtures/docker-compose.yml logs clickhouse --tail 50
+
+          echo "=== Testing direct ClickHouse connection ==="
+          for i in {1..5}; do
+            echo "Attempt $i to connect to ClickHouse..."
+            if curl -s "http://chuser:chpassword@localhost:8123/ping"; then
+              echo "ClickHouse is responding!"
+              break
+            else
+              echo "ClickHouse not responding yet, waiting..."
+              sleep 2
+            fi
+          done
+
+          echo "=== Testing ClickHouse query ==="
+          curl -s "http://chuser:chpassword@localhost:8123/?query=SELECT%20version()"
+          echo ""
+
+          echo "=== Checking for existing data in database ==="
+          curl -s "http://chuser:chpassword@localhost:8123/?query=SELECT%20count()%20FROM%20tensorzero_ui_fixtures.Inference" || echo "Query failed"
+          echo ""
 
       - name: Run `pnpm test`
         env:
@@ -106,7 +171,26 @@ jobs:
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
-        run: pnpm ui:test
+        run: |
+          echo "=== Running UI tests with ClickHouse ${{ matrix.clickhouse_version }} ==="
+          echo "TENSORZERO_CLICKHOUSE_URL: $TENSORZERO_CLICKHOUSE_URL"
+          pnpm ui:test --reporter=verbose
+
+      - name: Debug ClickHouse state after test
+        if: failure()
+        working-directory: ui
+        run: |
+          echo "=== ClickHouse is still running? ==="
+          docker compose -f fixtures/docker-compose.yml ps clickhouse
+
+          echo "=== ClickHouse process list ==="
+          curl -s "http://chuser:chpassword@localhost:8123/?query=SHOW%20PROCESSLIST%20FORMAT%20JSON" | jq . || echo "Failed to get process list"
+
+          echo "=== ClickHouse system.query_log (recent queries) ==="
+          curl -s "http://chuser:chpassword@localhost:8123/?query=SELECT%20query_start_time%2C%20query_duration_ms%2C%20query%20FROM%20system.query_log%20WHERE%20query_start_time%20%3E%20now()%20-%20INTERVAL%205%20MINUTE%20ORDER%20BY%20query_start_time%20DESC%20LIMIT%2050%20FORMAT%20JSONEachRow" | jq -s . || echo "Failed to get query log"
+
+          echo "=== ClickHouse error logs (last 100 lines) ==="
+          docker compose -f fixtures/docker-compose.yml logs clickhouse --tail 100
 
       - name: Run `pnpm test` for tensorzero-node
         working-directory: internal/tensorzero-node
