@@ -1,4 +1,4 @@
-import type { InternalInferenceMetadata } from "~/types/tensorzero";
+import type { StoredInference } from "~/types/tensorzero";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import { toInferenceUrl, toEpisodeUrl, toFunctionUrl } from "~/utils/urls";
 export default function InferencesTable({
   inferences,
 }: {
-  inferences: InternalInferenceMetadata[];
+  inferences: StoredInference[];
 }) {
   return (
     <div>
@@ -38,11 +38,14 @@ export default function InferencesTable({
             <TableEmptyState message="No inferences found" />
           ) : (
             inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
+              <TableRow
+                key={inference.inference_id}
+                id={inference.inference_id}
+              >
                 <TableCell>
                   <TableItemShortUuid
-                    id={inference.id}
-                    link={toInferenceUrl(inference.id)}
+                    id={inference.inference_id}
+                    link={toInferenceUrl(inference.inference_id)}
                   />
                 </TableCell>
                 <TableCell>
@@ -54,7 +57,7 @@ export default function InferencesTable({
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
-                    functionType={inference.function_type}
+                    functionType={inference.type}
                     link={toFunctionUrl(inference.function_name)}
                   />
                 </TableCell>

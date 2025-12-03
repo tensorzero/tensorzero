@@ -115,7 +115,7 @@ impl UninitializedGatewayConfig {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,

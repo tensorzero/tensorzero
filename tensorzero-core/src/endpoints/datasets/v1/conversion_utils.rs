@@ -213,7 +213,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .dangerous_into_config_without_writing()
+        .into_config_without_writing_for_tests()
     }
 
     fn create_test_input() -> Input {

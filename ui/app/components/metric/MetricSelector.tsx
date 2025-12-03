@@ -1,5 +1,5 @@
 import type { FeedbackConfig } from "~/utils/config/feedback";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 
 import { Button } from "../ui/button";
@@ -33,6 +33,9 @@ export default function MetricSelector({
   const [metricInputValue, setMetricInputValue] = useState("");
 
   const metricEntries = Object.entries(metrics);
+  const hasMetrics = metricEntries.length > 0;
+  const metricLabelId = useId();
+  const metricComboboxId = `${metricLabelId}-combobox`;
 
   const filteredMetrics = metricInputValue
     ? metricEntries.filter(([name]) =>
@@ -44,7 +47,8 @@ export default function MetricSelector({
     <div>
       <div className="mt-4">
         <label
-          htmlFor="evaluation_name"
+          id={`${metricLabelId}-label`}
+          htmlFor={metricComboboxId}
           className="mb-1 block text-sm font-medium"
         >
           Metric
@@ -56,11 +60,17 @@ export default function MetricSelector({
             variant="outline"
             role="combobox"
             aria-expanded={metricPopoverOpen}
+            aria-label="Metric"
+            aria-labelledby={`${metricLabelId}-label`}
+            id={metricComboboxId}
             className="w-full justify-between font-normal"
+            disabled={!hasMetrics}
           >
             {selectedMetric
               ? selectedMetric // Display selected metric name
-              : "Select a metric"}
+              : hasMetrics
+                ? "Select a metric"
+                : "No metrics available"}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>

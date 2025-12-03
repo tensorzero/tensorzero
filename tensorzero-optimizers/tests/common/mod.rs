@@ -40,6 +40,7 @@ pub mod dicl;
 pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
@@ -112,7 +113,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     )
     .await
     .unwrap()
-    .dangerous_into_config_without_writing();
+    .into_config_without_writing_for_tests();
     let job_handle = optimizer_info
         .launch(
             &client,

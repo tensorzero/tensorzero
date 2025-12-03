@@ -2,7 +2,7 @@
 import type { InferenceResponseToolCall } from "./InferenceResponseToolCall";
 import type { Text } from "./Text";
 import type { Thought } from "./Thought";
-import type { JsonValue } from "./serde_json/JsonValue";
+import type { Unknown } from "./Unknown";
 
 /**
  * Defines the types of content block that can come from a `chat` function
@@ -11,4 +11,4 @@ export type ContentBlockChatOutput =
   | ({ type: "text" } & Text)
   | ({ type: "tool_call" } & InferenceResponseToolCall)
   | ({ type: "thought" } & Thought)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
+  | ({ type: "unknown" } & Unknown);

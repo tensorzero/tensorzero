@@ -191,6 +191,132 @@ fn get_gepa_analyze_function() -> Result<UninitializedFunctionConfig, Error> {
     ))
 }
 
+/// Returns the `tensorzero::optimization::gepa::mutate` function configuration.
+///
+/// This is a JSON function that generates improved prompt templates based on
+/// analysis feedback from the GEPA optimization algorithm.
+fn get_gepa_mutate_function() -> Result<UninitializedFunctionConfig, Error> {
+    let user_schema_value = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["function_config", "evaluation_config", "templates_map", "analyses"],
+        "additionalProperties": false,
+        "properties": {
+            "function_config": {
+                "type": "object",
+                "description": "Complete function configuration including schemas, tools, variants, and other metadata"
+            },
+            "static_tools": {
+                "type": ["object", "null"],
+                "description": "Map of tool names to their StaticToolConfig definitions from the config. Omitted when the function has no static tools configured.",
+                "additionalProperties": {
+                    "type": "object"
+                }
+            },
+            "evaluation_config": {
+                "type": "object",
+                "description": "Evaluation configuration including all evaluator definitions",
+                "properties": {
+                    "evaluators": {
+                        "type": "object",
+                        "description": "Map of evaluator names to their full configurations"
+                    },
+                    "function_name": {
+                        "type": "string"
+                    }
+                }
+            },
+            "templates_map": {
+                "type": "object",
+                "description": "Map of template names to their contents. Your task is to improve the contents",
+                "additionalProperties": {
+                    "type": "string"
+                }
+            },
+            "analyses": {
+                "type": "array",
+                "description": "Array of analyses to inform how you can improve the templates",
+                "items": {
+                    "type": "object",
+                    "required": ["analysis"],
+                    "properties": {
+                        "inference": {
+                            "type": ["object", "null"],
+                            "description": "The input and output of the LLM inference analyzed",
+                            "properties": {
+                                "input": {
+                                    "type": "object",
+                                    "description": "The inference input"
+                                },
+                                "output": {
+                                    "description": "The inference output"
+                                }
+                            },
+                            "required": ["input", "output"],
+                            "additionalProperties": false
+                        },
+                        "analysis": {
+                            "type": "string",
+                            "description": "Analysis of an LLM inference to guide your template improvement"
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let user_schema_path =
+        create_inline_schema_path("optimization::gepa::mutate", "user", &user_schema_value)?;
+
+    // Define output schema inline
+    // Note: Using array format instead of additionalProperties to support OpenAI strict mode
+    let output_schema_value = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "templates": {
+                "type": "array",
+                "description": "Array of improved templates with their names",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "The template name (e.g., 'system', 'user', 'assistant')"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The improved template content"
+                        }
+                    },
+                    "required": ["name", "content"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["templates"],
+        "additionalProperties": false
+    });
+
+    let output_schema_path =
+        create_inline_schema_path("optimization::gepa::mutate", "output", &output_schema_value)?;
+
+    Ok(UninitializedFunctionConfig::Json(
+        UninitializedFunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(user_schema_path),
+            assistant_schema: None,
+            schemas: UninitializedSchemas::default(),
+            output_schema: Some(output_schema_path),
+            description: Some(
+                "Built-in GEPA mutate function - generates improved message templates based on analysis feedback".to_string(),
+            ),
+            experimentation: None,
+        },
+    ))
+}
+
 /// Returns all built-in functions as UninitializedFunctionConfigs.
 ///
 /// The keys are function names (e.g., "tensorzero::hello_chat")
@@ -218,6 +344,10 @@ pub fn get_all_built_in_functions() -> Result<HashMap<String, UninitializedFunct
     functions.insert(
         "tensorzero::optimization::gepa::analyze".to_string(),
         get_gepa_analyze_function()?,
+    );
+    functions.insert(
+        "tensorzero::optimization::gepa::mutate".to_string(),
+        get_gepa_mutate_function()?,
     );
     Ok(functions)
 }
@@ -257,10 +387,11 @@ mod tests {
     #[test]
     fn test_get_all_built_in_functions() {
         let functions = get_all_built_in_functions().unwrap();
-        assert_eq!(functions.len(), 3);
+        assert_eq!(functions.len(), 4);
         assert!(functions.contains_key("tensorzero::hello_chat"));
         assert!(functions.contains_key("tensorzero::hello_json"));
         assert!(functions.contains_key("tensorzero::optimization::gepa::analyze"));
+        assert!(functions.contains_key("tensorzero::optimization::gepa::mutate"));
     }
 
     #[test]

@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
@@ -93,8 +94,10 @@ pub struct ChatInferenceDatapointInsert {
     pub is_custom: bool,
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
     #[serde(default)]
-    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 /// Type that gets serialized directly to be written to ClickHouse. Serialization should match
@@ -153,8 +156,10 @@ pub struct JsonInferenceDatapointInsert {
     pub is_custom: bool,
 
     /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
     #[serde(default)]
-    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -194,8 +199,9 @@ pub struct DatasetQueryParams {
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+
+/// Parameters to query for dataset metadata (by aggregating over the datapoint tables).
+#[derive(Deserialize)]
 pub struct GetDatasetMetadataParams {
     /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
@@ -207,8 +213,7 @@ pub struct GetDatasetMetadataParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DatasetMetadata {
     pub dataset_name: String,
     pub count: u32,

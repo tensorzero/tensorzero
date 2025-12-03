@@ -1,5 +1,7 @@
 {
   "scripts": {
+    "format": "prettier --write \"**/*.{md,mdx,yaml,yml,json}\"",
+    "format:check": "prettier --check \"**/*.{md,mdx,yaml,yml,json}\"",
     "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
     "generate-python-schemas": "cd clients/python && uv run --no-project generate_schema_types.py",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
@@ -11,6 +13,7 @@
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
+    "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   },
   "packageManager": "pnpm@10.15.0",
@@ -20,8 +23,10 @@
       "msw"
     ],
     "overrides": {
+      "glob": ">=10.5.0",
       "js-yaml": ">=4.1.1",
-      "on-headers": ">=1.1.0"
+      "on-headers": ">=1.1.0",
+      "valibot": ">=1.2.0"
     }
   }
 }

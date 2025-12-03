@@ -87,6 +87,14 @@ impl std::fmt::Display for SnapshotHash {
     }
 }
 
+impl std::ops::Deref for SnapshotHash {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl SnapshotHash {
     pub fn new_test() -> SnapshotHash {
@@ -171,6 +179,7 @@ impl ConfigSnapshot {
     pub fn from_stored(
         config_toml: &str,
         extra_templates: HashMap<String, String>,
+        original_hash: &SnapshotHash,
     ) -> Result<Self, Error> {
         let table: toml::Table = config_toml.parse().map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -181,6 +190,12 @@ impl ConfigSnapshot {
         let sorted_table = prepare_table_for_snapshot(table);
         let config = UninitializedConfig::try_from(sorted_table.clone())?;
         let hash = ConfigSnapshot::hash(&sorted_table, &extra_templates)?;
+        if hash != *original_hash {
+            return Err(Error::new(ErrorDetails::ConfigSnapshotHashMismatch {
+                expected: original_hash.clone(),
+                actual: hash.clone(),
+            }));
+        }
 
         Ok(Self {
             config: config.into(),

@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_core::inference::types::{
-    Role, StoredContentBlock, StoredRequestMessage, Text, Usage,
+    Role, StoredContentBlock, StoredRequestMessage, Text, Unknown, Usage,
 };
 use uuid::Uuid;
 
@@ -276,7 +276,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"type": "text", "text": "My extra test-model input"}}
                     ]
                 }
             ]},
@@ -366,7 +366,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"type": "text", "text": "My extra test-model input"}},
                     ]
                 }
             ]
@@ -496,12 +496,11 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                             text: "Please write me a sentence about the anime character Megumin."
                                 .to_string()
                         }),
-                        StoredContentBlock::Unknown {
-                            model_provider_name: Some(
-                                "tensorzero::model_name::test::provider_name::good".to_string()
-                            ),
+                        StoredContentBlock::Unknown(Unknown {
+                            model_name: Some("test".to_string()),
+                            provider_name: Some("good".to_string()),
                             data: serde_json::json!({"type": "text", "text": "My extra test-model input"})
-                        }
+                        })
                     ],
                 }
             );
@@ -1050,7 +1049,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 
@@ -1080,7 +1080,8 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 }
@@ -1227,7 +1228,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
-          "finish_reason": "stop"
+          "finish_reason": "stop",
+          "snapshot_hash": null,
         })
     );
 }
