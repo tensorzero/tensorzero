@@ -38,6 +38,7 @@ pub struct ProductionClickHouseClient {
     database: String,
     client: Client,
     batch_sender: Option<Arc<BatchSender>>,
+    batch_config: BatchWritesConfig,
 }
 
 impl ProductionClickHouseClient {
@@ -104,6 +105,7 @@ impl ProductionClickHouseClient {
             database,
             client: make_clickhouse_http_client(username, password)?,
             batch_sender: None,
+            batch_config: batch_config.clone(),
         };
 
         // Create the batch sender if enabled
@@ -167,6 +169,18 @@ fn make_clickhouse_http_client(
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
 impl ClickHouseClient for ProductionClickHouseClient {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+        Ok(Arc::new(
+            ProductionClickHouseClient::new(
+                self.database_url.clone(),
+                self.cluster_name.clone(),
+                self.database.clone(),
+                self.batch_config.clone(),
+            )
+            .await?,
+        ))
+    }
+
     fn database_url(&self) -> &SecretString {
         &self.database_url
     }
