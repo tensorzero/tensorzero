@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tensorzero::{RenderedSample, Role, System};
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, ConfigLoadInfo},
+    config::{Config, ConfigFileGlob},
     db::clickhouse::test_helpers::get_clickhouse,
     http::TensorzeroHttpClient,
     inference::types::{
@@ -58,12 +58,13 @@ pub async fn test_gepa_optimization_chat() {
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     // Launch GEPA optimization
     let job_handle = gepa_config
@@ -190,12 +191,13 @@ pub async fn test_gepa_optimization_json() {
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     // Launch GEPA optimization
     let job_handle = gepa_config
