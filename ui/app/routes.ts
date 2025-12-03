@@ -50,6 +50,8 @@ export default [
     ),
 
     route("datapoints", "routes/api/datapoints/route.ts"),
+
+    route("feedback", "routes/api/feedback/route.ts"),
   ]),
 
   // Datasets

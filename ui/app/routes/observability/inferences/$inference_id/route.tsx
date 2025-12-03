@@ -16,14 +16,11 @@ import {
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { addHumanFeedback } from "~/utils/tensorzero.server";
-import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
-import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
@@ -142,50 +139,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
-
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const _action = formData.get("_action");
-  switch (_action) {
-    case "addToDataset": {
-      return handleAddToDatasetAction(formData);
-    }
-    case "addFeedback": {
-      try {
-        const response = await addHumanFeedback(formData);
-        const url = new URL(request.url);
-        url.searchParams.delete("beforeFeedback");
-        url.searchParams.delete("afterFeedback");
-        url.searchParams.set("newFeedbackId", response.feedback_id);
-        return data<ActionData>({ redirectTo: url.pathname + url.search });
-      } catch (error) {
-        if (isTensorZeroServerError(error)) {
-          return data<ActionData>(
-            { error: error.message },
-            { status: error.status },
-          );
-        }
-        return data<ActionData>(
-          { error: "Unknown server error. Try again." },
-          { status: 500 },
-        );
-      }
-    }
-    case null:
-      logger.error("No action provided");
-      return data<ActionData>({ error: "No action provided" }, { status: 400 });
-    default:
-      logger.error(`Unknown action: ${_action}`);
-      return data<ActionData>(
-        { error: "Unknown server action" },
-        { status: 400 },
-      );
-  }
-}
-
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
@@ -253,15 +206,29 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     usedVariants,
   };
 
+  // Handle feedback added callback - extract newFeedbackId from the API redirect URL
+  // and navigate to the page URL with the newFeedbackId
+  const handleFeedbackAdded = (redirectUrl?: string) => {
+    if (redirectUrl) {
+      // redirectUrl is like /api/inference/{id}?newFeedbackId={feedbackId}
+      // Extract the newFeedbackId and navigate to the current page with it
+      const url = new URL(redirectUrl, window.location.origin);
+      const newFeedbackIdParam = url.searchParams.get("newFeedbackId");
+      if (newFeedbackIdParam) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete("beforeFeedback");
+        currentUrl.searchParams.delete("afterFeedback");
+        currentUrl.searchParams.set("newFeedbackId", newFeedbackIdParam);
+        navigate(currentUrl.pathname + currentUrl.search);
+      }
+    }
+  };
+
   return (
     <PageLayout>
       <InferenceDetailContent
         data={inferenceData}
-        onFeedbackAdded={(redirectUrl) => {
-          if (redirectUrl) {
-            navigate(redirectUrl);
-          }
-        }}
+        onFeedbackAdded={handleFeedbackAdded}
         feedbackFooter={
           <PageButtons
             onNextPage={handleNextFeedbackPage}

@@ -50,5 +50,4 @@ jobs:
         run: nsc docker login
 
       - name: Push `mock-inference` container to Namespace registry
-        run:
-          docker push nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+        run: docker push nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}

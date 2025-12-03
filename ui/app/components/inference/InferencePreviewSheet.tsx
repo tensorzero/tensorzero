@@ -126,7 +126,6 @@ export function InferencePreviewSheet({
           {inferenceData && inferenceId && (
             <InferenceDetailContent
               data={inferenceData}
-              actionUrl={getInferenceApiUrl(inferenceId)}
               onFeedbackAdded={refreshInferenceData}
             />
           )}

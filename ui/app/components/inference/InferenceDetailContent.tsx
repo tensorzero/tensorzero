@@ -60,7 +60,6 @@ export interface InferenceHeaderProps {
 
 interface InferenceDetailContentProps {
   data: InferenceDetailData;
-  actionUrl?: string;
   onFeedbackAdded?: (redirectUrl?: string) => void;
   feedbackFooter?: ReactNode;
   /**
@@ -89,7 +88,6 @@ export function getInferenceUsage(
 
 export function InferenceDetailContent({
   data,
-  actionUrl,
   onFeedbackAdded,
   feedbackFooter,
   renderHeader,
@@ -307,11 +305,7 @@ export function InferenceDetailContent({
         isOpen={openModal === "human-feedback"}
         trigger={<HumanFeedbackButton />}
       >
-        <humanFeedbackFetcher.Form
-          method="post"
-          {...(actionUrl ? { action: actionUrl } : {})}
-        >
-          <input type="hidden" name="_action" value="addFeedback" />
+        <humanFeedbackFetcher.Form method="post" action="/api/feedback">
           <HumanFeedbackForm
             inferenceId={inference.id}
             inferenceOutput={inference.output}
@@ -431,9 +425,8 @@ export function InferenceDetailContent({
           {variantInferenceFetcher.data?.info && (
             <demonstrationFeedbackFetcher.Form
               method="post"
-              {...(actionUrl ? { action: actionUrl } : {})}
+              action="/api/feedback"
             >
-              <input type="hidden" name="_action" value="addFeedback" />
               <input type="hidden" name="metricName" value="demonstration" />
               <input type="hidden" name="inferenceId" value={inference.id} />
               <input
