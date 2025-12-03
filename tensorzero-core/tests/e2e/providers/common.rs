@@ -170,6 +170,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
+        use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -206,6 +207,15 @@ macro_rules! generate_provider_tests {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_assistant_prefill_inference_request() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_assistant_prefill_inference_request_with_provider(provider).await;
+            }
+        }
+
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
@@ -2544,6 +2554,74 @@ pub async fn test_warn_ignored_thought_block_with_provider(
             provider.variant_name
         );
     }
+}
+
+pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
+    // * Mistral doesn't support assistant prefill
+    // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
+    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Azure AI foundry seems to ignore trailing assistant messages
+    if provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "aws_sagemaker"
+        || provider.model_provider_name == "aws_bedrock"
+        || provider.variant_name == "azure-ai-foundry"
+    {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
+    let payload = serde_json::json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact"
+                },
+                {
+                    "role": "assistant",
+                    "content": "The capital city "
+                },
+                {
+                    "role": "assistant",
+                    "content": " of Japan is"
+                },
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+
+    assert_eq!(response_json["content"][0]["type"], "text");
+    let content = response_json["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content.to_lowercase().contains("tokyo"),
+        "Content should contain 'tokyo': {content}"
+    );
+
+    // We don't check clickhouse, since we do this in lots of places
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
