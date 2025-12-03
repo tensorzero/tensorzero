@@ -10,12 +10,14 @@ import {
 interface CancelButtonProps {
   onClick: () => void;
   className?: string;
+  disabled?: boolean;
   variant?: ButtonVariant;
 }
 
 export function CancelButton({
   onClick,
   className,
+  disabled = false,
   variant = "outline",
 }: CancelButtonProps) {
   return (
@@ -27,6 +29,7 @@ export function CancelButton({
             size="iconSm"
             onClick={onClick}
             className={className}
+            disabled={disabled}
             aria-label="Cancel"
             title="Cancel"
           >

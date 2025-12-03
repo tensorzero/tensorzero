@@ -6,6 +6,7 @@ import { ToolCallContentBlock } from "~/components/input_output/content_blocks/T
 import { ToolResultContentBlock } from "~/components/input_output/content_blocks/ToolResultContentBlock";
 import { FileContentBlock } from "~/components/input_output/content_blocks/FileContentBlock";
 import { ThoughtContentBlock } from "~/components/input_output/content_blocks/ThoughtContentBlock";
+import { UnknownContentBlock } from "~/components/input_output/content_blocks/UnknownContentBlock";
 
 interface ContentBlockElementProps {
   block: InputMessageContent;
@@ -94,14 +95,31 @@ export function ContentBlockElement({
     }
 
     case "file": {
-      return <FileContentBlock block={block} />;
+      return (
+        <FileContentBlock
+          block={block}
+          isEditing={isEditing}
+          onChange={
+            isEditing
+              ? (updatedBlock) => {
+                  onChange?.({
+                    ...block,
+                    ...updatedBlock,
+                  });
+                }
+              : undefined
+          }
+          actionBar={actionBar}
+        />
+      );
     }
 
     case "unknown": {
       return (
-        <TextContentBlock
-          label="Unknown"
-          text={JSON.stringify(block.data)}
+        <UnknownContentBlock
+          data={block.data}
+          isEditing={isEditing}
+          onChange={(data) => onChange?.({ ...block, data })}
           actionBar={actionBar}
         />
       );

@@ -34,7 +34,7 @@ jobs:
 
       - name: Build `gateway` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=dev -f gateway/Dockerfile . -t tensorzero/gateway:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=dev -f gateway/Dockerfile . -t tensorzero/gateway:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
 
       - name: Save `gateway` container
         run: docker save tensorzero/gateway:sha-${{ github.sha }} > gateway-container.tar
@@ -47,3 +47,10 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+
+      - name: Push `gateway` container to Namespace registry
+        run:
+          docker push nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}

@@ -288,6 +288,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             signature=block.get("signature"),
             summary=summary,
             type=block_type,
+            _internal_provider_type=block.get("_internal_provider_type"),
         )
     elif block_type == "unknown":
         return UnknownContentBlock(

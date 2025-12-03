@@ -19,10 +19,13 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   createColumnHelper,
   flexRender,
   type SortingState,
+  type PaginationState,
 } from "@tanstack/react-table";
+import PageButtons from "~/components/utils/PageButtons";
 import {
   Dialog,
   DialogContent,
@@ -36,9 +39,9 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
 export default function DatasetTable({
-  counts,
+  datasets,
 }: {
-  counts: DatasetMetadata[];
+  datasets: DatasetMetadata[];
 }) {
   const fetcher = useFetcher();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -46,6 +49,10 @@ export default function DatasetTable({
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 15,
+  });
 
   const columns = useMemo(
     () => [
@@ -99,17 +106,20 @@ export default function DatasetTable({
   );
 
   const table = useReactTable({
-    data: counts,
+    data: datasets,
     columns,
     state: {
       sorting,
       globalFilter,
+      pagination,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     globalFilterFn: "includesString",
   });
 
@@ -187,6 +197,13 @@ export default function DatasetTable({
           )}
         </TableBody>
       </Table>
+
+      <PageButtons
+        onPreviousPage={() => table.previousPage()}
+        onNextPage={() => table.nextPage()}
+        disablePrevious={!table.getCanPreviousPage()}
+        disableNext={!table.getCanNextPage()}
+      />
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

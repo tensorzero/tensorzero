@@ -38,14 +38,6 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::object_storage::get_object_handler),
         )
         .route(
-            "/internal/inferences/bounds",
-            get(endpoints::stored_inferences::v1::get_inference_bounds_handler),
-        )
-        .route(
-            "/internal/inferences",
-            get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
-        )
-        .route(
             "/internal/datasets",
             get(endpoints::datasets::v1::list_datasets_handler),
         )
