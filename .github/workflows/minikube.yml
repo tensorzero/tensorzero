@@ -10,100 +10,103 @@ jobs:
     runs-on: ubuntu-latest
     name: Run 'examples/production-deployment-k8s-helm' on minikube
     steps:
-    - uses: actions/checkout@v4
-    - name: Start minikube
-      uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9
-    - name: Download gateway container
-      uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
-      with:
-        pattern: build-*-container
-        merge-multiple: true
-    - name: Load gateway and ui containers
-      run: |
-        docker load < gateway-container.tar
-        docker load < ui-container.tar
-        minikube image load gateway-container.tar
-        minikube image load ui-container.tar
+      - uses: actions/checkout@v4
+      - name: Start minikube
+        uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9
+      - name: Download gateway container
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        with:
+          pattern: build-{gateway,ui}-container
+          merge-multiple: true
+      - name: Load gateway and ui containers
+        run: |
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
+          minikube image load gateway-container.tar
+          minikube image load ui-container.tar
 
-    - name: Create helm overrides file
-      run: |
-        cd examples/production-deployment-k8s-helm
-        cat > helm-ci-overrides.yaml <<EOF
-        gateway:
-          image:
-            repository: tensorzero/gateway
-            # We load this from the build-gateway-container job
-            tag: sha-${{ github.sha }}
-            pullPolicy: Never
-        ui:
-          image:
-            repository: tensorzero/ui
-            # We load this from the build-ui-container job
-            tag: sha-${{ github.sha }}
-            pullPolicy: Never
-        EOF
-        # Fix the extra indentation caused by inlining the yaml file in our workflow
-        sed -i 's/^        //' helm-ci-overrides.yaml
+      - name: Create helm overrides file
+        run: |
+          cd examples/production-deployment-k8s-helm
+          cat > helm-ci-overrides.yaml <<EOF
+          gateway:
+            image:
+              repository: tensorzero/gateway
+              # We load this from the build-gateway-container job
+              tag: sha-${{ github.sha }}
+              pullPolicy: Never
+            service:
+              type: NodePort
+          ui:
+            image:
+              repository: tensorzero/ui
+              # We load this from the build-ui-container job
+              tag: sha-${{ github.sha }}
+              pullPolicy: Never
+            service:
+              type: NodePort
+          EOF
+          # Fix the extra indentation caused by inlining the yaml file in our workflow
+          sed -i 's/^        //' helm-ci-overrides.yaml
 
+      - name: Install ClickHouse on minikube
+        run: |
+          cd examples/production-deployment-k8s-helm
+          helm repo add altinity https://altinity.github.io/helm-charts
+          helm repo update
+          kubectl create namespace clickhouse
+          helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
+          kubectl wait --for=condition=available deployment/clickhouse-operator -n clickhouse --timeout=120s
+          kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
+          kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
 
-    - name: Install ClickHouse on minikube
-      run: |
-        cd examples/production-deployment-k8s-helm
-        helm repo add altinity https://altinity.github.io/helm-charts
-        helm repo update
-        kubectl create namespace clickhouse
-        helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
-        kubectl wait --for=condition=available deployment/clickhouse-operator -n clickhouse --timeout=120s
-        kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
-        kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
+      - name: Install TensorZero on minikube
+        run: |
+          cd examples/production-deployment-k8s-helm
+          kubectl create namespace tensorzero
+          kubectl create secret generic tensorzero-secret -n tensorzero \
+              --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.chi-clickhouse-clickhouse-0-0.clickhouse.svc.cluster.local:8123" \
+              --from-literal=TENSORZERO_GATEWAY_URL="http://tensorzero-gateway.tensorzero.svc.cluster.local:3000" \
+              --from-literal=OPENAI_API_KEY="fake-openai-api-key"
+          helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
 
-    - name: Install TensorZero on minikube
-      run: |
-        cd examples/production-deployment-k8s-helm
-        kubectl create namespace tensorzero
-        kubectl create secret generic tensorzero-secret -n tensorzero \
-            --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.chi-clickhouse-clickhouse-0-0.clickhouse.svc.cluster.local:8123" \
-            --from-literal=TENSORZERO_GATEWAY_URL="http://tensorzero-gateway.tensorzero.svc.cluster.local:3000" \
-            --from-literal=OPENAI_API_KEY="fake-openai-api-key"
-        helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
+      - name: Ping the gateway
+        run: |
+          # Get the minikube service URL
+          GATEWAY_URL=$(minikube service tensorzero-gateway -n tensorzero --url)
+          echo "Gateway URL: $GATEWAY_URL"
 
-    - name: Port forward the gateway and ui services
-      run: |
-        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
-        kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 &
+          # TODO - add a 'startupProbe' to the gateway helm chart
+          count=0
+          max_attempts=40
+          while ! curl ${GATEWAY_URL}/health; do
+            echo "Waiting for gateway to be healthy (attempt $count/$max_attempts)..."
+            sleep 1
+            count=$((count + 1))
+            if [ $count -ge $max_attempts ]; then
+              echo "Gateway failed to become healthy after $max_attempts attempts"
+              exit 1
+            fi
+          done
+          echo "Gateway is healthy!"
 
-    - name: Ping the gateway
-      run: |
-        # TODO - add a 'startupProbe' to the gateway helm chart
-        count=0
-        max_attempts=40
-        while ! curl http://localhost:3000/health; do
-          echo "Waiting for gateway to be healthy..."
-          sleep 1
-          count=$((count + 1))
-          if [ $count -ge $max_attempts ]; then
-            echo "Gateway failed to become healthy after $max_attempts attempts"
-            exit 1
-          fi
-        done
+      - name: Print pod statuses
+        if: always()
+        run: |
+          kubectl get pods -A
 
-    - name: Print pod statuses
-      if: always()
-      run: |
-        kubectl get pods -A
+      - name: Run 'kubectl describe pods'
+        if: always()
+        run: |
+          kubectl describe pods -n tensorzero
 
-    - name: Run 'kubectl describe pods'
-      if: always()
-      run: |
-        kubectl describe pods -n tensorzero
+      - name: Print kubectl logs
+        if: always()
+        run: |
+          kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
 
-    - name: Print kubectl logs
-      if: always()
-      run: |
-        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
-
-    - name: Print logs from stopped pods
-      if: always()
-      run: |
-        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p || true
+      - name: Print logs from stopped pods
+        if: always()
+        run: |
+          kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p || true

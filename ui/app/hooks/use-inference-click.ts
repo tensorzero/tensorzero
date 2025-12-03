@@ -22,33 +22,40 @@ export function useInferenceClick(episodeRoute: string): {
   getError: (inferenceId: string) => string | null;
   openSheetInferenceId: string | null;
 } {
-  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<string | null>(null);
-  const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
+  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
+    string | null
+  >(null);
+  const [inferenceCache, setInferenceCache] = useState<
+    Record<string, InferenceState>
+  >({});
   const fetcher = useFetcher<ActionData>();
 
-  const handleOpenSheet = useCallback((inferenceId: string) => {
-    setOpenSheetInferenceId(inferenceId);
-    
-    setInferenceCache(prev => {
-      const currentState = prev[inferenceId];
-      if (!currentState?.data && !currentState?.loading) {
-        const formData = new FormData();
-        formData.append("_action", "fetchInference");
-        formData.append("inferenceId", inferenceId);
-        
-        fetcher.submit(formData, { 
-          method: "POST",
-          action: episodeRoute
-        });
-        
-        return {
-          ...prev,
-          [inferenceId]: { data: null, loading: true, error: null }
-        };
-      }
-      return prev;
-    });
-  }, [episodeRoute]);
+  const handleOpenSheet = useCallback(
+    (inferenceId: string) => {
+      setOpenSheetInferenceId(inferenceId);
+
+      setInferenceCache((prev) => {
+        const currentState = prev[inferenceId];
+        if (!currentState?.data && !currentState?.loading) {
+          const formData = new FormData();
+          formData.append("_action", "fetchInference");
+          formData.append("inferenceId", inferenceId);
+
+          fetcher.submit(formData, {
+            method: "POST",
+            action: episodeRoute,
+          });
+
+          return {
+            ...prev,
+            [inferenceId]: { data: null, loading: true, error: null },
+          };
+        }
+        return prev;
+      });
+    },
+    [episodeRoute, fetcher],
+  );
 
   const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
@@ -56,17 +63,17 @@ export function useInferenceClick(episodeRoute: string): {
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
-    
+
     const { inferenceId, inference, error } = fetcher.data;
-    
+
     if (inferenceId) {
-      setInferenceCache(prev => ({
+      setInferenceCache((prev) => ({
         ...prev,
         [inferenceId]: {
           data: inference || null,
           loading: false,
-          error: error || null
-        }
+          error: error || null,
+        },
       }));
     }
   }, [fetcher.state, fetcher.data]);
@@ -74,9 +81,12 @@ export function useInferenceClick(episodeRoute: string): {
   return {
     handleOpenSheet,
     handleCloseSheet,
-    getInferenceData: (inferenceId: string) => inferenceCache[inferenceId]?.data || null,
-    isLoading: (inferenceId: string) => inferenceCache[inferenceId]?.loading || false,
-    getError: (inferenceId: string) => inferenceCache[inferenceId]?.error || null,
+    getInferenceData: (inferenceId: string) =>
+      inferenceCache[inferenceId]?.data || null,
+    isLoading: (inferenceId: string) =>
+      inferenceCache[inferenceId]?.loading || false,
+    getError: (inferenceId: string) =>
+      inferenceCache[inferenceId]?.error || null,
     openSheetInferenceId,
   };
 }

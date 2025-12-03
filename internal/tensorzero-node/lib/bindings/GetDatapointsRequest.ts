@@ -2,7 +2,7 @@
 
 /**
  * Request to get specific datapoints by their IDs.
- * Used by the `POST /v1/datasets/get_datapoints` endpoint.
+ * Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
  */
 export type GetDatapointsRequest = {
   /**

@@ -33,14 +33,15 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, UnknownChunk,
+    Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
+use crate::model::{Credential, ModelProvider};
+use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
@@ -514,7 +515,7 @@ impl<'a> GeminiContent<'a> {
                                     raw_response: None,
                                 }));
                             }
-                            Some(ContentBlock::Unknown { .. }) => {
+                            Some(ContentBlock::Unknown(_)) => {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -533,7 +534,7 @@ impl<'a> GeminiContent<'a> {
                                             data: FlattenUnknown::Normal(part),
                                         });
                                     }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
                                             message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
@@ -647,10 +648,7 @@ async fn convert_non_thought_content_block(
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
             message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
         })),
-        ContentBlock::Unknown {
-            data,
-            model_provider_name: _,
-        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
     }
 }
 
@@ -669,7 +667,7 @@ struct GeminiTool<'a> {
 }
 
 impl<'a> GeminiFunctionDeclaration<'a> {
-    fn from_tool_config(tool: &'a ToolConfig) -> Self {
+    fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
         let mut parameters = tool.parameters().clone();
         if let Some(obj) = parameters.as_object_mut() {
             obj.remove("additionalProperties");
@@ -715,12 +713,22 @@ impl<'a> GoogleAIStudioGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Auto,
-                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some() {
+                    GeminiFunctionCallingMode::Any
+                } else {
+                    GeminiFunctionCallingMode::Auto
+                };
+                GoogleAIStudioGeminiToolConfig {
+                    function_calling_config: GeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::Any,
@@ -868,7 +876,7 @@ impl<'a> GeminiRequest<'a> {
             .into_iter()
             .filter(|m| !m.parts.is_empty())
             .collect();
-        let (tools, tool_config) = prepare_tools(request);
+        let (tools, tool_config) = prepare_tools(request)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -916,27 +924,30 @@ impl<'a> GeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> (
-    Option<Vec<GeminiTool<'a>>>,
-    Option<GoogleAIStudioGeminiToolConfig<'a>>,
-) {
+) -> Result<
+    (
+        Option<Vec<GeminiTool<'a>>>,
+        Option<GoogleAIStudioGeminiToolConfig<'a>>,
+    ),
+    Error,
+> {
     match &request.tool_config {
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None);
+                return Ok((None, None));
             }
             let tools = Some(vec![GeminiTool {
                 function_declarations: tool_config
-                    .tools_available()
+                    .tools_available()?
                     .map(GeminiFunctionDeclaration::from_tool_config)
                     .collect(),
             }]);
             let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(
                 tool_config,
             ));
-            (tools, tool_config_converted)
+            Ok((tools, tool_config_converted))
         }
-        None => (None, None),
+        None => Ok((None, None)),
     }
 }
 
@@ -1084,7 +1095,8 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1120,7 +1132,7 @@ fn convert_part_to_output(
                 }));
             }
             _ => {
-                output.push(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -1128,8 +1140,9 @@ fn convert_part_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                });
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
+                }));
             }
         }
         return Ok(());
@@ -1167,10 +1180,11 @@ fn convert_part_to_output(
             }));
         }
         FlattenUnknown::Unknown(part) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
     }
     Ok(())
@@ -1614,7 +1628,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&FunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()
@@ -1647,6 +1662,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1666,6 +1682,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1685,6 +1702,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Specific("get_temperature".to_string()),
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1703,11 +1721,12 @@ mod tests {
             }
         );
 
-        // Test Auto mode with specific allowed tools (new behavior)
+        // Test Auto mode with specific allowed tools - should use Any mode
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1720,7 +1739,7 @@ mod tests {
         let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GeminiFunctionCallingMode::Auto
+            GeminiFunctionCallingMode::Any
         );
         let mut allowed_names = tool_config
             .function_calling_config
@@ -1734,6 +1753,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1756,6 +1776,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -2314,7 +2335,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -2357,7 +2378,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         // Flash models do not support function calling mode Any

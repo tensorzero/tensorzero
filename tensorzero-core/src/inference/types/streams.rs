@@ -9,7 +9,7 @@ use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall,
-    Usage,
+    Unknown, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -71,7 +71,10 @@ pub struct ThoughtChunk {
 pub struct UnknownChunk {
     pub id: String,
     pub data: Value,
-    pub model_provider_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -488,7 +491,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         ContentBlockChunk::Unknown(UnknownChunk {
                             id,
                             data,
-                            model_provider_name,
+                            model_name,
+                            provider_name,
                         }) => {
                             // Unknown chunks are not merged/coalesced - each one gets a unique entry
                             // We use the chunk ID as part of the key to ensure uniqueness
@@ -497,10 +501,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                             }
                             blocks.insert(
                                 (ContentBlockOutputType::Unknown, id.clone()),
-                                ContentBlockOutput::Unknown {
+                                ContentBlockOutput::Unknown(Unknown {
                                     data: data.clone(),
-                                    model_provider_name: model_provider_name.clone(),
-                                },
+                                    model_name: model_name.clone(),
+                                    provider_name: provider_name.clone(),
+                                }),
                             );
                         }
                     }
@@ -961,12 +966,12 @@ mod tests {
             },
             "required": ["name", "age"]
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1247,12 +1252,12 @@ mod tests {
             },
             "required": ["name", "age"]
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1348,12 +1353,12 @@ mod tests {
             },
             "required": ["name"]
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
         let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),

@@ -4,18 +4,20 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ClientExt, JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use tensorzero::{
+    ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, StoredDatapoint, System,
+};
 use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
             select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
-            stale_datapoint_clickhouse,
         },
-        datasets::GetDatapointsParams,
+        datasets::{DatasetQueries, GetDatapointsParams},
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    tool::Tool,
 };
 
 use uuid::Uuid;
@@ -107,6 +109,7 @@ async fn test_datapoint_insert_synthetic_chat() {
       "is_custom": true,
       "source_inference_id": source_inference_id.to_string(),
       "staled_at": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -304,7 +307,7 @@ async fn test_create_delete_datapoint_chat() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
+        assert!(matches!(first_content, InputMessageContent::Text(_)));
 
         // Verify output if present
         if let Some(output) = &datapoint.output {
@@ -338,31 +341,36 @@ async fn test_create_delete_datapoint_chat() {
         if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
             assert!(!additional_tools.is_empty());
             let first_tool = &additional_tools[0];
-            assert_eq!(first_tool.name, "get_temperature");
-            assert_eq!(
-                first_tool.description,
-                "Get the current temperature in a given location"
-            );
-            assert_eq!(
-                first_tool.parameters,
-                json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
-                        },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
-                })
-            );
+            match &first_tool {
+                Tool::Function(tool) => {
+                    assert_eq!(tool.name, "get_temperature");
+                    assert_eq!(
+                        tool.description,
+                        "Get the current temperature in a given location"
+                    );
+                    assert_eq!(
+                        tool.parameters,
+                        json!({
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "The location to get the temperature for (e.g. \"New York\")"
+                                },
+                                "units": {
+                                    "type": "string",
+                                    "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                    "enum": ["fahrenheit", "celsius"]
+                                }
+                            },
+                            "required": ["location"],
+                            "additionalProperties": false
+                        })
+                    );
+                }
+                Tool::OpenAICustom(_) => panic!("Expected Function tool"),
+            }
         }
 
         let datapoint_id = datapoint.id;
@@ -613,7 +621,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": "[{\"type\":\"tool_call\",\"id\":\"call_123\",\"raw_name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"name\":\"get_temperature\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"}}]",
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
-      "dynamic_tools": ["{\"type\":\"client_side_function\",\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}"],
+      "dynamic_tools": ["{\"type\":\"function\",\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}"],
       "dynamic_provider_tools": [],
       "tool_choice": "auto",
       "parallel_tool_calls": false,
@@ -624,6 +632,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -704,6 +713,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -822,6 +832,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -862,7 +873,10 @@ async fn test_datapoint_insert_synthetic_json() {
     assert_eq!(datapoint.id, new_datapoint_id);
 
     // Let's stale the old datapoint and try again
-    stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
+    clickhouse
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+        .await
+        .unwrap();
 
     // Try a new insert with the same source_inference_id but a new datapoint id
     let new_datapoint_id = Uuid::now_v7();
@@ -929,6 +943,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1054,7 +1069,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Template { .. }
+            InputMessageContent::Template { .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1072,7 +1087,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Template { .. }
+            InputMessageContent::Template { .. }
         ));
 
         // Get the output schema
@@ -1491,6 +1506,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -1613,6 +1629,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1791,6 +1808,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1890,6 +1908,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -2006,6 +2025,7 @@ async fn test_datapoint_insert_output_none_json() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2126,6 +2146,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2279,6 +2300,7 @@ async fn test_datapoint_insert_missing_output_chat() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2350,6 +2372,7 @@ async fn test_datapoint_insert_null_output_chat() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2417,6 +2440,7 @@ async fn test_datapoint_insert_missing_output_json() {
       "staled_at": null,
       "source_inference_id": null,
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2484,6 +2508,7 @@ async fn test_datapoint_insert_null_output_json() {
       "staled_at": null,
       "source_inference_id": null,
       "name": null,
+      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -3014,6 +3039,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -3077,6 +3104,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();

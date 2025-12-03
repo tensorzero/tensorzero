@@ -86,7 +86,8 @@ pub async fn select_chat_datapoint_clickhouse(
             is_custom,
             source_inference_id,
             staled_at,
-            updated_at
+            updated_at,
+            snapshot_hash
         FROM ChatInferenceDatapoint FINAL
         WHERE id = '{inference_id}'
         LIMIT 1
@@ -148,7 +149,8 @@ pub async fn select_chat_dataset_clickhouse(
             is_custom,
             source_inference_id,
             staled_at,
-            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
+            snapshot_hash
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL
         FORMAT JSONEachRow"
@@ -477,109 +479,6 @@ pub async fn select_feedback_by_target_id_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
-}
-
-#[cfg(feature = "e2e_tests")]
-pub async fn stale_datapoint_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    datapoint_id: Uuid,
-) {
-    let query = format!(
-        "INSERT INTO ChatInferenceDatapoint
-        (
-            dataset_name,
-            function_name,
-            id,
-            name,
-            episode_id,
-            input,
-            output,
-            tool_params,
-            dynamic_tools,
-            dynamic_provider_tools,
-            tool_choice,
-            parallel_tool_calls,
-            allowed_tools,
-            tags,
-            auxiliary,
-            is_deleted,
-            source_inference_id,
-            staled_at,
-            updated_at
-        )
-        SELECT
-            dataset_name,
-            function_name,
-            id,
-            name,
-            episode_id,
-            input,
-            output,
-            tool_params,
-            dynamic_tools,
-            dynamic_provider_tools,
-            tool_choice,
-            parallel_tool_calls,
-            allowed_tools,
-            tags,
-            auxiliary,
-            is_deleted,
-            source_inference_id,
-            now64() as staled_at,
-            now64() as updated_at
-        FROM ChatInferenceDatapoint FINAL
-        WHERE id = '{datapoint_id}'"
-    );
-
-    // Execute the query and ignore errors (in case the datapoint doesn't exist in this table)
-    let _ = clickhouse_connection_info
-        .run_query_synchronous_no_params(query)
-        .await;
-
-    let query = format!(
-        "INSERT INTO JsonInferenceDatapoint
-        (
-            dataset_name,
-            function_name,
-            id,
-            episode_id,
-            input,
-            output,
-            output_schema,
-            tags,
-            auxiliary,
-            is_deleted,
-            updated_at,
-            staled_at,
-            source_inference_id,
-            is_custom,
-            name
-        )
-        SELECT
-            dataset_name,
-            function_name,
-            id,
-            episode_id,
-            input,
-            output,
-            output_schema,
-            tags,
-            auxiliary,
-            is_deleted,
-            now64() as updated_at,
-            now64() as staled_at,
-            source_inference_id,
-            is_custom,
-            name
-        FROM JsonInferenceDatapoint FINAL
-        WHERE id = '{datapoint_id}'"
-    );
-
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let _ = clickhouse_connection_info
-        .run_query_synchronous_no_params(query)
-        .await;
 }
 
 pub async fn select_workflow_evaluation_run_clickhouse(

@@ -362,6 +362,35 @@ You can use TensorZero with tools offered by Model Context Protocol (MCP) server
 
 See our [MCP (Model Context Protocol) Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/mcp-model-context-protocol) to learn how to integrate TensorZero with an MCP server.
 
+### Using Built-in Provider Tools
+
+<Warning>
+
+TensorZero currently only supports built-in provider tools from the OpenAI Responses API.
+
+</Warning>
+
+Some model providers offer built-in tools that run server-side on the provider's infrastructure.
+For example, OpenAI's Responses API provides a `web_search` tool that enables models to search the web for information.
+
+You can configure provider tools in your model provider configuration:
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+provider_tools = [{type = "web_search"}]
+```
+
+You can also provide them dynamically at inference time via the `provider_tools` parameter.
+
+<Tip>
+
+See [How to call the OpenAI Responses API](/gateway/call-the-openai-responses-api) for a complete guide on using provider tools like web search.
+
+</Tip>
+
 ## Learn More
 
 <Columns cols={2}>

@@ -46,7 +46,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    TextChunk, Unknown, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
@@ -59,7 +59,8 @@ use crate::providers::openai::responses::{
     OpenAIResponsesResponse,
 };
 use crate::tool::{
-    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
+    ToolChoice, ToolConfigRef,
 };
 
 use crate::providers::helpers::{
@@ -1528,11 +1529,25 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
         _ => AllowedToolsMode::Auto,
     };
 
+    // For each allowed tool name, determine if it's a function or custom tool
     let tool_refs: Vec<ToolReference> = allowed_tools_list
         .iter()
-        .map(|name| ToolReference {
-            r#type: OpenAIToolType::Function,
-            function: SpecificToolFunction { name },
+        .map(|name| {
+            // Check if this tool name belongs to a custom tool
+            let is_custom = tool_config
+                .openai_custom_tools
+                .iter()
+                .any(|custom_tool| custom_tool.name == *name);
+
+            if is_custom {
+                ToolReference::Custom {
+                    custom: SpecificToolCustom { name },
+                }
+            } else {
+                ToolReference::Function {
+                    function: SpecificToolFunction { name },
+                }
+            }
         })
         .collect();
 
@@ -1547,16 +1562,23 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
-pub(super) fn prepare_openai_tools<'a>(
-    request: &'a ModelInferenceRequest,
-) -> PreparedOpenAIToolsResult<'a> {
+fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            if !tool_config.any_tools_available() && tool_config.openai_custom_tools.is_empty() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
+            // This is the only place where we add OpenAI custom tools
+            let tools = Some(
+                tool_config
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => func.into(),
+                        ToolConfigRef::OpenAICustom(custom) => OpenAITool::Custom { custom },
+                    })
+                    .collect(),
+            );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             let tool_choice =
@@ -1828,10 +1850,7 @@ async fn tensorzero_to_openai_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 user_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
@@ -1912,18 +1931,12 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Owned(data),
                 });
@@ -2001,16 +2014,20 @@ pub struct OpenAIFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct OpenAITool<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIFunction<'a>,
-    pub strict: bool,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAITool<'a> {
+    Function {
+        function: OpenAIFunction<'a>,
+        strict: bool,
+    },
+    Custom {
+        custom: &'a OpenAICustomTool,
+    },
 }
 
-impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
+impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
+        OpenAITool::Function {
             function: OpenAIFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
@@ -2027,8 +2044,8 @@ pub struct OpenAISFTTool<'a> {
     pub function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for OpenAISFTTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         OpenAISFTTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -2040,10 +2057,9 @@ impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
     }
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for OpenAITool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
+impl<'a> From<&'a FunctionTool> for OpenAITool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
+        OpenAITool::Function {
             function: OpenAIFunction {
                 name: &tool.name,
                 description: Some(&tool.description),
@@ -2123,13 +2139,21 @@ pub struct SpecificToolFunction<'a> {
     pub name: &'a str,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SpecificToolCustom<'a> {
+    pub name: &'a str,
+}
+
 /// Represents the OpenAI API's allowed_tools constraint for tool_choice.
 /// This matches the OpenAI spec structure:
 /// {
 ///   "type": "allowed_tools",
 ///   "allowed_tools": {
 ///     "mode": "auto" | "required",
-///     "tools": [{"type": "function", "function": {"name": "..."}}]
+///     "tools": [
+///       {"type": "function", "function": {"name": "..."}},
+///       {"type": "custom", "custom": {"name": "..."}}
+///     ]
 ///   }
 /// }
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2152,11 +2176,15 @@ pub enum AllowedToolsMode {
 }
 
 /// A reference to a tool by name, used in allowed_tools constraint.
-/// Serializes as: {"type": "function", "function": {"name": "tool_name"}}
+/// Can reference either a function tool or a custom tool.
+/// Serializes as:
+///   - Function: {"type": "function", "function": {"name": "tool_name"}}
+///   - Custom: {"type": "custom", "custom": {"name": "tool_name"}}
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolReference<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: SpecificToolFunction<'a>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolReference<'a> {
+    Function { function: SpecificToolFunction<'a> },
+    Custom { custom: SpecificToolCustom<'a> },
 }
 
 impl Default for OpenAIToolChoice<'_> {
@@ -2374,24 +2402,43 @@ impl From<OpenAIEmbeddingUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseFunctionCall {
+pub(super) struct OpenAIResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseToolCall {
-    id: String,
-    r#type: OpenAIToolType,
-    function: OpenAIResponseFunctionCall,
+pub(super) struct OpenAIResponseCustomCall {
+    name: String,
+    input: String,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum OpenAIResponseToolCall {
+    Function {
+        id: String,
+        function: OpenAIResponseFunctionCall,
+    },
+    Custom {
+        id: String,
+        custom: OpenAIResponseCustomCall,
+    },
 }
 
 impl From<OpenAIResponseToolCall> for ToolCall {
     fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
-        ToolCall {
-            id: openai_tool_call.id,
-            name: openai_tool_call.function.name,
-            arguments: openai_tool_call.function.arguments,
+        match openai_tool_call {
+            OpenAIResponseToolCall::Function { id, function } => ToolCall {
+                id,
+                name: function.name,
+                arguments: function.arguments,
+            },
+            OpenAIResponseToolCall::Custom { id, custom } => ToolCall {
+                id,
+                name: custom.name,
+                arguments: custom.input,
+            },
         }
     }
 }
@@ -3133,8 +3180,13 @@ mod tests {
         );
         assert!(openai_request.tools.is_some());
         let tools = openai_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, WEATHER_TOOL.name());
+                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+            }
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+        }
         assert_eq!(
             openai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
@@ -3417,9 +3469,8 @@ mod tests {
                 message: OpenAIResponseMessage {
                     content: None,
                     reasoning_content: None,
-                    tool_calls: Some(vec![OpenAIResponseToolCall {
+                    tool_calls: Some(vec![OpenAIResponseToolCall::Function {
                         id: "call1".to_string(),
-                        r#type: OpenAIToolType::Function,
                         function: OpenAIResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
@@ -3623,10 +3674,20 @@ mod tests {
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        match &tools[0] {
+            OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, WEATHER_TOOL.name());
+                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+            }
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+        }
+        match &tools[1] {
+            OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, QUERY_TOOL.name());
+                assert_eq!(function.parameters, QUERY_TOOL.parameters());
+            }
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+        }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -5057,14 +5118,12 @@ mod tests {
                     AllowedToolsMode::Auto
                 );
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.tools[0].function.name,
-                    "get_temperature"
-                );
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.tools[0].r#type,
-                    OpenAIToolType::Function
-                );
+                match &allowed_tools_choice.allowed_tools.tools[0] {
+                    ToolReference::Function { function } => {
+                        assert_eq!(function.name, "get_temperature");
+                    }
+                    ToolReference::Custom { .. } => panic!("Expected Function variant"),
+                }
             }
             _ => panic!("Expected AllowedTools variant"),
         }
@@ -5111,7 +5170,10 @@ mod tests {
                     .allowed_tools
                     .tools
                     .iter()
-                    .map(|t| t.function.name)
+                    .map(|t| match t {
+                        ToolReference::Function { function } => function.name,
+                        ToolReference::Custom { .. } => panic!("Expected Function variant"),
+                    })
                     .collect();
                 assert!(tool_names.contains(&"query_articles"));
                 assert!(tool_names.contains(&"get_temperature"));

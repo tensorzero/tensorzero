@@ -1,0 +1,824 @@
+
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
+
+[models."gpt-4o-mini-2024-07-18-extra-body"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18-extra-body".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+extra_body = [
+    { pointer = "/temperature", value = 0.456 },
+    { pointer = "/frequency_penalty", value = 1.42 },
+]
+
+[models."gpt-oss-20b-fireworks"]
+routing = ["fireworks"]
+
+[models."gpt-oss-20b-fireworks".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/gpt-oss-20b"
+parse_think_blocks = false
+
+[models."gpt-oss-20b-vllm"]
+routing = ["vllm"]
+
+[models."gpt-oss-20b-vllm".providers.vllm]
+type = "vllm"
+api_base = "https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/v1/"
+model_name = "openai/gpt-oss-20b"
+
+[models."gpt-4o-mini-2024-07-18-dynamic"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18-dynamic".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_key_location = "dynamic::openai_api_key"
+
+[models."o1-2024-12-17"]
+routing = ["openai"]
+
+[models."o1-2024-12-17".providers.openai]
+type = "openai"
+model_name = "o1-2024-12-17"
+
+[models."gpt-4o-mini-azure"]
+routing = ["azure"]
+
+[models."gpt-4o-mini-azure".providers.azure]
+type = "azure"
+deployment_id = "gpt4o-mini-20240718"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
+
+[models."gpt-4o-mini-azure-dynamic"]
+routing = ["azure"]
+
+[models."gpt-4o-mini-azure-dynamic".providers.azure]
+type = "azure"
+deployment_id = "gpt4o-mini-20240718"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
+api_key_location = "dynamic::azure_openai_api_key"
+
+[models."llama-3.3-70b-instruct-azure"]
+routing = ["azure"]
+
+[models."llama-3.3-70b-instruct-azure".providers.azure]
+type = "azure"
+deployment_id = "Llama-3.3-70B-Instruct"
+api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
+endpoint = "https://t0-gha-resource.services.ai.azure.com"
+
+[models."llama-3.3-70b-instruct-azure-dynamic"]
+routing = ["azure"]
+
+[models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
+type = "azure"
+deployment_id = "Phi-4-mini-instruct"
+endpoint = "https://t0-gha-resource.services.ai.azure.com"
+api_key_location = "dynamic::azure_ai_foundry_api_key"
+
+## Groq
+
+[models."groq-qwen"]
+routing = ["groq"]
+
+[models."groq-qwen".providers.groq]
+type = "groq"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+[models."groq-qwen-dynamic"]
+routing = ["groq"]
+
+[models."groq-qwen-dynamic".providers.groq]
+type = "groq"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+api_key_location = "dynamic::groq_api_key"
+
+[models."claude-3-7-sonnet-20250219-thinking-128k"]
+routing = ["anthropic"]
+
+[models."claude-3-7-sonnet-20250219-thinking-128k".providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-7-sonnet-20250219"
+extra_headers = [{ name = "anthropic-beta", value = "output-128k-2025-02-19" }]
+extra_body = [
+    # We use a budget tokens of 1024 to make sure that it doesn't think for too long,
+    # since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
+    # to 128k in 'test_thinking_128k'
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+    { pointer = "/stop_sequences", value = [
+        "my_custom_stop",
+    ] },
+]
+
+[models.claude-3-haiku-20240307]
+routing = ["anthropic", "aws_bedrock"]
+
+[models.claude-3-haiku-20240307.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+
+[models.claude-3-haiku-20240307.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
+
+[models.claude-3-haiku-20240307-us-east-1]
+routing = ["aws-bedrock-us-east-1"]
+
+[models.claude-3-haiku-20240307-us-east-1.providers.aws-bedrock-us-east-1]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
+
+[models.claude-3-haiku-20240307-uk-hogwarts-1]
+routing = ["aws-bedrock-uk-hogwarts-1"]
+
+[models.claude-3-haiku-20240307-uk-hogwarts-1.providers.aws-bedrock-uk-hogwarts-1]
+type = "aws_bedrock"
+model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+region = "uk-hogwarts-1"
+
+# Duplicate so that we can test just Anthropic no fallbacks
+[models.claude-3-haiku-20240307-anthropic]
+routing = ["anthropic"]
+
+[models.claude-3-haiku-20240307-anthropic.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+
+[models."claude-3-haiku-20240307-anthropic-dynamic"]
+routing = ["anthropic"]
+
+[models."claude-3-haiku-20240307-anthropic-dynamic".providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+api_key_location = "dynamic::anthropic_api_key"
+
+# Duplicate so that we can test just AWS Bedrock no fallbacks
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
+
+[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock"]
+routing = ["aws_bedrock"]
+
+[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock".providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+region = "us-east-1"
+
+[models.gemma-3-1b-aws-sagemaker-openai]
+routing = ["aws_sagemaker"]
+
+[models.gemma-3-1b-aws-sagemaker-openai.providers.aws_sagemaker]
+type = "aws_sagemaker"
+endpoint_name = "gemma3-1b-provisioned-endpoint"
+region = "us-east-2"
+model_name = "gemma3:1b"
+# We actually host an ollama container, but we don't have an ollama provider yet
+hosted_provider = "openai"
+
+[models.gemma-3-1b-aws-sagemaker-tgi]
+routing = ["aws_sagemaker"]
+
+[models.gemma-3-1b-aws-sagemaker-tgi.providers.aws_sagemaker]
+type = "aws_sagemaker"
+endpoint_name = "text-generation-inference-2025-05-21-17-14-43-396"
+region = "us-east-2"
+model_name = "gemma3:1b"
+hosted_provider = "tgi"
+
+[models.claude-3-haiku-20240307-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-3-haiku@20240307"
+location = "us-central1"
+project_id = "tensorzero-public"
+
+[models."gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"]
+routing = ["gcp_vertex_anthropic_thinking"]
+
+[models."gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking".providers.gcp_vertex_anthropic_thinking]
+type = "gcp_vertex_anthropic"
+model_id = "claude-haiku-4-5@20251001"
+location = "us-east5"
+project_id = "tensorzero-public"
+extra_body = [
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+]
+
+[models."gcp-vertex-anthropic-claude-sonnet-4-5@20250929-thinking"]
+routing = ["gcp_vertex_anthropic"]
+
+[models."gcp-vertex-anthropic-claude-sonnet-4-5@20250929-thinking".providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
+extra_body = [
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+]
+
+[models."gemini-2.0-flash-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-2.0-flash-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.0-flash-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+credential_location = "sdk"
+
+[models."gcp-gemini-2.5-pro"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gcp-gemini-2.5-pro".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.5-pro"
+location = "global"
+project_id = "tensorzero-public"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
+
+[models."gemini-2.0-flash-lite"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-2.0-flash-lite".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-2.0-flash-lite"
+
+[models."gemini-2.0-flash-lite-tuned"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-2.0-flash-lite-tuned".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+location = "us-central1"
+project_id = "tensorzero-public"
+endpoint_id = "945488740422254592"
+
+[models."gemini-wrong-field"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-wrong-field".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+location = "us-central1"
+project_id = "tensorzero-public"
+model_id = "945488740422254592"
+
+[models."gemini-2.0-flash-lite-dynamic"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-2.0-flash-lite-dynamic".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-2.0-flash-lite"
+api_key_location = "dynamic::google_ai_studio_api_key"
+
+[models."gemini-2.5-pro"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-2.5-pro".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-2.5-pro"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
+
+[models."gemini-2.5-pro-dynamic"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-2.5-pro-dynamic".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-2.5-pro"
+api_key_location = "dynamic::google_ai_studio_api_key"
+# Set the thinking budget to the minimum value.
+# This speeds up our tests, saves us some tokens, and prevents the model from
+# hitting our token limit
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
+]
+
+[models."llama3.3-70b-instruct-fireworks"]
+routing = ["fireworks"]
+
+[models."llama3.3-70b-instruct-fireworks".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
+
+[models."llama3.3-70b-instruct-fireworks-dynamic"]
+routing = ["fireworks"]
+
+[models."llama3.3-70b-instruct-fireworks-dynamic".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
+api_key_location = "dynamic::fireworks_api_key"
+
+[models.deepseek-r1-aws-bedrock]
+routing = ["aws_bedrock"]
+
+[models.deepseek-r1-aws-bedrock.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.deepseek.r1-v1:0"
+region = "us-east-1"
+
+[models.qwen2p5-72b-instruct]
+routing = ["fireworks"]
+
+[models."deepseek-r1"]
+routing = ["fireworks"]
+
+[models."deepseek-r1".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/deepseek-r1-0528"
+
+[models.qwen2p5-72b-instruct.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
+
+[models."llama3.1-8b-instruct-together"]
+routing = ["together"]
+
+[models."llama3.1-8b-instruct-together".providers.together]
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+
+[models."phi-3.5-mini-instruct-tgi"]
+routing = ["tgi"]
+
+[models."phi-3.5-mini-instruct-tgi".providers.tgi]
+type = "tgi"
+api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
+
+[models."llama3.1-8b-instruct-together-dynamic"]
+routing = ["together"]
+
+[models."llama3.1-8b-instruct-together-dynamic".providers.together]
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+api_key_location = "dynamic::together_api_key"
+
+[models."llama3.1-405b-instruct-turbo-together"]
+routing = ["together"]
+
+[models."llama3.1-405b-instruct-turbo-together".providers.together]
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
+
+[models."Qwen/Qwen2.5-1.5B-Instruct"]
+routing = ["sglang"]
+
+[models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
+type = "sglang"
+model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+
+[models."qwen2.5-0.5b-instruct-vllm"]
+routing = ["vllm"]
+
+[models."qwen2.5-0.5b-instruct-vllm".providers.vllm]
+type = "vllm"
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+
+[models."qwen2.5-0.5b-instruct-vllm-dynamic"]
+routing = ["vllm"]
+
+[models."qwen2.5-0.5b-instruct-vllm-dynamic".providers.vllm]
+type = "vllm"
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+
+[models."open-mistral-nemo-2407"]
+routing = ["mistral"]
+
+[models."open-mistral-nemo-2407".providers.mistral]
+type = "mistral"
+model_name = "open-mistral-nemo-2407"
+
+[models."open-mistral-nemo-2407-dynamic"]
+routing = ["mistral"]
+
+[models."open-mistral-nemo-2407-dynamic".providers.mistral]
+type = "mistral"
+model_name = "open-mistral-nemo-2407"
+api_key_location = "dynamic::mistral_api_key"
+
+[models.o4-mini]
+routing = ["openai"]
+
+[models.o4-mini.providers.openai]
+type = "openai"
+model_name = "o4-mini"
+
+[models.o3-mini]
+routing = ["openai"]
+
+[models.o3-mini.providers.openai]
+type = "openai"
+model_name = "o3-mini"
+
+[models."grok_2_1212"]
+routing = ["xai"]
+
+[models."grok_2_1212".providers.xai]
+type = "xai"
+model_name = "grok-2-1212"
+
+[models."grok_2_1212-dynamic"]
+routing = ["xai"]
+
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
+output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
+
+[models."grok_2_1212-dynamic".providers.xai]
+type = "xai"
+model_name = "grok-2-1212"
+api_key_location = "dynamic::xai_api_key"
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+api_key_location = "dynamic::hyperbolic_api_key"
+
+[models."deepseek-chat"]
+routing = ["deepseek"]
+
+[models."deepseek-chat".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-chat"
+
+[models."deepseek-reasoner"]
+routing = ["deepseek"]
+
+[models."deepseek-reasoner".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-reasoner"
+
+[models."deepseek-chat-dynamic"]
+routing = ["deepseek"]
+
+[models."deepseek-chat-dynamic".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-chat"
+
+[models."together-deepseek-r1"]
+routing = ["together"]
+
+[models."together-deepseek-r1".providers.together]
+type = "together"
+model_name = "deepseek-ai/DeepSeek-R1"
+
+## OpenRouter
+
+[models.gpt_4_o_mini_openrouter]
+routing = ["openrouter"]
+
+[models.gpt_4_o_mini_openrouter.providers.openrouter]
+type = "openrouter"
+model_name = "openai/gpt-4o-mini"
+
+[models.gpt_4_o_mini_openrouter_dynamic]
+routing = ["openrouter"]
+
+[models.gpt_4_o_mini_openrouter_dynamic.providers.openrouter]
+type = "openrouter"
+model_name = "openai/gpt-4o-mini"
+api_key_location = "dynamic::openrouter_api_key"
+
+[functions.inference_ttft_chat]
+type = "chat"
+
+[functions.inference_ttft_chat.variants.first_provider_timeout]
+type = "chat_completion"
+model = "first_provider_timeout"
+
+[functions.inference_ttft_json]
+type = "json"
+
+[functions.inference_ttft_json.variants.second_provider_timeout]
+type = "chat_completion"
+json_mode = "strict"
+model = "first_provider_timeout"
+
+[models.first_provider_timeout]
+routing = ["first_timeout", "second_good"]
+
+[models.first_provider_timeout.providers.first_timeout]
+type = "dummy"
+model_name = "slow"
+timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
+
+[models.first_provider_timeout.providers.second_good]
+type = "dummy"
+model_name = "good"
+
+[models.null]
+routing = ["dummy"]
+
+[models.null.providers.dummy]
+type = "dummy"
+model_name = "null"
+
+[models.slow_model_timeout]
+routing = ["slow_provider"]
+timeouts = { non_streaming = { total_ms = 400 }, streaming = { ttft_ms = 500 } }
+
+[models.slow_model_timeout.providers.slow_provider]
+type = "dummy"
+model_name = "slow"
+
+[models.slow_with_timeout]
+routing = ["slow"]
+
+[models.slow_with_timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[models.slow_with_timeout.providers.slow.timeouts]
+non_streaming = { total_ms = 400 }
+streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk]
+routing = ["slow"]
+
+[models.slow_second_chunk.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow_second_chunk.providers.slow.timeouts]
+# The model takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+streaming = { ttft_ms = 500 }
+
+[models.slow_second_chunk_timeout]
+routing = ["slow"]
+# The 'slow' provider takes 2 seconds to produce the second chunk,
+# but produces the first chunk with no delay.
+# As a result, this timeout should never be hit.
+timeouts = { streaming = { ttft_ms = 500 } }
+
+[models.slow_second_chunk_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow]
+routing = ["slow"]
+
+[models.slow.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[models.test]
+routing = ["good"]
+
+[models.test.providers.good]
+type = "dummy"
+model_name = "good"
+
+[models.error]
+routing = ["error"]
+
+[models.error.providers.error]
+type = "dummy"
+model_name = "error"
+
+[models.test_fallback]
+routing = ["error", "good"]
+
+[models.test_fallback.providers.error]
+type = "dummy"
+model_name = "error"
+
+[models.test_fallback.providers.good]
+type = "dummy"
+model_name = "good"
+
+[models.json]
+routing = ["json"]
+
+[models.json.providers.json]
+type = "dummy"
+model_name = "json"
+
+[models.json_goodbye]
+routing = ["dummy"]
+
+[models.json_goodbye.providers.dummy]
+type = "dummy"
+model_name = "json_goodbye"
+
+[models.tool]
+routing = ["tool"]
+
+[models.tool.providers.tool]
+type = "dummy"
+model_name = "tool"
+
+[models.bad_tool]
+routing = ["bad_tool"]
+
+[models.bad_tool.providers.bad_tool]
+type = "dummy"
+model_name = "bad_tool"
+
+[models.best_of_n_evaluator]
+routing = ["best_of_n_evaluator"]
+
+[models.best_of_n_evaluator.providers.best_of_n_evaluator]
+type = "dummy"
+model_name = "best_of_n_0"
+
+[models.test_key]
+routing = ["dummy"]
+
+[models.test_key.providers.dummy]
+type = "dummy"
+model_name = "test_key"
+api_key_location = "dynamic::DUMMY_API_KEY"
+
+[models.flaky_basic_test]
+routing = ["dummy"]
+
+[models.flaky_basic_test.providers.dummy]
+type = "dummy"
+model_name = "flaky_basic_test"
+
+[models.err_in_stream]
+routing = ["dummy"]
+
+[models.err_in_stream.providers.dummy]
+type = "dummy"
+model_name = "err_in_stream"
+
+[models.flaky_best_of_n_judge]
+routing = ["dummy"]
+
+[models.flaky_best_of_n_judge.providers.dummy]
+type = "dummy"
+model_name = "flaky_best_of_n_judge"
+
+[models.alternate]
+routing = ["dummy"]
+
+[models.alternate.providers.dummy]
+type = "dummy"
+model_name = "alternate"
+
+[models.json_beatles_1]
+routing = ["dummy"]
+
+[models.json_beatles_1.providers.dummy]
+type = "dummy"
+model_name = "json_beatles_1"
+
+[models.json_beatles_2]
+routing = ["dummy"]
+
+[models.json_beatles_2.providers.dummy]
+type = "dummy"
+model_name = "json_beatles_2"
+
+[models.json_reasoner]
+routing = ["dummy"]
+
+[models.json_reasoner.providers.dummy]
+type = "dummy"
+model_name = "json_reasoner"
+
+[models.reasoner]
+routing = ["dummy"]
+
+[models.responses-gpt-5]
+routing = ["openai"]
+
+[models.responses-gpt-5.providers.openai]
+type = "openai"
+model_name = "gpt-5"
+api_type = "responses"
+include_encrypted_reasoning = true
+
+[models.gpt-5-mini-responses]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+
+[models.reasoner.providers.dummy]
+type = "dummy"
+model_name = "reasoner"
+
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[embedding_models.azure-text-embedding-3-small]
+routing = ["azure"]
+
+[embedding_models.azure-text-embedding-3-small.providers.azure]
+type = "azure"
+endpoint = "https://t0-azure-openai-east.openai.azure.com/"
+deployment_id = "text-embedding-3-small"
+
+[embedding_models.voyage_3_5_lite_256]
+routing = ["voyage"]
+
+[embedding_models.voyage_3_5_lite_256.providers.voyage]
+type = "openai"
+api_base = "https://api.voyageai.com/v1"
+model_name = "voyage-3.5-lite"
+api_key_location = "env::VOYAGE_API_KEY"
+extra_body = [
+    { pointer = "/dimensions", delete = true },
+    { pointer = "/encoding_format", delete = true },
+    { pointer = "/output_dimension", value = 256 },
+]
+
+[embedding_models.fallback]
+routing = ["slow", "openai"]
+
+[embedding_models.fallback.providers.slow]
+type = "dummy"
+model_name = "slow"
+timeout_ms = 1000
+
+[embedding_models.fallback.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[embedding_models.timeout]
+routing = ["slow"]
+timeout_ms = 1000
+
+[embedding_models.timeout.providers.slow]
+type = "dummy"
+model_name = "slow"
+
+[embedding_models.dummy-embedding-model]
+routing = ["dummy"]
+
+[embedding_models.dummy-embedding-model.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+
+[embedding_models.gemini_embedding_001_openrouter]
+routing = ["openrouter"]
+
+[embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
+type = "openrouter"
+model_name = "google/gemini-embedding-001"

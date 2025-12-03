@@ -7,7 +7,8 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow, ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type { StoredInference } from "~/types/tensorzero";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -28,7 +29,7 @@ export default function EpisodeInferenceTable({
   getError,
   openSheetInferenceId,
 }: {
-  inferences: InferenceByIdRow[];
+  inferences: StoredInference[];
   onOpenSheet?: (inferenceId: string) => void;
   onCloseSheet?: () => void;
   getInferenceData?: (inferenceId: string) => ParsedInferenceRow | null;
@@ -53,17 +54,20 @@ export default function EpisodeInferenceTable({
             <TableEmptyState message="No inferences found" />
           ) : (
             inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
+              <TableRow
+                key={inference.inference_id}
+                id={inference.inference_id}
+              >
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
-                    id={inference.id}
-                    link={toInferenceUrl(inference.id)}
+                    id={inference.inference_id}
+                    link={toInferenceUrl(inference.inference_id)}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
-                    functionType={inference.function_type}
+                    functionType={inference.type}
                     link={toFunctionUrl(inference.function_name)}
                   />
                 </TableCell>
@@ -85,7 +89,7 @@ export default function EpisodeInferenceTable({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => onOpenSheet(inference.id)}
+                      onClick={() => onOpenSheet(inference.inference_id)}
                       aria-label="View inference details"
                     >
                       <Eye className="h-4 w-4" />

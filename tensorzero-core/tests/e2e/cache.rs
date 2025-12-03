@@ -11,14 +11,15 @@ use serde_json::Value;
 use std::time::Duration;
 use tensorzero::CacheParamsOptions;
 use tensorzero::ClientInferenceParams;
-use tensorzero::ClientInput;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
-use tensorzero::ClientSideFunctionTool;
 use tensorzero::ContentBlockChunk;
 use tensorzero::DynamicToolParams;
+use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
+use tensorzero::Input;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
+use tensorzero::Tool;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
 use tensorzero_core::cache::CacheData;
@@ -32,7 +33,6 @@ use tensorzero_core::inference::types::FinishReason;
 use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
-use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::tool::InferenceResponseToolCall;
 use uuid::Uuid;
 
@@ -355,11 +355,11 @@ pub async fn test_dont_cache_invalid_tool_call() {
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],
@@ -405,11 +405,11 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],
@@ -419,7 +419,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the temperature".to_string(),
                 parameters: json!({
@@ -430,7 +430,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
                     "required": ["other_param"]
                 }),
                 strict: true,
-            }]),
+            })]),
             ..Default::default()
         },
         ..Default::default()

@@ -437,3 +437,315 @@ async def test_async_run_evaluation_both_variant_params_error(
             concurrency=1,
             inference_cache="off",
         )
+
+
+def test_sync_run_evaluation_with_adaptive_stopping(
+    evaluation_datasets: Dict[str, str],
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client experimental_run_evaluation with adaptive stopping parameters."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="on",
+        max_datapoints=4,
+        adaptive_stopping={"precision": {"exact_match": 0.2}},
+    )
+
+    # Test run_info property
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 6 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (4) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 4, f"Should process all 6 datapoints in dataset, got {num_datapoints}"
+
+    # Consume all results
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert "type" in result
+        assert result["type"] in ["success", "error"]
+
+    assert len(results) == num_datapoints
+
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "count_sports" in stats
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_adaptive_stopping(
+    evaluation_datasets: Dict[str, str],
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client experimental_run_evaluation with adaptive stopping parameters."""
+    job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="haiku_without_outputs",
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+        max_datapoints=7,
+        adaptive_stopping={"precision": {"topic_starts_with_f": 0.3}},
+    )
+
+    # Test run_info property
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 10 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (7) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 7, f"Should process max of 7 datapoints, got {num_datapoints}"
+
+    # Consume all results
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert "type" in result
+        assert result["type"] in ["success", "error"]
+
+    assert len(results) == num_datapoints
+
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "topic_starts_with_f" in stats
+
+
+# TESTS FOR DATAPOINT_IDS PARAMETER
+
+
+def test_sync_run_evaluation_with_datapoint_ids(
+    evaluation_datasets: Dict[str, str],
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client experimental_run_evaluation with specific datapoint_ids.
+
+    This is a happy path test that:
+    1. Runs an evaluation to collect available datapoint IDs
+    2. Selects a subset of those IDs
+    3. Runs evaluation with only the selected IDs
+    4. Verifies only the selected datapoints were evaluated
+    """
+    # First, run evaluation to collect available datapoint IDs from the dataset
+    first_job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="on",
+    )
+
+    # Collect all datapoint IDs from the first run
+    all_datapoint_ids: list[str] = []
+    for result in first_job.results():
+        if result["type"] == "success":
+            datapoint_id = result["datapoint"]["id"]
+            all_datapoint_ids.append(datapoint_id)
+
+    # We should have at least some datapoints
+    assert len(all_datapoint_ids) > 0, "Dataset should contain datapoints"
+
+    # Select first 3 datapoint IDs (or fewer if dataset is smaller)
+    num_to_select = min(3, len(all_datapoint_ids))
+    selected_ids = all_datapoint_ids[:num_to_select]
+
+    # Run evaluation with only the selected datapoint IDs
+    second_job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        datapoint_ids=selected_ids,
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="on",
+    )
+
+    # Verify run_info reports correct number of datapoints
+    run_info: Dict[str, Any] = second_job.run_info
+    assert run_info["num_datapoints"] == num_to_select, (
+        f"Expected {num_to_select} datapoints, got {run_info['num_datapoints']}"
+    )
+
+    # Collect results and verify they match selected IDs
+    evaluated_ids: list[str] = []
+    for result in second_job.results():
+        assert result["type"] == "success", "All evaluations should succeed"
+        datapoint_id = result["datapoint"]["id"]
+        evaluated_ids.append(datapoint_id)
+
+    # Verify correct number of results
+    assert len(evaluated_ids) == num_to_select, f"Expected {num_to_select} results, got {len(evaluated_ids)}"
+
+    # Verify all evaluated IDs are in the selected set
+    assert set(evaluated_ids) == set(selected_ids), (
+        f"Evaluated IDs {evaluated_ids} don't match selected IDs {selected_ids}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_datapoint_ids(
+    evaluation_datasets: Dict[str, str],
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client experimental_run_evaluation with specific datapoint_ids.
+
+    This is a happy path test that:
+    1. Runs an evaluation to collect available datapoint IDs
+    2. Selects a subset of those IDs
+    3. Runs evaluation with only the selected IDs
+    4. Verifies only the selected datapoints were evaluated
+    """
+    # First, run evaluation to collect available datapoint IDs from the dataset
+    first_job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="haiku_without_outputs",
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    # Collect all datapoint IDs from the first run
+    all_datapoint_ids: list[str] = []
+    async for result in first_job.results():
+        if result["type"] == "success":
+            datapoint_id = result["datapoint"]["id"]
+            all_datapoint_ids.append(datapoint_id)
+
+    # We should have at least some datapoints
+    assert len(all_datapoint_ids) > 0, "Dataset should contain datapoints"
+
+    # Select first 3 datapoint IDs (or fewer if dataset is smaller)
+    num_to_select = min(3, len(all_datapoint_ids))
+    selected_ids = all_datapoint_ids[:num_to_select]
+
+    # Run evaluation with only the selected datapoint IDs
+    second_job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="haiku_without_outputs",
+        datapoint_ids=selected_ids,
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    # Verify run_info reports correct number of datapoints
+    run_info: Dict[str, Any] = second_job.run_info
+    assert run_info["num_datapoints"] == num_to_select, (
+        f"Expected {num_to_select} datapoints, got {run_info['num_datapoints']}"
+    )
+
+    # Collect results and verify they match selected IDs
+    evaluated_ids: list[str] = []
+    async for result in second_job.results():
+        assert result["type"] == "success", "All evaluations should succeed"
+        datapoint_id = result["datapoint"]["id"]
+        evaluated_ids.append(datapoint_id)
+
+    # Verify correct number of results
+    assert len(evaluated_ids) == num_to_select, f"Expected {num_to_select} results, got {len(evaluated_ids)}"
+
+    # Verify all evaluated IDs are in the selected set
+    assert set(evaluated_ids) == set(selected_ids), (
+        f"Evaluated IDs {evaluated_ids} don't match selected IDs {selected_ids}"
+    )
+
+
+def test_sync_run_evaluation_both_dataset_and_datapoint_ids_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects both dataset_name and datapoint_ids."""
+    with pytest.raises(RuntimeError, match="Cannot provide both"):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            dataset_name="some_dataset",
+            datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_both_dataset_and_datapoint_ids_error(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client rejects both dataset_name and datapoint_ids."""
+    with pytest.raises(RuntimeError, match="Cannot provide both"):
+        await embedded_async_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            dataset_name="some_dataset",
+            datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+        )
+
+
+def test_sync_run_evaluation_neither_dataset_nor_datapoint_ids_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects neither dataset_name nor datapoint_ids."""
+    with pytest.raises(RuntimeError, match="Must provide either"):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_neither_dataset_nor_datapoint_ids_error(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client rejects neither dataset_name nor datapoint_ids."""
+    with pytest.raises(RuntimeError, match="Must provide either"):
+        await embedded_async_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+        )
+
+
+def test_sync_run_evaluation_datapoint_ids_and_max_datapoints_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects both datapoint_ids and max_datapoints."""
+    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+            max_datapoints=10,
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_datapoint_ids_and_max_datapoints_error(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client rejects both datapoint_ids and max_datapoints."""
+    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
+        await embedded_async_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+            max_datapoints=10,
+        )

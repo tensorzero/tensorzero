@@ -42,9 +42,11 @@ See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) 
 - **Required:** no
 
 A list of tool names that the model is allowed to call.
-The tools must be defined in the configuration file.
+The tools must be defined in the configuration file or provided dynamically via `additional_tools`.
 
-Any tools provided in `additional_tools` are always allowed, irrespective of this field.
+Some providers (notably OpenAI) natively support restricting allowed tools.
+For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
+For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
 
 #### `cache_options`
 
@@ -142,13 +144,16 @@ See [Episodes](/gateway/guides/episodes) for more information.
 The `extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
@@ -182,12 +187,12 @@ If TensorZero would normally send this request body to the provider...
   // ...
   "extra_body": [
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "variant_name": "my_variant", // or "model_name": "my_model", "provider_name": "my_provider"
       "pointer": "/agi",
       "value": true
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No `variant_name` or `model_name`/`provider_name` specified, so it applies to all variants and providers
       "pointer": "/safety_checks/no_agi",
       "value": {
         "bypass": "on"
@@ -197,7 +202,7 @@ If TensorZero would normally send this request body to the provider...
 }
 ```
 
-...overrides the request body (for `my_variant` only) to:
+...overrides the request body to:
 
 ```json
 {
@@ -222,11 +227,14 @@ If TensorZero would normally send this request body to the provider...
 The `extra_headers` field allows you to modify the request headers that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
@@ -253,12 +261,12 @@ Safety-Checks: on
 {
   "extra_headers": [
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      "variant_name": "my_variant", // or "model_name": "my_model", "provider_name": "my_provider"
       "name": "Safety-Checks",
       "value": "off"
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No `variant_name` or `model_name`/`provider_name` specified, so it applies to all variants and providers
       "name": "Intelligence-Level",
       "value": "AGI"
     }
@@ -266,7 +274,7 @@ Safety-Checks: on
 }
 ```
 
-...overrides the request headers to:
+...overrides the request headers so that `Safety-Checks` is set to `off` only for `my_variant`, while `Intelligence-Level: AGI` is applied globally to all variants and providers:
 
 ```text
 Safety-Checks: off

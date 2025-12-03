@@ -1,20 +1,14 @@
 import { createRequire } from "module";
 import type {
   CacheEnabledMode,
-  AdjacentDatapointIds,
   ClientInferenceParams,
   Config,
   CountDatapointsForDatasetFunctionParams,
-  DatasetDetailRow,
-  DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
-  GetAdjacentDatapointIdsParams,
-  GetDatasetMetadataParams,
-  GetDatasetRowsParams,
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
@@ -22,7 +16,6 @@ import type {
   ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
@@ -33,8 +26,6 @@ import type {
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
-  GetDatapointParams,
-  Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
@@ -154,6 +145,8 @@ interface RunEvaluationStreamingParams {
   variantName: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
+  maxDatapoints?: number;
+  precisionTargets?: string;
   onEvent: (event: EvaluationRunEvent) => void;
 }
 
@@ -240,12 +233,6 @@ export class DatabaseClient {
     return new DatabaseClient(
       await NativeDatabaseClient.fromClickhouseUrl(url),
     );
-  }
-
-  async getDatapoint(params: GetDatapointParams): Promise<Datapoint> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatapoint(paramsString);
-    return JSON.parse(result) as Datapoint;
   }
 
   async getModelUsageTimeseries(
@@ -364,30 +351,8 @@ export class DatabaseClient {
     return result;
   }
 
-  async getDatasetMetadata(
-    params: GetDatasetMetadataParams,
-  ): Promise<DatasetMetadata[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getDatasetMetadata(paramsString);
-    return JSON.parse(result) as DatasetMetadata[];
-  }
-
-  async getDatasetRows(
-    params: GetDatasetRowsParams,
-  ): Promise<DatasetDetailRow[]> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
-    return JSON.parse(result) as DatasetDetailRow[];
-  }
-
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.staleDatapoint(paramsString);
   }
 
   async countDatapointsForDatasetFunction(
@@ -397,15 +362,6 @@ export class DatabaseClient {
     return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
       paramsString,
     );
-  }
-
-  async getAdjacentDatapointIds(
-    params: GetAdjacentDatapointIdsParams,
-  ): Promise<AdjacentDatapointIds> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getAdjacentDatapointIds(paramsString);
-    return JSON.parse(result) as AdjacentDatapointIds;
   }
 
   async getFeedbackByVariant(

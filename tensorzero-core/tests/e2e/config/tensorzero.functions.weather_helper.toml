@@ -1,0 +1,180 @@
+[functions.weather_helper]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/weather_helper/system_schema.json"
+tools = ["get_temperature"]
+tool_choice = "auto"
+
+[functions.weather_helper.variants.anthropic-thinking]
+type = "chat_completion"
+weight = 0
+model = "anthropic::claude-3-7-sonnet-20250219"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+thinking_budget_tokens = 1024
+max_tokens = 1200
+
+[functions.weather_helper.variants.gcp-vertex-anthropic-thinking]
+type = "chat_completion"
+weight = 0
+model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+# This must be at least as large as `thinking.budget_tokens`
+max_tokens = 1200
+
+[functions.weather_helper.variants.gcp-vertex-anthropic-sonnet-thinking]
+type = "chat_completion"
+weight = 0
+model = "gcp-vertex-anthropic-claude-sonnet-4-5@20250929-thinking"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+# This must be at least as large as `thinking.budget_tokens`
+max_tokens = 1200
+
+[functions.weather_helper.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "tool"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.split_tool_name]
+type = "chat_completion"
+model = "dummy::tool_split_name"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.bad_tool]
+type = "chat_completion"
+model = "bad_tool"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.aws-bedrock-deepseek-r1]
+type = "chat_completion"
+model = "deepseek-r1-aws-bedrock"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 500
+[functions.weather_helper.variants.anthropic]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.azure]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.fireworks]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gcp-vertex-gemini-pro]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.weather_helper.variants.google-ai-studio-gemini-flash-8b]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.google-ai-studio-gemini-2_5-pro]
+type = "chat_completion"
+model = "gemini-2.5-pro"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.weather_helper.variants.gcp-vertex-haiku]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.groq]
+type = "chat_completion"
+model = "groq-qwen"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.weather_helper.variants.mistral]
+type = "chat_completion"
+model = "open-mistral-nemo-2407"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gpt-5-mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+
+[functions.weather_helper.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.openai-o1]
+type = "chat_completion"
+model = "o1-2024-12-17"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 1000
+
+[functions.weather_helper.variants.openrouter]
+type = "chat_completion"
+model = "gpt_4_o_mini_openrouter"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.together-tool]
+type = "chat_completion"
+model = "llama3.1-405b-instruct-turbo-together"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.sglang]
+type = "chat_completion"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.vllm]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.xai]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100

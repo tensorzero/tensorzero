@@ -7,7 +7,7 @@
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
-  - Run unit tests with `cargo test-unit` which uses `nextest` under the hood.
+  - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 
 ## For APIs
 
@@ -37,7 +37,7 @@ The pre-commit hooks automatically handle this by running `uv lock` and `uv expo
 
 We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
-- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`.
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `internal/tensorzero-node/lib/bindings/`.
 - To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
 - Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 

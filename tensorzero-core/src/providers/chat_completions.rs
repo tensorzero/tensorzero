@@ -8,8 +8,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::error::Error;
 use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{ClientSideFunctionTool, ToolChoice, ToolConfig};
+use crate::tool::{FunctionTool, FunctionToolConfig, ToolChoice};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,8 +92,8 @@ type PreparedChatCompletionToolsResult<'a> = (
     Option<bool>,
 );
 
-impl<'a> From<&'a ToolConfig> for ChatCompletionTool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
@@ -105,8 +106,8 @@ impl<'a> From<&'a ToolConfig> for ChatCompletionTool<'a> {
     }
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for ChatCompletionTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
@@ -190,12 +191,12 @@ fn prepare_chat_completion_allowed_tools_constraint<'a>(
 pub fn prepare_chat_completion_tools<'a>(
     request: &'a ModelInferenceRequest,
     supports_allowed_tools: bool,
-) -> PreparedChatCompletionToolsResult<'a> {
+) -> Result<PreparedChatCompletionToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
 
             let parallel_tool_calls = tool_config.parallel_tool_calls;
@@ -203,7 +204,7 @@ pub fn prepare_chat_completion_tools<'a>(
             if supports_allowed_tools {
                 // Provider supports OpenAI's allowed_tools constraint
                 // Send all tools and use allowed_tools in tool_choice if needed
-                let tools = Some(tool_config.tools_available().map(Into::into).collect());
+                let tools = Some(tool_config.tools_available()?.map(Into::into).collect());
 
                 let tool_choice = if let Some(allowed_tools_choice) =
                     prepare_chat_completion_allowed_tools_constraint(tool_config)
@@ -214,20 +215,20 @@ pub fn prepare_chat_completion_tools<'a>(
                     Some((&tool_config.tool_choice).into())
                 };
 
-                (tools, tool_choice, parallel_tool_calls)
+                Ok((tools, tool_choice, parallel_tool_calls))
             } else {
                 // Provider doesn't support allowed_tools constraint
                 // Filter tools using strict_tools_available and use regular tool_choice
                 let tools = Some(
                     tool_config
-                        .strict_tools_available()
+                        .strict_tools_available()?
                         .map(Into::into)
                         .collect(),
                 );
 
                 let tool_choice = Some((&tool_config.tool_choice).into());
 
-                (tools, tool_choice, parallel_tool_calls)
+                Ok((tools, tool_choice, parallel_tool_calls))
             }
         }
     }
@@ -240,12 +241,12 @@ mod tests {
     use serde_json::json;
 
     // Helper to create a test tool config
-    fn create_static_tool_config() -> ToolConfig {
+    fn create_static_tool_config() -> FunctionToolConfig {
         use crate::jsonschema_util::StaticJSONSchema;
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
-        ToolConfig::Static(Arc::new(StaticToolConfig {
+        FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
@@ -259,11 +260,11 @@ mod tests {
         }))
     }
 
-    fn create_dynamic_tool_config() -> ToolConfig {
+    fn create_dynamic_tool_config() -> FunctionToolConfig {
         use crate::jsonschema_util::DynamicJSONSchema;
         use crate::tool::DynamicToolConfig;
 
-        ToolConfig::Dynamic(DynamicToolConfig {
+        FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "dynamic_tool".to_string(),
             description: "A dynamic tool".to_string(),
             parameters: DynamicJSONSchema::new(json!({
@@ -403,7 +404,7 @@ mod tests {
 
     // Test From implementations
     #[test]
-    fn test_from_client_side_function_tool_config_static() {
+    fn test_from_function_tool_config_static() {
         let tool_config = create_static_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
@@ -414,7 +415,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_from_client_side_function_tool_config_dynamic() {
+    async fn test_from_function_tool_config_dynamic() {
         let tool_config = create_dynamic_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
@@ -423,8 +424,8 @@ mod tests {
     }
 
     #[test]
-    fn test_from_client_side_function_tool() {
-        let tool = ClientSideFunctionTool {
+    fn test_from_function_tool() {
+        let tool = FunctionTool {
             name: "direct_tool".to_string(),
             description: "Direct tool".to_string(),
             parameters: json!({"type": "object"}),
@@ -496,6 +497,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let result = prepare_chat_completion_allowed_tools_constraint(&tool_config);
@@ -516,6 +518,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let result = prepare_chat_completion_allowed_tools_constraint(&tool_config).unwrap();
@@ -549,6 +552,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let result = prepare_chat_completion_allowed_tools_constraint(&tool_config);
@@ -567,6 +571,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let result = prepare_chat_completion_allowed_tools_constraint(&tool_config).unwrap();
@@ -589,6 +594,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let result = prepare_chat_completion_allowed_tools_constraint(&tool_config).unwrap();
@@ -606,7 +612,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -624,6 +630,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -631,7 +638,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -649,6 +656,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -656,7 +664,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert_eq!(tools.unwrap().len(), 1);
         assert!(tool_choice.is_some());
@@ -681,6 +689,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -688,7 +697,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(false));
@@ -718,6 +727,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -725,7 +735,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, false);
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, false).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert!(parallel.is_none());
@@ -749,6 +760,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -756,7 +768,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, false);
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, false).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(true));
@@ -774,14 +787,14 @@ mod tests {
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
-        let tool1 = ToolConfig::Static(Arc::new(StaticToolConfig {
+        let tool1 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool1".to_string(),
             description: "First tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: true,
         }));
 
-        let tool2 = ToolConfig::Static(Arc::new(StaticToolConfig {
+        let tool2 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool2".to_string(),
             description: "Second tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
@@ -798,6 +811,7 @@ mod tests {
             static_tools_available: vec![tool1, tool2],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -805,7 +819,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, "tool1");
@@ -827,6 +841,7 @@ mod tests {
             static_tools_available: vec![create_static_tool_config()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
         };
 
         let request = ModelInferenceRequest {
@@ -834,7 +849,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
 

@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_core::{
-    inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
+    inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
 };
 use uuid::Uuid;
@@ -205,8 +205,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
+                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]},
@@ -264,8 +264,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
+                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]
@@ -380,11 +380,15 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                 StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        StoredContentBlock::Text(Text { text: "Please write me a sentence about Megumin making an explosion.".to_string() }),
-                        StoredContentBlock::Unknown {
-                            model_provider_name: Some("tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini".into()),
+                        StoredContentBlock::Text(Text {
+                            text: "Please write me a sentence about Megumin making an explosion."
+                                .to_string()
+                        }),
+                        StoredContentBlock::Unknown(Unknown {
+                            model_name: Some("gemini-2.0-flash-001".into()),
+                            provider_name: Some("gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
-                        }
+                        })
                     ],
                 }
             );
@@ -437,12 +441,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             text: "Please write me a sentence about Megumin making an explosion."
                                 .to_string()
                         }),
-                        StoredContentBlock::Unknown {
-                            model_provider_name: Some(
-                                "tensorzero::model_name::json::provider_name::json".into()
-                            ),
+                        StoredContentBlock::Unknown(Unknown {
+                            model_name: Some("json".into()),
+                            provider_name: Some("json".into()),
                             data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
-                        }
+                        })
                     ],
                 }
             );
@@ -771,7 +774,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 /// and one that gives an incorrect but well-formed JSON response.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
-/// This test uses implicit_tool in the evaluator, so we also check that there was actually a tool call made under the hood.
+/// This test uses `json_mode="tool"` in the evaluator, so we also check that there was actually a tool call made under the hood.
 #[tokio::test]
 async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
     let episode_id = Uuid::now_v7();

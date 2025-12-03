@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{ClientSideFunctionTool, GetDatapointParams, StoredDatapoint};
+use tensorzero::{FunctionTool, GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -742,7 +742,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             text: "Output".to_string(),
         })]),
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+            vec![Tool::Function(FunctionTool {
                 name: "test_tool".to_string(),
                 description: "Test tool".to_string(),
                 parameters: json!({}),

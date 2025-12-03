@@ -1,4 +1,4 @@
-import type { DatasetDetailRow } from "~/types/tensorzero";
+import type { Datapoint } from "~/types/tensorzero";
 import {
   Table,
   TableBody,
@@ -33,13 +33,14 @@ export default function DatasetRowTable({
   rows,
   dataset_name,
 }: {
-  rows: DatasetDetailRow[];
+  rows: Datapoint[];
   dataset_name: string;
 }) {
   const activeFetcher = useFetcher();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [datapointToDelete, setDatapointToDelete] =
-    useState<DatasetDetailRow | null>(null);
+  const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
+    null,
+  );
 
   // Handle successful deletion
   useEffect(() => {

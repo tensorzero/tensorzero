@@ -4,16 +4,16 @@ use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
+    ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
+    InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
 use tensorzero_core::inference::types::{
-    Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, TextKind,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, Template, Text,
 };
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -43,13 +43,13 @@ impl LLMJudgeEvaluationResult {
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
-    pub datapoint: &'a StoredDatapoint,
+    pub datapoint: &'a Datapoint,
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
     pub evaluator_name: &'a str,
     pub evaluation_run_id: Uuid,
-    pub input: &'a ClientInput,
+    pub input: &'a Input,
     pub inference_cache: CacheEnabledMode,
 }
 
@@ -177,10 +177,10 @@ pub async fn run_llm_judge_evaluator(
 /// Since we don't want to use a template on the gateway side, we must format this here.
 fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
-    input: &ClientInput,
+    input: &Input,
     inference_response: &InferenceResponse,
-    datapoint: &StoredDatapoint,
-) -> Result<Option<ClientInput>> {
+    datapoint: &Datapoint,
+) -> Result<Option<Input>> {
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
             prepare_serialized_chat_output(&chat_response.content)?
@@ -199,11 +199,12 @@ fn prepare_llm_judge_input(
         // alongside the generated output and optionally the reference output.
         LLMJudgeInputFormat::Serialized => {
             let serialized_input = prepare_serialized_input(input)?;
-            Ok(Some(ClientInput {
+            Ok(Some(Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         #[expect(clippy::expect_used)]
                         arguments: Arguments(
                             json!({
@@ -230,16 +231,16 @@ fn prepare_llm_judge_input(
             );
             match final_message {
                 Some(final_message) => {
-                    messages.push(ClientInputMessage {
+                    messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: final_message,
                         })],
                     });
                 }
                 None => return Ok(None),
             }
-            Ok(Some(ClientInput {
+            Ok(Some(Input {
                 system: None,
                 messages,
             }))
@@ -267,45 +268,43 @@ fn prepare_final_message_messages_input(
     }
 }
 
-fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
+fn prepare_serialized_input(input: &Input) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                ClientInputMessageContent::File { .. } => {
+                InputMessageContent::File { .. } => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
-                ClientInputMessageContent::Unknown(_) => {
+                InputMessageContent::Unknown(_) => {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
-                ClientInputMessageContent::Text { .. }
-                | ClientInputMessageContent::Template { .. }
-                | ClientInputMessageContent::ToolCall { .. }
-                | ClientInputMessageContent::ToolResult { .. }
-                | ClientInputMessageContent::RawText(..)
-                | ClientInputMessageContent::Thought(..) => {}
+                InputMessageContent::Text { .. }
+                | InputMessageContent::Template { .. }
+                | InputMessageContent::ToolCall { .. }
+                | InputMessageContent::ToolResult { .. }
+                | InputMessageContent::RawText(..)
+                | InputMessageContent::Thought(..) => {}
             }
         }
     }
     Ok(serde_json::to_string(input)?)
 }
 
-fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>> {
+fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
     let mut messages = Vec::new();
     if let Some(system) = &input.system {
         match system {
             System::Text(text) => {
-                messages.push(ClientInputMessage {
+                messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: text.clone(),
-                    })],
+                    content: vec![InputMessageContent::Text(Text { text: text.clone() })],
                 });
             }
             System::Template(arguments) => {
                 let system_message = serde_json::to_string(arguments)?;
-                messages.push(ClientInputMessage {
+                messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: system_message,
                     })],
                 });
@@ -314,7 +313,7 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
     }
     for message in &input.messages {
         let content = serialize_content_for_messages_input(&message.content)?;
-        messages.push(ClientInputMessage {
+        messages.push(InputMessage {
             role: message.role,
             content,
         });
@@ -323,50 +322,40 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
 }
 
 fn serialize_content_for_messages_input(
-    content: &Vec<ClientInputMessageContent>,
-) -> Result<Vec<ClientInputMessageContent>> {
+    content: &Vec<InputMessageContent>,
+) -> Result<Vec<InputMessageContent>> {
     let mut serialized_content = Vec::new();
     for content_block in content {
         match content_block {
-            ClientInputMessageContent::File(image) => {
+            InputMessageContent::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
                 if let File::Url(..) = image {
                     bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
                 }
-                serialized_content.push(ClientInputMessageContent::File(image.clone()));
+                serialized_content.push(InputMessageContent::File(image.clone()));
             }
-            ClientInputMessageContent::Unknown(_) => {
+            InputMessageContent::Unknown(_) => {
                 bail!("Unknown content not supported for LLM judge evaluations")
             }
-            ClientInputMessageContent::ToolCall { .. }
-            | ClientInputMessageContent::ToolResult { .. }
-            | ClientInputMessageContent::RawText { .. }
-            | ClientInputMessageContent::Thought(_) => {
+            InputMessageContent::ToolCall { .. }
+            | InputMessageContent::ToolResult { .. }
+            | InputMessageContent::RawText { .. }
+            | InputMessageContent::Thought(_) => {
                 serialized_content.push(content_block.clone());
             }
-            ClientInputMessageContent::Template(input) => {
+            InputMessageContent::Template(input) => {
                 // Since the LLM Judge does not have the template of the original function,
-                // we instead serialize the arguments and send them as a TextKind::Text block.
+                // we instead serialize the arguments and send them as a Text block.
                 let arguments_string = serde_json::to_string(input)?;
-                serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
+                serialized_content.push(InputMessageContent::Text(Text {
                     text: arguments_string,
                 }));
             }
-            ClientInputMessageContent::Text(text) => match text {
-                TextKind::Text { text } => {
-                    serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
-                        text: text.clone(),
-                    }));
-                }
-                // Since the LLM Judge does not have the template of the original function,
-                // we instead serialize the arguments and send them as a TextKind::Text block.
-                TextKind::Arguments { arguments } => {
-                    let arguments_string = serde_json::to_string(arguments)?;
-                    serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
-                        text: arguments_string,
-                    }));
-                }
-            },
+            InputMessageContent::Text(text) => {
+                serialized_content.push(InputMessageContent::Text(Text {
+                    text: text.text.clone(),
+                }));
+            }
         }
     }
     Ok(serialized_content)
@@ -403,17 +392,17 @@ fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String
 /// If the reference output is needed but not present, we throw an error. (this could be mapped to None above this call)
 fn handle_reference_output(
     llm_judge_config: &LLMJudgeConfig,
-    datapoint: &StoredDatapoint,
+    datapoint: &Datapoint,
 ) -> Result<Option<String>> {
     if !llm_judge_config.include.reference_output {
         return Ok(None);
     }
     match datapoint {
-        StoredDatapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
+        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        StoredDatapoint::Json(json_datapoint) => match &json_datapoint.output {
+        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -426,13 +415,13 @@ mod tests {
 
     use serde_json::json;
     use tensorzero_core::client::{File, Role, UrlFile};
+    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
-    use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
-    use tensorzero_core::inference::types::StoredInput;
+    use tensorzero_core::inference::types::Input;
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
@@ -445,11 +434,11 @@ mod tests {
     #[test]
     fn test_prepare_serialized_input() {
         // No system, just a text user message
-        let input = ClientInput {
+        let input = Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -461,15 +450,15 @@ mod tests {
         );
 
         // System message, user message with a text and tool block
-        let input = ClientInput {
+        let input = Input {
             system: Some(System::Text("You are a helpful assistant".to_string())),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    ClientInputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Hello, world!".to_string(),
                     }),
-                    ClientInputMessageContent::ToolResult(ToolResult {
+                    InputMessageContent::ToolResult(ToolResult {
                         name: "tool".to_string(),
                         result: "it's 24 degrees and cloudy in SF".to_string(),
                         id: "foooo".to_string(),
@@ -483,11 +472,11 @@ mod tests {
             r#"{"system":"You are a helpful assistant","messages":[{"role":"user","content":[{"type":"text","text":"Hello, world!"},{"type":"tool_result","name":"tool","result":"it's 24 degrees and cloudy in SF","id":"foooo"}]}]}"#
         );
         // Input contains an image
-        let input = ClientInput {
+        let input = Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                     mime_type: None,
                     detail: None,
@@ -517,10 +506,11 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
             }),
-            ContentBlockChatOutput::Unknown {
+            ContentBlockChatOutput::Unknown(Unknown {
                 data: json!({"foo": "bar"}),
-                model_provider_name: Some("foo".to_string()),
-            },
+                model_name: Some("foo".to_string()),
+                provider_name: Some("bar".to_string()),
+            }),
         ];
         let serialized_output = prepare_serialized_chat_output(&content).unwrap();
         assert_eq!(
@@ -555,12 +545,13 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
-        let input = ClientInput {
+        let input = Input {
             system: Some(System::Text("You are a helpful assistant".to_string())),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "bar".to_string(),
                 })],
             }],
@@ -580,13 +571,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -594,7 +585,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -608,11 +599,12 @@ mod tests {
         .unwrap();
         assert_eq!(
             input,
-            ClientInput {
+            Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("input".to_string(), "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".into()),
                             ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi world!\"}]".into()),
@@ -632,6 +624,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let input = prepare_llm_judge_input(
             &llm_judge_config,
@@ -647,13 +640,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -661,7 +654,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -675,13 +668,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             input,
-            ClientInput {
+            Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
-                            ("input".to_string(), "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".into()),
+                            ("input".to_string(), "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".into()),
                             ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi, world!\"}]".into()),
                             ("reference_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]".into()),
                         ])),
@@ -694,11 +688,11 @@ mod tests {
     #[test]
     fn test_prepare_messages_input() {
         // Test with simple string system message
-        let input = ClientInput {
+        let input = Input {
             system: Some(System::Text("You are a helpful assistant".to_string())),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -707,22 +701,22 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
         assert_eq!(messages[0].content.len(), 1);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(text, "You are a helpful assistant");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
         assert_eq!(messages[1].role, Role::User);
 
         // Test with object system message
-        let input = ClientInput {
+        let input = Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([
                 ("instructions".to_string(), "Be helpful".into()),
                 ("persona".to_string(), "assistant".into()),
             ])))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -730,32 +724,33 @@ mod tests {
         let messages = prepare_messages_input(&input).unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(
                 text,
                 r#"{"instructions":"Be helpful","persona":"assistant"}"#
             );
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
     }
 
     #[test]
     fn test_serialize_content_for_messages_input() {
-        // Test with TextKind::Text
-        let content = vec![ClientInputMessageContent::Text(TextKind::Text {
+        // Test with Text
+        let content = vec![InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
             assert_eq!(text, "Hello, world!");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
-        // Test with TextKind::Arguments
-        let content = vec![ClientInputMessageContent::Text(TextKind::Arguments {
+        // Test with Template
+        let content = vec![InputMessageContent::Template(Template {
+            name: "test".to_string(),
             arguments: Arguments(serde_json::Map::from_iter([(
                 "key".to_string(),
                 "value".into(),
@@ -763,28 +758,28 @@ mod tests {
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
-            assert_eq!(text, r#"{"key":"value"}"#);
+        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
+            assert!(text.contains("test") && text.contains("key"));
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
         let content = vec![
-            ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+            InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                 id: "toolid".to_string(),
                 name: "tool".to_string(),
                 arguments: json!({"arg": "value"}).to_string(),
             })),
-            ClientInputMessageContent::ToolResult(ToolResult {
+            InputMessageContent::ToolResult(ToolResult {
                 name: "tool".to_string(),
                 result: "result".to_string(),
                 id: "toolid".to_string(),
             }),
-            ClientInputMessageContent::RawText(RawText {
+            InputMessageContent::RawText(RawText {
                 value: "raw text".to_string(),
             }),
-            ClientInputMessageContent::Thought(Thought {
+            InputMessageContent::Thought(Thought {
                 text: Some("thought".to_string()),
                 signature: None,
                 summary: None,
@@ -795,9 +790,10 @@ mod tests {
         assert_eq!(serialized.len(), 4);
 
         // Test with Unknown content (should error)
-        let content = vec![ClientInputMessageContent::Unknown(Unknown {
+        let content = vec![InputMessageContent::Unknown(Unknown {
             data: json!({"unknown": "data"}),
-            model_provider_name: Some("provider".to_string()),
+            model_name: Some("model".to_string()),
+            provider_name: Some("provider".to_string()),
         })];
         let err = serialize_content_for_messages_input(&content).unwrap_err();
         assert_eq!(
@@ -839,19 +835,20 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -872,19 +869,20 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -900,20 +898,20 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "Reference text".to_string(),
             })]),
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -928,13 +926,13 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -968,6 +966,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let result = prepare_final_message_messages_input(&config, "Generated", None);
         assert_eq!(result, None);
@@ -990,6 +989,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let message = prepare_final_message_messages_input(&config, "Generated", None).unwrap();
         let expected = format!(
@@ -1010,12 +1010,13 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
-        let input = ClientInput {
+        let input = Input {
             system: Some(System::Text("System instruction".to_string())),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "User message".to_string(),
                 })],
             }],
@@ -1034,20 +1035,20 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Reference output".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -1066,46 +1067,41 @@ mod tests {
 
         // First message should be system converted to user
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[0].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[0].content[0] {
             assert_eq!(text, "System instruction");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Second message should be original user message
         assert_eq!(prepared_input.messages[1].role, Role::User);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[1].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[1].content[0] {
             assert_eq!(text, "User message");
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
 
         // Third message should contain the generated output
         assert_eq!(prepared_input.messages[2].role, Role::User);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
-            &prepared_input.messages[2].content[0]
-        {
+        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[2].content[0] {
             let expected = format!(
                 include_str!("message_output_template_without_reference.txt"),
                 "[{\"type\":\"text\",\"text\":\"Generated output\"}]"
             );
             assert_eq!(text, &expected);
         } else {
-            panic!("Expected TextKind::Text");
+            panic!("Expected Text");
         }
     }
 
     #[test]
     fn test_prepare_serialized_chat_output_error_cases() {
         // Test with only Unknown blocks
-        let content = vec![ContentBlockChatOutput::Unknown {
+        let content = vec![ContentBlockChatOutput::Unknown(Unknown {
             data: json!({"foo": "bar"}),
-            model_provider_name: Some("provider".to_string()),
-        }];
+            model_name: Some("model".to_string()),
+            provider_name: Some("provider".to_string()),
+        })];
         let err = prepare_serialized_chat_output(&content).unwrap_err();
         assert_eq!(err.to_string(), "No valid content blocks to serialize");
 
@@ -1124,12 +1120,13 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
-        let input = ClientInput {
+        let input = Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Query".to_string(),
                 })],
             }],
@@ -1149,13 +1146,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Json(JsonInferenceDatapoint {
+            &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },
@@ -1180,9 +1177,10 @@ mod tests {
         assert_eq!(prepared_input.system, None);
         assert_eq!(prepared_input.messages.len(), 1);
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let ClientInputMessageContent::Text(TextKind::Arguments { arguments }) =
+        if let InputMessageContent::Template(Template { name, arguments }) =
             &prepared_input.messages[0].content[0]
         {
+            assert_eq!(name, "user");
             assert_eq!(
                 arguments.0.get("input").and_then(|v| v.as_str()).unwrap(),
                 r#"{"messages":[{"role":"user","content":[{"type":"text","text":"Query"}]}]}"#
@@ -1197,7 +1195,7 @@ mod tests {
             );
             assert!(arguments.0.get("reference_output").unwrap().is_null());
         } else {
-            panic!("Expected TextKind::Arguments");
+            panic!("Expected Template");
         }
     }
 }

@@ -25,7 +25,9 @@ pub mod providers; // providers for the inference and / or optimization services
 pub mod rate_limiting; // utilities for rate limiting
 pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
-mod testing;
+#[cfg(any(test, feature = "e2e_tests"))]
+pub mod test_helpers; // e2e test utilities for external crates
+mod testing; // unit test utilities for tensorzero-core
 pub mod tool; // types and methods for working with TensorZero tools
 pub mod utils;
 pub mod variant; // types and methods for working with TensorZero variants

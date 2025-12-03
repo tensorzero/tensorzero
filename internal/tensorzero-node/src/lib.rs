@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use tensorzero_core::config::ConfigLoadInfo;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -44,7 +45,7 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
     pub variant_name: String,
 }
 
@@ -113,10 +114,15 @@ pub struct RunEvaluationStreamingParams {
     pub clickhouse_url: String,
     pub config_path: String,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+    pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
+    pub max_datapoints: Option<u32>,
+    /// JSON string mapping evaluator names to precision limit thresholds.
+    /// Example: '{"exact_match": 0.13, "llm_judge": 0.16}'
+    pub precision_targets: Option<String>,
 }
 
 #[napi]
@@ -135,16 +141,18 @@ pub async fn run_evaluation_streaming(
             ))
         })?;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(&config_glob, false)
-            .await
-            .map_err(|e| {
-                napi::Error::from_reason(format!(
-                    "Failed to load configuration from {}: {e}",
-                    params.config_path
-                ))
-            })?,
-    );
+    let ConfigLoadInfo {
+        config,
+        snapshot: _,
+    } = Config::load_from_path_optional_verify_credentials(&config_glob, false)
+        .await
+        .map_err(|e| {
+            napi::Error::from_reason(format!(
+                "Failed to load configuration from {}: {e}",
+                params.config_path
+            ))
+        })?;
+    let config = Arc::new(config);
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()
@@ -178,13 +186,37 @@ pub async fn run_evaluation_streaming(
         ))
     })?;
 
+    let datapoint_ids: Vec<Uuid> = params
+        .datapoint_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid UUID in datapoint_ids: {e}"))
+            })
+        })
+        .collect::<Result<Vec<Uuid>, napi::Error>>()?;
+
     let evaluation_run_id = Uuid::now_v7();
+
+    // Parse precision_targets from JSON string to HashMap
+    let precision_targets = if let Some(limits_json_str) = params.precision_targets {
+        let limits_map: std::collections::HashMap<String, f64> =
+            serde_json::from_str(&limits_json_str).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid precision_targets JSON: {e}"))
+            })?;
+        // Convert f64 to f32
+        limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect()
+    } else {
+        HashMap::new()
+    };
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
@@ -192,15 +224,18 @@ pub async fn run_evaluation_streaming(
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(core_args, None, HashMap::new()).await {
-        Ok(result) => result,
-        Err(error) => {
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
-                "Failed to start evaluation run: {error}"
-            )));
-        }
-    };
+    let result =
+        match run_evaluation_core_streaming(core_args, params.max_datapoints, precision_targets)
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = callback.abort();
+                return Err(napi::Error::from_reason(format!(
+                    "Failed to start evaluation run: {error}"
+                )));
+            }
+        };
 
     let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
         evaluation_run_id,

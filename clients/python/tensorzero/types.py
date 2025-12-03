@@ -167,7 +167,8 @@ class ToolResult(ContentBlock):
 @dataclass
 class UnknownContentBlock(ContentBlock):
     data: Any
-    model_provider_name: Optional[str] = None
+    model_name: Optional[str] = None
+    provider_name: Optional[str] = None
     type: str = "unknown"
 
 
@@ -287,11 +288,13 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             signature=block.get("signature"),
             summary=summary,
             type=block_type,
+            _internal_provider_type=block.get("_internal_provider_type"),
         )
     elif block_type == "unknown":
         return UnknownContentBlock(
             data=block["data"],
-            model_provider_name=block.get("model_provider_name"),
+            model_name=block.get("model_name"),
+            provider_name=block.get("provider_name"),
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
@@ -363,23 +366,6 @@ class JsonChunk:
 
 
 InferenceChunk = Union[ChatChunk, JsonChunk]
-
-
-class VariantExtraBody(TypedDict):
-    variant_name: str
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-class ProviderExtraBody(TypedDict):
-    model_provider_name: str
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:

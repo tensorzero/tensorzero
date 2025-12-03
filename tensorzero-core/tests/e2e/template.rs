@@ -562,7 +562,7 @@ async fn e2e_test_named_system_template_no_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
@@ -627,7 +627,7 @@ async fn e2e_test_named_system_template_with_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
@@ -667,7 +667,7 @@ async fn e2e_test_named_system_template_with_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     123.into(),

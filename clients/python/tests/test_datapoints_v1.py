@@ -136,6 +136,109 @@ async def test_async_get_datapoints_by_ids(async_client: AsyncTensorZeroGateway)
     await async_client.delete_datapoints(dataset_name=dataset_name, ids=datapoint_ids)
 
 
+def test_sync_get_datapoints_by_ids_with_dataset_name(sync_client: TensorZeroGateway):
+    """Test retrieving multiple datapoints by IDs using get_datapoints endpoint."""
+    dataset_name = f"test_get_v1_{uuid7()}"
+
+    # Insert test datapoints
+    requests = [
+        CreateDatapointRequestChat(
+            function_name="basic_test",
+            input=Input(
+                system={"assistant_name": "TestBot"},
+                messages=[InputMessage(role="user", content=[InputMessageContentText(text="First message")])],
+            ),
+            output=[ContentBlockChatOutputText(text="First response")],
+        ),
+        CreateDatapointRequestChat(
+            function_name="basic_test",
+            input=Input(
+                system={"assistant_name": "TestBot"},
+                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Second message")])],
+            ),
+            output=[ContentBlockChatOutputText(text="Second response")],
+        ),
+        CreateDatapointRequestJson(
+            function_name="json_success",
+            input=Input(
+                system={"assistant_name": "JsonBot"},
+                messages=[
+                    InputMessage(
+                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Canada"})]
+                    )
+                ],
+            ),
+            output=JsonDatapointOutputUpdate(raw='{"answer":"Ottawa"}'),
+        ),
+    ]
+
+    response = sync_client.create_datapoints(dataset_name=dataset_name, requests=requests)
+    datapoint_ids = response.ids
+    assert len(datapoint_ids) == 3
+
+    # Get all datapoints by IDs using v1 endpoint (convert UUIDs to strings)
+    response = sync_client.get_datapoints(dataset_name=dataset_name, ids=datapoint_ids)
+    datapoints = response.datapoints
+
+    assert datapoints is not None
+    assert len(datapoints) == 3
+
+    # Verify we got the correct datapoints
+    retrieved_ids = [dp.id for dp in datapoints]
+    assert set(retrieved_ids) == set(datapoint_ids)
+
+    # Verify types
+    chat_dps = [dp for dp in datapoints if dp.type == "chat"]
+    json_dps = [dp for dp in datapoints if dp.type == "json"]
+    assert len(chat_dps) == 2
+    assert len(json_dps) == 1
+
+    # Clean up
+    sync_client.delete_datapoints(dataset_name=dataset_name, ids=datapoint_ids)
+
+
+@pytest.mark.asyncio
+async def test_async_get_datapoints_by_ids_with_dataset_name(async_client: AsyncTensorZeroGateway):
+    """Test async version of get_datapoints endpoint."""
+    dataset_name = f"test_get_v1_async_{uuid7()}"
+
+    # Insert test datapoints
+    requests = [
+        CreateDatapointRequestChat(
+            function_name="basic_test",
+            input=Input(
+                system={"assistant_name": "AsyncBot"},
+                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Async message")])],
+            ),
+        ),
+        CreateDatapointRequestJson(
+            function_name="json_success",
+            input=Input(
+                system={"assistant_name": "AsyncJson"},
+                messages=[
+                    InputMessage(
+                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Mexico"})]
+                    )
+                ],
+            ),
+        ),
+    ]
+
+    response = await async_client.create_datapoints(dataset_name=dataset_name, requests=requests)
+    datapoint_ids = response.ids
+    assert len(datapoint_ids) == 2
+
+    # Get datapoints by IDs (convert to strings)
+    response = await async_client.get_datapoints(dataset_name=dataset_name, ids=datapoint_ids)
+    datapoints = response.datapoints
+
+    assert datapoints is not None
+    assert len(datapoints) == 2
+
+    # Clean up
+    await async_client.delete_datapoints(dataset_name=dataset_name, ids=datapoint_ids)
+
+
 def test_sync_list_datapoints_with_filters(sync_client: TensorZeroGateway):
     """Test listing datapoints with the new v1 filter-based API."""
     dataset_name = f"test_list_v1_{uuid7()}"
@@ -269,7 +372,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     sleep(1)
 
     # Verify the metadata was updated
-    response = sync_client.get_datapoints(ids=[str(original_id)])
+    response = sync_client.get_datapoints(dataset_name=dataset_name, ids=[str(original_id)])
     datapoints = response.datapoints
     assert len(datapoints) == 1
     assert datapoints[0].name == "updated_name"
@@ -284,7 +387,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     sleep(1)
 
     # Verify the name was cleared
-    response = sync_client.get_datapoints(ids=[str(original_id)])
+    response = sync_client.get_datapoints(dataset_name=dataset_name, ids=[str(original_id)])
     datapoints = response.datapoints
     assert len(datapoints) == 1
     assert datapoints[0].name is None

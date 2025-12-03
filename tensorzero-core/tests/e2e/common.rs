@@ -20,7 +20,6 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
     base_url.join(endpoint).unwrap()
 }
 
-// TODO(shuyangli): delete after uniting with tensorzero-core/src/db/clickhouse/dataset_queries.rs::stale_datapoint.
 pub async fn delete_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     datapoint_kind: DatapointKind,

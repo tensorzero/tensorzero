@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{
-    chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+use crate::{
+    inference::types::{
+        chat_completion_inference_params::{
+            warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+        },
+        ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
     },
-    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
@@ -25,13 +28,11 @@ use crate::{
         file::Detail, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason,
         FlattenUnknown, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage,
     },
-    model::fully_qualified_name,
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
-        OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
-        PROVIDER_TYPE,
+        OpenAIFile, OpenAIMessagesConfig, OpenAITool, SystemOrDeveloper, PROVIDER_TYPE,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -178,6 +179,15 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::CustomToolCall(
+                    custom_tool_call,
+                )) => {
+                    output.push(ContentBlockOutput::ToolCall(ToolCall {
+                        id: custom_tool_call.call_id.to_string(),
+                        arguments: custom_tool_call.input.to_string(),
+                        name: custom_tool_call.name.to_string(),
+                    }));
+                }
 
                 FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning {
                     encrypted_content,
@@ -208,10 +218,11 @@ impl OpenAIResponsesResponse<'_> {
                     output.push(ContentBlockOutput::Thought(thought));
                 }
                 FlattenUnknown::Unknown(data) => {
-                    output.push(ContentBlockOutput::Unknown {
+                    output.push(ContentBlockOutput::Unknown(Unknown {
                         data: data.into_owned(),
-                        model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                    });
+                        model_name: Some(model_name.to_string()),
+                        provider_name: Some(provider_name.to_string()),
+                    }));
                 }
             }
         }
@@ -259,30 +270,74 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-            r#type: self.r#type,
-            name: self.function.name,
-            description: self.function.description,
-            parameters: self.function.parameters,
-            strict: self.strict,
-        })
+        match self {
+            OpenAITool::Function { function, strict } => {
+                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
+                    name: function.name,
+                    description: function.description,
+                    parameters: function.parameters,
+                    strict,
+                })
+            }
+            OpenAITool::Custom {
+                custom: custom_tool,
+            } => OpenAIResponsesTool::Custom(custom_tool.into()),
+        }
     }
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
     BuiltIn(&'a Value),
+    Custom(OpenAIResponsesCustomTool<'a>),
 }
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesFunctionTool<'a> {
-    r#type: OpenAIToolType,
     name: &'a str,
     description: Option<&'a str>,
     parameters: &'a Value,
     strict: bool,
+}
+
+/// Custom tool format for the Responses API (flattened structure)
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesCustomToolFormat {
+    Text,
+    Grammar {
+        syntax: OpenAIGrammarSyntax,
+        definition: String,
+    },
+}
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesCustomTool<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<OpenAIResponsesCustomToolFormat>,
+}
+
+impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
+    fn from(tool: &'a OpenAICustomTool) -> Self {
+        OpenAIResponsesCustomTool {
+            name: &tool.name,
+            description: tool.description.as_deref(),
+            format: tool.format.as_ref().map(|f| match f {
+                OpenAICustomToolFormat::Text => OpenAIResponsesCustomToolFormat::Text,
+                OpenAICustomToolFormat::Grammar { grammar } => {
+                    OpenAIResponsesCustomToolFormat::Grammar {
+                        syntax: grammar.syntax.clone(),
+                        definition: grammar.definition.clone(),
+                    }
+                }
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -345,8 +400,15 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available()
-                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => {
+                            OpenAITool::from(func).into_openai_responses_tool()
+                        }
+                        ToolConfigRef::OpenAICustom(custom) => {
+                            OpenAIResponsesTool::Custom(custom.into())
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -529,6 +591,8 @@ pub enum OpenAIResponsesOutputInner<'a> {
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    #[serde(borrow)]
+    CustomToolCall(OpenAIResponsesCustomToolCall<'a>),
     Reasoning {
         #[serde(default)]
         encrypted_content: Option<String>,
@@ -598,6 +662,15 @@ pub struct OpenAIResponsesFunctionCall<'a> {
     call_id: Cow<'a, str>,
     name: Cow<'a, str>,
     arguments: Cow<'a, str>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesCustomToolCall<'a> {
+    id: Cow<'a, str>,
+    call_id: Cow<'a, str>,
+    name: Cow<'a, str>,
+    input: Cow<'a, str>,
+    status: Cow<'a, str>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -803,10 +876,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 // The user included an 'unknown' content block inside of the user message,
                 // so push a new user message that includes their custom JSON value
                 messages.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
@@ -907,16 +977,10 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                 }
             }
 
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Owned(data)));
             }
         }
@@ -1244,10 +1308,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                         vec![ContentBlockChunk::Unknown(UnknownChunk {
                             id: output_index.to_string(),
                             data: item,
-                            model_provider_name: Some(fully_qualified_name(
-                                model_name,
-                                provider_name,
-                            )),
+                            model_name: Some(model_name.to_string()),
+                            provider_name: Some(provider_name.to_string()),
                         })],
                         None,
                         raw_message,
@@ -1386,7 +1448,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "unknown".to_string(),
                     data,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 })],
                 None,
                 raw_message,
@@ -2378,18 +2441,17 @@ mod tests {
         assert_eq!(provider_response.output.len(), 1);
 
         match &provider_response.output[0] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
-                model_provider_name,
-            } => {
+                model_name,
+                provider_name,
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
                 );
-                assert_eq!(
-                    model_provider_name.as_deref(),
-                    Some("tensorzero::model_name::test-model::provider_name::test-provider")
-                );
+                assert_eq!(model_name.as_deref(), Some("test-model"));
+                assert_eq!(provider_name.as_deref(), Some("test-provider"));
             }
             _ => panic!("Expected ContentBlockOutput::Unknown"),
         }
@@ -2488,7 +2550,7 @@ mod tests {
 
         // Second should be unknown (web_search_call)
         match &provider_response.output[1] {
-            ContentBlockOutput::Unknown { data, .. } => {
+            ContentBlockOutput::Unknown(Unknown { data, .. }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
@@ -2508,10 +2570,11 @@ mod tests {
 
         // Fourth should be unknown (another_unknown_type)
         match &provider_response.output[3] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
-                model_provider_name,
-            } => {
+                model_name,
+                provider_name,
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("another_unknown_type")
@@ -2520,10 +2583,8 @@ mod tests {
                     data.get("custom_field").and_then(|v| v.as_str()),
                     Some("custom_value")
                 );
-                assert_eq!(
-                    model_provider_name.as_deref(),
-                    Some("tensorzero::model_name::gpt-5-nano::provider_name::openai")
-                );
+                assert_eq!(model_name.as_deref(), Some("gpt-5-nano"));
+                assert_eq!(provider_name.as_deref(), Some("openai"));
             }
             _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
         }

@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import typing as t
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from os import path
@@ -37,6 +38,8 @@ from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from pytest import CaptureFixture
 from tensorzero import (
+    AlwaysExtraBody,
+    AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
@@ -48,6 +51,8 @@ from tensorzero import (
     ImageUrl,
     InferenceChunk,
     JsonInferenceResponse,
+    ModelProviderExtraBody,
+    ModelProviderExtraBodyDelete,
     RawText,
     TensorZeroError,
     TensorZeroGateway,
@@ -57,21 +62,21 @@ from tensorzero import (
     ThoughtChunk,
     ToolCall,
     ToolResult,
+    VariantExtraBody,
+    VariantExtraBodyDelete,
 )
 from tensorzero.types import (
     ChatChunk,
     JsonChunk,
-    ProviderExtraBody,
     Template,
     Thought,
     ToolCallChunk,
-    VariantExtraBody,
 )
 from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 # Test image with File block
@@ -2303,7 +2308,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "id": "1",
     }
     assert request["input"]["messages"][2]["content"][0] == {
-        "type": "text",
+        "type": "template",
+        "name": "user",
         "arguments": {"foo": "bar"},
     }
     assert request["input"]["messages"][2]["content"][1] == {
@@ -2323,6 +2329,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
+        "type": "function",
         "name": "drill",
         "parameters": '{"foo": "bar"}',
         "description": "drills",
@@ -2426,30 +2433,31 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 pointer="/response_format",
                 value={"type": "json_object"},
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/stop",
                 value="Potato",
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
                 value=2,
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBodyDelete(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
-                delete=True,
             ),
             VariantExtraBody(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
                 value=2,
             ),
-            VariantExtraBody(
+            VariantExtraBodyDelete(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
-                delete=True,
             ),
         ],
     )
@@ -2462,6 +2470,68 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
     assert content[0].text is not None
     assert '"haiku"' in content[0].text
     assert "Potato" not in content[0].text
+
+
+def test_all_extra_body(sync_client: TensorZeroGateway):
+    """Test that AlwaysExtraBody applies to all variants."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        extra_body=[
+            AlwaysExtraBody(
+                pointer="/max_completion_tokens",
+                value=2,
+            )
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    assert len(content[0].text.split(" ")) <= 2
+    usage = result.usage
+    assert usage.output_tokens == 2
+
+
+def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
+    """Test that AlwaysExtraBody can delete fields across all variants."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        extra_body=[
+            AlwaysExtraBody(
+                pointer="/should_be_deleted_all",
+                value=2,
+            ),
+            AlwaysExtraBodyDelete(
+                pointer="/should_be_deleted_all",
+            ),
+            AlwaysExtraBody(
+                pointer="/max_completion_tokens",
+                value=10,
+            ),
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    usage = result.usage
+    assert usage.output_tokens <= 10
 
 
 def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
@@ -2626,62 +2696,82 @@ def test_sync_timeout_invalid():
     assert "Invalid timeout: cannot convert float seconds to Duration: value is negative" == str(exc_info.value)
 
 
+# If TENSORZERO_E2E_PROXY is set, then we'll make requests using the proxy, which results in different error messages
+# if the target URL is unreachable.
+@contextmanager
+def without_env_tensorzero_e2e_proxy():
+    old_value = os.environ.pop("TENSORZERO_E2E_PROXY", None)
+    try:
+        yield
+    finally:
+        if old_value is not None:
+            os.environ["TENSORZERO_E2E_PROXY"] = old_value
+
+
 @pytest.mark.asyncio
 async def test_async_non_verbose_errors():
-    client_fut = AsyncTensorZeroGateway.build_http(gateway_url="http://tensorzero.invalid:3000", verbose_errors=False)
-    assert inspect.isawaitable(client_fut)
-    async with await client_fut as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            await async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        client_fut = AsyncTensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+        )
+        assert inspect.isawaitable(client_fut)
+        async with await client_fut as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                await async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" not in str(exc_info.value)
+            assert "dns error" not in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_async_verbose_errors():
-    client_fut = AsyncTensorZeroGateway.build_http(gateway_url="http://tensorzero.invalid:3000", verbose_errors=True)
-    assert inspect.isawaitable(client_fut)
-    async with await client_fut as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            await async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        client_fut = AsyncTensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+        )
+        assert inspect.isawaitable(client_fut)
+        async with await client_fut as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                await async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" in str(exc_info.value)
+            assert "dns error" in str(exc_info.value)
 
 
 def test_sync_non_verbose_errors():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
-    ) as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        with TensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+        ) as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" not in str(exc_info.value)
+            assert "dns error" not in str(exc_info.value)
 
 
 def test_sync_verbose_errors():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
-    ) as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        with TensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+        ) as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" in str(exc_info.value)
+            assert "dns error" in str(exc_info.value)
 
 
 def test_uuid7_import():
@@ -2752,7 +2842,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(
         client,
-        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(
@@ -3232,7 +3322,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_core::client::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
     )
 
 
@@ -3274,7 +3364,7 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "US"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                 }
             ],
         },
@@ -3461,8 +3551,14 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     )
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
+
     assert captured.err == ""
-    assert captured.out == ""
 
 
 @pytest.mark.asyncio
@@ -3475,8 +3571,13 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = await client_fut
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
     assert captured.err == ""
-    assert captured.out == ""
 
 
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
@@ -3488,7 +3589,7 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     captured = capfd.readouterr()
     assert captured.err == ""
     if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
-        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
         for line in captured.out.splitlines():
             assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
     else:
