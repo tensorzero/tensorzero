@@ -112,7 +112,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     )
     .await
     .unwrap()
-    .dangerous_into_config_without_writing();
+    .into_config_without_writing_for_tests();
     let job_handle = optimizer_info
         .launch(
             &client,

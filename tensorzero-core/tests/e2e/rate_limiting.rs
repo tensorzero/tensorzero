@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, Role, TensorZeroError,
+    ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent, Role,
+    TensorZeroError,
 };
 use tensorzero_core::endpoints::inference::{ChatCompletionInferenceParams, InferenceParams};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
@@ -48,11 +48,11 @@ async fn make_request_with_tags(
     let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1107,11 +1107,11 @@ retries = { num_retries = 3 }
     client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1125,11 +1125,11 @@ retries = { num_retries = 3 }
     let err = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1165,11 +1165,11 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::slow_second_chunk".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],

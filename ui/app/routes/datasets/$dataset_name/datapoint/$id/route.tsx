@@ -45,8 +45,10 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Input,
+  Datapoint,
 } from "~/types/tensorzero";
 import {
+  cloneDatapoint,
   deleteDatapoint,
   renameDatapoint,
   updateDatapoint,
@@ -56,6 +58,7 @@ import {
   serializeDeleteDatapointToFormData,
   serializeUpdateDatapointToFormData,
   serializeRenameDatapointToFormData,
+  type CloneDatapointFormData,
   type DeleteDatapointFormData,
   type UpdateDatapointFormData,
   type RenameDatapointFormData,
@@ -78,6 +81,13 @@ export function validateJsonOutput(
       };
     }
   }
+  return { valid: true };
+}
+
+export function validateInput(
+  _input: Input,
+): { valid: true } | { valid: false; error: string } {
+  // TODO (#4903): Handle invalid intermediate states; right it'll keep stale version (but there is a visual cue)
   return { valid: true };
 }
 
@@ -237,6 +247,35 @@ async function handleRenameAction(
   }
 }
 
+async function handleCloneAction(
+  actionData: CloneDatapointFormData,
+): Promise<
+  ReturnType<
+    typeof data<{ success: boolean; error?: string; redirectTo?: string }>
+  >
+> {
+  try {
+    const datapointData = JSON.parse(actionData.datapoint) as Datapoint;
+    const { newId } = await cloneDatapoint({
+      targetDataset: actionData.target_dataset,
+      datapoint: datapointData,
+    });
+    return data({
+      success: true,
+      redirectTo: toDatapointUrl(actionData.target_dataset, newId),
+    });
+  } catch (error) {
+    logger.error("Error cloning datapoint:", error);
+    return data(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
@@ -270,6 +309,8 @@ export async function action({ request }: ActionFunctionArgs) {
       return handleUpdateAction(parsedAction);
     case "rename":
       return handleRenameAction(parsedAction);
+    case "clone":
+      return handleCloneAction(parsedAction);
   }
 }
 
@@ -370,6 +411,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const updateError =
     fetcher.data?.success === false ? fetcher.data.error : null;
 
+  // Determine which action is being performed by checking the form data
+  // Include both "submitting" and "loading" states to keep spinner visible until page updates
+  const pendingAction = fetcher.formData?.get("action") as string | null;
+  const isSubmittingOrLoading =
+    fetcher.state === "submitting" || fetcher.state === "loading";
+  const isSaving = isSubmittingOrLoading && pendingAction === "update";
+  const isDeleting = isSubmittingOrLoading && pendingAction === "delete";
+
   const handleDelete = () => {
     try {
       const formData = serializeDeleteDatapointToFormData({
@@ -385,9 +434,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleUpdate = () => {
     setValidationError(null);
 
-    const validation = validateJsonOutput(output);
-    if (!validation.valid) {
-      setValidationError(validation.error);
+    const outputValidation = validateJsonOutput(output);
+    if (!outputValidation.valid) {
+      setValidationError(outputValidation.error);
+      return;
+    }
+
+    const inputValidation = validateInput(input);
+    if (!inputValidation.valid) {
+      setValidationError(inputValidation.error);
       return;
     }
 
@@ -565,14 +620,16 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onVariantSelect={onVariantSelect}
             variantInferenceIsLoading={variantInferenceIsLoading}
             onDelete={handleDelete}
-            isDeleting={fetcher.state === "submitting" && !updateError}
+            isDeleting={isDeleting}
             toggleEditing={toggleEditing}
             isEditing={isEditing}
             canSave={canSave}
+            isSaving={isSaving}
             onSave={handleUpdate}
             onReset={handleReset}
             showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
             isStale={!!datapoint.staled_at}
+            datapoint={datapoint}
           />
         </SectionLayout>
 
