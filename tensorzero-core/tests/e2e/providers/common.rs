@@ -2559,7 +2559,12 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
     // * Mistral doesn't support assistant prefill
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
-    if provider.model_provider_name == "mistral" || provider.model_provider_name == "aws_sagemaker"
+    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Azure AI foundry seems to ignore trailing assistant messages
+    if provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "aws_sagemaker"
+        || provider.model_provider_name == "aws_bedrock"
+        || provider.variant_name == "azure-ai-foundry"
     {
         return;
     }
