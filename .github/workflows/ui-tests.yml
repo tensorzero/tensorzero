@@ -73,15 +73,25 @@ jobs:
         run: pnpm build:debug
 
       - name: Download container images
+        if: github.event_name != 'push'
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: build-{gateway,mock-inference}-container
           merge-multiple: true
 
       - name: Load container images
+        if: github.event_name != 'push'
         run: |
           docker load < gateway-container.tar
           docker load < mock-inference-container.tar
+
+      - name: Build containers locally (debug mode)
+        if: github.event_name == 'push'
+        run: |
+          echo "Building gateway container locally..."
+          cd gateway && docker build -t tensorzero/gateway:sha-${{ github.sha }} -f Dockerfile ..
+          echo "Building mock inference container locally..."
+          cd tensorzero-core/tests/mock-inference-provider && docker build -t tensorzero/mock-inference-provider:sha-${{ github.sha }} -f Dockerfile ../../..
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
