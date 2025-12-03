@@ -100,8 +100,8 @@ pub async fn test_gepa_optimization_chat() {
                         "GEPA should produce at least one evolved variant"
                     );
                     assert!(
-                        variants.len() <= gepa_config.max_iterations as usize + 1,
-                        "Should not exceed max_iterations + 1 variants, got {}",
+                        variants.len() <= gepa_config.max_iterations as usize,
+                        "Should not exceed max_iterations variants, got {}",
                         variants.len()
                     );
 
@@ -233,8 +233,8 @@ pub async fn test_gepa_optimization_json() {
                         "GEPA should produce at least one evolved variant"
                     );
                     assert!(
-                        variants.len() <= gepa_config.max_iterations as usize + 1,
-                        "Should not exceed max_iterations + 1 variants, got {}",
+                        variants.len() <= gepa_config.max_iterations as usize,
+                        "Should not exceed max_iterations variants, got {}",
                         variants.len()
                     );
 
