@@ -1770,13 +1770,6 @@ mod tests {
     #[tokio::test]
     async fn test_initialize_anthropic_request_body() {
         let model = "claude-3-7-sonnet-latest".to_string();
-        let listening_message = AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "[listening]",
-            })],
-        };
-
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1837,19 +1830,15 @@ mod tests {
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
                 model: &model,
-                messages: vec![
-                    listening_message.clone(),
-                    AnthropicMessage::from_request_message(
-                        &inference_request.messages[0],
-                        AnthropicMessagesConfig {
-                            fetch_and_encode_input_files_before_inference: false,
-                        },
-                        PROVIDER_TYPE,
-                    )
-                    .await
-                    .unwrap(),
-                    listening_message.clone(),
-                ],
+                messages: vec![AnthropicMessage::from_request_message(
+                    &inference_request.messages[0],
+                    AnthropicMessagesConfig {
+                        fetch_and_encode_input_files_before_inference: false,
+                    },
+                    PROVIDER_TYPE,
+                )
+                .await
+                .unwrap(),],
                 max_tokens: 64_000,
                 stream: Some(false),
                 system: Some(vec![AnthropicSystemBlock::Text {
@@ -1914,7 +1903,6 @@ mod tests {
                     )
                     .await
                     .unwrap(),
-                    listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
@@ -2023,7 +2011,7 @@ mod tests {
             AnthropicRequestBody::new(&model, &inference_request, false).await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
-        assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
+        assert_eq!(result.messages.len(), 3); // Original 2 messages + JSON prefill
         assert_eq!(
             result.messages[0],
             AnthropicMessage::from_request_message(
@@ -2048,9 +2036,8 @@ mod tests {
             .await
             .unwrap()
         );
-        assert_eq!(result.messages[2], listening_message);
         assert_eq!(
-            result.messages[3],
+            result.messages[2],
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {

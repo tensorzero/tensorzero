@@ -887,12 +887,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize_anthropic_request_body() {
-        let listening_message = AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "[listening]",
-            })],
-        };
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -977,7 +971,6 @@ mod tests {
                     )
                     .await
                     .unwrap(),
-                    listening_message.clone(),
                 ],
                 max_tokens: 32_000,
                 stream: Some(false),
@@ -1033,17 +1026,20 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    AnthropicMessage {
-                        role: AnthropicRole::User,
-                        content: vec![
-                            FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                                text: "test_user"
-                            }),
-                            FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                                text: "test_user2"
-                            })
-                        ],
-                    },
+                    AnthropicMessage::from_request_message(
+                        &messages[0],
+                        message_config,
+                        PROVIDER_TYPE
+                    )
+                    .await
+                    .unwrap(),
+                    AnthropicMessage::from_request_message(
+                        &messages[1],
+                        message_config,
+                        PROVIDER_TYPE
+                    )
+                    .await
+                    .unwrap(),
                     AnthropicMessage::from_request_message(
                         &messages[2],
                         message_config,
@@ -1051,7 +1047,6 @@ mod tests {
                     )
                     .await
                     .unwrap(),
-                    listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
