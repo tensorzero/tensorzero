@@ -83,7 +83,13 @@ export function InferencePreviewSheet({
 
   const inferenceData = fetcher.data ?? null;
   const isLoading = fetcher.state === "loading";
-  const hasError = fetcher.state === "idle" && !fetcher.data;
+  // Only show error if we're idle, have no data, but have an inferenceId we should have fetched
+  // This avoids showing error on initial render before the fetch starts
+  const hasError =
+    fetcher.state === "idle" &&
+    !fetcher.data &&
+    inferenceId !== null &&
+    prevInferenceIdRef.current === inferenceId;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
