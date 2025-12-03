@@ -98,7 +98,8 @@ test("countInferencesForVariant returns correct counts", async () => {
 // Tests for listInferencesWithPagination (new cursor-based pagination API)
 test(
   "listInferencesWithPagination basic pagination",
-  { timeout: 30_000 },
+  // TODO - lower this timeout when we figure out what's wrong with clickhouse lts
+  { timeout: 20_000 },
   async () => {
     const result = await listInferencesWithPagination({
       limit: 10,
@@ -127,7 +128,7 @@ test(
 
 test(
   "listInferencesWithPagination pagination with before and after",
-  { timeout: 30_000 },
+  { timeout: 10_000 },
   async () => {
     const LIMIT = 100;
 
