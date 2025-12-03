@@ -122,7 +122,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
-                    snapshot_hash: Some(config.hash.clone()),
+                    snapshot_hash: config.hash.if_enabled(),
                 };
 
                 Ok(DatapointInsert::Json(datapoint))
@@ -156,7 +156,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
-                    snapshot_hash: Some(config.hash.clone()),
+                    snapshot_hash: config.hash.if_enabled(),
                 };
 
                 Ok(DatapointInsert::Chat(datapoint))
