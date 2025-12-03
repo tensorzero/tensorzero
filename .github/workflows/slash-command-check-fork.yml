@@ -40,8 +40,9 @@ jobs:
 
       - name: Force-push to a branch named ${{ env.TARGET_BRANCH }}
         run: |
+          git remote add upstream git@github.com:tensorzero/tensorzero.git
           git checkout -b ${{ env.TARGET_BRANCH }}
-          git push --force origin ${{ env.TARGET_BRANCH }}
+          git push --force upstream ${{ env.TARGET_BRANCH }}
       - name: Trigger 'General Checks' workflow on ${{ env.TARGET_BRANCH }}
         id: trigger
         run: |
