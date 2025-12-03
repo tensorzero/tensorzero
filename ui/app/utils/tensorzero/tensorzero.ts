@@ -13,14 +13,16 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
+  CloneDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  GetInferenceBoundsResponse,
-  InternalListInferencesByIdResponse,
+  GetInferencesResponse,
   ListDatapointsRequest,
+  ListDatasetsResponse,
+  ListInferencesRequest,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -494,6 +496,34 @@ export class TensorZeroClient {
     return body;
   }
 
+  async listDatasets(params: {
+    function_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return await response.json();
+  }
+
   async updateDatapointsMetadata(
     datasetName: string,
     datapoints: UpdateDatapointsMetadataRequest,
@@ -539,6 +569,29 @@ export class TensorZeroClient {
     return body;
   }
 
+  /**
+   * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+   * @param targetDatasetName - The name of the target dataset to clone datapoints to
+   * @param datapointIds - Array of datapoint UUIDs to clone
+   * @returns A promise that resolves with the response containing the new datapoint IDs (null if source not found)
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async cloneDatapoints(
+    targetDatasetName: string,
+    datapointIds: string[],
+  ): Promise<CloneDatapointsResponse> {
+    const endpoint = `/internal/datasets/${encodeURIComponent(targetDatasetName)}/datapoints/clone`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ datapoint_ids: datapointIds }),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CloneDatapointsResponse;
+  }
+
   async getObject(storagePath: ZodStoragePath): Promise<string> {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
@@ -559,81 +612,24 @@ export class TensorZeroClient {
   }
 
   /**
-   * Gets inference table bounds (min/max IDs and count) with optional filters.
-   * @param params - Optional filters (function_name, variant_name, episode_id)
-   * @returns A promise that resolves with the inference bounds
+   * Lists inferences with optional filtering, pagination, and sorting.
+   * Uses the public v1 API endpoint.
+   * @param request - The list inferences request parameters
+   * @returns A promise that resolves with the inferences response
    * @throws Error if the request fails
    */
-  async getInferenceBounds(params?: {
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<GetInferenceBoundsResponse> {
-    const searchParams = new URLSearchParams();
-
-    if (params?.function_name) {
-      searchParams.append("function_name", params.function_name);
-    }
-    if (params?.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params?.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences/bounds${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
+  async listInferences(
+    request: ListInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/list_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as GetInferenceBoundsResponse;
-  }
-
-  /**
-   * Internal: List inferences by ID with pagination.
-   * @param params - Query parameters for listing inferences
-   * @returns A promise that resolves with the list of inferences
-   * @throws Error if the request fails
-   */
-  async internalListInferencesById(params: {
-    limit: number;
-    before?: string;
-    after?: string;
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<InternalListInferencesByIdResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.append("limit", params.limit.toString());
-
-    if (params.before) {
-      searchParams.append("before", params.before);
-    }
-    if (params.after) {
-      searchParams.append("after", params.after);
-    }
-    if (params.function_name) {
-      searchParams.append("function_name", params.function_name);
-    }
-    if (params.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as InternalListInferencesByIdResponse;
+    return (await response.json()) as GetInferencesResponse;
   }
 
   private async fetch(

@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -197,7 +196,12 @@ pub struct ListInferencesParams<'a> {
     /// We always enforce a limit at the database level to avoid unbounded queries.
     pub limit: u32,
     /// Number of inferences to skip before starting to return results.
+    /// This is mutually exclusive with cursor pagination. If both are provided, we return an error.
     pub offset: u32,
+    /// Optional cursor-based pagination condition.
+    /// This supports 2 types: "before a given ID" and "after a given ID".
+    /// This is mutually exclusive with offset pagination. If both are provided, we return an error.
+    pub pagination: Option<PaginationParams>,
     /// Ordering criteria for the results.
     pub order_by: Option<&'a [OrderBy]>,
     /// Experimental: search query to filter inferences by.
@@ -215,91 +219,22 @@ impl Default for ListInferencesParams<'_> {
             output_source: InferenceOutputSource::Inference,
             limit: DEFAULT_INFERENCE_QUERY_LIMIT,
             offset: 0,
+            pagination: None,
             order_by: None,
             search_query_experimental: None,
         }
     }
 }
 
-/// Parameters for querying inference bounds
-#[derive(Default)]
-pub struct GetInferenceBoundsParams {
-    /// Optional function name to filter inferences by.
-    pub function_name: Option<String>,
-    /// Optional variant name to filter inferences by.
-    pub variant_name: Option<String>,
-    /// Optional episode ID to filter inferences by.
-    pub episode_id: Option<Uuid>,
-}
-
-/// Result from querying inference table bounds.
-/// Contains the min/max inference IDs and the total count.
-#[serde_as]
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-pub struct InferenceBounds {
-    /// The most recent inference ID (MAX id_uint).
-    pub latest_id: Option<Uuid>,
-
-    /// The oldest inference ID (MIN id_uint).
-    pub earliest_id: Option<Uuid>,
-
-    /// The total number of inferences matching the filter criteria.
-    /// Note that ClickHouse returns u64s as strings, so we use DisplayFromStr to deserialize it.
-    #[serde_as(as = "DisplayFromStr")]
-    pub count: u64,
-}
-
-impl InferenceBounds {
-    /// Creates bounds representing no results.
-    pub fn empty() -> Self {
-        Self {
-            latest_id: None,
-            earliest_id: None,
-            count: 0,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum PaginateByIdCondition {
+/// Parameters for cursor-based pagination.
+/// Currently it only supports paginating before/after a given ID. In the future, we can extend this
+/// to support paginating with additional metrics at the page boundary.
+#[derive(Debug, Clone)]
+pub enum PaginationParams {
     /// Return the latest inferences before the given ID.
     Before { id: Uuid },
-    /// Return the earliest inferences after the given ID.
+    /// Return the oldest inferences after the given ID.
     After { id: Uuid },
-}
-
-/// Parameters for querying inferences by ID with before/after pagination.
-#[derive(Debug, Default)]
-pub struct ListInferencesByIdParams {
-    /// Maximum number of inferences to return.
-    pub limit: u32,
-    /// Optional function name to filter inferences by.
-    pub function_name: Option<String>,
-    /// Optional variant name to filter inferences by.
-    pub variant_name: Option<String>,
-    /// Optional episode ID to filter inferences by.
-    pub episode_id: Option<Uuid>,
-    /// Optional pagination condition to use.
-    /// This supports 2 types: "before a given ID" and "after a given ID".
-    /// By specifying this, we also set the order by to return the results in the correct order.
-    pub pagination: Option<PaginateByIdCondition>,
-}
-
-/// Metadata about an inference.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-pub struct InferenceMetadata {
-    /// The ID of the inference.
-    pub id: Uuid,
-    /// The function name of the inference.
-    pub function_name: String,
-    /// The variant name of the inference.
-    pub variant_name: String,
-    /// The episode ID of the inference.
-    pub episode_id: Uuid,
-    /// The function type of the inference.
-    pub function_type: String,
-    /// The timestamp of the inference.
-    pub timestamp: DateTime<Utc>,
 }
 
 #[async_trait]
@@ -311,17 +246,4 @@ pub trait InferenceQueries {
         config: &Config,
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error>;
-
-    async fn get_inference_bounds(
-        &self,
-        params: GetInferenceBoundsParams,
-    ) -> Result<InferenceBounds, Error>;
-
-    /// Lists inferences by ID with pagination.
-    /// This queries the internal InferenceById table which does not contain actual input/output
-    /// of the inference. Used for UI only.
-    async fn list_inferences_by_id(
-        &self,
-        params: ListInferencesByIdParams,
-    ) -> Result<Vec<InferenceMetadata>, Error>;
 }

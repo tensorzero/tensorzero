@@ -7,9 +7,9 @@
 use axum::{extract::State, Extension, Json};
 
 use crate::endpoints::embeddings::embeddings;
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::embeddings::{OpenAICompatibleEmbeddingParams, OpenAIEmbeddingResponse};
 

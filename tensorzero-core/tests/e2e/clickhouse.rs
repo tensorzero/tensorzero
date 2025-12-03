@@ -793,7 +793,7 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         finish_reason: None,
-        snapshot_hash: SnapshotHash::new_test(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

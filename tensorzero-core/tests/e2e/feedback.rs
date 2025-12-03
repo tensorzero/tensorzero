@@ -13,7 +13,7 @@ use tensorzero_core::{
     endpoints::feedback::{feedback, Params},
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
     utils::gateway::GatewayHandle,
 };
@@ -215,7 +215,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1312,7 +1312,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -1577,6 +1577,20 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
+
+    // Assert BooleanMetricFeedbackByTargetId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM BooleanMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "BooleanMetricFeedbackByTargetId should have snapshot_hash"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1584,7 +1598,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
-        .dangerous_into_config_without_writing();
+        .into_config_without_writing_for_tests();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
@@ -1651,13 +1665,13 @@ async fn test_fast_inference_then_feedback() {
                     model_name: None,
                     variant_name: None,
                     episode_id: None,
-                    input: tensorzero::ClientInput {
+                    input: tensorzero::Input {
                         system: Some(System::Template(Arguments(serde_json::Map::from_iter([
                             ("assistant_name".to_string(), "Alfred Pennyworth".into()),
                         ])))),
-                        messages: vec![tensorzero::ClientInputMessage {
+                        messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::InputMessageContent::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

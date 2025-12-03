@@ -16,6 +16,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
@@ -267,6 +268,10 @@ pub enum ErrorDetails {
     },
     ConfigSnapshotNotFound {
         snapshot_hash: String,
+    },
+    ConfigSnapshotHashMismatch {
+        expected: SnapshotHash,
+        actual: SnapshotHash,
     },
     ObjectStoreUnconfigured {
         block_type: String,
@@ -626,6 +631,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
@@ -769,6 +775,7 @@ impl ErrorDetails {
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
@@ -1052,6 +1059,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
                 write!(f, "Config snapshot not found for hash: {snapshot_hash}")
+            }
+            ErrorDetails::ConfigSnapshotHashMismatch { expected, actual } => {
+                write!(f, "Config snapshot hash does not match expected hash. Expected {expected} but got {actual}. {IMPOSSIBLE_ERROR_MESSAGE}")
             }
             ErrorDetails::DatapointNotFound {
                 dataset_name,

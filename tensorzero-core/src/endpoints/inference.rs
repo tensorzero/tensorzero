@@ -29,7 +29,6 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::{FunctionConfig, FunctionConfigChat};
@@ -57,6 +56,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
@@ -152,7 +152,6 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
-    pub snapshot_hash: SnapshotHash,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -625,7 +624,6 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             fetch_and_encode_input_files_before_inference: config
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
-            snapshot_hash: config.hash.clone(),
         };
 
         let stream = create_stream(
@@ -895,7 +893,6 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
-                snapshot_hash,
             } = metadata;
 
             let config = config.clone();
@@ -942,7 +939,7 @@ fn create_stream(
                         ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
-                        snapshot_hash: snapshot_hash.clone(),
+                        snapshot_hash: config.hash.clone(),
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1606,7 +1603,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1662,7 +1658,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            snapshot_hash: SnapshotHash::new_test(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1837,7 +1832,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1864,7 +1859,7 @@ mod tests {
         let file_base64 = File::Base64(
             Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "fake_base64_data".to_string(),
                 None,
                 None,
@@ -1936,7 +1931,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -2004,8 +1999,14 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                Some(mime::IMAGE_JPEG),
+                "abcdef".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
 
         let serialized = serde_json::to_string(&original).unwrap();

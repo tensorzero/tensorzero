@@ -8,6 +8,7 @@ use chrono::Duration;
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
 ///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
+use gateway::AuthConfig;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -28,7 +29,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use unwritten_config::UnwrittenConfig;
+use unwritten::UnwrittenConfig;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -69,6 +70,7 @@ mod span_map;
 pub mod stored;
 #[cfg(test)]
 mod tests;
+pub mod unwritten;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -1001,10 +1003,10 @@ impl Config {
     ///
     /// This function performs the following steps:
     ///
-    /// 2. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
+    /// 1. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
     ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
     ///
-    /// 3. **Initialize Components**: Load and initialize all config components:
+    /// 2. **Initialize Components**: Load and initialize all config components:
     ///    - Object storage (S3, filesystem)
     ///    - Gateway settings (timeouts, OTLP, etc.)
     ///    - HTTP client
@@ -1016,21 +1018,20 @@ impl Config {
     ///    - Optimizers
     ///    - Templates (load from filesystem, compile with MiniJinja)
     ///
-    /// 4. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
+    /// 3. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
     ///    for database storage. The snapshot includes a Blake3 hash for version tracking.
-    ///    This happens before validation so the hash is available on the Config struct.
     ///
-    /// 5. **Validate**: Run comprehensive validation checks:
+    /// 4. **Validate**: Run comprehensive validation checks:
     ///    - Function validation (schemas, templates, tools exist)
     ///    - Model validation (timeout settings)
     ///    - Metric name restrictions
     ///    - Name prefix restrictions (tensorzero:: reserved)
     ///
-    /// 6. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
+    /// 5. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
     ///    This happens after validation since evaluations write tensorzero:: prefixed items.
     ///
-    /// 7. **Return UnwrittenConfig**: Pair the config and snapshot in an `UnwrittenConfig`.
-    ///    This happens **before** database connections exist, so the snapshot is written later.
+    /// 6. **Return UnwrittenConfig**: Pair the config and snapshot in an `UnwrittenConfig`.
+    ///    The snapshot is written to the database later via `into_config()`.
     ///
     /// # Why UnwrittenConfig?
     ///
@@ -1137,6 +1138,7 @@ impl Config {
         })?;
 
         // Add built in functions
+        // NOTE: for now these are not versioned (will fix #4922)
         let built_in_functions = built_in::get_all_built_in_functions()?;
         let built_in_templates = Config::get_templates(&built_in_functions);
         templates.add_templates(built_in_templates)?;
@@ -1189,10 +1191,10 @@ impl Config {
                 // Get mutable access to templates - this is safe because we just created the Arc
                 // and haven't shared it yet
                 let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
-                    Error::from(ErrorDetails::Config {
-                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                    })
-                })?;
+                                    Error::from(ErrorDetails::Config {
+                                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                    })
+                                })?;
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         templates.add_template(
@@ -1418,6 +1420,64 @@ impl Config {
             })?
             .clone())
     }
+
+    /// Overlays runtime-specific configuration from a live config onto this config.
+    ///
+    /// When using a config loaded from a historical snapshot, certain fields should
+    /// reflect the current runtime environment rather than the snapshot's values:
+    /// - `gateway`: Runtime gateway settings (bind address, auth, observability, etc.)
+    /// - `object_store_info`: Current object store configuration
+    /// - `postgres`: Current postgres settings
+    /// - `rate_limiting`: Current rate limiting rules
+    /// - `http_client`: Current HTTP client configuration
+    ///
+    /// These fields are infrastructure/runtime concerns that should not be replayed
+    /// from historical data.
+    pub fn overlay_runtime_config(self, live_config: &Config) -> Config {
+        let gateway = GatewayConfig {
+            bind_address: None,
+            observability: live_config.gateway.observability.clone(),
+            debug: live_config.gateway.debug,
+            template_filesystem_access: live_config.gateway.template_filesystem_access.clone(),
+            export: live_config.gateway.export.clone(),
+            base_path: None,
+            // We would prefer this to not be global but it is global
+            unstable_error_json: live_config.gateway.unstable_error_json,
+            unstable_disable_feedback_target_validation: live_config
+                .gateway
+                .unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics: live_config
+                .gateway
+                .disable_pseudonymous_usage_analytics,
+            // Rehydrated inferences have object store pointers so we don't need to use
+            // whatever the historical setting was
+            fetch_and_encode_input_files_before_inference: live_config
+                .gateway
+                .fetch_and_encode_input_files_before_inference,
+            auth: AuthConfig {
+                enabled: false,
+                cache: None,
+            },
+            global_outbound_http_timeout: live_config.gateway.global_outbound_http_timeout,
+        };
+        Config {
+            gateway,
+            models: self.models,
+            embedding_models: self.embedding_models,
+            functions: self.functions,
+            metrics: self.metrics,
+            tools: self.tools,
+            evaluations: self.evaluations,
+            templates: self.templates,
+            object_store_info: live_config.object_store_info.clone(),
+            provider_types: self.provider_types,
+            optimizers: self.optimizers,
+            postgres: live_config.postgres.clone(),
+            rate_limiting: live_config.rate_limiting.clone(),
+            http_client: live_config.http_client.clone(),
+            hash: self.hash,
+        }
+    }
 }
 
 pub enum ConfigInput {
@@ -1425,74 +1485,12 @@ pub enum ConfigInput {
     Snapshot(Box<ConfigSnapshot>),
 }
 
-/// This is for privacy of internal types
-pub mod unwritten_config {
-    use super::*;
-
-    /// A wrapper around `Config` that indicates the config has been loaded and validated,
-    /// but has **not yet been written to the database**.
-    ///
-    /// This type exists to enforce correct sequencing in the config loading process:
-    /// 1. Config files are loaded and parsed
-    /// 2. The config is validated and initialized (producing `UnwrittenConfig`)
-    /// 3. Later, the config snapshot is written to the database (consuming `UnwrittenConfig`)
-    ///
-    /// This wrapper is necessary because config loading happens **before** database connections
-    /// are established. The gateway needs to read database connection settings from the config
-    /// itself before it can connect to ClickHouse.
-    ///
-    /// # Deref Behavior
-    /// This type implements `Deref<Target = Config>`, so you can access all `Config` methods
-    /// through an `UnwrittenConfig` reference.
-    ///
-    /// # Consuming the Config
-    /// To get the inner `Config`, you must either:
-    /// - Call `ConfigLoadInfo::into_config()` to write the snapshot to the database
-    /// - Call `ConfigLoadInfo::dangerous_into_config_without_writing()` (test/special cases only)
-    #[derive(Debug)]
-    pub struct UnwrittenConfig {
-        config: Config,
-        snapshot: ConfigSnapshot,
-    }
-
-    impl UnwrittenConfig {
-        pub fn new(config: Config, snapshot: ConfigSnapshot) -> Self {
-            Self { config, snapshot }
-        }
-
-        /// Writes the config snapshot to ClickHouse and returns the config with its hash.
-        ///
-        /// This consumes the `ConfigLoadInfo` and:
-        /// 1. Writes the `ConfigSnapshot` to the `ConfigSnapshot` table in ClickHouse
-        /// 2. Returns a `ConfigWithHash` containing the config and its hash
-        ///
-        /// The hash is used to track which config version was used for each inference request.
-        pub async fn into_config(
-            self,
-            clickhouse: &ClickHouseConnectionInfo,
-        ) -> Result<Config, Error> {
-            let UnwrittenConfig { config, snapshot } = self;
-            write_config_snapshot(clickhouse, snapshot).await?;
-            Ok(config)
-        }
-
-        pub fn dangerous_into_config_without_writing(self) -> Config {
-            self.config
-        }
-    }
-
-    impl std::ops::Deref for UnwrittenConfig {
-        type Target = Config;
-
-        fn deref(&self) -> &Self::Target {
-            &self.config
-        }
-    }
-}
-
 /// Writes the config snapshot to the `ConfigSnapshot` table.
 /// Takes special care to retain the created_at if there was already a row
 /// that had the same hash.
+///
+/// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
+/// If the env var is not set to "1", the write is skipped.
 pub async fn write_config_snapshot(
     clickhouse: &ClickHouseConnectionInfo,
     snapshot: ConfigSnapshot,
@@ -1640,7 +1638,6 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_storage: Option<StorageKind>,
-
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]

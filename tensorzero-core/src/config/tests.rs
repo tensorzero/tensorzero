@@ -3166,3 +3166,43 @@ async fn test_deprecated_template_filesystem_access_enabled() {
         "The `gateway.template_filesystem_access.enabled` flag is deprecated"
     ));
 }
+
+/// Test that overlay_runtime_config correctly copies runtime fields from live config
+#[test]
+fn test_overlay_runtime_config() {
+    // Create snapshot config with default values
+    let snapshot_config = Config::default();
+
+    // Create live config with distinguishable values
+    let mut live_config = Config::default();
+
+    // Modify gateway field - use debug flag as a distinguishable marker
+    live_config.gateway.debug = true;
+    assert!(!snapshot_config.gateway.debug);
+
+    // Modify postgres field
+    live_config.postgres.connection_pool_size = 42;
+    assert_ne!(
+        snapshot_config.postgres.connection_pool_size,
+        live_config.postgres.connection_pool_size
+    );
+
+    // Apply overlay
+    let snapshot_config = snapshot_config.overlay_runtime_config(&live_config);
+
+    // Verify gateway was overlaid
+    assert!(snapshot_config.gateway.debug);
+
+    // Verify postgres was overlaid
+    assert_eq!(snapshot_config.postgres.connection_pool_size, 42);
+
+    // Verify http_client was overlaid (they should now be the same instance via clone)
+    // We can't easily compare TensorzeroHttpClient, but we can verify it doesn't panic
+    let _ = &snapshot_config.http_client;
+
+    // Verify object_store_info was overlaid (both default to None)
+    assert!(snapshot_config.object_store_info.is_none());
+
+    // Verify rate_limiting was overlaid - default is enabled=true
+    assert!(snapshot_config.rate_limiting.enabled());
+}

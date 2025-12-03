@@ -4,11 +4,7 @@
 allow-git = ["https://github.com/hyperium/mime"]
 
 [bans]
-deny = [
-    { name = "native-tls" },
-    { name = "openssl" },
-    { name = "openssl-sys"}
-]
+deny = [{ name = "native-tls" }, { name = "openssl" }, { name = "openssl-sys" }]
 # We have lots of transitive dependencies with multiple versions,
 # so this check isn't useful for us.
 multiple-versions = "allow"
@@ -17,9 +13,22 @@ multiple-versions = "allow"
 ignore = [
     "RUSTSEC-2024-0436", # We don't care that 'paste' is unmaintained
     "RUSTSEC-2025-0057", # fxhash is unmaintained, used by rlt crate
-    "RUSTSEC-2024-0370"  # proc-macro-error is unmaintained, used by rlt crate
+    "RUSTSEC-2024-0370", # proc-macro-error is unmaintained, used by rlt crate
 ]
 
 [licenses]
 version = 2
-allow = ["Unicode-3.0", "Apache-2.0", "MIT", "CDLA-Permissive-2.0", "ISC", "CC0-1.0", "Apache-2.0 WITH LLVM-exception", "BSD-3-Clause", "Zlib", "MIT-0", "OpenSSL", "BSD-2-Clause"]
+allow = [
+    "Unicode-3.0",
+    "Apache-2.0",
+    "MIT",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "CC0-1.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "Zlib",
+    "MIT-0",
+    "OpenSSL",
+    "BSD-2-Clause",
+]

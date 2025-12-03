@@ -41,7 +41,7 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Thought,
-    Usage,
+    Unknown, Usage,
 };
 use crate::inference::WrappedProvider;
 use crate::model_table::{
@@ -195,27 +195,56 @@ impl StreamResponse {
     }
 }
 
-/// Creates a fully-qualified name from a model and provider name, suitable for using
-/// in `ContentBlock::Unknown.model_provider_name`
-/// Note that 'model_name' is a name from `[models]`, which is not necessarily
-/// the same as the underlying name passed to a specific provider api
+/// Creates a fully-qualified name from a model and provider name.
+/// This format was previously used in `ContentBlock::Unknown.model_provider_name`
+/// and is still used for the deprecated `DynamicExtraBody::Provider` variant.
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
 }
 
 impl ModelConfig {
+    /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
+    /// Returns true if the block should be filtered (removed), false if it should be kept.
+    fn should_filter_unknown_block(
+        block_model_name: &Option<String>,
+        block_provider_name: &Option<String>,
+        target_model_name: &str,
+        target_provider_name: &str,
+    ) -> bool {
+        // If model_name is specified and doesn't match, filter it out
+        if let Some(ref m) = block_model_name {
+            if m != target_model_name {
+                return true;
+            }
+        }
+        // If provider_name is specified and doesn't match, filter it out
+        if let Some(ref p) = block_provider_name {
+            if p != target_provider_name {
+                return true;
+            }
+        }
+        // Keep the block if both match (or are None)
+        false
+    }
+
     fn filter_content_blocks<'a>(
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
         provider: &ModelProvider,
     ) -> Cow<'a, ModelInferenceRequest<'a>> {
-        let name = fully_qualified_name(model_name, provider.name.as_ref());
+        let provider_name = provider.name.as_ref();
         let needs_filter = request.messages.iter().any(|m| {
             m.content.iter().any(|c| match c {
-                ContentBlock::Unknown {
-                    model_provider_name,
+                ContentBlock::Unknown(Unknown {
+                    model_name: block_model_name,
+                    provider_name: block_provider_name,
                     data: _,
-                } => model_provider_name.as_ref().is_some_and(|n| n != &name),
+                }) => Self::should_filter_unknown_block(
+                    block_model_name,
+                    block_provider_name,
+                    model_name,
+                    provider_name,
+                ),
                 ContentBlock::Thought(Thought {
                     text: _,
                     signature: _,
@@ -236,11 +265,17 @@ impl ModelConfig {
                         .content
                         .iter()
                         .flat_map(|c| match c {
-                            ContentBlock::Unknown {
-                                model_provider_name,
+                            ContentBlock::Unknown(Unknown {
+                                model_name: block_model_name,
+                                provider_name: block_provider_name,
                                 data: _,
-                            } => {
-                                if model_provider_name.as_ref().is_some_and(|n| n != &name) {
+                            }) => {
+                                if Self::should_filter_unknown_block(
+                                    block_model_name,
+                                    block_provider_name,
+                                    model_name,
+                                    provider_name,
+                                ) {
                                     None
                                 } else {
                                     Some(c.clone())

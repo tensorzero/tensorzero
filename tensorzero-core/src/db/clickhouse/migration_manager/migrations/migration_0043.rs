@@ -2,7 +2,7 @@ use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::migration_manager::migrations::{
     check_column_exists, check_table_exists,
 };
-use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::Error;
 use async_trait::async_trait;
 use std::time::Duration;
@@ -114,6 +114,13 @@ impl<'a> Migration for Migration0043<'a> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "ConfigSnapshot",
+                table_engine_name: "ReplacingMergeTree",
+                engine_args: &["last_used"],
+            },
+        );
 
         // Create ConfigSnapshot table
         let create_table_query = format!(
@@ -125,7 +132,7 @@ impl<'a> Migration for Migration0043<'a> {
                 tensorzero_version String,
                 created_at DateTime64(6) DEFAULT now(),
                 last_used DateTime64(6) DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(last_used)
+            ) ENGINE = {table_engine_name}
             ORDER BY hash
             SETTINGS index_granularity = 256
         "
@@ -608,8 +615,8 @@ impl<'a> Migration for Migration0043<'a> {
         instructions.push_str(&format!("ALTER TABLE TagJsonInferenceView{on_cluster_name} MODIFY QUERY SELECT function_name, variant_name, episode_id, id as inference_id, 'json' as function_type, key, tags[key] as value FROM JsonInference ARRAY JOIN mapKeys(tags) as key;\n"));
         instructions.push_str(&format!("ALTER TABLE ChatInferenceTagView{on_cluster_name} MODIFY QUERY SELECT function_name, key, tags[key] as value, id as inference_id FROM ChatInference ARRAY JOIN mapKeys(tags) as key;\n"));
         instructions.push_str(&format!("ALTER TABLE JsonInferenceTagView{on_cluster_name} MODIFY QUERY SELECT function_name, key, tags[key] as value, id as inference_id FROM JsonInference ARRAY JOIN mapKeys(tags) as key;\n"));
-        instructions.push_str(&format!("ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH float_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM FloatMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM float_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback) GROUP BY (episode_id_uint, function_name)) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM float_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
-        instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH boolean_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM BooleanMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback) GROUP BY (episode_id_uint, function_name)) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM boolean_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
+        instructions.push_str(&format!("ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH float_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM FloatMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM float_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback) GROUP BY episode_id_uint, function_name) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM float_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
+        instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH boolean_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM BooleanMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback) GROUP BY episode_id_uint, function_name) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM boolean_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
         instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT metric_name, key, tags[key] as value, id as feedback_id FROM BooleanMetricFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
         instructions.push_str(&format!("ALTER TABLE CommentFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT 'comment' as metric_name, key, tags[key] as value, id as feedback_id FROM CommentFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
         instructions.push_str(&format!("ALTER TABLE DemonstrationFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT 'demonstration' as metric_name, key, tags[key] as value, id as feedback_id FROM DemonstrationFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
@@ -623,7 +630,15 @@ impl<'a> Migration for Migration0043<'a> {
         // DynamicEvaluationRunEpisodeByRunIdView references DynamicEvaluationRunEpisode
         instructions.push_str(&format!("ALTER TABLE DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(run_id) AS run_id_uint, episode_id_uint, variant_pins, tags, datapoint_name, is_deleted, updated_at FROM DynamicEvaluationRunEpisode ORDER BY run_id_uint, episode_id_uint;\n"));
 
-        instructions.push_str(&format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n"));
+        // ModelProviderStatisticsView references ModelInference. ClickHouse Cloud revalidates views
+        // when columns are dropped from source tables, and stricter versions reject GROUP BY (a, b, c)
+        // tuple syntax. We modify the view to use GROUP BY a, b, c before dropping the column.
+        let qs = super::migration_0037::quantiles_sql_args();
+        instructions.push_str(&format!("ALTER TABLE ModelProviderStatisticsView{on_cluster_name} MODIFY QUERY SELECT model_name, model_provider_name, toStartOfMinute(timestamp) as minute, quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles, quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles, sumState(input_tokens) as total_input_tokens, sumState(output_tokens) as total_output_tokens, countState() as count FROM ModelInference GROUP BY model_name, model_provider_name, minute;\n"));
+
+        instructions.push_str(&format!(
+            "DROP TABLE ConfigSnapshot{on_cluster_name} SYNC;\n"
+        ));
 
         for table in SNAPSHOT_TRACKED_TABLES {
             instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));

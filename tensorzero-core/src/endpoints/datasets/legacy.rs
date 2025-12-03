@@ -1364,7 +1364,10 @@ impl JsonInferenceDatapoint {
     /// Convert to storage type, without resolving network resources for files.
     /// This is used in PyO3 where we do not have a fetch context available.
     /// Returns an error if the input contains any external URLs or Base64 files.
-    pub fn into_storage_without_file_handling(self) -> Result<StoredJsonInferenceDatapoint, Error> {
+    pub fn into_storage_without_file_handling(
+        self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<StoredJsonInferenceDatapoint, Error> {
         let stored_input = self.input.into_stored_input_without_file_handling()?;
 
         Ok(StoredJsonInferenceDatapoint {
@@ -1383,7 +1386,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
-            snapshot_hash: None,
+            snapshot_hash: Some(snapshot_hash),
         })
     }
 }

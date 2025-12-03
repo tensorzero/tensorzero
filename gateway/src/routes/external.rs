@@ -1,37 +1,22 @@
-//! Route definitions and endpoint mappings for the TensorZero Gateway API.
+//! External route definitions for the TensorZero Gateway API.
 //!
 //! This file should remain minimal, containing only endpoint path definitions and their handler mappings.
 //! Router construction logic belongs in `router.rs`. This constraint exists because CODEOWNERS
 //! requires specific review for route changes.
 
 use axum::{
-    routing::{delete, get, patch, post, put},
+    routing::{delete, get, patch, post},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use std::sync::Arc;
+use tensorzero_core::endpoints::openai_compatible::build_openai_compatible_routes;
 use tensorzero_core::observability::OtelEnabledRoutes;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tensorzero_core::{
-    endpoints::openai_compatible::build_openai_compatible_routes,
-    observability::{RouterExt as _, TracerWrapper},
-};
-
-pub fn build_api_routes(
-    otel_tracer: Option<Arc<TracerWrapper>>,
-    metrics_handle: PrometheusHandle,
-) -> Router<AppStateData> {
-    let (otel_enabled_routes, otel_enabled_router) = build_otel_enabled_routes();
-    Router::new()
-        .merge(otel_enabled_router)
-        .merge(build_non_otel_enabled_routes(metrics_handle))
-        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes)
-}
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
 /// All of these routes will have a span named `METHOD <ROUTE>` (e.g. `POST /batch_inference/{batch_id}`)
 /// sent to OpenTelemetry
-fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
+pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
     let mut routes = vec![
         ("/inference", post(endpoints::inference::inference_handler)),
         (
@@ -63,22 +48,19 @@ fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
     )
 }
 
-// Defines routes that should not have top-level OpenTelemetry HTTP spans created
-// We use this for internal routes which we don't want to expose to users,
-// or uninteresting routes like /health
-fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
+/// Builds external routes that don't have OpenTelemetry tracing.
+pub fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
         .merge(build_observability_routes())
         .merge(build_datasets_routes())
         .merge(build_optimization_routes())
         .merge(build_evaluations_routes())
-        .merge(build_internal_routes())
         .merge(build_meta_observability_routes(metrics_handle))
 }
 
 /// This function builds the public routes for observability.
 ///
-/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_observability_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -93,7 +75,7 @@ fn build_observability_routes() -> Router<AppStateData> {
 
 /// This function builds the public routes for datasets.
 ///
-/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_datasets_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -158,7 +140,7 @@ fn build_datasets_routes() -> Router<AppStateData> {
 
 /// This function builds the public routes for optimization.
 ///
-/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_optimization_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -173,7 +155,7 @@ fn build_optimization_routes() -> Router<AppStateData> {
 
 /// This function builds the public routes for evaluations.
 ///
-/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_evaluations_routes() -> Router<AppStateData> {
     Router::new()
         // Workflow evaluation endpoints (new)
@@ -196,45 +178,9 @@ fn build_evaluations_routes() -> Router<AppStateData> {
         )
 }
 
-/// This function builds the internal routes.
-///
-/// IMPORTANT: These routes are for internal use. They are unstable and might change without notice.
-fn build_internal_routes() -> Router<AppStateData> {
-    Router::new()
-        // Deprecated (#4652): Remove the endpoint without the `/internal` prefix.
-        .route(
-            "/variant_sampling_probabilities",
-            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
-        )
-        .route(
-            "/internal/functions/{function_name}/variant_sampling_probabilities",
-            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            put(endpoints::datasets::update_datapoint_handler),
-        )
-        .route(
-            "/internal/object_storage",
-            get(endpoints::object_storage::get_object_handler),
-        )
-        .route(
-            "/internal/inferences/bounds",
-            get(endpoints::stored_inferences::v1::get_inference_bounds_handler),
-        )
-        .route(
-            "/internal/inferences",
-            get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
-        )
-}
-
 /// This function builds the public routes for meta-observability (e.g. gateway health).
 ///
-/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_meta_observability_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
         .route(
