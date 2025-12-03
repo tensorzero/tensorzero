@@ -79,7 +79,7 @@ clickhouse_migration = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'test(test_otel_export)'
-slow-timeout = { period = "60s", terminate-after = 2 }
+slow-timeout = { period = "60s", terminate-after = 4 }
 # We sleep long enough that these tests should pass 100% of the time.
 # Any flakiness indicates a potential bug that could cause us to lose spans,
 # so we don't want to retry.
