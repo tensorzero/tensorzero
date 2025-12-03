@@ -400,7 +400,7 @@ impl InputMessageContent {
                         let storage_kind = get_storage_kind(context)?;
                         let base64_file_for_path = Base64File::new(
                             source_url.clone(),
-                            mime_type.clone(),
+                            Some(mime_type.clone()),
                             data.to_string(),
                             // We explicitly set detail to None when computing the storage path.
                             // This is intentional for content-addressing: the detail parameter controls
@@ -628,7 +628,7 @@ impl LazyResolvedInputMessageContent {
                     let resolved_file = future.await?;
                     let base64_file = Base64File::new(
                         resolved_file.file.source_url.clone(),
-                        resolved_file.file.mime_type.clone(),
+                        Some(resolved_file.file.mime_type.clone()),
                         resolved_file.data.clone(),
                         resolved_file.file.detail.clone(),
                         resolved_file.file.filename.clone(),
@@ -649,7 +649,7 @@ impl LazyResolvedInputMessageContent {
                 LazyFile::Base64(pending) => {
                     let base64_file = Base64File::new(
                         pending.0.file.source_url.clone(),
-                        pending.0.file.mime_type.clone(),
+                        Some(pending.0.file.mime_type.clone()),
                         pending.0.data.clone(),
                         pending.0.file.detail.clone(),
                         pending.0.file.filename.clone(),

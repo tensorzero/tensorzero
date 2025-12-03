@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rand::{
     SeedableRng,
     distr::{Alphanumeric, SampleString},
@@ -116,14 +118,22 @@ impl TensorZeroApiKey {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum TensorZeroAuthError {
     #[error("Invalid format for TensorZero API key: {0}")]
     InvalidKeyFormat(&'static str),
     #[error("Database error: {0}")]
-    Sqlx(#[from] sqlx::Error),
+    Sqlx(Arc<sqlx::Error>),
     #[error("Migration error: {message}")]
     Migration { message: String },
+    #[error("Error performing authentication: {message}")]
+    Middleware { message: String },
+}
+
+impl From<sqlx::Error> for TensorZeroAuthError {
+    fn from(err: sqlx::Error) -> Self {
+        Self::Sqlx(Arc::new(err))
+    }
 }
 
 #[cfg(test)]

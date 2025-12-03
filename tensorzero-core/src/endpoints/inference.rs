@@ -29,7 +29,6 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::{FunctionConfig, FunctionConfigChat};
@@ -57,6 +56,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
@@ -1837,7 +1837,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1864,7 +1864,7 @@ mod tests {
         let file_base64 = File::Base64(
             Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "fake_base64_data".to_string(),
                 None,
                 None,
@@ -1936,7 +1936,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -2004,8 +2004,14 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                Some(mime::IMAGE_JPEG),
+                "abcdef".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
 
         let serialized = serde_json::to_string(&original).unwrap();

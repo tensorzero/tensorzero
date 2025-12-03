@@ -231,7 +231,7 @@ impl ResolvedInput {
                     if let ResolvedInputMessageContent::File(resolved) = content_block {
                         let raw = match Base64File::new(
                             resolved.file.source_url.clone(),
-                            resolved.file.mime_type.clone(),
+                            Some(resolved.file.mime_type.clone()),
                             resolved.data.clone(),
                             resolved.file.detail.clone(),
                             resolved.file.filename.clone(),

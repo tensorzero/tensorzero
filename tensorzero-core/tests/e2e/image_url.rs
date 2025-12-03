@@ -299,7 +299,7 @@ async fn test_base64_image_with_fetch_true() {
                         InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
-                                mime::IMAGE_PNG,
+                                Some(mime::IMAGE_PNG),
                                 IMAGE_BASE64.to_string(),
                                 None,
                                 None,
@@ -379,7 +379,7 @@ async fn test_base64_image_with_fetch_false() {
                         InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
-                                mime::IMAGE_PNG,
+                                Some(mime::IMAGE_PNG),
                                 IMAGE_BASE64.to_string(),
                                 None,
                                 None,

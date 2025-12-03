@@ -266,6 +266,8 @@ async fn analyze_inference(
         }
     };
 
+    tracing::debug!("Generated analysis: {}", analysis);
+
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
         Some(Inference {

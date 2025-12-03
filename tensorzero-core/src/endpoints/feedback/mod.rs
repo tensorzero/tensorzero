@@ -17,7 +17,6 @@ use uuid::Uuid;
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
@@ -30,6 +29,7 @@ use crate::tool::{
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
