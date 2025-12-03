@@ -86,6 +86,11 @@ slow-timeout = { period = "60s", terminate-after = 4 }
 retries = 0
 
 [[profile.default.overrides]]
+filter = 'test(e2e_test_variant_failover)'
+# This test makes lots of requests, so give it extra time for the slower Github runners.
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
 test-group = 'e2e_aws_bedrock'
 
