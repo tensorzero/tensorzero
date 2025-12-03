@@ -85,13 +85,14 @@ jobs:
           docker load < gateway-container.tar
           docker load < mock-inference-container.tar
 
-      - name: Build containers locally (debug mode)
+      - name: Pull latest published images (debug mode)
         if: github.event_name == 'push'
         run: |
-          echo "Building gateway container locally..."
-          cd gateway && docker build -t tensorzero/gateway:sha-${{ github.sha }} -f Dockerfile ..
-          echo "Building mock inference container locally..."
-          cd tensorzero-core/tests/mock-inference-provider && docker build -t tensorzero/mock-inference-provider:sha-${{ github.sha }} -f Dockerfile ../../..
+          echo "Pulling latest published images for debugging..."
+          docker pull tensorzero/gateway:latest
+          docker tag tensorzero/gateway:latest tensorzero/gateway:sha-${{ github.sha }}
+          docker pull tensorzero/mock-inference-provider:latest
+          docker tag tensorzero/mock-inference-provider:latest tensorzero/mock-inference-provider:sha-${{ github.sha }}
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
