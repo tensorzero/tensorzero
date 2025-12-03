@@ -8,7 +8,6 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { StoredInference } from "~/types/tensorzero";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -16,27 +15,23 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
-import { InferenceDetailSheet } from "~/components/inference/InferenceDetailSheet";
+import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 import { Button } from "~/components/ui/button";
 import { Eye } from "lucide-react";
+
+interface EpisodeInferenceTableProps {
+  inferences: StoredInference[];
+  onOpenSheet?: (inferenceId: string) => void;
+  onCloseSheet?: () => void;
+  openSheetInferenceId?: string | null;
+}
 
 export default function EpisodeInferenceTable({
   inferences,
   onOpenSheet,
   onCloseSheet,
-  getInferenceData,
-  isInferenceLoading,
-  getError,
   openSheetInferenceId,
-}: {
-  inferences: StoredInference[];
-  onOpenSheet?: (inferenceId: string) => void;
-  onCloseSheet?: () => void;
-  getInferenceData?: (inferenceId: string) => ParsedInferenceRow | null;
-  isInferenceLoading?: (inferenceId: string) => boolean;
-  getError?: (inferenceId: string) => string | null;
-  openSheetInferenceId?: string | null;
-}) {
+}: EpisodeInferenceTableProps) {
   return (
     <>
       <Table>
@@ -46,7 +41,7 @@ export default function EpisodeInferenceTable({
             <TableHead>Function</TableHead>
             <TableHead>Variant</TableHead>
             <TableHead>Time</TableHead>
-            <TableHead>View</TableHead>
+            <TableHead className="text-center">Preview</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -84,7 +79,7 @@ export default function EpisodeInferenceTable({
                 <TableCell>
                   <TableItemTime timestamp={inference.timestamp} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-center">
                   {onOpenSheet && (
                     <Button
                       variant="ghost"
@@ -102,15 +97,11 @@ export default function EpisodeInferenceTable({
         </TableBody>
       </Table>
 
-      {openSheetInferenceId && (
-        <InferenceDetailSheet
-          inference={getInferenceData?.(openSheetInferenceId) ?? null}
-          isLoading={isInferenceLoading?.(openSheetInferenceId) ?? false}
-          error={getError?.(openSheetInferenceId) ?? null}
-          isOpen={!!openSheetInferenceId}
-          onClose={onCloseSheet!}
-        />
-      )}
+      <InferencePreviewSheet
+        inferenceId={openSheetInferenceId ?? null}
+        isOpen={!!openSheetInferenceId}
+        onClose={onCloseSheet!}
+      />
     </>
   );
 }

@@ -1,6 +1,5 @@
 import {
   countInferencesForEpisode,
-  queryInferenceById,
   listInferencesWithPagination,
 } from "~/utils/clickhouse/inference.server";
 import {
@@ -14,6 +13,7 @@ import {
   isRouteErrorResponse,
   useNavigate,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
@@ -27,7 +27,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -35,12 +35,32 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { useInferenceClick } from "~/hooks/use-inference-click";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
 };
+
+/**
+ * Prevent revalidation of this route when actions are submitted to API routes.
+ * This is needed because:
+ * 1. The InferencePreviewSheet submits feedback to /api/inference/:id
+ * 2. The AddToDatasetButton submits to /api/datapoints
+ * 3. By default, React Router revalidates all active loaders after any action
+ * 4. We don't want to reload the entire episode page when these actions complete
+ *    because the sheet handles its own data refresh
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    formAction?.startsWith("/api/inference/") ||
+    formAction?.startsWith("/api/datapoints")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -149,57 +169,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 type ActionData =
-  | {
-      redirectTo: string;
-      error?: never;
-      inference?: never;
-      inferenceId?: never;
-    }
-  | {
-      error: string;
-      redirectTo?: never;
-      inference?: never;
-      inferenceId?: string;
-    }
-  | {
-      inference: ParsedInferenceRow;
-      error?: never;
-      redirectTo?: never;
-      inferenceId: string;
-    };
+  | { redirectTo: string; error?: never }
+  | { error: string; redirectTo?: never };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
 
   switch (_action) {
-    case "fetchInference": {
-      const inferenceId = formData.get("inferenceId") as string;
-      if (!inferenceId) {
-        return data<ActionData>(
-          { error: "Inference ID is required" },
-          { status: 400 },
-        );
-      }
-
-      try {
-        const inference = await queryInferenceById(inferenceId);
-        if (!inference) {
-          return data<ActionData>(
-            { error: `Inference ${inferenceId} not found`, inferenceId },
-            { status: 404 },
-          );
-        }
-        return data<ActionData>({ inference, inferenceId });
-      } catch (error) {
-        logger.error("Failed to fetch inference:", error);
-        return data<ActionData>(
-          { error: "Failed to fetch inference details", inferenceId },
-          { status: 500 },
-        );
-      }
-    }
-
     case "addFeedback": {
       try {
         const response = await addHumanFeedback(formData);
@@ -250,14 +227,17 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const {
-    handleOpenSheet,
-    handleCloseSheet,
-    getInferenceData,
-    isLoading,
-    getError,
-    openSheetInferenceId,
-  } = useInferenceClick(`/observability/episodes/${episode_id}`);
+  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
+    string | null
+  >(null);
+
+  const handleOpenSheet = useCallback((inferenceId: string) => {
+    setOpenSheetInferenceId(inferenceId);
+  }, []);
+
+  const handleCloseSheet = useCallback(() => {
+    setOpenSheetInferenceId(null);
+  }, []);
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -370,9 +350,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             inferences={inferences}
             onOpenSheet={handleOpenSheet}
             onCloseSheet={handleCloseSheet}
-            getInferenceData={getInferenceData}
-            isInferenceLoading={isLoading}
-            getError={getError}
             openSheetInferenceId={openSheetInferenceId}
           />
           <PageButtons
