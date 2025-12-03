@@ -21,9 +21,9 @@ import { Eye } from "lucide-react";
 
 interface EpisodeInferenceTableProps {
   inferences: StoredInference[];
-  onOpenSheet?: (inferenceId: string) => void;
-  onCloseSheet?: () => void;
-  openSheetInferenceId?: string | null;
+  onOpenSheet: (inferenceId: string) => void;
+  onCloseSheet: () => void;
+  openSheetInferenceId: string | null;
 }
 
 export default function EpisodeInferenceTable({
@@ -80,16 +80,14 @@ export default function EpisodeInferenceTable({
                   <TableItemTime timestamp={inference.timestamp} />
                 </TableCell>
                 <TableCell className="text-center">
-                  {onOpenSheet && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onOpenSheet(inference.inference_id)}
-                      aria-label="View inference details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onOpenSheet(inference.inference_id)}
+                    aria-label="View inference details"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))
@@ -98,9 +96,9 @@ export default function EpisodeInferenceTable({
       </Table>
 
       <InferencePreviewSheet
-        inferenceId={openSheetInferenceId ?? null}
+        inferenceId={openSheetInferenceId}
         isOpen={!!openSheetInferenceId}
-        onClose={onCloseSheet!}
+        onClose={onCloseSheet}
       />
     </>
   );
