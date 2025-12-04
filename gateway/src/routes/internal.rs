@@ -41,4 +41,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/datasets",
             get(endpoints::datasets::v1::list_datasets_handler),
         )
+        .route(
+            "/internal/episode/{episode_id}/inferences",
+            get(endpoints::stored_inferences::internal::get_inferences_by_episode_handler),
+        )
 }

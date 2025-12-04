@@ -1,3 +1,4 @@
+pub mod internal;
 mod render_samples;
 pub mod v1;
 
