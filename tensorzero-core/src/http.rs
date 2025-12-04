@@ -3,8 +3,8 @@ use once_cell::sync::OnceCell;
 use std::{
     pin::Pin,
     sync::{
-        atomic::{AtomicU8, Ordering},
         Arc,
+        atomic::{AtomicU8, Ordering},
     },
     task::{Context, Poll},
 };
@@ -17,7 +17,7 @@ use pin_project::pin_project;
 use reqwest::{Body, Response};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -508,10 +508,11 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
         })?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
-    if cfg!(feature = "e2e_tests") {
-        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
-            http_client_builder = http_client_builder
+    if cfg!(feature = "e2e_tests")
+        && let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY")
+    {
+        tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+        http_client_builder = http_client_builder
                 .proxy(
                     Proxy::all(proxy_url)
                         .map_err(|e| {
@@ -526,7 +527,6 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
                 .danger_accept_invalid_certs(true);
-        }
     }
 
     http_client_builder.build().map_err(|e| {
@@ -542,22 +542,22 @@ mod tests {
         future::IntoFuture,
         net::SocketAddr,
         sync::{
-            atomic::{AtomicU8, Ordering},
             Arc,
+            atomic::{AtomicU8, Ordering},
         },
     };
 
     use axum::{
-        extract::Request,
-        response::{sse::Event, Sse},
-        routing::get,
         Router,
+        extract::Request,
+        response::{Sse, sse::Event},
+        routing::get,
     };
     use futures::StreamExt;
     use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::{LimitedClient, TensorZeroEventSource, CONCURRENCY_LIMIT};
+    use crate::http::{CONCURRENCY_LIMIT, LimitedClient, TensorZeroEventSource};
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
         let app = Router::new()
@@ -685,7 +685,11 @@ mod tests {
         // (the maximum is achieved if all tasks happen to run concurrently)
         assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
         let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
-        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ), "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+        assert!(
+            num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize)),
+            "Too many initialized clients - found {num_initialized_clients} but expected at most {}",
+            num_tasks / (CONCURRENCY_LIMIT as usize)
+        );
         for client_cell in client.clients.iter() {
             if let Some(client) = client_cell.get() {
                 assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);

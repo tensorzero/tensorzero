@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -15,20 +15,16 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Usage,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
@@ -36,7 +32,11 @@ use crate::inference::types::{
     Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
-use crate::inference::InferenceProvider;
+use crate::inference::types::{
+    ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
+    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+};
 use crate::model::{Credential, ModelProvider};
 use crate::tool::FunctionToolConfig;
 #[cfg(test)]
@@ -537,7 +537,9 @@ impl<'a> GeminiContent<'a> {
                                     // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
-                                            message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                            message: format!(
+                                                "Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                                            ),
                                         }));
                                     }
                                 }
@@ -588,14 +590,12 @@ async fn convert_non_thought_content_block(
                 "name": tool_result.name,
                 "content": tool_result.result,
             });
-            Ok(FlattenUnknown::Normal(
-                GeminiPartData::FunctionResponse {
-                    function_response: GeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
-                    },
+            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
+                function_response: GeminiFunctionResponse {
+                    name: &tool_result.name,
+                    response,
                 },
-            ))
+            }))
         }
         ContentBlock::ToolCall(tool_call) => {
             // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
@@ -646,9 +646,13 @@ async fn convert_non_thought_content_block(
             }))
         }
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
-            message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
+            message: format!(
+                "Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         })),
-        ContentBlock::Unknown(Unknown { data, .. }) => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => {
+            Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
+        }
     }
 }
 
@@ -1021,14 +1025,13 @@ fn content_part_to_tensorzero_chunk(
             }
             _ => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                        message:
-                            format!(
-                                "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
-                            ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                    }));
+                    message: format!(
+                        "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                }));
             }
         }
         return Ok(());
@@ -1455,8 +1458,8 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
-    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use serde_json::json;
 
     use super::*;
@@ -2156,8 +2159,10 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text }),
+            ContentBlockOutput::ToolCall(tool_call),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
             assert_eq!(tool_call.name, "get_temperature");
@@ -2269,8 +2274,12 @@ mod tests {
         assert_eq!(model_inference_response.raw_request, raw_request);
 
         assert_eq!(model_inference_response.raw_response, raw_response);
-        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text: text1 }),
+            ContentBlockOutput::ToolCall(tool_call1),
+            ContentBlockOutput::Text(Text { text: text2 }),
+            ContentBlockOutput::ToolCall(tool_call2),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");

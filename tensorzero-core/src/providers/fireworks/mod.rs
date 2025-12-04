@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
@@ -27,28 +27,28 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
+        InferenceProvider,
         types::{
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
             ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
             Text, TextChunk, Thought, ThoughtChunk,
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
         },
-        InferenceProvider,
     },
     model::{Credential, ModelProvider},
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
 
 use super::{
-    helpers_thinking_block::{process_think_blocks, ThinkingState},
+    helpers_thinking_block::{ThinkingState, process_think_blocks},
     openai::{
-        get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIFunction,
-        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice, OpenAIToolType,
-        OpenAIUsage,
+        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice,
+        OpenAIToolType, OpenAIUsage, get_chat_url, handle_openai_error,
+        tensorzero_to_openai_messages,
     },
 };
 

@@ -13,11 +13,11 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use snapshot::SnapshotHash;
 use std::borrow::Cow;
@@ -25,8 +25,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tracing::instrument;
 use tracing::Span;
+use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
 
@@ -43,14 +43,14 @@ use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
-use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
-use crate::tool::{create_json_mode_tool_call_config, StaticToolConfig, ToolChoice};
+use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -154,19 +154,23 @@ impl TimeoutsConfig {
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
 
-        if let Some(total_ms) = total_ms {
-            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(total_ms) = total_ms
+            && Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
-        if let Some(ttft_ms) = ttft_ms {
-            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(ttft_ms) = ttft_ms
+            && Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
 
         Ok(())
@@ -209,7 +213,9 @@ impl ObjectStoreInfo {
                         #[expect(clippy::if_not_else)]
                         if !std::fs::exists(path).unwrap_or(false) {
                             if skip_credential_validation() {
-                                tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
+                                tracing::warn!(
+                                    "Filesystem object store path does not exist: {path}. Treating object store as unconfigured"
+                                );
                                 return Ok(None);
                             }
                             return Err(Error::new(ErrorDetails::Config {
@@ -259,22 +265,30 @@ impl ObjectStoreInfo {
                     builder = builder.with_endpoint(endpoint);
                 }
                 if std::env::var("AWS_ALLOW_HTTP").as_deref() == Ok("true") {
-                    tracing::warn!("`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                    tracing::warn!(
+                        "`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                    );
                     if allow_http.is_some() {
-                        tracing::info!("Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`");
+                        tracing::info!(
+                            "Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`"
+                        );
                     }
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                        tracing::warn!(
+                            "`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                        );
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
 
-                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
-                    if endpoint.ends_with(bucket_name) {
-                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
-                    }
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint)
+                    && endpoint.ends_with(bucket_name)
+                {
+                    tracing::warn!(
+                        "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
+                    );
                 }
 
                 // This is used to speed up our unit tests - in the future,
@@ -306,7 +320,9 @@ impl ObjectStoreInfo {
     /// Verifies that the object store is configured correctly by writing an empty file to it.
     pub async fn verify(&self) -> Result<(), Error> {
         if let Some(store) = &self.object_store {
-            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            tracing::info!(
+                "Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)"
+            );
             store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
                 .await
                 .map_err(|e| {
@@ -776,10 +792,8 @@ impl Config {
             Self::load_from_toml(globbed_config.table).await?
         };
 
-        if validate_credentials {
-            if let Some(object_store) = &unwritten_config.object_store_info {
-                object_store.verify().await?;
-            }
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
         Ok(unwritten_config)
@@ -953,7 +967,9 @@ impl Config {
         // Initialize the templates
         let user_template_paths = Config::get_templates(&user_functions);
         if gateway_config.template_filesystem_access.enabled {
-            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+            deprecation_warning(
+                "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
+            );
         }
         let template_fs_path = gateway_config
             .template_filesystem_access
@@ -1646,15 +1662,15 @@ impl UninitializedFunctionConfig {
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
-                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode().is_some() {
-                            return Err(ErrorDetails::Config {
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner
+                        && chat_config.json_mode().is_some()
+                    {
+                        return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
                                 ),
                             }
                             .into());
-                        }
                     }
                 }
                 let experimentation = params

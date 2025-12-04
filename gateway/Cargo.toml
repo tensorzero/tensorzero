@@ -38,3 +38,4 @@ reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
+env = { workspace = true }

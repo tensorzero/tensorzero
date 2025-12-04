@@ -17,8 +17,8 @@ use crate::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceCredentials, InferenceParams, InferenceResponse, Params,
 };
 use crate::endpoints::openai_compatible::types::input_files::{
-    convert_file_to_base64, convert_image_url_to_file, convert_input_audio_to_file,
     OpenAICompatibleFile, OpenAICompatibleImageUrl, OpenAICompatibleInputAudio,
+    convert_file_to_base64, convert_image_url_to_file, convert_input_audio_to_file,
 };
 use crate::endpoints::openai_compatible::types::tool::{
     ChatCompletionToolChoiceOption, OpenAICompatibleTool, OpenAICompatibleToolCall,
@@ -30,8 +30,8 @@ use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
-    current_timestamp, Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage,
-    InputMessageContent, RawText, Role, System, Template, Text,
+    Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
+    RawText, Role, System, Template, Text, current_timestamp,
 };
 use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
@@ -248,17 +248,21 @@ impl<'de> Deserialize<'de> for TextContent {
             (Some(text), None) => Ok(TextContent::Text {
                 text: match text {
                     Value::String(text) => text,
-                    _ => return Err(serde::de::Error::custom(
-                        "`text` must be a string when using `\"type\": \"text\"`",
-                    )),
+                    _ => {
+                        return Err(serde::de::Error::custom(
+                            "`text` must be a string when using `\"type\": \"text\"`",
+                        ));
+                    }
                 },
             }),
             (None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
                 tensorzero_arguments: match arguments {
                     Value::Object(arguments) => Arguments(arguments),
-                    _ => return Err(serde::de::Error::custom(
-                        "`tensorzero::arguments` must be an object when using `\"type\": \"text\"`",
-                    )),
+                    _ => {
+                        return Err(serde::de::Error::custom(
+                            "`tensorzero::arguments` must be an object when using `\"type\": \"text\"`",
+                        ));
+                    }
                 },
             }),
             (Some(_), Some(_)) => Err(serde::de::Error::custom(
@@ -298,24 +302,24 @@ impl Params {
             }));
         };
 
-        if let Some(function_name) = &function_name {
-            if function_name.is_empty() {
-                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+        if let Some(function_name) = &function_name
+            && function_name.is_empty()
+        {
+            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
                     "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
-            }
         }
 
-        if let Some(model_name) = &model_name {
-            if model_name.is_empty() {
-                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+        if let Some(model_name) = &model_name
+            && model_name.is_empty()
+        {
+            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                     message: "model_name (passed in model field after \"tensorzero::model_name::\") cannot be empty".to_string(),
                 }
                 .into());
-            }
         }
 
         // If both max_tokens and max_completion_tokens are provided, we use the minimum of the two.
@@ -497,7 +501,9 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                     }
 
                     if had_prior_system {
-                        tracing::warn!("Multiple system messages provided. They will be concatenated and moved to the start of the conversation.");
+                        tracing::warn!(
+                            "Multiple system messages provided. They will be concatenated and moved to the start of the conversation."
+                        );
                     } else if !first_system {
                         tracing::warn!("Moving system message to the start of the conversation.");
                     }
@@ -1242,7 +1248,10 @@ mod tests {
         }]);
         let err = convert_openai_message_content("user".to_string(), other_content.clone())
             .expect_err("Should not accept invalid block");
-        assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
+        assert_eq!(
+            err.to_string(),
+            "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`"
+        );
     }
 
     #[test]

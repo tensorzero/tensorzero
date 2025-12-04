@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
-use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
+use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -165,7 +165,7 @@ impl ModelProviderRequest<'_> {
         hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
         hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
-                             // Convert the request to a JSON Value, error if serialization fails
+        // Convert the request to a JSON Value, error if serialization fails
 
         let mut request_value = serde_json::to_value(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {

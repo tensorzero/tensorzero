@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use secrecy::SecretString;
 use tensorzero::ClientExt;
 
-use object_store::{aws::AmazonS3Builder, ObjectStore};
+use object_store::{ObjectStore, aws::AmazonS3Builder};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
     AnthropicDefaults, AzureDefaults, DeepSeekDefaults, FireworksDefaults, GCPDefaults,
@@ -20,7 +20,7 @@ use tensorzero_core::tool::Tool;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use base64::prelude::*;
 use futures::StreamExt;
 use image::{ImageFormat, ImageReader};
@@ -29,14 +29,14 @@ use object_store::path::Path;
 use rand::Rng;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientSecretString, InferenceOutput,
     InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
-use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
+use tensorzero_core::endpoints::object_storage::{ObjectResponse, PathParams, get_object_handler};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
@@ -47,8 +47,8 @@ use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
-        storage::{StorageKind, StoragePath},
         ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage,
+        storage::{StorageKind, StoragePath},
     },
     tool::{ToolCall, ToolResult},
 };
@@ -998,14 +998,14 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    env::remove_var(&original_env_var).unwrap();
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    env::set_var(&custom_env_var, &credential_value).unwrap();
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1114,14 +1114,14 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    env::remove_var(&original_env_var).unwrap();
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    env::set_var(&custom_env_var, &credential_value).unwrap();
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -5052,7 +5052,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -5651,20 +5651,24 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     // We don't care about thoughts in this test
     output_clickhouse.retain(|block| block["type"] != "thought");
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    assert!(content_block
-        .get("text")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("mehta"));
+    assert!(
+        content_block
+            .get("text")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("mehta")
+    );
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -6289,7 +6293,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -6886,9 +6890,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -6964,9 +6970,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert!(raw_request
-        .to_lowercase()
-        .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        raw_request
+            .to_lowercase()
+            .contains("what is the weather like in tokyo (in celsius)")
+    );
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
@@ -7272,12 +7280,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7684,12 +7694,14 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7970,12 +7982,14 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("location")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("location"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -10709,13 +10723,15 @@ pub async fn check_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -10980,13 +10996,15 @@ pub async fn check_dynamic_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("response")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("response")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -11245,10 +11263,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
-            if !raw.is_empty() {
-                full_content.push_str(raw);
-            }
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str())
+            && !raw.is_empty()
+        {
+            full_content.push_str(raw);
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -12589,9 +12607,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
     {
-        assert!(raw_request_val["generationConfig"]
-            .get("response_mime_type")
-            .is_none());
+        assert!(
+            raw_request_val["generationConfig"]
+                .get("response_mime_type")
+                .is_none()
+        );
     } else {
         assert!(raw_request_val.get("response_format").is_none());
     }

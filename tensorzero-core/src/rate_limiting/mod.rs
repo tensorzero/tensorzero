@@ -412,10 +412,10 @@ impl RateLimitingConfigRule {
         max_priority: &mut usize,
     ) -> Option<Vec<ActiveRateLimit>> {
         let key = self.scope.get_key_if_matches(scope_info)?;
-        if let RateLimitingConfigPriority::Priority(priority) = self.priority {
-            if priority > *max_priority {
-                *max_priority = priority;
-            }
+        if let RateLimitingConfigPriority::Priority(priority) = self.priority
+            && priority > *max_priority
+        {
+            *max_priority = priority;
         }
         Some(
             self.limits
@@ -788,10 +788,10 @@ impl TicketBorrows {
 
         if results_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
-            message: format!(
-                "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
-            )
-        }));
+                message: format!(
+                    "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
+            }));
         }
         let receipts = align_and_check_limits(&active_limits, results, ticket_requests)?;
         let borrows = receipts
@@ -876,7 +876,11 @@ impl TicketBorrows {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
                     // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
-                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
+                    tracing::warn!(
+                        "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
+                        active_limit.limit.resource,
+                        receipt.tickets_consumed
+                    );
                     let difference = actual_usage_this_request - receipt.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
@@ -2044,9 +2048,11 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
         };
-        assert!(config_disabled
-            .get_rate_limited_resources(&scope_info)
-            .is_empty());
+        assert!(
+            config_disabled
+                .get_rate_limited_resources(&scope_info)
+                .is_empty()
+        );
     }
 
     #[test]
