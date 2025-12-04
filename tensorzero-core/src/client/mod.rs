@@ -2,7 +2,7 @@ use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Dur
 
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
-use crate::config::ConfigFileGlob;
+use crate::config::{ConfigFileGlob, RuntimeOverlay};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -649,13 +649,22 @@ impl ClientBuilder {
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
-        // Load config from snapshot
-        let unwritten_config = Box::pin(Config::load_from_snapshot(snapshot, verify_credentials))
-            .await
-            .map_err(|e| ClientBuilderError::ConfigParsing {
-                error: TensorZeroError::Other { source: e.into() },
-                glob: ConfigFileGlob::new_empty(),
-            })?;
+        // Create runtime overlay from live config.
+        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
+        // reflect the current environment rather than historical snapshot values.
+        let runtime_overlay = RuntimeOverlay::from_config(live_config);
+
+        // Load config from snapshot with runtime overlay applied
+        let unwritten_config = Box::pin(Config::load_from_snapshot(
+            snapshot,
+            runtime_overlay,
+            verify_credentials,
+        ))
+        .await
+        .map_err(|e| ClientBuilderError::ConfigParsing {
+            error: TensorZeroError::Other { source: e.into() },
+            glob: ConfigFileGlob::new_empty(),
+        })?;
 
         // Setup ClickHouse with runtime URL
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
@@ -665,17 +674,12 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let mut config = unwritten_config
+        let config = unwritten_config
             .into_config(&clickhouse_connection_info)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
             })?;
-
-        // Overlay runtime config from live gateway.
-        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
-        // reflect the current environment rather than historical snapshot values.
-        config = config.overlay_runtime_config(live_config);
 
         let config = Arc::new(config);
 

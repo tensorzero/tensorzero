@@ -8,7 +8,6 @@ use chrono::Duration;
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
 ///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
-use gateway::AuthConfig;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
@@ -25,6 +24,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use stored::StoredConfig;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 use tracing::Span;
@@ -728,6 +728,66 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
+/// Runtime configuration values to overlay onto snapshot config.
+/// These reflect the current runtime environment rather than historical snapshot values.
+///
+/// When loading a config from a historical snapshot, infrastructure settings should
+/// come from the current runtime environment, not the snapshot. This struct captures
+/// those runtime values that need to be overlaid.
+pub struct RuntimeOverlay {
+    pub gateway: UninitializedGatewayConfig,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub object_store_info: Option<ObjectStoreInfo>,
+}
+
+impl RuntimeOverlay {
+    /// Create a RuntimeOverlay from a live Config.
+    /// Uses destructuring to ensure compile-time errors if fields are added/removed.
+    pub fn from_config(config: &Config) -> Self {
+        // Destructure GatewayConfig to ensure all fields are handled
+        let GatewayConfig {
+            bind_address,
+            observability,
+            debug,
+            template_filesystem_access,
+            export,
+            base_path,
+            unstable_error_json,
+            unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference,
+            auth,
+            global_outbound_http_timeout,
+        } = &config.gateway;
+
+        Self {
+            gateway: UninitializedGatewayConfig {
+                bind_address: *bind_address,
+                observability: observability.clone(),
+                debug: *debug,
+                template_filesystem_access: Some(template_filesystem_access.clone()),
+                export: export.clone(),
+                base_path: base_path.clone(),
+                unstable_disable_feedback_target_validation:
+                    *unstable_disable_feedback_target_validation,
+                unstable_error_json: *unstable_error_json,
+                disable_pseudonymous_usage_analytics: *disable_pseudonymous_usage_analytics,
+                fetch_and_encode_input_files_before_inference: Some(
+                    *fetch_and_encode_input_files_before_inference,
+                ),
+                auth: auth.clone(),
+                global_outbound_http_timeout_ms: Some(
+                    global_outbound_http_timeout.num_milliseconds() as u64,
+                ),
+            },
+            postgres: config.postgres.clone(),
+            rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
+            object_store_info: config.object_store_info.clone(),
+        }
+    }
+}
+
 /// Result of processing the initial config input (Fresh table or Snapshot).
 /// Contains the fields needed from UninitializedConfig after the branch-specific
 /// processing (functions, gateway, object_storage) has been done.
@@ -838,14 +898,26 @@ async fn process_config_input(
                 object_store_info,
             })
         }
-        ConfigInput::Snapshot(snapshot) => {
-            let snapshot = *snapshot;
-            // Clone the config before converting to UninitializedConfig
+        ConfigInput::Snapshot {
+            snapshot,
+            runtime_overlay,
+        } => {
+            let original_snapshot = *snapshot;
+
+            // Destructure overlay to ensure all fields are handled (compile error if field added/removed)
+            let RuntimeOverlay {
+                gateway: overlay_gateway,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
+                object_store_info: overlay_object_store_info,
+            } = *runtime_overlay;
+
+            // Destructure uninit_config to overlay specific fields
             let UninitializedConfig {
-                gateway,
-                postgres,
-                rate_limiting,
-                object_storage,
+                gateway: _,        // replaced by overlay
+                postgres: _,       // replaced by overlay
+                rate_limiting: _,  // replaced by overlay
+                object_storage: _, // replaced by overlay (via object_store_info)
                 models,
                 embedding_models,
                 functions,
@@ -854,7 +926,35 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-            } = snapshot.config.clone().into();
+            } = original_snapshot.config.clone().into();
+
+            // Reconstruct with overlaid values for snapshot hash computation
+            let overlaid_config = UninitializedConfig {
+                gateway: overlay_gateway.clone(),
+                postgres: overlay_postgres.clone(),
+                rate_limiting: overlay_rate_limiting.clone(),
+                object_storage: overlay_object_store_info
+                    .as_ref()
+                    .map(|info| info.kind.clone()),
+                models: models.clone(),
+                embedding_models: embedding_models.clone(),
+                functions: functions.clone(),
+                metrics: metrics.clone(),
+                tools: tools.clone(),
+                evaluations: evaluations.clone(),
+                provider_types: provider_types.clone(),
+                optimizers: optimizers.clone(),
+            };
+
+            // Create a new snapshot from the overlaid config to get the correct hash
+            let overlaid_table = toml::Table::try_from(Into::<StoredConfig>::into(overlaid_config))
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to serialize overlaid config: {e}"),
+                    })
+                })?;
+            let extra_templates = original_snapshot.extra_templates.clone();
+            let snapshot = ConfigSnapshot::new(overlaid_table, extra_templates.clone())?;
 
             // Load user-defined functions and ensure they don't use tensorzero:: prefix
             let user_functions = functions
@@ -873,10 +973,9 @@ async fn process_config_input(
                         .map(|c| (name, Arc::new(c)))
                 })
                 .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
-            let object_store_info = ObjectStoreInfo::new(object_storage)?;
-            let gateway_config = gateway.load(object_store_info.as_ref())?;
 
-            let extra_templates = snapshot.extra_templates.clone();
+            // Use the overlay object store info directly instead of creating a new one
+            let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
 
             Ok(ProcessedConfigInput {
                 tools,
@@ -886,13 +985,13 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-                postgres,
-                rate_limiting,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
                 extra_templates,
                 snapshot,
                 user_functions,
                 gateway_config,
-                object_store_info,
+                object_store_info: overlay_object_store_info,
             })
         }
     }
@@ -940,20 +1039,30 @@ impl Config {
     }
 
     /// Load config from a ConfigSnapshot (historical config stored in ClickHouse)
+    /// with runtime configuration overlaid from the provided RuntimeOverlay.
+    ///
+    /// The runtime overlay ensures that infrastructure settings (gateway, postgres,
+    /// rate limiting, object storage) come from the current runtime environment
+    /// rather than the historical snapshot.
     pub async fn load_from_snapshot(
         snapshot: ConfigSnapshot,
+        runtime_overlay: RuntimeOverlay,
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
                 (),
-                Self::load_from_toml(ConfigInput::Snapshot(Box::new(snapshot))),
+                Self::load_from_toml(ConfigInput::Snapshot {
+                    snapshot: Box::new(snapshot),
+                    runtime_overlay: Box::new(runtime_overlay),
+                }),
             ))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Snapshot(Box::new(
-                snapshot,
-            ))))
+            Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            }))
             .await?
         };
 
@@ -1420,69 +1529,14 @@ impl Config {
             })?
             .clone())
     }
-
-    /// Overlays runtime-specific configuration from a live config onto this config.
-    ///
-    /// When using a config loaded from a historical snapshot, certain fields should
-    /// reflect the current runtime environment rather than the snapshot's values:
-    /// - `gateway`: Runtime gateway settings (bind address, auth, observability, etc.)
-    /// - `object_store_info`: Current object store configuration
-    /// - `postgres`: Current postgres settings
-    /// - `rate_limiting`: Current rate limiting rules
-    /// - `http_client`: Current HTTP client configuration
-    ///
-    /// These fields are infrastructure/runtime concerns that should not be replayed
-    /// from historical data.
-    pub fn overlay_runtime_config(self, live_config: &Config) -> Config {
-        let gateway = GatewayConfig {
-            bind_address: None,
-            observability: live_config.gateway.observability.clone(),
-            debug: live_config.gateway.debug,
-            template_filesystem_access: live_config.gateway.template_filesystem_access.clone(),
-            export: live_config.gateway.export.clone(),
-            base_path: None,
-            // We would prefer this to not be global but it is global
-            unstable_error_json: live_config.gateway.unstable_error_json,
-            unstable_disable_feedback_target_validation: live_config
-                .gateway
-                .unstable_disable_feedback_target_validation,
-            disable_pseudonymous_usage_analytics: live_config
-                .gateway
-                .disable_pseudonymous_usage_analytics,
-            // Rehydrated inferences have object store pointers so we don't need to use
-            // whatever the historical setting was
-            fetch_and_encode_input_files_before_inference: live_config
-                .gateway
-                .fetch_and_encode_input_files_before_inference,
-            auth: AuthConfig {
-                enabled: false,
-                cache: None,
-            },
-            global_outbound_http_timeout: live_config.gateway.global_outbound_http_timeout,
-        };
-        Config {
-            gateway,
-            models: self.models,
-            embedding_models: self.embedding_models,
-            functions: self.functions,
-            metrics: self.metrics,
-            tools: self.tools,
-            evaluations: self.evaluations,
-            templates: self.templates,
-            object_store_info: live_config.object_store_info.clone(),
-            provider_types: self.provider_types,
-            optimizers: self.optimizers,
-            postgres: live_config.postgres.clone(),
-            rate_limiting: live_config.rate_limiting.clone(),
-            http_client: live_config.http_client.clone(),
-            hash: self.hash,
-        }
-    }
 }
 
 pub enum ConfigInput {
     Fresh(toml::Table),
-    Snapshot(Box<ConfigSnapshot>),
+    Snapshot {
+        snapshot: Box<ConfigSnapshot>,
+        runtime_overlay: Box<RuntimeOverlay>,
+    },
 }
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.
