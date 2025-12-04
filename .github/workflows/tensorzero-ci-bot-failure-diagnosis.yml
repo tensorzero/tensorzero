@@ -43,9 +43,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install mini-swe-agent
-        run: |
-          uv tool install mini-swe-agent --from
-          "git+https://github.com/virajmehta/mini-swe-agent.git@main"
+        run: "uv tool install mini-swe-agent --from \"git+https://github.com/virajmehta/mini-swe-agent.git@main\""
 
       - name: Generate patch
         id: generate
