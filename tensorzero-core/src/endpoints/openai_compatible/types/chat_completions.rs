@@ -451,7 +451,8 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             openai_compatible_messages.first(),
             Some(OpenAICompatibleMessage::System(_))
         );
-        for message in openai_compatible_messages {
+        let mut iter = openai_compatible_messages.into_iter().peekable();
+        while let Some(message) = iter.next() {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
                     let had_prior_system = system_message.is_some();
@@ -529,6 +530,12 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                     });
                 }
                 OpenAICompatibleMessage::Tool(msg) => {
+                    // When we encounter a tool call, coalesce all subsequent tool calls into a single
+                    // `Role::User` message.
+                    // This ensures that parallel tool calls can be passed through properly to providers
+                    // (e.g. AWS Bedrock) that require parallel tool calls results to occur in the same
+                    // `Role::User` message.
+                    let mut tool_results = Vec::new();
                     let name = tool_call_id_to_name
                         .get(&msg.tool_call_id)
                         .ok_or_else(|| {
@@ -537,13 +544,36 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                             })
                         })?
                         .to_string();
+                    tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                        id: msg.tool_call_id,
+                        name,
+                        result: msg.content.unwrap_or_default().to_string(),
+                    }));
+
+                    while let Some(message) = iter.peek() {
+                        if let OpenAICompatibleMessage::Tool(tool_result) = message {
+                            let name = tool_call_id_to_name
+                                .get(&tool_result.tool_call_id)
+                                .ok_or_else(|| {
+                                    Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: "tool call id not found".to_string(),
+                                    })
+                                })?
+                                .to_string();
+                            tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                                id: tool_result.tool_call_id.clone(),
+                                name,
+                                result: tool_result.content.clone().unwrap_or_default().to_string(),
+                            }));
+                            // Consume the tool result that we just peeked
+                            iter.next();
+                        } else {
+                            break;
+                        }
+                    }
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::ToolResult(ToolResult {
-                            id: msg.tool_call_id,
-                            name,
-                            result: msg.content.unwrap_or_default().to_string(),
-                        })],
+                        content: tool_results,
                     });
                 }
             }
@@ -757,6 +787,147 @@ mod tests {
         assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
         assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
         assert_eq!(params.tags, tensorzero_tags);
+    }
+
+    #[test]
+    fn test_try_from_parallel_tool_calls() {
+        // Try an assistant message with text and tool calls
+        let messages = vec![
+            OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello, world!".to_string())),
+                tool_calls: Some(vec![OpenAICompatibleToolCall {
+                    id: "1".to_string(),
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+            }),
+            OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
+                content: None,
+                tool_calls: Some(vec![OpenAICompatibleToolCall {
+                    id: "2".to_string(),
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+            }),
+            OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
+                content: None,
+                tool_calls: Some(vec![OpenAICompatibleToolCall {
+                    id: "3".to_string(),
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+            }),
+            OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
+                content: Some(Value::String("Tool result 1".to_string())),
+                tool_call_id: "1".to_string(),
+            }),
+            OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
+                content: Some(Value::String("Tool result 2".to_string())),
+                tool_call_id: "2".to_string(),
+            }),
+            OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("First message".to_string()),
+            }),
+            OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
+                content: Some(Value::String("Tool result 3".to_string())),
+                tool_call_id: "3".to_string(),
+            }),
+            OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("Second message".to_string()),
+            }),
+        ];
+        let input: Input = messages.try_into().unwrap();
+
+        assert_eq!(
+            input.messages,
+            vec![
+                InputMessage {
+                    role: Role::Assistant,
+                    content: vec![
+                        InputMessageContent::Text(Text {
+                            text: "Hello, world!".to_string(),
+                        }),
+                        InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                            InferenceResponseToolCall {
+                                id: "1".to_string(),
+                                raw_name: "test_tool".to_string(),
+                                raw_arguments: "{}".to_string(),
+                                name: None,
+                                arguments: None
+                            }
+                        )),
+                    ]
+                },
+                InputMessage {
+                    role: Role::Assistant,
+                    content: vec![InputMessageContent::ToolCall(
+                        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
+                            id: "2".to_string(),
+                            raw_name: "test_tool".to_string(),
+                            raw_arguments: "{}".to_string(),
+                            name: None,
+                            arguments: None
+                        })
+                    ),]
+                },
+                InputMessage {
+                    role: Role::Assistant,
+                    content: vec![InputMessageContent::ToolCall(
+                        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
+                            id: "3".to_string(),
+                            raw_name: "test_tool".to_string(),
+                            raw_arguments: "{}".to_string(),
+                            name: None,
+                            arguments: None
+                        })
+                    )]
+                },
+                InputMessage {
+                    role: Role::User,
+                    content: vec![
+                        InputMessageContent::ToolResult(ToolResult {
+                            name: "test_tool".to_string(),
+                            result: "\"Tool result 1\"".to_string(),
+                            id: "1".to_string()
+                        }),
+                        InputMessageContent::ToolResult(ToolResult {
+                            name: "test_tool".to_string(),
+                            result: "\"Tool result 2\"".to_string(),
+                            id: "2".to_string()
+                        })
+                    ]
+                },
+                InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "First message".to_string(),
+                    })]
+                },
+                InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::ToolResult(ToolResult {
+                        name: "test_tool".to_string(),
+                        result: "\"Tool result 3\"".to_string(),
+                        id: "3".to_string()
+                    })]
+                },
+                InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Second message".to_string(),
+                    })]
+                }
+            ]
+        );
     }
 
     #[test]
