@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "datamodel-code-generator[http]>=0.26.0",
+#   "datamodel-code-generator[http]==0.35.0",
 # ]
 # ///
 """
@@ -187,6 +187,9 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 # Generate Literal["a", "b", "c"] for unit enum values
                 "--enum-field-as-literal",
                 "all",
+                # Do not prefix fields with anything, even if they start with an underscore
+                "--special-field-name-prefix",
+                "",
                 # Do not generate __future__ imports; they are useless
                 # and conflict with custom file headers
                 "--disable-future-imports",

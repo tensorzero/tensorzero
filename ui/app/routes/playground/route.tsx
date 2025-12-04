@@ -17,7 +17,7 @@ import {
 } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { listDatapoints } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
@@ -27,7 +27,8 @@ import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt, symmetricDifference } from "~/utils/common";
@@ -152,11 +153,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const datasetName = searchParams.get("datasetName");
 
-  let datapoints, totalDatapoints;
+  let getDatapointsResponse, totalDatapoints;
   try {
-    [datapoints, totalDatapoints] = datasetName
+    [getDatapointsResponse, totalDatapoints] = datasetName
       ? await Promise.all([
-          listDatapoints(datasetName, functionName ?? undefined, limit, offset),
+          getTensorZeroClient().listDatapoints(datasetName, {
+            function_name: functionName ?? undefined,
+            limit,
+            offset,
+          }),
           functionName
             ? countDatapointsForDatasetFunction(datasetName, functionName)
             : null,
@@ -171,9 +176,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  const datapoints: TensorZeroDatapoint[] =
+    getDatapointsResponse?.datapoints ?? [];
+
   let inputs;
   try {
-    inputs = datapoints
+    inputs = getDatapointsResponse
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
             const inputData = datapointInputToZodInput(datapoint.input);
@@ -460,7 +468,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               Reference Output
                             </h3>
                             {datapoint.output ? (
-                              <Output output={datapoint.output} />
+                              datapoint.type === "json" ? (
+                                <JsonOutputElement
+                                  output={datapoint.output}
+                                  outputSchema={datapoint.output_schema}
+                                />
+                              ) : (
+                                <ChatOutputElement output={datapoint.output} />
+                              )
                             ) : (
                               <div className="text-sm text-gray-500">None</div>
                             )}

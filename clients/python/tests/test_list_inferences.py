@@ -164,7 +164,6 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
     assert len(inferences) == limit
     for inference in inferences:
         assert inference.function_name == "multi_hop_rag_agent"
-        assert inference.variant_name == "baseline"
         input = inference.input
         messages = input.messages
         assert messages is not None

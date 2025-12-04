@@ -12,9 +12,9 @@ path = "tests/e2e/tests.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
-clap = { version = "4.5.51", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
 hex = "0.4.3"
-http = "1.2.0"
+http = "1.4.0"
 http-body-util = "0.1.2"
 http-serde-ext = "1.0.2"
 hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
@@ -29,7 +29,7 @@ serde_json.workspace = true
 sha2 = "0.10.9"
 tokio.workspace = true
 tokio-rustls = "0.26.1"
-tracing = "0.1.41"
+tracing = "0.1.43"
 tracing-subscriber.workspace = true
 tempfile = "3.21.0"
 

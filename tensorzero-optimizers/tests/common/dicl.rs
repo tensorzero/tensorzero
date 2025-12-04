@@ -8,12 +8,12 @@ use uuid::Uuid;
 
 use super::use_mock_inference_provider;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
-    RenderedSample, Role, System,
+    ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
+    Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
+    Role, System,
 };
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, ConfigLoadInfo, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inferences_clickhouse, CLICKHOUSE_URL,
@@ -22,7 +22,7 @@ use tensorzero_core::{
     inference::types::{
         Arguments, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, Usage,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -110,12 +110,13 @@ pub async fn test_dicl_optimization_chat() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(
@@ -205,14 +206,14 @@ pub async fn test_dicl_optimization_chat() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -394,12 +395,13 @@ pub async fn test_dicl_optimization_json() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(
@@ -489,14 +491,14 @@ pub async fn test_dicl_optimization_json() {
     .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    let input = ClientInput {
+    let input = Input {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
             "Pinocchio".into(),
         )])))),
-        messages: vec![ClientInputMessage {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -631,7 +633,7 @@ fn create_inference_params(
     function_name: &str,
     variant_name: &str,
     episode_id: Uuid,
-    input: ClientInput,
+    input: Input,
     stream: bool,
 ) -> ClientInferenceParams {
     ClientInferenceParams {

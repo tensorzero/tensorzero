@@ -1,22 +1,172 @@
+use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use crate::error::{Error, ErrorDetails};
+
+use super::stored::StoredConfig;
+use super::UninitializedConfig;
+
+/// A serializable snapshot of a config suitable for storage in the database.
+///
+/// This struct holds the parts of a config that need to be persisted to the `ConfigSnapshot`
+/// table in ClickHouse. It serves two main purposes:
+///
+/// 1. **Config Version Tracking**: Each unique config gets a deterministic hash. This hash is
+///    stored with each inference request, allowing you to correlate inference results with the
+///    exact config that was active at the time.
+///
+/// 2. **Config History**: All historical configs are preserved in the database, enabling:
+///    - Reproducing past behavior
+///    - Understanding config evolution over time
+///    - Debugging issues by comparing configs
+///
+/// # Fields
+///
+/// - `config`: The parsed config as a `StoredConfig` (will be serialized to TOML for storage)
+/// - `hash`: A deterministic Blake3 hash computed from the TOML and templates
+/// - `extra_templates`: Templates loaded from the filesystem (not in TOML)
+///
+/// # Templates in ConfigSnapshot
+///
+/// **IMPORTANT**: The `extra_templates` in this struct are **only used for database storage
+/// and hash computation**. They are NOT used at runtime by the gateway.
+///
+/// - At runtime, the gateway uses `Config.templates` (a `TemplateConfig` with compiled MiniJinja templates)
+/// - The `extra_templates` here are just the raw template strings that were loaded from disk
+/// - They're stored in the database to preserve the complete config state for reproducibility
+///
+/// # Hash Computation
+///
+/// The hash is computed from:
+/// 1. The TOML config (after sorting keys for determinism via `prepare_table_for_snapshot()`)
+/// 2. The extra templates (sorted by name for determinism)
+///
+/// This ensures that any change to the config or templates produces a different hash.
+///
+/// # Usage
+///
+/// This is typically created during config loading and then written to the database:
+///
+/// ```ignore
+/// // During config loading (in Config::load_from_toml)
+/// let snapshot = ConfigSnapshot::new(sorted_table, extra_templates)?;
+///
+/// // Later, after database connection is established
+/// write_config_snapshot(&clickhouse, snapshot).await?;
+/// ```
+#[expect(clippy::manual_non_exhaustive)]
 #[derive(Debug)]
 pub struct ConfigSnapshot {
-    pub config: String, // serialized as TOML
+    /// The config in a form suitable for serialization to TOML for database storage.
+    /// Uses `StoredConfig` instead of `UninitializedConfig` to support backward-compatible
+    /// deserialization of historical snapshots (see `stored.rs` for details).
+    pub config: StoredConfig,
+
+    /// A deterministic Blake3 hash of the config TOML and templates.
+    /// This uniquely identifies this config version.
+    pub hash: SnapshotHash,
+
+    /// Templates that were loaded from the filesystem (e.g., prompt templates).
+    /// These are stored separately from the TOML config itself.
+    ///
+    /// **NOTE**: These templates are for database storage only. At runtime, the gateway
+    /// uses the compiled templates in `Config.templates`, not these raw strings.
     pub extra_templates: HashMap<String, String>,
+
+    __private: (),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SnapshotHash(Arc<str>);
+
+impl std::fmt::Display for SnapshotHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl SnapshotHash {
+    pub fn new_test() -> SnapshotHash {
+        let hash = blake3::hash(&[]);
+        let big_int = BigUint::from_bytes_be(hash.as_bytes());
+        SnapshotHash(Arc::from(big_int.to_string()))
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl Default for SnapshotHash {
+    fn default() -> Self {
+        SnapshotHash::new_test()
+    }
 }
 
 impl ConfigSnapshot {
-    /// Compute a blake3 hash of this config snapshot
-    pub fn hash(&self) -> blake3::Hash {
-        let mut hasher = blake3::Hasher::new();
-        let ConfigSnapshot {
-            config,
+    pub fn new(
+        config_toml: toml::Table,
+        extra_templates: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        let config = UninitializedConfig::try_from(config_toml)?;
+        let stored_config = config.into();
+        let stored_config_toml =
+            prepare_table_for_snapshot(toml::Table::try_from(&stored_config).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize stored config: {e}"),
+                })
+            })?);
+        let hash = ConfigSnapshot::hash(&stored_config_toml, &extra_templates)?;
+        Ok(Self {
+            config: stored_config,
+            hash,
             extra_templates,
-        } = self;
+            __private: (),
+        })
+    }
 
-        // Hash the config string
-        hasher.update(config.as_bytes());
+    /// Create a ConfigSnapshot from a TOML string for testing.
+    /// Parses the string, computes the hash, and stores the config.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_from_toml_string(
+        config_toml: &str,
+        extra_templates: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        use super::snapshot::prepare_table_for_snapshot;
+        let table: toml::Table = config_toml.parse().map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse TOML: {e}"),
+            })
+        })?;
+        let sorted_table = prepare_table_for_snapshot(table);
+        Self::new(sorted_table, extra_templates)
+    }
+
+    /// Create an empty ConfigSnapshot for testing when the actual config doesn't matter.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_empty_for_test() -> Self {
+        Self {
+            config: StoredConfig::default(),
+            hash: SnapshotHash::new_test(),
+            extra_templates: HashMap::new(),
+            __private: (),
+        }
+    }
+
+    /// Compute a blake3 hash of this config snapshot
+    fn hash(
+        sorted_config_toml: &toml::Table,
+        extra_templates: &HashMap<String, String>,
+    ) -> Result<SnapshotHash, Error> {
+        let mut hasher = blake3::Hasher::new();
+
+        // Serialize and hash the TOML config
+        let serialized_config = toml::to_string(sorted_config_toml).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize config for hashing: {e}"),
+            })
+        })?;
+        hasher.update(serialized_config.as_bytes());
         hasher.update(&[0]); // null byte separator
 
         // Hash the extra templates in a deterministic order
@@ -30,14 +180,17 @@ impl ConfigSnapshot {
             hasher.update(&[0]); // null byte separator
         }
 
-        hasher.finalize()
+        let hash = hasher.finalize();
+        // Convert the 32-byte hash to a decimal string
+        let big_int = BigUint::from_bytes_be(hash.as_bytes());
+        Ok(SnapshotHash(Arc::from(big_int.to_string())))
     }
 }
 
 /// Recursively sorts every sub-table of the toml::Table so that the config is
 /// stable to rearranging on disk.
 /// This should be done prior to hashing.
-pub fn prepare_table_for_snapshot(raw_config: toml::Table) -> toml::Table {
+fn prepare_table_for_snapshot(raw_config: toml::Table) -> toml::Table {
     internal_prepare_table_for_snapshot(&raw_config)
 }
 

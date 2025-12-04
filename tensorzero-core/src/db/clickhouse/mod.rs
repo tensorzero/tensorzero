@@ -129,6 +129,12 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub async fn recreate(&self) -> Result<Self, Error> {
+        Ok(Self {
+            inner: self.inner.recreate().await?,
+        })
+    }
+
     pub fn database_url(&self) -> &SecretString {
         self.inner.database_url()
     }

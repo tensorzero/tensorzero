@@ -64,6 +64,10 @@ async fn write_fake<T: serde::Serialize + Send + Sync>(
 
 #[async_trait]
 impl ClickHouseClient for FakeClickHouseClient {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+        Ok(Arc::new(FakeClickHouseClient::new(self.healthy)))
+    }
+
     fn database_url(&self) -> &SecretString {
         &FAKE_DATABASE_URL
     }

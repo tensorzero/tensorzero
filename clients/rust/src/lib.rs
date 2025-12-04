@@ -30,8 +30,8 @@ pub use tensorzero_core::client::{
 
 // Client input types
 pub use tensorzero_core::client::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, Input, InputMessage,
+    InputMessageContent,
 };
 
 // Input handling utilities
@@ -45,9 +45,8 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
-    GetDatasetRowsParams,
+    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetQueries, DatasetQueryParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
@@ -81,8 +80,8 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
-    Base64File, ContentBlockChunk, File, Input, InputMessage, InputMessageContent,
-    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile, Usage,
+    Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
+    UrlFile, Usage,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{

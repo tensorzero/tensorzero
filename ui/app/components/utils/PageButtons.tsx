@@ -14,11 +14,6 @@ export default function PageButtons({
   disablePrevious,
   disableNext,
 }: PageButtonsProps) {
-  // We don't need page buttons if there is only one page
-  if (disablePrevious && disableNext) {
-    return null;
-  }
-
   return (
     <div className="mt-4 flex items-center justify-center gap-2">
       <Button

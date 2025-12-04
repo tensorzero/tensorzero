@@ -52,11 +52,12 @@ ts-rs = { workspace = true }
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 evaluations = { path = "../evaluations" }
+minijinja = { workspace = true }
 paste = "1.0.15"
 tempfile = "3.21.0"
 base64 = "0.22.1"
 tokio-stream = { workspace = true }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [[test]]
 name = "optimization-live"
@@ -73,13 +74,10 @@ name = "e2e_dicl"
 path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
 
-# TODO: The test configuration for tests in `tests/e2e/gepa/` has been temporarily removed due to timeout issues.
-# Once the timeout issues are resolved, re-enable the test configuration here.
-# The test files (e.g., `mod.rs`, `analyze.rs` in `tests/e2e/gepa/`) are intentionally left in place.
-# [[test]]
-# name = "e2e_gepa"
-# path = "tests/e2e/gepa/mod.rs"
-# required-features = ["e2e_tests"]
+[[test]]
+name = "e2e_gepa"
+path = "tests/e2e/gepa/mod.rs"
+required-features = ["e2e_tests"]
 
 # False positive (used in macro)
 [package.metadata.cargo-shear]

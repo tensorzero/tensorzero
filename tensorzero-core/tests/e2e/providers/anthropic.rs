@@ -7,9 +7,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
-    UrlFile,
+    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, File, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent, Role, UrlFile,
 };
 use url::Url;
 use uuid::Uuid;
@@ -22,7 +21,7 @@ use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, TextKind},
+    inference::types::{ContentBlockChatOutput, Text},
 };
 
 use super::common::ModelTestProvider;
@@ -719,6 +718,10 @@ pub async fn test_redacted_thinking_helper(
         "role": "assistant",
         "content": tensorzero_content_blocks,
     }));
+    array.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "text", "text": "What were you thinking about?"}],
+    }));
 
     let payload = json!({
         "model_name": model_name,
@@ -743,6 +746,8 @@ pub async fn test_redacted_thinking_helper(
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+
+    println!("New response JSON: {response_json}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
@@ -1248,11 +1253,11 @@ async fn test_forward_image_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-3-haiku-20240307".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the image".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
@@ -1327,11 +1332,11 @@ async fn test_forward_file_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-sonnet-4-5-20250929".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the PDF".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,

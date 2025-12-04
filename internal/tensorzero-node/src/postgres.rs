@@ -18,7 +18,7 @@ impl PostgresClient {
         let config = Config::new_empty()
             .await
             .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?
-            .config;
+            .dangerous_into_config_without_writing();
 
         let connection_info = setup_postgres(&config, Some(postgres_url))
             .await

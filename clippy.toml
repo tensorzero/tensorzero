@@ -7,5 +7,6 @@ disallowed-types = [
 ]
 disallowed-methods = [
     { path = "tracing_subscriber::layer::Layer::with_filter", reason = "Call `apply_filter_fixing_tracing_bug` instead" },
-    { path = "tokio::task::spawn", reason = "Verify that it's okay for the gateway to shut down without waiting for this task"}
+    { path = "tokio::task::spawn", reason = "Verify that it's okay for the gateway to shut down without waiting for this task" },
+    { path = "std::process::exit", reason = "Verify that it's okay to shut down the entire process without our normal shutdown logic" },
 ]

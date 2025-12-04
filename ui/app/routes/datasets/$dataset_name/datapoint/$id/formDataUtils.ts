@@ -1,9 +1,23 @@
 import { z } from "zod";
-import type {
-  ContentBlockChatOutput,
-  JsonInferenceOutput,
-  Input,
-} from "~/types/tensorzero";
+import type { Input } from "~/types/tensorzero";
+import {
+  contentBlockChatOutputSchema,
+  jsonInferenceOutputSchema,
+  ZodJsonValueSchema,
+} from "~/utils/clickhouse/common";
+
+// ============================================================================
+// Output Schemas
+// ============================================================================
+
+/**
+ * Combined output schema - discriminates by structure (array vs object with raw/parsed).
+ * null is used to indicate deletion (backend uses double-option pattern).
+ */
+const OutputSchema = z.union([
+  z.array(contentBlockChatOutputSchema),
+  jsonInferenceOutputSchema,
+]);
 
 // ============================================================================
 // Helper Functions
@@ -47,16 +61,12 @@ export const UpdateDatapointFormDataSchema = z.object({
   dataset_name: z.string().min(1, "Dataset name is required"),
   function_name: z.string().min(1, "Function name is required"),
   id: z.string().uuid("Invalid datapoint ID format"),
-  episode_id: z.string().uuid("Invalid episode ID format").optional(),
+  episode_id: z.string().uuid("Invalid episode ID format").nullish(),
   input: z.custom<Input>((val) => val !== null && typeof val === "object", {
     message: "Input must be a valid object",
   }),
-  // TODO: this could be discriminated over `type` to be more type-safe but it's progress...
-  output: z
-    .custom<
-      ContentBlockChatOutput[] | JsonInferenceOutput
-    >((val) => val === undefined || (val !== null && typeof val === "object"), { message: "Output must be a valid object or undefined" })
-    .optional(),
+  output: OutputSchema.optional().nullable(),
+  output_schema: ZodJsonValueSchema.optional(),
   tags: z.record(z.string(), z.string()).optional(),
   action: z.literal("update"),
 });
@@ -80,12 +90,27 @@ export type RenameDatapointFormData = z.infer<
 >;
 
 /**
+ * Schema for `"clone"` form action.
+ * The datapoint field is a JSON string containing the full datapoint data to clone.
+ */
+export const CloneDatapointFormDataSchema = z.object({
+  target_dataset: z.string().min(1, "Target dataset name is required"),
+  datapoint: z.string().min(1, "Datapoint data is required"),
+  action: z.literal("clone"),
+});
+
+export type CloneDatapointFormData = z.infer<
+  typeof CloneDatapointFormDataSchema
+>;
+
+/**
  * Discriminated union of all datapoint actions.
  */
 export const DatapointActionSchema = z.discriminatedUnion("action", [
   DeleteDatapointFormDataSchema,
   UpdateDatapointFormDataSchema,
   RenameDatapointFormDataSchema,
+  CloneDatapointFormDataSchema,
 ]);
 
 export type DatapointAction = z.infer<typeof DatapointActionSchema>;
@@ -182,6 +207,7 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
   } else if (action === "update") {
     const inputStr = formData.get("input") as string | null;
     const outputStr = formData.get("output") as string | null;
+    const outputSchemaStr = formData.get("output_schema") as string | null;
     const tagsStr = formData.get("tags") as string | null;
 
     rawData = {
@@ -203,6 +229,10 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
       rawData.output = safeJsonParse(outputStr, "output");
     }
 
+    if (outputSchemaStr) {
+      rawData.output_schema = safeJsonParse(outputSchemaStr, "output_schema");
+    }
+
     if (tagsStr) {
       rawData.tags = safeJsonParse(tagsStr, "tags");
     }
@@ -210,6 +240,12 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
     rawData = {
       ...baseData,
       name: formData.get("name"),
+    };
+  } else if (action === "clone") {
+    rawData = {
+      target_dataset: formData.get("target_dataset"),
+      datapoint: formData.get("datapoint"),
+      action,
     };
   } else {
     rawData = baseData;
@@ -253,12 +289,16 @@ export function serializeUpdateDatapointToFormData(
   formData.append("function_name", validatedData.function_name);
   formData.append("id", validatedData.id);
   formData.append("input", JSON.stringify(validatedData.input));
-
+  // Always send output (even though optional): use `null` to indicate deletion (backend uses double-option pattern)
+  formData.append("output", JSON.stringify(validatedData.output ?? null));
   if (validatedData.episode_id) {
     formData.append("episode_id", validatedData.episode_id);
   }
-  if (validatedData.output !== undefined) {
-    formData.append("output", JSON.stringify(validatedData.output));
+  if (validatedData.output_schema !== undefined) {
+    formData.append(
+      "output_schema",
+      JSON.stringify(validatedData.output_schema),
+    );
   }
   if (validatedData.tags) {
     formData.append("tags", JSON.stringify(validatedData.tags));

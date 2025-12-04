@@ -3,6 +3,7 @@ mod create_datapoints;
 mod create_from_inferences;
 mod delete_datapoints;
 mod get_datapoints;
+mod list_datasets;
 mod update_datapoints;
 
 pub mod types;
@@ -16,6 +17,7 @@ pub use get_datapoints::{
     get_datapoints, get_datapoints_by_dataset_handler, get_datapoints_handler, list_datapoints,
     list_datapoints_handler,
 };
+pub use list_datasets::list_datasets_handler;
 pub use update_datapoints::{
     update_datapoints, update_datapoints_handler, update_datapoints_metadata,
     update_datapoints_metadata_handler,

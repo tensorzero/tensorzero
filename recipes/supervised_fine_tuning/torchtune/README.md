@@ -3,6 +3,7 @@
 The `torchtune.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning of models using [torchtune](https://docs.pytorch.org/torchtune/main/) based on data collected by the TensorZero Gateway.
 
 You will need to set a few environment variables in the shell your notebook will run in.
+
 - Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero`.
 - Set `HF_TOKEN=<your-hf-token>` to your huggingface token to use models like Llama and Gemma.
 - Set `CHECKPOINT_HOME=</path/to/store/large/models>` as the directory to save models downloaded from huggingface.

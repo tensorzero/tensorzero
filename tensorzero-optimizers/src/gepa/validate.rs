@@ -200,7 +200,7 @@ fn validate_stored_output(stored_output: &Option<StoredOutput>) -> Result<(), St
                     }
                 }
                 // Unknown is fine (we'll let it through)
-                ContentBlockChatOutput::Unknown { .. } => {}
+                ContentBlockChatOutput::Unknown(_) => {}
             }
         }
     }
@@ -338,8 +338,9 @@ pub fn validate_examples(examples: Vec<RenderedSample>) -> Result<Vec<RenderedSa
     Ok(valid_examples)
 }
 
-/// Initializes the Pareto frontier with baseline variants or provided initial variants
-pub fn initialize_pareto_frontier(
+/// Extracts UninitializedVariantConfigs to initialize the Pareto frontier with existing
+/// variants or provided initial variants
+pub fn get_uninitialized_variant_configs(
     config: &GEPAConfig,
     function_context: &FunctionContext,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
@@ -448,7 +449,7 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text, Unknown,
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
@@ -779,10 +780,13 @@ mod tests {
 
     #[test]
     fn test_validate_stored_output_chat_unknown_block() {
-        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Unknown {
-            data: serde_json::Value::Null,
-            model_provider_name: None,
-        }]));
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Unknown(
+            Unknown {
+                data: serde_json::Value::Null,
+                model_name: None,
+                provider_name: None,
+            },
+        )]));
 
         // Unknown blocks should be accepted
         let result = validate_stored_output(&output);
@@ -918,7 +922,7 @@ mod tests {
     // Note: Early exit behavior and File content validation are covered by integration tests
 
     // ============================================================================
-    // Helper Functions for initialize_pareto_frontier tests
+    // Helper Functions for get_uninitialized_variant_configs tests
     // ============================================================================
 
     /// Creates a minimal UninitializedChatCompletionConfig for testing
@@ -1061,11 +1065,11 @@ mod tests {
     }
 
     // ============================================================================
-    // Tests for initialize_pareto_frontier
+    // Tests for get_uninitialized_variant_configs
     // ============================================================================
 
     #[test]
-    fn test_initialize_pareto_frontier_with_all_variants() {
+    fn test_get_uninitialized_variant_configs_with_all_variants() {
         // Setup: Create function with multiple ChatCompletion variants
         let variants = create_test_variants(3);
 
@@ -1073,7 +1077,7 @@ mod tests {
         let config = create_gepa_config("test_function", None, None);
 
         // Test: Initialize without initial_variants (should use all variants)
-        let result = initialize_pareto_frontier(&config, &function_context);
+        let result = get_uninitialized_variant_configs(&config, &function_context);
 
         assert!(result.is_ok());
         let frontier = result.unwrap();
@@ -1084,7 +1088,7 @@ mod tests {
     }
 
     #[test]
-    fn test_initialize_pareto_frontier_with_initial_variants() {
+    fn test_get_uninitialized_variant_configs_with_initial_variants() {
         // Setup: Create function with multiple variants
         let variants = create_test_variants(3);
 
@@ -1094,7 +1098,7 @@ mod tests {
         let initial_variants = Some(vec!["variant1".to_string(), "variant3".to_string()]);
         let config = create_gepa_config("test_function", initial_variants, None);
 
-        let result = initialize_pareto_frontier(&config, &function_context);
+        let result = get_uninitialized_variant_configs(&config, &function_context);
 
         assert!(result.is_ok());
         let frontier = result.unwrap();
@@ -1108,7 +1112,7 @@ mod tests {
     }
 
     #[test]
-    fn test_initialize_pareto_frontier_nonexistent_variant() {
+    fn test_get_uninitialized_variant_configs_nonexistent_variant() {
         // Setup: Create function with variants
         let mut variants = HashMap::new();
         variants.insert(
@@ -1122,7 +1126,7 @@ mod tests {
         let initial_variants = Some(vec!["variant1".to_string(), "nonexistent".to_string()]);
         let config = create_gepa_config("test_function", initial_variants, None);
 
-        let result = initialize_pareto_frontier(&config, &function_context);
+        let result = get_uninitialized_variant_configs(&config, &function_context);
 
         assert!(result.is_err());
         let err = result.unwrap_err();

@@ -14,9 +14,8 @@ use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams,
-    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    JsonInferenceDatapointInsert,
+    DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams, GetDatapointParams,
+    GetDatapointsParams, GetDatasetMetadataParams, JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
@@ -136,76 +135,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(response.metadata.written_rows as u32)
     }
 
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error> {
-        let dataset_name = &params.dataset_name;
-        let limit = params.limit;
-
-        // Ensure offset is not negative
-        let offset = std::cmp::max(0, params.offset);
-
-        let query = r"
-            SELECT *
-            FROM (
-                SELECT
-                    id,
-                    'chat' as type,
-                    function_name,
-                    name,
-                    episode_id,
-                    formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-                FROM ChatInferenceDatapoint
-                FINAL
-                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
-                UNION ALL
-                SELECT
-                    id,
-                    'json' as type,
-                    function_name,
-                    name,
-                    episode_id,
-                    formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-                FROM JsonInferenceDatapoint
-                FINAL
-                WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
-            )
-            ORDER BY updated_at DESC, id DESC
-            LIMIT {limit:UInt32}
-            OFFSET {offset:UInt32}
-            FORMAT JSONEachRow
-        ";
-
-        let limit_str = limit.to_string();
-        let offset_str = offset.to_string();
-
-        let mut query_params = HashMap::new();
-        query_params.insert("dataset_name", dataset_name.as_str());
-        query_params.insert("limit", limit_str.as_str());
-        query_params.insert("offset", offset_str.as_str());
-
-        let response = self
-            .run_query_synchronous(query.to_string(), &query_params)
-            .await?;
-
-        // Parse the response as JSON lines
-        let rows: Vec<DatasetDetailRow> = response
-            .response
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| {
-                serde_json::from_str(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseDeserialization {
-                        message: format!("Failed to deserialize DatasetDetailRow: {e}"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(rows)
-    }
-
     async fn get_dataset_metadata(
         &self,
         params: &GetDatasetMetadataParams,
@@ -238,11 +167,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         let query = format!(
             r"
-            SELECT
-                dataset_name,
-                toUInt32(sum(count)) AS count,
-                formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-            FROM (
+            WITH unioned_datasets AS (
                 SELECT
                     dataset_name,
                     toUInt32(count()) AS count,
@@ -263,8 +188,13 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {function_where_clause}
                 GROUP BY dataset_name
             )
+            SELECT
+                dataset_name,
+                toUInt32(sum(count)) AS count,
+                formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+            FROM unioned_datasets
             GROUP BY dataset_name
-            ORDER BY last_updated DESC
+            ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
             {limit_clause}
             {offset_clause}
             FORMAT JSONEachRow
@@ -1801,108 +1731,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_dataset_rows_executes_successfully() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .withf(|query, parameters| {
-                assert_query_contains(query, "
-                SELECT *
-                FROM (
-                    SELECT
-                        id,
-                        'chat' as type,
-                        function_name,
-                        name,
-                        episode_id,
-                        formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-                    FROM ChatInferenceDatapoint
-                    FINAL
-                    WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
-                    UNION ALL
-                    SELECT
-                        id,
-                        'json' as type,
-                        function_name,
-                        name,
-                        episode_id,
-                        formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-                    FROM JsonInferenceDatapoint
-                    FINAL
-                    WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
-                )
-                ORDER BY updated_at DESC, id DESC
-                LIMIT {limit:UInt32}
-                OFFSET {offset:UInt32}
-                FORMAT JSONEachRow");
-
-                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
-                assert_eq!(parameters.get("limit"), Some(&"10"));
-                assert_eq!(parameters.get("offset"), Some(&"20"));
-
-                true
-            })
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from(r#"
-                    {"id": "0199cff5-3130-7e90-815c-91219e1a2dae","type": "chat","function_name": "test_function","name": "test_name","episode_id": "test_episode_id","updated_at": "2021-01-01T00:00:00Z"}
-                    {"id": "f11946d7-4986-43a7-b530-33e6dbba3817","type": "chat","function_name": "test_function","name": "test_name_2","updated_at": "2021-01-01T00:00:00Z"}
-                    "#),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 1,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = GetDatasetRowsParams {
-            dataset_name: "test_dataset".to_string(),
-            limit: 10,
-            offset: 20,
-        };
-
-        let rows = conn.get_dataset_rows(&params).await.unwrap();
-
-        assert_eq!(rows.len(), 2, "Should return 2 rows");
-        assert_eq!(rows[0].id, "0199cff5-3130-7e90-815c-91219e1a2dae");
-        assert_eq!(rows[1].id, "f11946d7-4986-43a7-b530-33e6dbba3817");
-    }
-
-    #[tokio::test]
     async fn test_get_dataset_metadata_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "
+                WITH unioned_datasets AS (
                     SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM ChatInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                    UNION ALL
+                    SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM JsonInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                )
+                SELECT
                     dataset_name,
                     toUInt32(sum(count)) AS count,
-                    formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-                    FROM (
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM ChatInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                        UNION ALL
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM JsonInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                )
+                    formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+                FROM unioned_datasets
                 GROUP BY dataset_name
-                ORDER BY last_updated DESC
+                ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
                 LIMIT {limit:UInt32}
                 OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");
