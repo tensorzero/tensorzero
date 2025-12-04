@@ -22,6 +22,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
         )
         .route(
+            "/internal/ui-config",
+            get(endpoints::ui::get_config::ui_config_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
