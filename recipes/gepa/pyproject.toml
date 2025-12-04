@@ -1,0 +1,16 @@
+[project]
+name = "tensorzero-recipes-gepa"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ipykernel",
+    "notebook",
+    "numpy",
+    "tensorzero",
+    "toml",
+]
+
+# TODO: Remove this section once PR #4730 (andrew/gepa-python-client) lands
+[tool.uv.sources]
+tensorzero = { path = "../../clients/python", editable = true }
