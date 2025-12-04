@@ -43,11 +43,11 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install mini-swe-agent
-        run: "uv tool install mini-swe-agent --from \"git+https://github.com/virajmehta/mini-swe-agent.git@main\""
+        run: 'uv tool install mini-swe-agent --from "git+https://github.com/virajmehta/mini-swe-agent.git@main"'
 
       - name: Generate patch
         id: generate
-        uses: tensorzero/experimental-ci-bot/generate-pr-patch@main
+        uses: tensorzero/experimental-ci-bot/generate-pr-patch@6075c5483e949af3acec76c40b755dcccd99e6b0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
