@@ -21,6 +21,7 @@ pub struct ExtraBodyReplacement {
 #[export_schema]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
+    #[schemars(title = "ExtraBodyReplacementKindValue")]
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
     #[serde(
