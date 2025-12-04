@@ -490,7 +490,7 @@ pub async fn test_streaming_cache_without_err() {
     // for the second call)
     let original_content =
         check_test_streaming_cache_with_err(episode_id, seed, false, false).await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     let cached_content = check_test_streaming_cache_with_err(episode_id, seed, false, true).await;
     assert_eq!(original_content, cached_content);
 }

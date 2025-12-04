@@ -47,7 +47,7 @@ async fn test_otel_export_trace_export_with_parent() {
 #[tokio::test]
 async fn test_otel_export_trace_export_with_custom_header() {
     // Prevent overloading Tempo (it gives us 'job queue full' errors if we send too many requests at once)
-    let semaphore = Arc::new(Semaphore::new(10));
+    let semaphore = Arc::new(Semaphore::new(2));
     let mut futures = JoinSet::new();
     let num_tasks = 100;
     for _ in 0..num_tasks {
@@ -201,7 +201,18 @@ pub async fn get_tempo_spans(
     let start_time = start_time.timestamp();
     let now = Utc::now().timestamp();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .retry(
+            reqwest::retry::for_host("localhost").classify_fn(|req_resp| {
+                if req_resp.status().is_some_and(|s| s.is_success()) {
+                    req_resp.success()
+                } else {
+                    req_resp.retryable()
+                }
+            }),
+        )
+        .build()
+        .unwrap();
 
     let tempo_base_url = std::env::var("TENSORZERO_TEMPO_URL")
         .unwrap_or_else(|_| "http://localhost:3200".to_string());
