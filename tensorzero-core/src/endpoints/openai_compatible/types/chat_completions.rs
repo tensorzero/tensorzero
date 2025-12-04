@@ -532,8 +532,8 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 OpenAICompatibleMessage::Tool(msg) => {
                     // When we encounter a tool call, coalesce all subsequent tool calls into a single
                     // `Role::User` message.
-                    // This ensures that parallel tool calls can be passed through properly to providers
-                    // (e.g. AWS Bedrock) that require parallel tool calls results to occur in the same
+                    // This ensures that parallel tool call results can be passed through properly to providers
+                    // (e.g. AWS Bedrock) that require parallel tool call results to occur in the same
                     // `Role::User` message.
                     let mut tool_results = Vec::new();
                     let name = tool_call_id_to_name
