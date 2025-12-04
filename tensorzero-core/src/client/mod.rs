@@ -1,7 +1,8 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
-use crate::config::ConfigFileGlob;
+use crate::config::{ConfigFileGlob, RuntimeOverlay};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -490,20 +491,23 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                    Config::load_from_path_optional_verify_credentials(&glob, *verify_credentials)
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
-                            error: TensorZeroError::Other { source: e.into() },
-                            glob,
-                        })?
+                    Box::pin(Config::load_from_path_optional_verify_credentials(
+                        &glob,
+                        *verify_credentials,
+                    ))
+                    .await
+                    .map_err(|e| ClientBuilderError::ConfigParsing {
+                        error: TensorZeroError::Other { source: e.into() },
+                        glob,
+                    })?
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Config::new_empty()
-                        .await
-                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                    Box::pin(Config::new_empty()).await.map_err(|e| {
+                        ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob: ConfigFileGlob::new_empty(),
-                        })?
+                        }
+                    })?
                 };
                 let clickhouse_connection_info =
                     setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
@@ -615,6 +619,92 @@ impl ClientBuilder {
             #[cfg(feature = "e2e_tests")]
             last_body: Default::default(),
         })
+    }
+
+    /// Creates a client from a historical ConfigSnapshot.
+    ///
+    /// This allows replaying inferences with the exact configuration that was used
+    /// at the time the snapshot was created. The semantic configuration (functions,
+    /// models, variants, templates, etc.) comes from the snapshot, while runtime
+    /// infrastructure settings are overlaid from the live config.
+    ///
+    /// # Parameters
+    /// - `snapshot`: The ConfigSnapshot to load from (historical semantic config)
+    /// - `live_config`: Reference to the current live gateway config. Runtime fields
+    ///   (`gateway`, `object_store_info`, `postgres`, `rate_limiting`, `http_client`)
+    ///   are copied from this config to override the snapshot's values, since these
+    ///   represent current infrastructure rather than historical behavior.
+    /// - `clickhouse_url`: Current ClickHouse connection (not from snapshot)
+    /// - `postgres_url`: Current Postgres connection (not from snapshot)
+    /// - `verify_credentials`: Whether to validate model provider credentials
+    /// - `timeout`: Optional timeout for gateway operations
+    ///
+    /// # Returns
+    /// A Client configured with historical semantic settings but current runtime parameters
+    pub async fn from_config_snapshot(
+        snapshot: ConfigSnapshot,
+        live_config: &Config,
+        clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
+        verify_credentials: bool,
+        timeout: Option<Duration>,
+    ) -> Result<Client, ClientBuilderError> {
+        // Create runtime overlay from live config.
+        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
+        // reflect the current environment rather than historical snapshot values.
+        let runtime_overlay = RuntimeOverlay::from_config(live_config);
+
+        // Load config from snapshot with runtime overlay applied
+        let unwritten_config = Box::pin(Config::load_from_snapshot(
+            snapshot,
+            runtime_overlay,
+            verify_credentials,
+        ))
+        .await
+        .map_err(|e| ClientBuilderError::ConfigParsing {
+            error: TensorZeroError::Other { source: e.into() },
+            glob: ConfigFileGlob::new_empty(),
+        })?;
+
+        // Setup ClickHouse with runtime URL
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Convert config_load_info into Config with hash
+        let config = unwritten_config
+            .into_config(&clickhouse_connection_info)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        let config = Arc::new(config);
+
+        // Validate embedded gateway configuration
+        Self::validate_embedded_gateway_config(&config, false)?;
+
+        // Setup Postgres with runtime URL
+        let postgres_connection_info =
+            setup_postgres(&config, postgres_url).await.map_err(|e| {
+                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Use HTTP client from config (now overlaid from live_config)
+        let http_client = config.http_client.clone();
+
+        // Build client using FromComponents pattern
+        let builder = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout,
+        });
+
+        Box::pin(builder.build()).await
     }
 
     /// Validates configuration for embedded gateway mode.
@@ -960,14 +1050,14 @@ pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
 ) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
-        Some(path) => Config::load_from_path_optional_verify_credentials(
+        Some(path) => Box::pin(Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
                 .map_err(|e| TensorZeroError::Other { source: e.into() })?,
             false,
-        )
+        ))
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::new_empty()
+        None => Ok(Box::pin(Config::new_empty())
             .await
             .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }

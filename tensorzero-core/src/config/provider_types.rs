@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "e2e_tests")]
 use url::Url;
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -46,14 +46,14 @@ pub struct ProviderTypesConfig {
 
 // Anthropic
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: AnthropicDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AnthropicDefaults {
     #[ts(type = "string")]
@@ -72,14 +72,14 @@ impl Default for AnthropicDefaults {
 
 // Azure
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AzureProviderTypeConfig {
     #[serde(default)]
     pub defaults: AzureDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AzureDefaults {
     #[ts(type = "string")]
@@ -98,14 +98,14 @@ impl Default for AzureDefaults {
 
 // DeepSeek
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct DeepSeekProviderTypeConfig {
     #[serde(default)]
     pub defaults: DeepSeekDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct DeepSeekDefaults {
     #[ts(type = "string")]
@@ -124,14 +124,14 @@ impl Default for DeepSeekDefaults {
 
 // Fireworks
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FireworksProviderTypeConfig {
     #[serde(default)]
     pub defaults: FireworksDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FireworksDefaults {
     #[ts(type = "string")]
@@ -206,14 +206,14 @@ impl Default for GCPDefaults {
 
 // Google AI Studio
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
     #[serde(default)]
     pub defaults: GoogleAIStudioGeminiDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GoogleAIStudioGeminiDefaults {
     #[ts(type = "string")]
@@ -232,14 +232,14 @@ impl Default for GoogleAIStudioGeminiDefaults {
 
 // Groq
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GroqProviderTypeConfig {
     #[serde(default)]
     pub defaults: GroqDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GroqDefaults {
     #[ts(type = "string")]
@@ -258,14 +258,14 @@ impl Default for GroqDefaults {
 
 // Hyperbolic
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct HyperbolicProviderTypeConfig {
     #[serde(default)]
     pub defaults: HyperbolicDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct HyperbolicDefaults {
     #[ts(type = "string")]
@@ -284,14 +284,14 @@ impl Default for HyperbolicDefaults {
 
 // Mistral
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MistralProviderTypeConfig {
     #[serde(default)]
     pub defaults: MistralDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MistralDefaults {
     #[ts(type = "string")]
@@ -310,7 +310,7 @@ impl Default for MistralDefaults {
 
 // OpenAI
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
@@ -320,7 +320,7 @@ pub struct OpenAIProviderTypeConfig {
     pub batch_inference_api_base: Option<Url>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenAIDefaults {
     #[ts(type = "string")]
@@ -339,13 +339,13 @@ impl Default for OpenAIDefaults {
 
 // Openrouter
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenRouterProviderTypeConfig {
     pub defaults: OpenRouterDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenRouterDefaults {
     #[ts(type = "string")]
@@ -364,14 +364,14 @@ impl Default for OpenRouterDefaults {
 
 // SGLang
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SGLangProviderTypeConfig {
     #[serde(default)]
     pub defaults: SGLangDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SGLangDefaults {
     #[ts(type = "string")]
@@ -390,13 +390,13 @@ impl Default for SGLangDefaults {
 
 // TGI
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TGIProviderTypeConfig {
     pub defaults: TGIDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TGIDefaults {
     #[ts(type = "string")]
@@ -415,13 +415,13 @@ impl Default for TGIDefaults {
 
 // Together
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TogetherProviderTypeConfig {
     pub defaults: TogetherDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TogetherDefaults {
     #[ts(type = "string")]
@@ -440,14 +440,14 @@ impl Default for TogetherDefaults {
 
 // vLLM
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct VLLMProviderTypeConfig {
     #[serde(default)]
     pub defaults: VLLMDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct VLLMDefaults {
     #[ts(type = "string")]
@@ -466,14 +466,14 @@ impl Default for VLLMDefaults {
 
 // xAI
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct XAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: XAIDefaults,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct XAIDefaults {
     #[ts(type = "string")]
