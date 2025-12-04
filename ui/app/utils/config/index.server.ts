@@ -3,8 +3,6 @@ import { getConfig as getConfigNative } from "tensorzero-node";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
 
-const CACHE_TTL_MS = 1000 * 60; // 1 minute
-
 /*
 Config Context provider:
 
@@ -50,12 +48,7 @@ export function getConfigPath(): string | null {
   return env.TENSORZERO_UI_CONFIG_PATH;
 }
 
-interface ConfigCache {
-  data: Config;
-  timestamp: number;
-}
-
-let configCache: ConfigCache | null = null;
+let configCache: Config | undefined = undefined;
 
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
@@ -69,48 +62,18 @@ const defaultFunctionConfig: FunctionConfig = {
   experimentation: { type: "uniform" },
 };
 
-export function getDefaultFunctionConfigWithVariant(
-  model_name: string,
-): FunctionConfig {
-  const functionConfig = defaultFunctionConfig;
-  functionConfig.variants[model_name] = {
-    inner: {
-      type: "chat_completion",
-      model: model_name,
-      weight: null,
-      templates: {},
-      temperature: null,
-      top_p: null,
-      max_tokens: null,
-      presence_penalty: null,
-      frequency_penalty: null,
-      seed: null,
-      stop_sequences: null,
-      json_mode: null,
-      retries: { num_retries: 0, max_delay_s: 0 },
-    },
-    timeouts: {
-      non_streaming: { total_ms: null },
-      streaming: { ttft_ms: null },
-    },
-  };
-  return functionConfig;
-}
-
 export async function getConfig() {
-  const now = Date.now();
-
-  if (configCache && now - configCache.timestamp < CACHE_TTL_MS) {
-    return configCache.data;
+  if (configCache) {
+    return configCache;
   }
 
-  // Cache is invalid or doesn't exist, reload it
+  // Cache doesn't exist, load it.
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
   freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
-  configCache = { data: freshConfig, timestamp: now };
-  return freshConfig;
+  configCache = freshConfig;
+  return configCache;
 }
 
 /**
