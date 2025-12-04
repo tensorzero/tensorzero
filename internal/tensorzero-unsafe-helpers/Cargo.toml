@@ -7,5 +7,5 @@ license.workspace = true
 
 [dependencies]
 
-# NOTE - we do not inherit lints from the workspace, we we need to allow unsafe code in this crate
+# NOTE - we do not inherit lints from the workspace, so we need to allow unsafe code in this crate
 [lints]
