@@ -13,6 +13,7 @@ members = [
     "tensorzero-optimizers",
     "internal/tensorzero-derive",
     "internal/tensorzero-auth",
+    "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
 ]
