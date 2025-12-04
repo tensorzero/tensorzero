@@ -172,7 +172,7 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 
 # %%
 rendered_samples = tensorzero_client.experimental_render_samples(
-    stored_inferences=stored_inferences,
+    stored_samples=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
 
