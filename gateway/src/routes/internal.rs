@@ -41,4 +41,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/datasets",
             get(endpoints::datasets::v1::list_datasets_handler),
         )
+        .route(
+            "/internal/aggregated_feedback/{function_name}",
+            get(endpoints::aggregated_feedback::get_aggregated_feedback_handler),
+        )
 }

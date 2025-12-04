@@ -1,3 +1,4 @@
+mod aggregated_feedback_queries;
 mod bandit_queries;
 mod dataset_queries;
 mod experimentation_queries;

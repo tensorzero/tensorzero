@@ -6,9 +6,9 @@ use uuid::Uuid;
 use crate::{
     db::{
         feedback::{
-            BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
-            DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow,
+            AggregatedFeedbackByVariant, BooleanMetricFeedbackRow, CommentFeedbackRow,
+            CumulativeFeedbackTimeSeriesPoint, DemonstrationFeedbackRow, FeedbackBounds,
+            FeedbackBoundsByType, FeedbackByVariant, FeedbackRow, FloatMetricFeedbackRow,
         },
         FeedbackQueries, TableBounds, TimeWindow,
     },
@@ -811,6 +811,76 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &query_params).await?;
 
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_aggregated_feedback_by_variant(
+        &self,
+        function_name: &str,
+        variant_name: Option<&str>,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<AggregatedFeedbackByVariant>, Error> {
+        // Build variant filter
+        let variant_filter = match variant_name {
+            None => String::new(),
+            Some(name) => format!(
+                " AND variant_name = '{}'",
+                escape_string_for_clickhouse_literal(name)
+            ),
+        };
+
+        // Build metric filter and select/group by clause
+        // When metric_name is provided, we filter by it and don't need to group by metric_name
+        // When metric_name is not provided, we select metric_name and group by it
+        let (metric_select, metric_filter, metric_group_by) = match metric_name {
+            Some(_) => (
+                "{metric_name:String} as metric_name".to_string(),
+                " AND metric_name = {metric_name:String}".to_string(),
+                String::new(),
+            ),
+            None => (
+                "metric_name".to_string(),
+                String::new(),
+                ", metric_name".to_string(),
+            ),
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                variant_name,
+                {metric_select},
+                avgMerge(feedback_mean) as mean,
+                varSampStableMerge(feedback_variance) as variance,
+                sum(count) as count
+            FROM FeedbackByVariantStatistics
+            WHERE function_name = {{function_name:String}}{metric_filter}{variant_filter}
+            GROUP BY variant_name{metric_group_by}
+            FORMAT JSONEachRow"
+        );
+
+        let mut params_map = HashMap::new();
+        params_map.insert("function_name".to_string(), function_name.to_string());
+        if let Some(metric) = metric_name {
+            params_map.insert("metric_name".to_string(), metric.to_string());
+        }
+
+        let query_params: HashMap<&str, &str> = params_map
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let res = self.run_query_synchronous(query, &query_params).await?;
+
+        res.response
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<AggregatedFeedbackByVariant>, _>>()
+            .map_err(|e| {
+                Error::new(crate::error::ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize AggregatedFeedbackByVariant: {e}"),
+                })
+            })
     }
 }
 
@@ -1734,5 +1804,223 @@ mod tests {
         assert_eq!(result[0].mean, 0.85);
         assert_eq!(result[1].variant_name, "variant2");
         assert_eq!(result[1].mean, 0.90);
+    }
+
+    // Tests for get_aggregated_feedback_by_variant
+
+    #[tokio::test]
+    async fn test_get_aggregated_feedback_by_variant_no_filters() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Should group by both variant_name and metric_name when no metric filter
+                assert_query_contains(query, "SELECT variant_name, metric_name");
+                assert_query_contains(query, "avgMerge(feedback_mean) as mean");
+                assert_query_contains(query, "varSampStableMerge(feedback_variance) as variance");
+                assert_query_contains(query, "sum(count) as count");
+                assert_query_contains(query, "FROM FeedbackByVariantStatistics");
+                assert_query_contains(query, "WHERE function_name = {function_name:String}");
+                assert_query_contains(query, "GROUP BY variant_name, metric_name");
+                assert_query_does_not_contain(query, "AND metric_name =");
+                assert_query_does_not_contain(query, "AND variant_name =");
+
+                assert_eq!(
+                    parameters.get("function_name"),
+                    Some(&"test_function".to_string().as_str())
+                );
+                assert!(!parameters.contains_key("metric_name"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"variant_name":"variant1","metric_name":"accuracy","mean":0.85,"variance":0.01,"count":"100"}
+{"variant_name":"variant1","metric_name":"latency","mean":0.5,"variance":0.02,"count":"50"}
+{"variant_name":"variant2","metric_name":"accuracy","mean":0.90,"variance":0.005,"count":"75"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 3,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_aggregated_feedback_by_variant("test_function", None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[0].mean, 0.85);
+        assert_eq!(result[0].count, 100);
+    }
+
+    #[tokio::test]
+    async fn test_get_aggregated_feedback_by_variant_with_metric_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Should filter by metric_name and not group by it
+                assert_query_contains(query, "{metric_name:String} as metric_name");
+                assert_query_contains(query, "AND metric_name = {metric_name:String}");
+                assert_query_contains(query, "GROUP BY variant_name");
+                assert_query_does_not_contain(query, "GROUP BY variant_name, metric_name");
+
+                assert_eq!(
+                    parameters.get("function_name"),
+                    Some(&"test_function".to_string().as_str())
+                );
+                assert_eq!(
+                    parameters.get("metric_name"),
+                    Some(&"accuracy".to_string().as_str())
+                );
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"variant_name":"variant1","metric_name":"accuracy","mean":0.85,"variance":0.01,"count":"100"}
+{"variant_name":"variant2","metric_name":"accuracy","mean":0.90,"variance":0.005,"count":"75"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_aggregated_feedback_by_variant("test_function", None, Some("accuracy"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[1].metric_name, "accuracy");
+    }
+
+    #[tokio::test]
+    async fn test_get_aggregated_feedback_by_variant_with_variant_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Should filter by variant_name
+                assert_query_contains(query, "AND variant_name = 'variant1'");
+                assert_query_contains(query, "GROUP BY variant_name, metric_name");
+
+                assert_eq!(
+                    parameters.get("function_name"),
+                    Some(&"test_function".to_string().as_str())
+                );
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"variant_name":"variant1","metric_name":"accuracy","mean":0.85,"variance":0.01,"count":"100"}
+{"variant_name":"variant1","metric_name":"latency","mean":0.5,"variance":0.02,"count":"50"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_aggregated_feedback_by_variant("test_function", Some("variant1"), None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[1].variant_name, "variant1");
+    }
+
+    #[tokio::test]
+    async fn test_get_aggregated_feedback_by_variant_with_both_filters() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Should filter by both metric_name and variant_name
+                assert_query_contains(query, "AND metric_name = {metric_name:String}");
+                assert_query_contains(query, "AND variant_name = 'variant1'");
+                assert_query_contains(query, "GROUP BY variant_name");
+                assert_query_does_not_contain(query, "GROUP BY variant_name, metric_name");
+
+                assert_eq!(
+                    parameters.get("function_name"),
+                    Some(&"test_function".to_string().as_str())
+                );
+                assert_eq!(
+                    parameters.get("metric_name"),
+                    Some(&"accuracy".to_string().as_str())
+                );
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"variant_name":"variant1","metric_name":"accuracy","mean":0.85,"variance":0.01,"count":"100"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_aggregated_feedback_by_variant("test_function", Some("variant1"), Some("accuracy"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[0].mean, 0.85);
+    }
+
+    #[tokio::test]
+    async fn test_get_aggregated_feedback_by_variant_empty_result() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_aggregated_feedback_by_variant("nonexistent_function", None, None)
+            .await
+            .unwrap();
+
+        assert!(result.is_empty());
     }
 }

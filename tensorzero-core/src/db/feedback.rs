@@ -83,12 +83,46 @@ pub trait FeedbackQueries {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
+
+    /// Retrieves aggregated feedback statistics grouped by variant and optionally by metric.
+    ///
+    /// # Parameters
+    ///
+    /// - `function_name`: The name of the function to query
+    /// - `variant_name`: Optional filter for a specific variant. If `None`, all variants are included.
+    /// - `metric_name`: Optional filter for a specific metric. If `None`, results are grouped by metric_name.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `AggregatedFeedbackByVariant` containing statistics for each variant/metric combination.
+    async fn get_aggregated_feedback_by_variant(
+        &self,
+        function_name: &str,
+        variant_name: Option<&str>,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<AggregatedFeedbackByVariant>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
+    // Mean of feedback values for the variant
+    pub mean: f32,
+    // Variance of feedback values for the variant
+    // Equal to None for sample size 1 because ClickHouse uses sample variance with (n - 1) in the denominator
+    pub variance: Option<f32>,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
+/// Aggregated feedback statistics by variant and metric.
+/// Similar to FeedbackByVariant but includes the metric_name field.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct AggregatedFeedbackByVariant {
+    pub variant_name: String,
+    pub metric_name: String,
     // Mean of feedback values for the variant
     pub mean: f32,
     // Variance of feedback values for the variant

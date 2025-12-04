@@ -48,6 +48,7 @@ pub use tensorzero_core::db::datasets::{
     CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetQueries, DatasetQueryParams,
     GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
+pub use tensorzero_core::db::feedback::AggregatedFeedbackByVariant;
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
@@ -456,6 +457,32 @@ pub trait ClientExt {
         &self,
         function_name: &str,
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
+
+    // ================================================================
+    // Aggregated feedback operations
+    // ================================================================
+
+    /// Gets aggregated feedback statistics grouped by variant and optionally by metric.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query
+    /// * `variant_name` - Optional filter for a specific variant. If `None`, all variants are included.
+    /// * `metric_name` - Optional filter for a specific metric. If `None`, results are grouped by metric_name.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `AggregatedFeedbackByVariant` containing statistics for each variant/metric combination.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn get_aggregated_feedback(
+        &self,
+        function_name: &str,
+        variant_name: Option<&str>,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<AggregatedFeedbackByVariant>, TensorZeroError>;
 
     // ================================================================
     // Config access
@@ -1354,6 +1381,59 @@ impl ClientExt for Client {
                     Ok(response.probabilities)
                 })
                 .await?)
+            }
+        }
+    }
+
+    async fn get_aggregated_feedback(
+        &self,
+        function_name: &str,
+        variant_name: Option<&str>,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<AggregatedFeedbackByVariant>, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let endpoint = format!("internal/aggregated_feedback/{function_name}");
+                let mut url = client
+                    .base_url
+                    .join(&endpoint)
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/aggregated_feedback/{function_name} endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+
+                // Build query string using url crate's form_urlencoded
+                {
+                    let mut query_pairs = url.query_pairs_mut();
+                    if let Some(variant) = variant_name {
+                        query_pairs.append_pair("variant_name", variant);
+                    }
+                    if let Some(metric) = metric_name {
+                        query_pairs.append_pair("metric_name", metric);
+                    }
+                }
+
+                let builder = client.http_client.get(url);
+                let response: tensorzero_core::endpoints::aggregated_feedback::GetAggregatedFeedbackResponse =
+                    client.send_and_parse_http_response(builder).await?;
+                Ok(response.feedback)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::aggregated_feedback::get_aggregated_feedback(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        function_name,
+                        variant_name,
+                        metric_name,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
             }
         }
     }
