@@ -1050,7 +1050,6 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 
@@ -1081,7 +1080,6 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }
@@ -1229,7 +1227,6 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }
