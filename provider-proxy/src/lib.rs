@@ -210,6 +210,7 @@ async fn check_cache<
                 .with_context(|| format!("Failed to read cache file metadata for {path_str}"))?
                 .modified()
                 .with_context(|| format!("Failed to read cache file mtime for {path_str}"))?;
+            tracing::info!("Cache file mtime: {file_mtime:?} start time: {start_time:?}");
             Ok(file_mtime <= start_time)
         }
     };
