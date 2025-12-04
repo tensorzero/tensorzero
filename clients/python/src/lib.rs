@@ -1116,7 +1116,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1143,7 +1143,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1184,7 +1184,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1211,7 +1211,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1242,7 +1242,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1260,7 +1260,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1298,7 +1298,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1323,7 +1323,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), res).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1599,7 +1599,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -2309,7 +2309,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2339,7 +2339,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2379,7 +2379,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2411,7 +2411,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2441,7 +2441,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2465,7 +2465,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2506,7 +2506,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2534,7 +2534,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2803,7 +2803,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
@@ -2829,7 +2829,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
