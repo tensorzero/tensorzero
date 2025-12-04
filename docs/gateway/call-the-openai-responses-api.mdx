@@ -910,3 +910,26 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
 </Tab>
 
 </Tabs>
+
+## Call the OpenAI Responses API with Azure
+
+You can call the OpenAI Responses API with Azure by setting `api_base` in your configuration to your Azure deployment URL.
+
+```toml
+[models.azure-gpt-5-mini-responses]
+routing = ["azure"]
+
+[models.azure-gpt-5-mini-responses.providers.azure]
+type = "openai"  # CAREFUL: not `azure`!
+api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_OPENAI_API_KEY"
+model_name = "gpt-5-mini"
+api_type = "responses"
+```
+
+<Warning>
+
+The `azure` model provider does not support the Responses API.
+You must use the `openai` provider with a custom `api_base` instead.
+
+</Warning>

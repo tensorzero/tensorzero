@@ -22,7 +22,6 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
@@ -50,6 +49,7 @@ use crate::tool::{
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:

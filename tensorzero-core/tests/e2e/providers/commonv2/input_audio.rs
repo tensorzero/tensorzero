@@ -58,7 +58,7 @@ const AUDIO_FILE_HASH: &str = "4e497dd5ba1f3761a3d8bdf21da18632d4b919e66cba20af3
 
 pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let (_client, _storage_path) = test_base64_audio_inference_with_provider_and_store(
+    let (_client, _storage_path) = Box::pin(test_base64_audio_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -74,7 +74,7 @@ pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that audio was stored in filesystem
@@ -120,7 +120,7 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                             InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    "audio/mpeg".parse().unwrap(),
+                                    Some("audio/mpeg".parse().unwrap()),
                                     audio_data.clone(),
                                     None,
                                     None,

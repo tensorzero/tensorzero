@@ -718,6 +718,10 @@ pub async fn test_redacted_thinking_helper(
         "role": "assistant",
         "content": tensorzero_content_blocks,
     }));
+    array.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "text", "text": "What were you thinking about?"}],
+    }));
 
     let payload = json!({
         "model_name": model_name,
@@ -742,6 +746,8 @@ pub async fn test_redacted_thinking_helper(
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+
+    println!("New response JSON: {response_json}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(

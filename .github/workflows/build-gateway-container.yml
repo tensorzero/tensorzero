@@ -52,5 +52,4 @@ jobs:
         run: nsc docker login
 
       - name: Push `gateway` container to Namespace registry
-        run:
-          docker push nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+        run: docker push nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
