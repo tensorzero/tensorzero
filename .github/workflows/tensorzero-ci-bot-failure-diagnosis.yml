@@ -55,7 +55,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           mode: patch-only
-          tensorzero-base-url: http://localhost:3000
+          tensorzero-base-url: http://ci-bot-gateway:3000
           output-artifacts-dir: debug-logs
           clickhouse-url: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
           clickhouse-table: GitHubBotPullRequestToInferenceMap
