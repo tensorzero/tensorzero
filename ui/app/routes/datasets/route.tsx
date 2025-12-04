@@ -1,12 +1,7 @@
-import {
-  getDatasetMetadata,
-  countDatasets,
-} from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
 import { data, isRouteErrorResponse } from "react-router";
 import { useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
   PageLayout,
@@ -15,20 +10,11 @@ import {
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const limit = Number(url.searchParams.get("limit")) || 15;
-  const offset = Number(url.searchParams.get("offset")) || 0;
-  if (limit > 100) {
-    throw data("Limit cannot exceed 100", { status: 400 });
-  }
-  const datasetMetadata = await getDatasetMetadata({
-    limit,
-    offset,
-  });
-  const numberOfDatasets = await countDatasets();
-  return { counts: datasetMetadata, limit, offset, numberOfDatasets };
+export async function loader() {
+  const datasetMetadata = await getTensorZeroClient().listDatasets({});
+  return { datasets: datasetMetadata.datasets };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -47,30 +33,14 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
-  const { counts, limit, offset, numberOfDatasets } = loaderData;
+  const { datasets } = loaderData;
   const navigate = useNavigate();
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
   return (
     <PageLayout>
-      <PageHeader heading="Datasets" count={numberOfDatasets} />
+      <PageHeader heading="Datasets" count={datasets.length} />
       <SectionLayout>
         <DatasetsActions onBuildDataset={() => navigate("/datasets/builder")} />
-        <DatasetTable counts={counts} />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset === 0}
-          disableNext={offset + limit >= numberOfDatasets}
-        />
+        <DatasetTable datasets={datasets} />
       </SectionLayout>
     </PageLayout>
   );

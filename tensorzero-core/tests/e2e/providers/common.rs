@@ -32,8 +32,8 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
@@ -41,14 +41,14 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage, Text,
+        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -170,6 +170,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
+        use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -206,6 +207,15 @@ macro_rules! generate_provider_tests {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_assistant_prefill_inference_request() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_assistant_prefill_inference_request_with_provider(provider).await;
+            }
+        }
+
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
@@ -1052,11 +1062,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1152,11 +1162,11 @@ defaults.{}
             function_name: None,
             model_name: Some(provider.model_name),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1272,11 +1282,11 @@ model = "test-model"
                 function_name: Some("basic_test".to_string()),
                 variant_name: Some("default".to_string()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Say hello".to_string(),
                         })],
                     }],
@@ -1311,11 +1321,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1349,7 +1359,7 @@ model = "test-model"
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_url_image_inference_with_provider_and_store(
+    Box::pin(test_url_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1365,7 +1375,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         "#,
             temp_dir.path().to_string_lossy()
         ),
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1432,7 +1442,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1448,7 +1458,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that PDF was stored in filesystem
@@ -1472,7 +1482,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1488,7 +1498,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1551,7 +1561,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     prefix += "-";
 
     let (tensorzero_client, expected_key, storage_path) =
-        test_image_inference_with_provider_s3_compatible(
+        Box::pin(test_image_inference_with_provider_s3_compatible(
             provider,
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
@@ -1573,7 +1583,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     "#
             ),
             &prefix,
-        )
+        ))
         .await;
 
     check_object_fetch(
@@ -1620,9 +1630,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         }
     }
 
-    let (tensorzero_client, storage_path) =
-        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
-            .await;
+    let (tensorzero_client, storage_path) = Box::pin(
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix),
+    )
+    .await;
 
     let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client
@@ -1686,15 +1697,15 @@ pub async fn test_url_image_inference_with_provider_and_store(
             .inference(ClientInferenceParams {
                 model_name: Some(provider.model_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url(UrlFile {
+                            InputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
@@ -1755,18 +1766,18 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                 function_name: Some("pdf_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(
+                            InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    mime::APPLICATION_PDF,
+                                    Some(mime::APPLICATION_PDF),
                                     pdf_data.clone(),
                                     None,
                                     None,
@@ -1821,18 +1832,18 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         function_name: Some("image_test".to_string()),
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    ClientInputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64(
+                    InputMessageContent::File(File::Base64(
                         Base64File::new(
                             None,
-                            mime::IMAGE_PNG,
+                            Some(mime::IMAGE_PNG),
                             image_data.clone(),
                             Some(Detail::Low),
                             None,
@@ -1894,8 +1905,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
+    params.input.messages[0].content[1] = InputMessageContent::File(File::Base64(
+        Base64File::new(None, Some(mime::IMAGE_PNG), updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2479,24 +2490,24 @@ pub async fn test_warn_ignored_thought_block_with_provider(
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
                 messages: vec![
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::Assistant,
-                        content: vec![ClientInputMessageContent::Thought(Thought {
+                        content: vec![InputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
                         })],
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     },
@@ -2543,6 +2554,74 @@ pub async fn test_warn_ignored_thought_block_with_provider(
             provider.variant_name
         );
     }
+}
+
+pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
+    // * Mistral doesn't support assistant prefill
+    // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
+    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Azure AI foundry seems to ignore trailing assistant messages
+    if provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "aws_sagemaker"
+        || provider.model_provider_name == "aws_bedrock"
+        || provider.variant_name == "azure-ai-foundry"
+    {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
+    let payload = serde_json::json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact"
+                },
+                {
+                    "role": "assistant",
+                    "content": "The capital city "
+                },
+                {
+                    "role": "assistant",
+                    "content": " of Japan is"
+                },
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+
+    assert_eq!(response_json["content"][0]["type"], "text");
+    let content = response_json["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content.to_lowercase().contains("tokyo"),
+        "Content should contain 'tokyo': {content}"
+    );
+
+    // We don't check clickhouse, since we do this in lots of places
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
@@ -6632,7 +6711,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        StoredContentBlock::Text(_) | StoredContentBlock::Unknown { .. } => {}
+        StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_) => {}
         _ => {
             panic!("Expected a text or unknown block, got {first:?}");
         }
@@ -8970,15 +9049,15 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             model_name: None,
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
-                messages: vec![tensorzero::ClientInputMessage {
+                messages: vec![tensorzero::InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    content: vec![tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
                                 .to_string(),
                         },
@@ -9100,16 +9179,16 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         } else {
             UnfilteredInferenceExtraHeaders::default()
         },
-        input: tensorzero::ClientInput {
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
                 content: vec![
-                    tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
                     )
@@ -9410,14 +9489,14 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::InputMessageContent::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         extra_headers: if provider.model_provider_name == "vllm"

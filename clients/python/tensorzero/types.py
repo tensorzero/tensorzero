@@ -90,14 +90,14 @@ class RawText(ContentBlock):
 @dataclass
 class ImageBase64(ContentBlock):
     data: Optional[str]
-    mime_type: str
+    mime_type: Optional[str] = None
     type: str = "image"
 
 
 @dataclass
 class FileBase64(ContentBlock):
     data: Optional[str]
-    mime_type: str
+    mime_type: Optional[str] = None
     type: str = "file"
 
 
@@ -167,7 +167,8 @@ class ToolResult(ContentBlock):
 @dataclass
 class UnknownContentBlock(ContentBlock):
     data: Any
-    model_provider_name: Optional[str] = None
+    model_name: Optional[str] = None
+    provider_name: Optional[str] = None
     type: str = "unknown"
 
 
@@ -287,11 +288,13 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             signature=block.get("signature"),
             summary=summary,
             type=block_type,
+            _internal_provider_type=block.get("_internal_provider_type"),
         )
     elif block_type == "unknown":
         return UnknownContentBlock(
             data=block["data"],
-            model_provider_name=block.get("model_provider_name"),
+            model_name=block.get("model_name"),
+            provider_name=block.get("provider_name"),
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")

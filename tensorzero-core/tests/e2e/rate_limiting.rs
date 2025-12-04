@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, Role, TensorZeroError,
+    ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent, Role,
+    TensorZeroError,
 };
 use tensorzero_core::endpoints::inference::{ChatCompletionInferenceParams, InferenceParams};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
@@ -48,11 +48,11 @@ async fn make_request_with_tags(
     let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -127,12 +127,12 @@ fn assert_rate_limit_exceeded<T: Debug>(result: Result<T, TensorZeroError>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_concrete_tag_value_non_streaming() {
-    test_rate_limiting_concrete_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_concrete_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_concrete_tag_value_streaming() {
-    test_rate_limiting_concrete_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_concrete_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_concrete_tag_value_helper(stream: bool) {
@@ -194,12 +194,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_total_tag_value_non_streaming() {
-    test_rate_limiting_total_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_total_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_total_tag_value_streaming() {
-    test_rate_limiting_total_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_total_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_total_tag_value_helper(stream: bool) {
@@ -240,12 +240,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_each_tag_value() {
-    test_rate_limiting_each_tag_value_helper(false).await;
+    Box::pin(test_rate_limiting_each_tag_value_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_each_tag_value_streaming() {
-    test_rate_limiting_each_tag_value_helper(true).await;
+    Box::pin(test_rate_limiting_each_tag_value_helper(true)).await;
 }
 
 async fn test_rate_limiting_each_tag_value_helper(stream: bool) {
@@ -296,12 +296,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_always_non_streaming() {
-    test_rate_limiting_priority_always_helper(false).await;
+    Box::pin(test_rate_limiting_priority_always_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_always_streaming() {
-    test_rate_limiting_priority_always_helper(true).await;
+    Box::pin(test_rate_limiting_priority_always_helper(true)).await;
 }
 
 async fn test_rate_limiting_priority_always_helper(stream: bool) {
@@ -506,12 +506,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_resources_non_streaming() {
-    test_rate_limiting_multiple_resources_helper(false).await;
+    Box::pin(test_rate_limiting_multiple_resources_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_resources_streaming() {
-    test_rate_limiting_multiple_resources_helper(true).await;
+    Box::pin(test_rate_limiting_multiple_resources_helper(true)).await;
 }
 
 async fn test_rate_limiting_multiple_resources_helper(stream: bool) {
@@ -707,12 +707,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_scopes_non_streaming() {
-    test_rate_limiting_multiple_scopes_helper(false).await;
+    Box::pin(test_rate_limiting_multiple_scopes_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_scopes_streaming() {
-    test_rate_limiting_multiple_scopes_helper(true).await;
+    Box::pin(test_rate_limiting_multiple_scopes_helper(true)).await;
 }
 
 async fn test_rate_limiting_multiple_scopes_helper(stream: bool) {
@@ -764,12 +764,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_missing_tags_non_streaming() {
-    test_rate_limiting_missing_tags_helper(false).await;
+    Box::pin(test_rate_limiting_missing_tags_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_missing_tags_streaming() {
-    test_rate_limiting_missing_tags_helper(true).await;
+    Box::pin(test_rate_limiting_missing_tags_helper(true)).await;
 }
 
 async fn test_rate_limiting_missing_tags_helper(stream: bool) {
@@ -998,12 +998,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_time_intervals_non_streaming() {
-    test_rate_limiting_time_intervals_helper(false).await;
+    Box::pin(test_rate_limiting_time_intervals_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_time_intervals_streaming() {
-    test_rate_limiting_time_intervals_helper(true).await;
+    Box::pin(test_rate_limiting_time_intervals_helper(true)).await;
 }
 
 async fn test_rate_limiting_time_intervals_helper(stream: bool) {
@@ -1107,11 +1107,11 @@ retries = { num_retries = 3 }
     client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1125,11 +1125,11 @@ retries = { num_retries = 3 }
     let err = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1165,11 +1165,11 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::slow_second_chunk".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Hello".to_string(),
                     })],
                 }],
@@ -1205,12 +1205,12 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_override_with_each_non_streaming() {
-    test_rate_limiting_priority_override_with_each_helper(false).await;
+    Box::pin(test_rate_limiting_priority_override_with_each_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_override_with_each_streaming() {
-    test_rate_limiting_priority_override_with_each_helper(true).await;
+    Box::pin(test_rate_limiting_priority_override_with_each_helper(true)).await;
 }
 
 async fn test_rate_limiting_priority_override_with_each_helper(stream: bool) {

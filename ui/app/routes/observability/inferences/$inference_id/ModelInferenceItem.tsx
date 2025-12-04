@@ -27,7 +27,7 @@ import {
   SnippetContent,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
-import ModelInferenceOutput from "~/components/inference/ModelInferenceOutput";
+import ModelInferenceOutput from "~/components/input_output/ModelInferenceOutput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;

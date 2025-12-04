@@ -1,11 +1,11 @@
 use serde_json::json;
 use tempfile::NamedTempFile;
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Role, Text, TextKind};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Role, Text};
 
 // Helper function to create a test gateway with the given config
 pub async fn create_test_gateway(config: &str) -> Client {
@@ -26,11 +26,11 @@ pub async fn create_test_gateway(config: &str) -> Client {
 }
 
 // Helper function to create standard test input
-pub fn create_test_input() -> ClientInput {
-    ClientInput {
-        messages: vec![ClientInputMessage {
+pub fn create_test_input() -> Input {
+    Input {
+        messages: vec![InputMessage {
             role: Role::User,
-            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+            content: vec![InputMessageContent::Text(Text {
                 text: "test".to_string(),
             })],
         }],

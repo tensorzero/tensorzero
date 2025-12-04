@@ -1,28 +1,26 @@
 #![recursion_limit = "256"]
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
-use clap::Parser;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
 
 // Public re-exports for external consumers
+pub use cli::{Args, OutputFormat};
 pub use stats::{
     mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
     EvaluatorStats, PerEvaluatorStats,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::ClientInput;
+use tensorzero_core::client::Input;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::config::{
-    ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
-};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},
@@ -38,9 +36,9 @@ use tokio::{
     task::JoinSet,
 };
 use tracing::{debug, error, info, instrument};
-use url::Url;
 use uuid::Uuid;
 
+pub mod cli;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
@@ -49,96 +47,6 @@ pub mod stopping;
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
 const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
-
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
-#[clap(rename_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum OutputFormat {
-    Jsonl,
-    #[default]
-    Pretty,
-}
-
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-pub struct Args {
-    /// Path to tensorzero.toml.
-    #[arg(long, default_value = "./config/tensorzero.toml")]
-    pub config_file: PathBuf,
-
-    /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evaluations using that gateway.
-    #[arg(long)]
-    pub gateway_url: Option<Url>,
-
-    /// Name of the evaluation to run.
-    #[arg(short, long)]
-    pub evaluation_name: String,
-
-    /// Name of the dataset to run on.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[arg(short, long)]
-    pub dataset_name: Option<String>,
-
-    /// Specific datapoint IDs to evaluate (comma-separated).
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    /// Example: --datapoint-ids 01957bbb-44a8-7490-bfe7-32f8ed2fc797,01957bbb-44a8-7490-bfe7-32f8ed2fc798
-    #[arg(long, value_delimiter = ',')]
-    pub datapoint_ids: Option<Vec<Uuid>>,
-
-    /// Name of the variant to run.
-    #[arg(short, long)]
-    pub variant_name: String,
-
-    /// Number of concurrent requests to make.
-    #[arg(short, long, default_value = "1")]
-    pub concurrency: usize,
-
-    #[arg(short, long, default_value = "pretty")]
-    pub format: OutputFormat,
-
-    #[arg(long, default_value = "on")]
-    pub inference_cache: CacheEnabledMode,
-
-    /// Maximum number of datapoints to evaluate from the dataset.
-    #[arg(long)]
-    pub max_datapoints: Option<u32>,
-
-    /// Per-evaluator precision targets for adaptive stopping.
-    /// Format: evaluator_name=precision_target, comma-separated for multiple evaluators.
-    /// Example: --adaptive-stopping-precision exact_match=0.13,llm_judge=0.16
-    /// Evaluator stops when confidence interval (CI) half-width (or the maximum width of the two
-    /// halves of the CI in the case of asymmetric CIs) <= precision_target.
-    #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_target, value_delimiter = ',', num_args = 0..)]
-    pub precision_targets: Vec<(String, f32)>,
-}
-
-/// Parse a single precision target in format "evaluator_name=precision_target"
-fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
-    let s = s.trim();
-    if s.is_empty() {
-        return Err("Precision target cannot be empty".to_string());
-    }
-
-    let parts: Vec<&str> = s.splitn(2, '=').collect();
-    if parts.len() != 2 {
-        return Err(format!(
-            "Invalid precision format: '{s}'. Expected format: evaluator_name=precision_target"
-        ));
-    }
-
-    let evaluator_name = parts[0].to_string();
-    let precision_target = parts[1]
-        .parse::<f32>()
-        .map_err(|e| format!("Invalid precision value '{}': {e}", parts[1]))?;
-
-    if precision_target < 0.0 {
-        return Err(format!(
-            "Precision value must be non-negative, got {precision_target}"
-        ));
-    }
-
-    Ok((evaluator_name, precision_target))
-}
 
 pub struct Clients {
     pub tensorzero_client: Client,
@@ -268,14 +176,17 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let ConfigLoadInfo {
-        config,
-        snapshot: _, // TODO: do an actual snapshot
-    } = Config::load_from_path_optional_verify_credentials(
+    let unwritten_config = Config::load_from_path_optional_verify_credentials(
         &ConfigFileGlob::new_from_path(&args.config_file)?,
         false,
     )
     .await?;
+    let clickhouse_client = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        unwritten_config.gateway.observability.batch_writes.clone(),
+    )
+    .await?;
+    let config = unwritten_config.into_config(&clickhouse_client).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
     let tensorzero_client = match args.gateway_url {
@@ -294,12 +205,6 @@ pub async fn run_evaluation(
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {e}"))?;
-
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &clickhouse_url,
-        config.gateway.observability.batch_writes.clone(),
-    )
-    .await?;
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
@@ -758,7 +663,7 @@ struct InferDatapointParams<'a> {
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a Datapoint,
-    input: &'a ClientInput,
+    input: &'a Input,
     evaluation_name: &'a str,
     config: &'a Config,
     inference_cache: CacheEnabledMode,

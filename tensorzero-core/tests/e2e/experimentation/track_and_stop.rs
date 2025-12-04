@@ -8,13 +8,13 @@ use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
 use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, InferenceResponse, Role,
+    ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role,
 };
 use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::Text;
 use tokio::time::Duration;
 use url::Url;
 use uuid::Uuid;
@@ -366,11 +366,11 @@ async fn run_inference_batch(client: &Arc<Client>, count: usize) -> Vec<(Uuid, S
                 let output = client
                     .inference(ClientInferenceParams {
                         function_name: Some("test_function".to_string()),
-                        input: ClientInput {
+                        input: Input {
                             system: None,
-                            messages: vec![ClientInputMessage {
+                            messages: vec![InputMessage {
                                 role: Role::User,
-                                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                content: vec![InputMessageContent::Text(Text {
                                     text: "test input".to_string(),
                                 })],
                             }],
@@ -694,7 +694,8 @@ async fn test_min_pulls() {
         min_prob: None,
     });
 
-    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, clickhouse, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let client = std::sync::Arc::new(client);
 
     // Run exactly enough inferences to complete the nursery phase
@@ -756,7 +757,8 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         ("variant_c", 0.95), // Clear winner
     ];
 
-    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, clickhouse, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let bandit = BernoulliBandit::new(bandit_distribution.clone(), Some(42));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
@@ -842,7 +844,8 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         ("variant_c", 1.0, 0.10),
     ];
 
-    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, clickhouse, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
@@ -921,7 +924,7 @@ async fn test_effect_of_delta_on_stopping() {
     });
 
     let (setup_client, clickhouse, guard) =
-        make_embedded_gateway_with_clean_clickhouse(&setup_config).await;
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&setup_config)).await;
     let setup_client = std::sync::Arc::new(setup_client);
 
     // Create borderline data: variant_b better than variant_a
@@ -1051,7 +1054,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     });
 
     let (setup_client, clickhouse, guard) =
-        make_embedded_gateway_with_clean_clickhouse(&setup_config).await;
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&setup_config)).await;
     let setup_client = std::sync::Arc::new(setup_client);
 
     // Create data where variant_b is slightly better (within epsilon range)
@@ -1178,7 +1181,8 @@ async fn test_cold_start_with_stopped_experiment() {
         min_prob: None,
     });
 
-    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, clickhouse, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let bandit = BernoulliBandit::new(bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
@@ -1323,7 +1327,7 @@ async fn test_new_variant_triggers_reexploration() {
     });
 
     let (client, clickhouse, _guard) =
-        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&initial_config)).await;
     let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
@@ -1497,7 +1501,7 @@ async fn test_remove_winner_variant_after_stopping() {
     });
 
     let (client, clickhouse, _guard) =
-        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&initial_config)).await;
     let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
@@ -1638,7 +1642,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
     });
 
     let (client, clickhouse, _guard) =
-        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&initial_config)).await;
     let bandit = BernoulliBandit::new(initial_bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);

@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob, ConfigLoadInfo},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
@@ -40,6 +40,7 @@ pub mod dicl;
 pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
@@ -106,12 +107,13 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .clone();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
     let job_handle = optimizer_info
         .launch(
             &client,
