@@ -33,6 +33,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: false
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
