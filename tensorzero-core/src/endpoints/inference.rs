@@ -30,7 +30,7 @@ use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
-use crate::function::{FunctionConfig, FunctionConfigChat};
+use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
@@ -208,8 +208,6 @@ impl std::fmt::Debug for InferenceOutput {
         }
     }
 }
-
-pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
 pub struct InferenceIds {

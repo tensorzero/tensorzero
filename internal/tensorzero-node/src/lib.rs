@@ -17,6 +17,7 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     config::{Config, ConfigFileGlob},
     db::clickhouse::ClickHouseConnectionInfo,
+    evaluations::EvaluationConfig,
 };
 use uuid::Uuid;
 
@@ -160,6 +161,25 @@ pub async fn run_evaluation_streaming(
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;
     let config = Arc::new(config);
 
+    // Extract evaluation config from the loaded config
+    let evaluation_config = config
+        .evaluations
+        .get(&params.evaluation_name)
+        .ok_or_else(|| {
+            napi::Error::from_reason(format!(
+                "Failed to get evaluation config '{}'",
+                params.evaluation_name
+            ))
+        })?
+        .clone();
+
+    // Get function name and look up function config
+    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+    let function_config = config
+        .get_function(&inference_eval_config.function_name)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to get function config: {e}")))?
+        .into_owned();
+
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()
         .await
@@ -213,7 +233,8 @@ pub async fn run_evaluation_streaming(
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
-        config: config.clone(),
+        evaluation_config,
+        function_config,
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
