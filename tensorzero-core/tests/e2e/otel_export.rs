@@ -393,7 +393,7 @@ async fn test_otel_export_outgoing_traceparent() {
         .expect("Missing `POST /openai/v1/chat/completions` span");
 
     // Walk up the parent chain, and verify that the `POST /openai/v1/chat/completions` has the correct parent span.
-    // This tests both that we set the outgoing `traceparent` header, and that we processing incoming `traceparent` headers correctly.
+    // This tests both that we set the outgoing `traceparent` header, and that we process incoming `traceparent` headers correctly.
 
     let mut ancestors = Vec::new();
     let mut parent_id = Some(openai_span_id.clone());
