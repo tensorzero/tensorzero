@@ -149,14 +149,21 @@ model_name = "error"
         .unwrap();
 
     // Should succeed because relay forwards to downstream's working provider
-    assert_eq!(response.status(), 200, "Streaming request should succeed via relay");
+    assert_eq!(
+        response.status(),
+        200,
+        "Streaming request should succeed via relay"
+    );
 
     // Read the streaming response
     let body = response.text().await.unwrap();
     let lines: Vec<&str> = body.lines().collect();
 
     // Should have multiple SSE lines (proves we got actual streaming content from downstream)
-    assert!(lines.len() > 1, "Expected multiple streaming chunks from downstream");
+    assert!(
+        lines.len() > 1,
+        "Expected multiple streaming chunks from downstream"
+    );
 
     // All non-empty lines should start with "data: "
     for line in lines.iter().filter(|l| !l.is_empty()) {
@@ -570,8 +577,7 @@ model_name = "good"
     let body_local_text = response_local.text().await.unwrap();
     assert_eq!(
         status_local, 200,
-        "Model with skip_relay=true should succeed using local provider. Status: {}, Body: {}",
-        status_local, body_local_text
+        "Model with skip_relay=true should succeed using local provider. Status: {status_local}, Body: {body_local_text}"
     );
 
     let body_local: serde_json::Value = serde_json::from_str(&body_local_text).unwrap();
@@ -614,7 +620,6 @@ model_name = "good"
     let status_relay = response_relay.status();
     assert!(
         status_relay.is_server_error(),
-        "Model with skip_relay=false should fail when downstream unreachable. Got status: {}",
-        status_relay
+        "Model with skip_relay=false should fail when downstream unreachable. Got status: {status_relay}"
     );
 }
