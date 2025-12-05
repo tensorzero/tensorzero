@@ -6,47 +6,25 @@ on:
     types:
       - completed
 
-permissions:
-  contents: write
-  pull-requests: write
-  actions: read
-
 jobs:
-  gather-diff-and-generate-patch:
+  generate-patch:
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
-    name: Gather failure context and generate PR
+    name: Generate patch from CI failure
+    # Override with read-only permissions - agent cannot push or create PRs
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      has-changes: ${{ steps.generate.outputs.has-changes }}
     steps:
-      - name: Checkout TensorZero config file
-        uses: actions/checkout@v5
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
         with:
-          repository: tensorzero/experimental-ci-bot
-          ref: "v0.1-pre-agent"
-          sparse-checkout: |
-            tensorzero
-
-      - name: Move tensorzero to tensorzero-for-gateway
-        run: |
-          mv ./tensorzero /tmp/tensorzero-for-gateway
-          ls -lR .
-
-      - name: Start TensorZero gateway
-        run: |
-          docker pull tensorzero/gateway:latest
-          docker run -d --rm \
-            --name tensorzero-gateway \
-            -e TENSORZERO_CLICKHOUSE_URL=${{ secrets.CI_BOT_CLICKHOUSE_URL }} \
-            -e OPENAI_API_KEY=${{ secrets.CI_BOT_OPENAI_API_KEY }} \
-            -p 3000:3000 \
-            --volume /tmp/tensorzero-for-gateway:/action-config \
-            tensorzero/gateway:latest --config-file /action-config/tensorzero.toml
-
-          for _i in {1..100}; do
-            curl -fsS http://localhost:3000/health && exit 0
-            sleep 3
-          done
-          echo "Gateway never became ready" >&2
-          exit 1
+          oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -55,34 +33,208 @@ jobs:
           fetch-depth: 0
           fetch-tags: false
 
-      - name: Debug
-        run: |
-          ls -lR /tmp/tensorzero-for-gateway
-          cat /tmp/tensorzero-for-gateway/tensorzero.toml
-          cat /tmp/tensorzero-for-gateway/prompt.minijinja
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Call LLM to generate PR revision
-        uses: "tensorzero/experimental-ci-bot/generate-pr-patch@v0.1-pre-agent"
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install mini-swe-agent
+        run: 'uv tool install mini-swe-agent --from "git+https://github.com/virajmehta/mini-swe-agent.git@main"'
+
+      - name: Generate patch
+        id: generate
+        uses: tensorzero/experimental-ci-bot/generate-pr-patch@6075c5483e949af3acec76c40b755dcccd99e6b0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tensorzero-base-url: http://localhost:3000
-          tensorzero-diff-patched-successfully-metric-name: tensorzero_github_ci_bot_diff_patched_successfully
+          mode: patch-only
+          tensorzero-base-url: http://ci-bot-gateway:3000
           output-artifacts-dir: debug-logs
           clickhouse-url: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
           clickhouse-table: GitHubBotPullRequestToInferenceMap
 
+      - name: Upload patch artifact
+        if: steps.generate.outputs.has-changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-patch
+          path: |
+            debug-logs/patch.diff
+            debug-logs/metadata.json
+
       - name: Upload diagnostics bundle
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@v4
         with:
           name: ci-failure-diagnostics
-          path: |
-            debug-logs/
+          path: debug-logs/
 
-      - name: Stop TensorZero gateway
-        if: always()
-        continue-on-error: true
-        run: docker stop tensorzero-gateway
+  apply-patch-and-create-pr:
+    needs: generate-patch
+    if: needs.generate-patch.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    name: Apply patch and create PR
+    # WRITE permissions - only this job can push and create PRs
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      # Download to /tmp so checkout doesn't delete it
+      - name: Download patch artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-patch
+          path: /tmp/patch-data
+
+      - name: Read metadata
+        id: meta
+        run: |
+          echo "pr-number=$(jq -r .prNumber /tmp/patch-data/metadata.json)" >> $GITHUB_OUTPUT
+          echo "head-ref=$(jq -r .headRef /tmp/patch-data/metadata.json)" >> $GITHUB_OUTPUT
+          echo "owner=$(jq -r .owner /tmp/patch-data/metadata.json)" >> $GITHUB_OUTPUT
+          echo "repo=$(jq -r .repo /tmp/patch-data/metadata.json)" >> $GITHUB_OUTPUT
+          echo "episode-id=$(jq -r '.episodeId // empty' /tmp/patch-data/metadata.json)" >> $GITHUB_OUTPUT
+
+          # Handle multiline reasoning
+          {
+            echo 'reasoning<<EOF'
+            jq -r '.reasoning // empty' /tmp/patch-data/metadata.json
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.meta.outputs.head-ref }}
+          fetch-depth: 0
+
+      - name: Apply patch and create PR
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create new branch
+          BRANCH_NAME="tensorzero/pr-${{ steps.meta.outputs.pr-number }}-$(date +%s)"
+          git checkout -b "$BRANCH_NAME"
+
+          # Apply patch from /tmp
+          git apply /tmp/patch-data/patch.diff
+
+          # Commit and push
+          git config user.email "hello@tensorzero.com"
+          git config user.name "TensorZero-Experimental-CI-Bot[bot]"
+          git add -A
+          git commit -m "chore: automated fix for PR #${{ steps.meta.outputs.pr-number }}"
+          git push -u origin "$BRANCH_NAME"
+
+          # Create PR with reasoning in body
+          PR_BODY="This pull request was generated automatically in response to failing CI on #${{ steps.meta.outputs.pr-number }}.
+
+          The proposed changes were produced by mini-swe-agent.
+
+          ## Fix Details
+
+          ${{ steps.meta.outputs.reasoning }}"
+
+          PR_URL=$(gh pr create \
+            --base "${{ steps.meta.outputs.head-ref }}" \
+            --head "$BRANCH_NAME" \
+            --title "Automated follow-up for #${{ steps.meta.outputs.pr-number }}" \
+            --body "$PR_BODY")
+
+          # Extract PR number from URL (format: https://github.com/owner/repo/pull/123)
+          FOLLOWUP_PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          echo "followup-pr-number=$FOLLOWUP_PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "Created follow-up PR #$FOLLOWUP_PR_NUMBER: $PR_URL"
+
+      - name: Send feedback and record to ClickHouse
+        if: steps.meta.outputs.episode-id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TENSORZERO_BASE_URL: http://ci-bot-gateway:3000
+          CLICKHOUSE_URL: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
+          CLICKHOUSE_TABLE: GitHubBotPullRequestToInferenceMap
+        run: |
+          EPISODE_ID="${{ steps.meta.outputs.episode-id }}"
+          OWNER="${{ steps.meta.outputs.owner }}"
+          REPO="${{ steps.meta.outputs.repo }}"
+          FOLLOWUP_PR_NUMBER="${{ steps.create-pr.outputs.followup-pr-number }}"
+
+          # Get the follow-up PR's numeric ID (not number) via GitHub API
+          PR_ID=$(gh api "repos/$OWNER/$REPO/pulls/$FOLLOWUP_PR_NUMBER" --jq '.id')
+          echo "Follow-up PR #$FOLLOWUP_PR_NUMBER has ID: $PR_ID"
+
+          # 1. Send TensorZero episode feedback (ci_fix_pr_created_agent=true)
+          echo "Sending TensorZero feedback for episode $EPISODE_ID..."
+          curl -sf -X POST "$TENSORZERO_BASE_URL/feedback" \
+            -H "Content-Type: application/json" \
+            -d "{\"metric_name\": \"ci_fix_pr_created_agent\", \"episode_id\": \"$EPISODE_ID\", \"value\": true}" \
+            && echo "Feedback sent successfully" \
+            || echo "Warning: Failed to send feedback"
+
+          # 2. Write episode-to-PR mapping to ClickHouse
+          echo "Writing to ClickHouse..."
+          echo "  URL length: ${#CLICKHOUSE_URL}"
+          echo "  Table: $CLICKHOUSE_TABLE"
+          echo "  PR ID: $PR_ID"
+          echo "  Episode ID: $EPISODE_ID"
+
+          # Use fully qualified table name with ci_bot database
+          CLICKHOUSE_QUERY="INSERT INTO ci_bot.$CLICKHOUSE_TABLE (pull_request_id, episode_id) VALUES ($PR_ID, '$EPISODE_ID')"
+          echo "  Query: $CLICKHOUSE_QUERY"
+
+          # Remove any path from URL and use query parameter for database if needed
+          # The @clickhouse/client library handles this automatically, but curl needs the base URL
+          CLICKHOUSE_BASE_URL=$(echo "$CLICKHOUSE_URL" | sed 's|/[^/]*$||')
+          echo "  Base URL length: ${#CLICKHOUSE_BASE_URL}"
+
+          CLICKHOUSE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$CLICKHOUSE_BASE_URL/" -d "$CLICKHOUSE_QUERY")
+          CLICKHOUSE_HTTP_CODE=$(echo "$CLICKHOUSE_RESPONSE" | tail -n1)
+          CLICKHOUSE_BODY=$(echo "$CLICKHOUSE_RESPONSE" | sed '$d')
+
+          echo "  HTTP Status: $CLICKHOUSE_HTTP_CODE"
+          if [ -n "$CLICKHOUSE_BODY" ]; then
+            echo "  Response Body: $CLICKHOUSE_BODY"
+          fi
+
+          if [ "$CLICKHOUSE_HTTP_CODE" -ge 200 ] && [ "$CLICKHOUSE_HTTP_CODE" -lt 300 ]; then
+            echo "ClickHouse record created successfully"
+          else
+            echo "Warning: Failed to write to ClickHouse (HTTP $CLICKHOUSE_HTTP_CODE)"
+          fi
+
+      - name: Send failure feedback
+        if: failure() && steps.meta.outputs.episode-id != ''
+        env:
+          TENSORZERO_BASE_URL: http://ci-bot-gateway:3000
+        run: |
+          EPISODE_ID="${{ steps.meta.outputs.episode-id }}"
+
+          echo "Sending failure feedback for episode $EPISODE_ID..."
+
+          # Send ci_fix_pr_created_agent=false
+          curl -sf -X POST "$TENSORZERO_BASE_URL/feedback" \
+            -H "Content-Type: application/json" \
+            -d "{\"metric_name\": \"ci_fix_pr_created_agent\", \"episode_id\": \"$EPISODE_ID\", \"value\": false}" \
+            && echo "ci_fix_pr_created_agent=false sent" \
+            || echo "Warning: Failed to send ci_fix_pr_created_agent feedback"
+
+          # Send ci_fix_pr_merged_agent=false
+          curl -sf -X POST "$TENSORZERO_BASE_URL/feedback" \
+            -H "Content-Type: application/json" \
+            -d "{\"metric_name\": \"ci_fix_pr_merged_agent\", \"episode_id\": \"$EPISODE_ID\", \"value\": false}" \
+            && echo "ci_fix_pr_merged_agent=false sent" \
+            || echo "Warning: Failed to send ci_fix_pr_merged_agent feedback"

@@ -1658,8 +1658,8 @@ async fn test_bedrock_err_no_auto_detect_region() {
 async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
     // We want auto-detection to fail, so we clear this environment variable.
     // We use 'nextest' as our runner, so each test runs in its own process
-    std::env::remove_var("AWS_REGION");
-    std::env::remove_var("AWS_DEFAULT_REGION");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
 
     let config_str = r#"
         [gateway]
@@ -1777,8 +1777,8 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
 async fn test_config_load_invalid_s3_creds() {
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1806,8 +1806,8 @@ async fn test_config_blocked_s3_http_endpoint_default() {
     let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1840,9 +1840,9 @@ async fn test_config_blocked_s3_http_endpoint_override() {
     let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
-    std::env::set_var("AWS_ALLOW_HTTP", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ALLOW_HTTP", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1876,11 +1876,11 @@ async fn test_config_s3_allow_http_config() {
     let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     // Make `object_store` fail immediately (with the expected dns resolution error)
     // to speed up this test.
-    std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1916,12 +1916,12 @@ async fn test_config_s3_allow_http_env_var() {
     let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
-    std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ACCESS_KEY_ID", "invalid");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_SECRET_ACCESS_KEY", "invalid");
     // Make `object_store` fail immediately (with the expected dns resolution error)
     // to speed up this test.
-    std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
-    std::env::set_var("AWS_ALLOW_HTTP", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+    tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_ALLOW_HTTP", "true");
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
