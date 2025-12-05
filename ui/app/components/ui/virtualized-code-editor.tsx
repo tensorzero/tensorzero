@@ -33,13 +33,14 @@ export function VirtualizedCodeEditor(props: CodeEditorProps) {
   }, []);
 
   return (
-    <div ref={containerRef} className={props.className}>
+    <div ref={containerRef}>
       {isVisible ? (
-        <CodeEditor {...props} className={undefined} />
+        <CodeEditor {...props} />
       ) : (
         <LightweightPlaceholder
           value={props.value}
           maxHeight={props.maxHeight}
+          className={props.className}
         />
       )}
     </div>
@@ -49,14 +50,17 @@ export function VirtualizedCodeEditor(props: CodeEditorProps) {
 function LightweightPlaceholder({
   value,
   maxHeight = "400px",
+  className,
 }: {
   value?: string;
   maxHeight?: string;
+  className?: string;
 }) {
   return (
     <pre
       className={cn(
         "min-h-9 overflow-auto rounded-sm bg-gray-50 p-2 font-mono text-xs whitespace-pre-wrap",
+        className,
       )}
       style={{ maxHeight }}
     >
