@@ -36,7 +36,6 @@ import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
-import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 
 export interface InferenceDetailData {
   inference: ParsedInferenceRow;
@@ -75,16 +74,6 @@ type ModalType = "human-feedback" | "variant-response" | null;
 type ActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
-
-/**
- * Helper to compute inference usage from model inferences.
- * Exported for use by the inference detail page.
- */
-export function getInferenceUsage(
-  model_inferences: ParsedModelInferenceRow[],
-): InferenceUsage {
-  return getTotalInferenceUsage(model_inferences);
-}
 
 export function InferenceDetailContent({
   data,
