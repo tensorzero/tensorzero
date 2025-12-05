@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
 use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero::{
-    ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse, Input, InputMessage,
-    InputMessageContent, Role,
+    ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse, Input,
+    InputContentBlock, InputMessage, Role,
 };
 use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
@@ -370,7 +370,7 @@ async fn run_inference_batch(client: &Arc<Client>, count: usize) -> Vec<(Uuid, S
                             system: None,
                             messages: vec![InputMessage {
                                 role: Role::User,
-                                content: vec![InputMessageContent::Text(Text {
+                                content: vec![InputContentBlock::Text(Text {
                                     text: "test input".to_string(),
                                 })],
                             }],

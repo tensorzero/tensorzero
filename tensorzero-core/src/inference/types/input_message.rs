@@ -3,7 +3,7 @@
 //! This module isolates the legacy compatibility logic needed to deserialize
 //! inbound requests while keeping `serde_path_to_error`'s path tracking intact.
 
-use super::{Arguments, InputMessage, InputMessageContent, Role, Template, Text, TextKind};
+use super::{Arguments, InputContentBlock, InputMessage, Role, Template, Text, TextKind};
 use serde::de::Error as DeserializerError;
 use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer};
@@ -24,7 +24,7 @@ impl<'de> Deserialize<'de> for MessageContent {
             .expecting(format_args!("a string, object, or array"))
             .string(|text| {
                 Ok(vec![IntermediaryInputMessageContent::Final(Box::new(
-                    InputMessageContent::Text(Text {
+                    InputContentBlock::Text(Text {
                         text: text.to_owned(),
                     }),
                 ))])
@@ -81,7 +81,7 @@ impl<'de> Deserialize<'de> for InputMessage {
 // while legacy `"content": {...}` shapes are postponed until we have access to
 // the message role (needed to synthesize the implicit template name).
 enum IntermediaryInputMessageContent {
-    Final(Box<InputMessageContent>),
+    Final(Box<InputContentBlock>),
     TemplateFromArguments(Arguments),
 }
 
@@ -104,7 +104,7 @@ impl<'de> Deserialize<'de> for IntermediaryInputMessageContent {
                     .map_err(|err| DeserializerError::custom(err.to_string()))?;
                 return match text_kind {
                     TextKind::Text { text } => Ok(IntermediaryInputMessageContent::Final(
-                        Box::new(InputMessageContent::Text(Text { text })),
+                        Box::new(InputContentBlock::Text(Text { text })),
                     )),
                     TextKind::Arguments { arguments } => Ok(
                         IntermediaryInputMessageContent::TemplateFromArguments(arguments),
@@ -113,7 +113,7 @@ impl<'de> Deserialize<'de> for IntermediaryInputMessageContent {
             }
         }
 
-        let content: InputMessageContent = serde_json::from_value(value)
+        let content: InputContentBlock = serde_json::from_value(value)
             .map_err(|err| DeserializerError::custom(err.to_string()))?;
         Ok(IntermediaryInputMessageContent::Final(Box::new(content)))
     }
@@ -122,7 +122,7 @@ impl<'de> Deserialize<'de> for IntermediaryInputMessageContent {
 fn finalize_intermediary_content(
     intermediaries: Vec<IntermediaryInputMessageContent>,
     role: Role,
-) -> Vec<InputMessageContent> {
+) -> Vec<InputContentBlock> {
     // At this point we have already preserved serde's path information. Now we
     // fold the intermediary variants into the final enum, inserting implicit
     // templates for legacy shapes that did not include a template name.
@@ -131,7 +131,7 @@ fn finalize_intermediary_content(
         .map(|content| match content {
             IntermediaryInputMessageContent::Final(content) => *content,
             IntermediaryInputMessageContent::TemplateFromArguments(arguments) => {
-                InputMessageContent::Template(Template {
+                InputContentBlock::Template(Template {
                     name: role.implicit_template_name().to_string(),
                     arguments,
                 })
@@ -167,7 +167,7 @@ mod tests {
         let message = &input.messages[0];
         assert_eq!(message.role, Role::User);
         match message.content.as_slice() {
-            [InputMessageContent::Text(Text { text })] => assert_eq!(text, "Hello world"),
+            [InputContentBlock::Text(Text { text })] => assert_eq!(text, "Hello world"),
             other => panic!("unexpected content: {other:?}"),
         }
     }
@@ -184,7 +184,7 @@ mod tests {
         let input = deserialize_input(json).expect("input should deserialize");
         let message = &input.messages[0];
         match message.content.as_slice() {
-            [InputMessageContent::Template(template)] => {
+            [InputContentBlock::Template(template)] => {
                 assert_eq!(template.name, "user");
                 assert_eq!(template.arguments.0.get("foo"), Some(&json!("bar")));
             }
@@ -207,7 +207,7 @@ mod tests {
         let input = deserialize_input(json).expect("input should deserialize");
         let message = &input.messages[0];
         match message.content.as_slice() {
-            [InputMessageContent::Template(template)] => {
+            [InputContentBlock::Template(template)] => {
                 assert_eq!(template.name, "assistant");
                 assert_eq!(template.arguments.0.get("answer"), Some(&json!("42")));
             }

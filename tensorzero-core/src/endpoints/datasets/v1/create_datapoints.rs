@@ -118,8 +118,8 @@ mod tests {
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
-        ContentBlockChatOutput, Input, InputMessage, InputMessageContent, JsonInferenceOutput,
-        Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+        ContentBlockChatOutput, Input, InputContentBlock, InputMessage, JsonInferenceOutput, Role,
+        StoredInput, StoredInputContentBlock, StoredInputMessage, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{DynamicToolParams, ToolChoice};
@@ -176,7 +176,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "test message".to_string(),
                 })],
             }],
@@ -216,7 +216,7 @@ mod tests {
                         system: None,
                         messages: vec![StoredInputMessage {
                             role: Role::User,
-                            content: vec![StoredInputMessageContent::Text(Text {
+                            content: vec![StoredInputContentBlock::Text(Text {
                                 text: "test message".to_string(),
                             })],
                         }],
@@ -287,7 +287,7 @@ mod tests {
                         system: None,
                         messages: vec![StoredInputMessage {
                             role: Role::User,
-                            content: vec![StoredInputMessageContent::Text(Text {
+                            content: vec![StoredInputContentBlock::Text(Text {
                                 text: "test message".to_string(),
                             })],
                         }],

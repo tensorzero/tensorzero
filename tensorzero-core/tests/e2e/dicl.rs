@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{
-    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
-    InputMessageContent,
+    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputContentBlock,
+    InputMessage,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
@@ -1347,7 +1347,7 @@ max_tokens = 100
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "What programming language is used for web development?".to_string(),
                 })],
             }],
@@ -1504,7 +1504,7 @@ max_tokens = 100
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Who was the author of the Harry Potter series?".to_string(),
                 })],
             }],

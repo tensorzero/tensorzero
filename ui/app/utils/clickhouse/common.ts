@@ -3,7 +3,7 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   JsonValue,
-  StoredInputMessageContent,
+  StoredInputContentBlock,
   StoredInputMessage,
   StoredInput,
   StoragePath as BackendStoragePath,
@@ -482,7 +482,7 @@ function storagePathToBackendStoragePath(
  */
 function displayInputMessageContentToStoredInputMessageContent(
   content: ZodDisplayInputMessageContent,
-): StoredInputMessageContent {
+): StoredInputContentBlock {
   switch (content.type) {
     case "text":
       return { type: "text", text: content.text };

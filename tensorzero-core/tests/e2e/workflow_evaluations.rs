@@ -5,8 +5,8 @@ use std::{
 
 use serde_json::json;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
-    InputMessageContent, Role, WorkflowEvaluationRunParams,
+    ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputContentBlock,
+    InputMessage, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -72,7 +72,7 @@ async fn test_workflow_evaluation() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
                     })],
@@ -260,7 +260,7 @@ async fn test_workflow_evaluation_other_function() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -333,7 +333,7 @@ async fn test_workflow_evaluation_variant_error() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -388,7 +388,7 @@ async fn test_workflow_evaluation_override_variant_tags() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],
@@ -446,7 +446,7 @@ async fn test_bad_workflow_evaluation_run() {
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion.".into(),
                 })],
             }],

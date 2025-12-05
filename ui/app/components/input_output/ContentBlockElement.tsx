@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { InputMessageContent } from "~/types/tensorzero";
+import type { InputContentBlock } from "~/types/tensorzero";
 import { TextContentBlock } from "~/components/input_output/content_blocks/TextContentBlock";
 import { TemplateContentBlock } from "~/components/input_output/content_blocks/TemplateContentBlock";
 import { ToolCallContentBlock } from "~/components/input_output/content_blocks/ToolCallContentBlock";
@@ -9,9 +9,9 @@ import { ThoughtContentBlock } from "~/components/input_output/content_blocks/Th
 import { UnknownContentBlock } from "~/components/input_output/content_blocks/UnknownContentBlock";
 
 interface ContentBlockElementProps {
-  block: InputMessageContent;
+  block: InputContentBlock;
   isEditing?: boolean;
-  onChange?: (updatedContentBlock: InputMessageContent) => void;
+  onChange?: (updatedContentBlock: InputContentBlock) => void;
   actionBar?: ReactNode;
 }
 

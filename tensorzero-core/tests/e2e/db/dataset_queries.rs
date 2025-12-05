@@ -23,8 +23,8 @@ use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, Text,
+    ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputContentBlock,
+    StoredInputMessage, Text,
 };
 use tensorzero_core::stored_inference::StoredSample;
 
@@ -942,7 +942,7 @@ async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
         let input_messages = datapoint.input.messages;
         assert!(input_messages.contains(&StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text(Text {
+            content: vec![StoredInputContentBlock::Text(Text {
                 text: "Is it a living thing?".to_string(),
             })],
         }));
@@ -2244,9 +2244,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::File(Box::new(
-                    stored_file.clone(),
-                ))],
+                content: vec![StoredInputContentBlock::File(Box::new(stored_file.clone()))],
             }],
         },
         output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -2286,7 +2284,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         assert_eq!(chat_dp.input.messages[0].content.len(), 1);
 
         match &chat_dp.input.messages[0].content[0] {
-            StoredInputMessageContent::File(file) => {
+            StoredInputContentBlock::File(file) => {
                 assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
                     file.source_url,
@@ -2329,9 +2327,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::File(Box::new(
-                    stored_file.clone(),
-                ))],
+                content: vec![StoredInputContentBlock::File(Box::new(stored_file.clone()))],
             }],
         },
         output: Some(JsonInferenceOutput {
@@ -2372,7 +2368,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
         assert_eq!(json_dp.input.messages[0].content.len(), 1);
 
         match &json_dp.input.messages[0].content[0] {
-            StoredInputMessageContent::File(file) => {
+            StoredInputContentBlock::File(file) => {
                 assert_eq!(file.mime_type, mime::APPLICATION_JSON);
                 assert_eq!(
                     file.source_url,
@@ -2428,15 +2424,15 @@ async fn test_datapoint_with_mixed_file_types() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Here are some files".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(stored_file1.clone())),
+                        StoredInputContentBlock::File(Box::new(stored_file1.clone())),
                     ],
                 },
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::File(Box::new(
+                    content: vec![StoredInputContentBlock::File(Box::new(
                         stored_file2.clone(),
                     ))],
                 },
@@ -2480,13 +2476,13 @@ async fn test_datapoint_with_mixed_file_types() {
         // Check first message with text and file
         assert_eq!(chat_dp.input.messages[0].content.len(), 2);
         match &chat_dp.input.messages[0].content[0] {
-            StoredInputMessageContent::Text(text) => {
+            StoredInputContentBlock::Text(text) => {
                 assert_eq!(text.text, "Here are some files");
             }
             _ => panic!("Expected Text content"),
         }
         match &chat_dp.input.messages[0].content[1] {
-            StoredInputMessageContent::File(file) => {
+            StoredInputContentBlock::File(file) => {
                 assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
                     file.source_url,
@@ -2500,7 +2496,7 @@ async fn test_datapoint_with_mixed_file_types() {
         // Check second message with file only
         assert_eq!(chat_dp.input.messages[1].content.len(), 1);
         match &chat_dp.input.messages[1].content[0] {
-            StoredInputMessageContent::File(file) => {
+            StoredInputContentBlock::File(file) => {
                 assert_eq!(file.mime_type, mime::IMAGE_JPEG);
                 assert_eq!(file.source_url, None);
                 assert_eq!(file.storage_path.path, stored_file2.storage_path.path);

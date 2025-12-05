@@ -35,7 +35,7 @@ import type {
   ClientInferenceParams,
   Input,
   InputMessage,
-  InputMessageContent,
+  InputContentBlock,
   ContentBlockChatOutput,
   JsonInferenceOutput,
   ChatInferenceDatapoint,
@@ -213,7 +213,7 @@ function inputMessageToZodInputMessage(message: InputMessage): ZodInputMessage {
 }
 
 function inputMessageContentToZodInputMessageContent(
-  content: InputMessageContent,
+  content: InputContentBlock,
 ): ZodInputMessageContent {
   switch (content.type) {
     case "raw_text":
@@ -547,7 +547,7 @@ function resolvedInputMessageToInputMessage(
 
 function resolvedInputMessageContentToInputMessageContent(
   content: ZodDisplayInputMessageContent,
-): InputMessageContent {
+): InputContentBlock {
   switch (content.type) {
     case "template":
       return content;
@@ -612,7 +612,7 @@ function resolvedInputMessageContentToInputMessageContent(
 
 function resolvedFileContentToClientFile(
   content: ZodResolvedFileContent,
-): InputMessageContent {
+): InputContentBlock {
   const data = content.file.data.split(",")[1];
   return {
     type: "file",

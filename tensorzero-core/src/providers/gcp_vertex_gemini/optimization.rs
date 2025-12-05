@@ -265,7 +265,7 @@ mod tests {
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            StoredInput, StoredInputContentBlock, StoredInputMessage, System, Text,
         },
         stored_inference::{RenderedSample, StoredOutput},
         tool::DynamicToolParams,
@@ -296,7 +296,7 @@ mod tests {
                 )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
                 }],

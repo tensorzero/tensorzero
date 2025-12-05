@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
-use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
+use crate::inference::types::stored_input::{StoredInput, StoredInputContentBlock};
 use crate::inference::types::{
     ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
 };
@@ -209,20 +209,20 @@ pub fn content_block_chat_output_to_python(
 
 pub fn stored_input_message_content_to_python(
     py: Python<'_>,
-    content: StoredInputMessageContent,
+    content: StoredInputContentBlock,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        StoredInputMessageContent::Text(text) => {
+        StoredInputContentBlock::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
             let kwargs = [(intern!(py, "text"), text.text)].into_py_dict(py)?;
             text_content_block.call(py, (), Some(&kwargs))
         }
-        StoredInputMessageContent::Template(template) => {
+        StoredInputContentBlock::Template(template) => {
             let template_content_block = import_template_content_block(py)?;
             let arguments_py = serialize_to_dict(py, template.arguments)?;
             template_content_block.call1(py, (template.name, arguments_py))
         }
-        StoredInputMessageContent::ToolCall(tool_call) => {
+        StoredInputContentBlock::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             let parsed_arguments_py = JSON_LOADS
                 .get(py)
@@ -244,24 +244,24 @@ pub fn stored_input_message_content_to_python(
                 ),
             )
         }
-        StoredInputMessageContent::ToolResult(tool_result) => {
+        StoredInputContentBlock::ToolResult(tool_result) => {
             let tool_result_content_block = import_tool_result_content_block(py)?;
             tool_result_content_block
                 .call1(py, (tool_result.name, tool_result.result, tool_result.id))
         }
-        StoredInputMessageContent::Thought(thought) => {
+        StoredInputContentBlock::Thought(thought) => {
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        StoredInputMessageContent::RawText(raw_text) => {
+        StoredInputContentBlock::RawText(raw_text) => {
             let raw_text_content_block = import_raw_text_content_block(py)?;
             raw_text_content_block.call1(py, (raw_text.value,))
         }
-        StoredInputMessageContent::File(file) => {
+        StoredInputContentBlock::File(file) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(py, (PyNone::get(py), file.mime_type.to_string()))
         }
-        StoredInputMessageContent::Unknown(unknown) => {
+        StoredInputContentBlock::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
             unknown_content_block.call1(

@@ -6,8 +6,8 @@ use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
+use tensorzero::InputContentBlock;
 use tensorzero::InputMessage;
-use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
 use tensorzero_core::config::{Config, ConfigFileGlob};
@@ -90,7 +90,7 @@ async fn test_get_howdy_report() {
             ))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -121,7 +121,7 @@ async fn test_get_howdy_report() {
             ))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Template(Template {
+                content: vec![InputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(
                         json!({

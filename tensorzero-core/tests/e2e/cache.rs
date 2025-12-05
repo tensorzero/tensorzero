@@ -17,8 +17,8 @@ use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
 use tensorzero::Input;
+use tensorzero::InputContentBlock;
 use tensorzero::InputMessage;
-use tensorzero::InputMessageContent;
 use tensorzero::Tool;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
@@ -359,7 +359,7 @@ pub async fn test_dont_cache_invalid_tool_call() {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],
@@ -409,7 +409,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: format!("Test inference: {randomness}"),
                 })],
             }],

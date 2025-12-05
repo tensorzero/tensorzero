@@ -21,7 +21,7 @@ use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
-use crate::inference::types::StoredInputMessageContent;
+use crate::inference::types::StoredInputContentBlock;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata,
     chat_completion_inference_params::ChatCompletionInferenceParamsV2, ModelInferenceRequest,
@@ -885,7 +885,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let StoredInputMessageContent::File(_) = content {
+                if let StoredInputContentBlock::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -1007,13 +1007,13 @@ mod tests {
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, assistant!".to_string(),
                     })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, user!".to_string(),
                     })],
                 },
@@ -1160,7 +1160,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the boiling point of water?".to_string(),
                         })],
                     }],
@@ -1183,10 +1183,10 @@ mod tests {
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
-                            StoredInputMessageContent::Text(Text {
+                            StoredInputContentBlock::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
-                            StoredInputMessageContent::File(Box::new(StoredFile(
+                            StoredInputContentBlock::File(Box::new(StoredFile(
                                 ObjectStoragePointer {
                                     source_url: None,
                                     mime_type: mime::IMAGE_PNG,
@@ -1236,7 +1236,7 @@ mod tests {
                 ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the boiling point of water?".to_string(),
                     })],
                 }],
@@ -1280,7 +1280,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the boiling point of water?".to_string(),
                         })],
                     }],
@@ -1302,7 +1302,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     }],
@@ -1350,7 +1350,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "Provide a sample JSON response.".to_string(),
                         })],
                     }],
@@ -1378,7 +1378,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "Provide another JSON response.".to_string(),
                         })],
                     }],
@@ -1577,7 +1577,7 @@ mod tests {
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Example question".to_string(),
                 })],
             }],

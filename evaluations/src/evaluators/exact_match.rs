@@ -75,7 +75,7 @@ mod tests {
             inference::{ChatInferenceResponse, JsonInferenceResponse},
         },
         inference::types::{
-            ContentBlockChatOutput, Input, InputMessage, InputMessageContent, JsonInferenceOutput,
+            ContentBlockChatOutput, Input, InputContentBlock, InputMessage, JsonInferenceOutput,
             Template, Text, Usage,
         },
     };
@@ -90,7 +90,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -153,7 +153,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -185,7 +185,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],
@@ -259,7 +259,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],
@@ -296,7 +296,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],

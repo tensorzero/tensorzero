@@ -202,7 +202,7 @@ mod tests {
         convert_openai_message_content, OpenAICompatibleContentBlock, OpenAICompatibleMessage,
         OpenAICompatibleUserMessage,
     };
-    use crate::inference::types::{Input, InputMessageContent, Role};
+    use crate::inference::types::{Input, InputContentBlock, Role};
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         match &result[0] {
-            InputMessageContent::File(File::Base64(base64_file)) => {
+            InputContentBlock::File(File::Base64(base64_file)) => {
                 // infer crate returns audio/x-wav for WAV files
                 assert_eq!(
                     base64_file.mime_type,
@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         match &result[0] {
-            InputMessageContent::File(File::Base64(base64_file)) => {
+            InputContentBlock::File(File::Base64(base64_file)) => {
                 assert_eq!(
                     base64_file.mime_type,
                     "audio/mpeg".parse::<MediaType>().unwrap()
@@ -583,7 +583,7 @@ mod tests {
 
         // Check text content
         match &input.messages[0].content[0] {
-            InputMessageContent::Text(text) => {
+            InputContentBlock::Text(text) => {
                 assert_eq!(text.text, "Please analyze this file");
             }
             _ => panic!("Expected Text content"),
@@ -591,7 +591,7 @@ mod tests {
 
         // Check file content with filename
         match &input.messages[0].content[1] {
-            InputMessageContent::File(File::Base64(base64_file)) => {
+            InputContentBlock::File(File::Base64(base64_file)) => {
                 assert_eq!(base64_file.filename, Some("important_data.txt".to_string()));
                 assert_eq!(base64_file.mime_type, mime::TEXT_PLAIN);
             }
@@ -613,7 +613,7 @@ mod tests {
 
         let input_no_filename: Input = messages_no_filename.try_into().unwrap();
         match &input_no_filename.messages[0].content[0] {
-            InputMessageContent::File(File::Base64(base64_file)) => {
+            InputContentBlock::File(File::Base64(base64_file)) => {
                 assert_eq!(base64_file.filename, None);
                 assert_eq!(base64_file.mime_type, mime::APPLICATION_PDF);
             }

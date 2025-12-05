@@ -30,8 +30,8 @@ use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
-    current_timestamp, Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage,
-    InputMessageContent, RawText, Role, System, Template, Text,
+    current_timestamp, Arguments, ContentBlockChatOutput, FinishReason, Input, InputContentBlock,
+    InputMessage, RawText, Role, System, Template, Text,
 };
 use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
@@ -461,9 +461,9 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 
                     for content in system_content {
                         let text = match content {
-                            InputMessageContent::Text(t) => Some(t.text),
-                            InputMessageContent::RawText(rt) => Some(rt.value),
-                            InputMessageContent::Template(t) => {
+                            InputContentBlock::Text(t) => Some(t.text),
+                            InputContentBlock::RawText(rt) => Some(rt.value),
+                            InputContentBlock::Template(t) => {
                                 if system_message.is_some() {
                                     return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                                         message: "System message cannot contain template with other content".to_string(),
@@ -521,7 +521,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                         for tool_call in tool_calls {
                             tool_call_id_to_name
                                 .insert(tool_call.id.clone(), tool_call.function.name.clone());
-                            message_content.push(InputMessageContent::ToolCall(tool_call.into()));
+                            message_content.push(InputContentBlock::ToolCall(tool_call.into()));
                         }
                     }
                     messages.push(InputMessage {
@@ -544,7 +544,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                             })
                         })?
                         .to_string();
-                    tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                    tool_results.push(InputContentBlock::ToolResult(ToolResult {
                         id: msg.tool_call_id,
                         name,
                         result: msg.content.unwrap_or_default().to_string(),
@@ -560,7 +560,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                                     })
                                 })?
                                 .to_string();
-                            tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                            tool_results.push(InputContentBlock::ToolResult(ToolResult {
                                 id: tool_result.tool_call_id.clone(),
                                 name,
                                 result: tool_result.content.clone().unwrap_or_default().to_string(),
@@ -589,29 +589,29 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 pub fn convert_openai_message_content(
     role: String,
     content: Value,
-) -> Result<Vec<InputMessageContent>, Error> {
+) -> Result<Vec<InputContentBlock>, Error> {
     match content {
-        Value::String(s) => Ok(vec![InputMessageContent::Text(Text { text: s })]),
+        Value::String(s) => Ok(vec![InputContentBlock::Text(Text { text: s })]),
         Value::Array(a) => {
             let mut outputs = Vec::with_capacity(a.len());
             for val in a {
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
-                    Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => InputMessageContent::RawText(raw_text),
-                    Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(Text { text }),
+                    Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => InputContentBlock::RawText(raw_text),
+                    Ok(OpenAICompatibleContentBlock::Template(template)) => InputContentBlock::Template(template),
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputContentBlock::Text(Text { text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => {
                         crate::utils::deprecation_warning("Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
-                        InputMessageContent::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
+                        InputContentBlock::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
                     }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
-                        InputMessageContent::File(convert_image_url_to_file(image_url)?)
+                        InputContentBlock::File(convert_image_url_to_file(image_url)?)
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(convert_file_to_base64(file)?)
+                        InputContentBlock::File(convert_file_to_base64(file)?)
                     }
                     Ok(OpenAICompatibleContentBlock::InputAudio { input_audio }) => {
-                        InputMessageContent::File(convert_input_audio_to_file(input_audio)?)
+                        InputContentBlock::File(convert_input_audio_to_file(input_audio)?)
                     }
                     Err(e) => {
                         if let Some(obj) = val.as_object() {
@@ -633,7 +633,7 @@ pub fn convert_openai_message_content(
                         }
                         crate::utils::deprecation_warning(&format!(r#"Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#));
                         if let Value::Object(obj) = val {
-                            InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
+                            InputContentBlock::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
                             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: format!("Content block `{val}` is not an object"),
@@ -776,7 +776,7 @@ mod tests {
         assert_eq!(params.input.messages[0].role, Role::User);
         assert_eq!(
             params.input.messages[0].content[0],
-            InputMessageContent::Text(Text {
+            InputContentBlock::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -853,10 +853,10 @@ mod tests {
                 InputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "Hello, world!".to_string(),
                         }),
-                        InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                        InputContentBlock::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
                             InferenceResponseToolCall {
                                 id: "1".to_string(),
                                 raw_name: "test_tool".to_string(),
@@ -869,7 +869,7 @@ mod tests {
                 },
                 InputMessage {
                     role: Role::Assistant,
-                    content: vec![InputMessageContent::ToolCall(
+                    content: vec![InputContentBlock::ToolCall(
                         ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
                             id: "2".to_string(),
                             raw_name: "test_tool".to_string(),
@@ -881,7 +881,7 @@ mod tests {
                 },
                 InputMessage {
                     role: Role::Assistant,
-                    content: vec![InputMessageContent::ToolCall(
+                    content: vec![InputContentBlock::ToolCall(
                         ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
                             id: "3".to_string(),
                             raw_name: "test_tool".to_string(),
@@ -894,12 +894,12 @@ mod tests {
                 InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::ToolResult(ToolResult {
+                        InputContentBlock::ToolResult(ToolResult {
                             name: "test_tool".to_string(),
                             result: "\"Tool result 1\"".to_string(),
                             id: "1".to_string()
                         }),
-                        InputMessageContent::ToolResult(ToolResult {
+                        InputContentBlock::ToolResult(ToolResult {
                             name: "test_tool".to_string(),
                             result: "\"Tool result 2\"".to_string(),
                             id: "2".to_string()
@@ -908,13 +908,13 @@ mod tests {
                 },
                 InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "First message".to_string(),
                     })]
                 },
                 InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::ToolResult(ToolResult {
+                    content: vec![InputContentBlock::ToolResult(ToolResult {
                         name: "test_tool".to_string(),
                         result: "\"Tool result 3\"".to_string(),
                         id: "3".to_string()
@@ -922,7 +922,7 @@ mod tests {
                 },
                 InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Second message".to_string(),
                     })]
                 }
@@ -940,7 +940,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Text(Text {
+            InputContentBlock::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -1015,7 +1015,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Template(Template {
+            InputContentBlock::Template(Template {
                 name: "assistant".to_string(),
                 arguments: Arguments(
                     json!({
@@ -1048,10 +1048,10 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(input.messages[0].content.len(), 2);
 
-        let expected_text = InputMessageContent::Text(Text {
+        let expected_text = InputContentBlock::Text(Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(
+        let expected_tool_call = InputContentBlock::ToolCall(
             ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
                 id: "1".to_string(),
                 raw_name: "test_tool".to_string(),
@@ -1088,7 +1088,7 @@ mod tests {
             result.messages,
             vec![InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Assistant message".to_string(),
                 })],
             }]
@@ -1282,10 +1282,7 @@ mod tests {
         let value =
             convert_openai_message_content("user".to_string(), Value::String(content.clone()))
                 .unwrap();
-        assert_eq!(
-            value,
-            vec![InputMessageContent::Text(Text { text: content })]
-        );
+        assert_eq!(value, vec![InputContentBlock::Text(Text { text: content })]);
         // tensorzero::raw_text
         let content = json!([{
             "type": "tensorzero::raw_text",
@@ -1294,7 +1291,7 @@ mod tests {
         let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::RawText(RawText {
+            vec![InputContentBlock::RawText(RawText {
                 value: "This is raw text".to_string()
             })]
         );
@@ -1306,7 +1303,7 @@ mod tests {
         let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(Template {
+            vec![InputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     json!({
@@ -1345,7 +1342,7 @@ mod tests {
         let value = convert_openai_message_content("user".to_string(), arguments_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(Template {
+            vec![InputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     json!({
@@ -1368,7 +1365,7 @@ mod tests {
         let value = convert_openai_message_content("user".to_string(), template_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(Template {
+            vec![InputContentBlock::Template(Template {
                 name: "my_template".to_string(),
                 arguments: Arguments(
                     json!({ "custom_key": "custom_val" })
@@ -1390,7 +1387,7 @@ mod tests {
         let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(Template {
+            vec![InputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     json!({

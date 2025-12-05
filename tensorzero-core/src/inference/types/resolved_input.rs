@@ -17,7 +17,7 @@ use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::{Base64FileMetadata, Detail};
 use crate::inference::types::stored_input::{
-    StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredFile, StoredInput, StoredInputContentBlock, StoredInputMessage,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, Template};
 use crate::rate_limiting::RateLimitedInputContent;
@@ -382,29 +382,29 @@ pub enum ResolvedInputMessageContent {
 }
 
 impl ResolvedInputMessageContent {
-    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
+    pub fn into_stored_input_message_content(self) -> StoredInputContentBlock {
         match self {
-            ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
+            ResolvedInputMessageContent::Text(text) => StoredInputContentBlock::Text(text),
             ResolvedInputMessageContent::Template(template) => {
-                StoredInputMessageContent::Template(template)
+                StoredInputContentBlock::Template(template)
             }
             ResolvedInputMessageContent::ToolCall(tool_call) => {
-                StoredInputMessageContent::ToolCall(tool_call)
+                StoredInputContentBlock::ToolCall(tool_call)
             }
             ResolvedInputMessageContent::ToolResult(tool_result) => {
-                StoredInputMessageContent::ToolResult(tool_result)
+                StoredInputContentBlock::ToolResult(tool_result)
             }
             ResolvedInputMessageContent::RawText(raw_text) => {
-                StoredInputMessageContent::RawText(raw_text)
+                StoredInputContentBlock::RawText(raw_text)
             }
             ResolvedInputMessageContent::Thought(thought) => {
-                StoredInputMessageContent::Thought(thought)
+                StoredInputContentBlock::Thought(thought)
             }
             ResolvedInputMessageContent::File(resolved) => {
-                StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+                StoredInputContentBlock::File(Box::new(StoredFile(resolved.file)))
             }
             ResolvedInputMessageContent::Unknown(unknown) => {
-                StoredInputMessageContent::Unknown(unknown)
+                StoredInputContentBlock::Unknown(unknown)
             }
         }
     }

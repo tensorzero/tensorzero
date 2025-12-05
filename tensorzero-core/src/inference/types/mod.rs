@@ -122,7 +122,7 @@ pub mod usage;
 pub use resolved_input::ResolvedRequestMessage;
 pub use role::Role;
 pub use stored_input::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
+    StoredInput, StoredInputContentBlock, StoredInputMessage, StoredRequestMessage,
 };
 pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
@@ -250,7 +250,7 @@ impl InputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .map(InputContentBlock::into_stored_input_message_content_without_file_handling)
                 .try_collect()?,
         })
     }
@@ -300,7 +300,7 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     Ok(object_store_info.kind.clone())
 }
 
-impl InputMessageContent {
+impl InputContentBlock {
     /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
     /// we can remove the `role` parameter.
@@ -309,25 +309,25 @@ impl InputMessageContent {
         context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text(Text { text }) => {
+            InputContentBlock::Text(Text { text }) => {
                 LazyResolvedInputMessageContent::Text(Text { text })
             }
-            InputMessageContent::RawText(raw_text) => {
+            InputContentBlock::RawText(raw_text) => {
                 LazyResolvedInputMessageContent::RawText(raw_text)
             }
-            InputMessageContent::Thought(thought) => {
+            InputContentBlock::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
-            InputMessageContent::Template(template) => {
+            InputContentBlock::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
             }
-            InputMessageContent::ToolCall(tool_call) => {
+            InputContentBlock::ToolCall(tool_call) => {
                 LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
             }
-            InputMessageContent::ToolResult(tool_result) => {
+            InputContentBlock::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
             }
-            InputMessageContent::File(file) => {
+            InputContentBlock::File(file) => {
                 match &file {
                     // User provided a file URL.
                     // We create a lazy future that will fetch the file when needed.
@@ -486,7 +486,7 @@ impl InputMessageContent {
                     ),
                 }
             }
-            InputMessageContent::Unknown(unknown) => {
+            InputContentBlock::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
         })
@@ -495,23 +495,19 @@ impl InputMessageContent {
     /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
     pub fn into_stored_input_message_content_without_file_handling(
         self,
-    ) -> Result<StoredInputMessageContent, Error> {
+    ) -> Result<StoredInputContentBlock, Error> {
         Ok(match self {
-            InputMessageContent::Text(Text { text }) => {
-                StoredInputMessageContent::Text(Text { text })
+            InputContentBlock::Text(Text { text }) => StoredInputContentBlock::Text(Text { text }),
+            InputContentBlock::RawText(raw_text) => StoredInputContentBlock::RawText(raw_text),
+            InputContentBlock::Thought(thought) => StoredInputContentBlock::Thought(thought),
+            InputContentBlock::Template(template) => StoredInputContentBlock::Template(template),
+            InputContentBlock::ToolCall(tool_call) => {
+                StoredInputContentBlock::ToolCall(tool_call.try_into()?)
             }
-            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
-            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
-            InputMessageContent::Template(template) => {
-                StoredInputMessageContent::Template(template)
+            InputContentBlock::ToolResult(tool_result) => {
+                StoredInputContentBlock::ToolResult(tool_result)
             }
-            InputMessageContent::ToolCall(tool_call) => {
-                StoredInputMessageContent::ToolCall(tool_call.try_into()?)
-            }
-            InputMessageContent::ToolResult(tool_result) => {
-                StoredInputMessageContent::ToolResult(tool_result)
-            }
-            InputMessageContent::File(file) => {
+            InputContentBlock::File(file) => {
                 match file {
                     // If `file` is external, we cannot convert it directly to a StoredFile.
                     File::Url(_) | File::Base64(_) => {
@@ -523,11 +519,11 @@ impl InputMessageContent {
                     File::ObjectStorage(ObjectStorageFile { file, .. })
                     | File::ObjectStoragePointer(file)
                     | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
-                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                        StoredInputContentBlock::File(Box::new(StoredFile(file)))
                     }
                 }
             }
-            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
+            InputContentBlock::Unknown(unknown) => StoredInputContentBlock::Unknown(unknown),
         })
     }
 }
@@ -590,7 +586,7 @@ impl LazyResolvedInputMessageContent {
     pub async fn into_stored_input_message_content(
         self,
         object_store_info: &Option<ObjectStoreInfo>,
-    ) -> Result<StoredInputMessageContent, Error> {
+    ) -> Result<StoredInputContentBlock, Error> {
         Ok(match self {
             LazyResolvedInputMessageContent::File(file) => match *file {
                 // File reference to object storage without data in memory.
@@ -602,7 +598,7 @@ impl LazyResolvedInputMessageContent {
                     metadata,
                     storage_path,
                     future: _,
-                } => StoredInputMessageContent::File(Box::new(StoredFile(ObjectStoragePointer {
+                } => StoredInputContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
                     source_url: metadata.source_url,
                     mime_type: metadata.mime_type,
                     storage_path,
@@ -615,7 +611,7 @@ impl LazyResolvedInputMessageContent {
                 // The file is already persisted at storage_path, so we skip the write.
                 // We drop the in-memory data and keep only the metadata for storage.
                 LazyFile::ObjectStorage(resolved) => {
-                    StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+                    StoredInputContentBlock::File(Box::new(StoredFile(resolved.file)))
                 }
                 // File from a URL that needs to be fetched and stored.
                 // Origin: User provided File::Url
@@ -639,7 +635,7 @@ impl LazyResolvedInputMessageContent {
                     )
                     .await?;
 
-                    StoredInputMessageContent::File(Box::new(StoredFile(resolved_file.file)))
+                    StoredInputContentBlock::File(Box::new(StoredFile(resolved_file.file)))
                 }
                 // Base64-encoded file data that needs to be written to storage.
                 // Origin: User provided File::Base64 (fresh file data)
@@ -660,7 +656,7 @@ impl LazyResolvedInputMessageContent {
                     )
                     .await?;
 
-                    StoredInputMessageContent::File(Box::new(StoredFile(pending.0.file)))
+                    StoredInputContentBlock::File(Box::new(StoredFile(pending.0.file)))
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
@@ -677,7 +673,7 @@ impl LazyResolvedInputMessageContent {
 #[export_schema]
 pub struct InputMessage {
     pub role: Role,
-    pub content: Vec<InputMessageContent>,
+    pub content: Vec<InputContentBlock>,
 }
 
 impl From<StoredInputMessage> for InputMessage {
@@ -687,7 +683,7 @@ impl From<StoredInputMessage> for InputMessage {
             content: stored_input_message
                 .content
                 .into_iter()
-                .map(StoredInputMessageContent::into_input_message_content)
+                .map(StoredInputContentBlock::into_input_message_content)
                 .collect(),
         }
     }
@@ -727,28 +723,28 @@ pub enum System {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 #[export_schema]
-pub enum InputMessageContent {
-    #[schemars(title = "InputMessageContentText")]
+pub enum InputContentBlock {
+    #[schemars(title = "InputContentBlockText")]
     Text(Text),
-    #[schemars(title = "InputMessageContentTemplate")]
+    #[schemars(title = "InputContentBlockTemplate")]
     Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
+    #[schemars(title = "InputContentBlockToolCall")]
     ToolCall(ToolCallWrapper),
-    #[schemars(title = "InputMessageContentToolResult")]
+    #[schemars(title = "InputContentBlockToolResult")]
     ToolResult(ToolResult),
-    #[schemars(title = "InputMessageContentRawText")]
+    #[schemars(title = "InputContentBlockRawText")]
     RawText(RawText),
-    #[schemars(title = "InputMessageContentThought")]
+    #[schemars(title = "InputContentBlockThought")]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "InputMessageContentFile")]
+    #[schemars(title = "InputContentBlockFile")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    #[schemars(title = "InputMessageContentUnknown")]
+    #[schemars(title = "InputContentBlockUnknown")]
     Unknown(Unknown),
 }
 
@@ -1748,9 +1744,9 @@ pub struct ModelInferenceDatabaseInsert {
 }
 
 #[cfg(test)]
-impl From<String> for InputMessageContent {
+impl From<String> for InputContentBlock {
     fn from(text: String) -> Self {
-        InputMessageContent::Text(Text { text })
+        InputContentBlock::Text(Text { text })
     }
 }
 
@@ -3020,7 +3016,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(text) => {
+            InputContentBlock::Text(text) => {
                 assert_eq!(&text.text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
@@ -3035,7 +3031,7 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Template(template) => {
+            InputContentBlock::Template(template) => {
                 assert_eq!(template.name, "assistant");
                 assert_eq!(
                     &template.arguments.0,
@@ -3057,13 +3053,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(text) => {
+            InputContentBlock::Text(text) => {
                 assert_eq!(&text.text, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(wrapper) => match wrapper {
+            InputContentBlock::ToolCall(wrapper) => match wrapper {
                 ToolCallWrapper::ToolCall(tc) => {
                     assert_eq!(tc.id, "123");
                     assert_eq!(tc.name, "test_tool");
@@ -3091,7 +3087,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Template(Template { name, arguments }) => {
+            InputContentBlock::Template(Template { name, arguments }) => {
                 assert_eq!(name, "user");
                 assert_eq!(
                     &arguments.0,
@@ -3103,7 +3099,7 @@ mod tests {
             _ => panic!("Expected Text content with JSON object"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(wrapper) => match wrapper {
+            InputContentBlock::ToolCall(wrapper) => match wrapper {
                 ToolCallWrapper::ToolCall(tc) => {
                     assert_eq!(tc.id, "456");
                     assert_eq!(tc.name, "another_tool");

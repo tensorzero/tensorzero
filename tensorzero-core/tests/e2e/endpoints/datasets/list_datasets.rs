@@ -9,7 +9,7 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::endpoints::datasets::v1::types::ListDatasetsResponse;
 use tensorzero_core::inference::types::{
-    Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+    Role, StoredInput, StoredInputContentBlock, StoredInputMessage, Text,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -33,7 +33,7 @@ async fn test_list_datasets_no_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -122,7 +122,7 @@ async fn test_list_datasets_with_function_filter() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 1".to_string(),
                 })],
             }],
@@ -146,7 +146,7 @@ async fn test_list_datasets_with_function_filter() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 2".to_string(),
                 })],
             }],
@@ -250,7 +250,7 @@ async fn test_list_datasets_with_pagination() {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: format!("Test {i}"),
                     })],
                 }],

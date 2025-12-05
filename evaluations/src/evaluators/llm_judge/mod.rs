@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
-    InferenceResponse, Input, InputMessage, InputMessageContent, Role,
+    InferenceResponse, Input, InputContentBlock, InputMessage, Role,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
@@ -203,7 +203,7 @@ fn prepare_llm_judge_input(
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         #[expect(clippy::expect_used)]
                         arguments: Arguments(
@@ -233,7 +233,7 @@ fn prepare_llm_judge_input(
                 Some(final_message) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(Text {
+                        content: vec![InputContentBlock::Text(Text {
                             text: final_message,
                         })],
                     });
@@ -272,18 +272,18 @@ fn prepare_serialized_input(input: &Input) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                InputMessageContent::File { .. } => {
+                InputContentBlock::File { .. } => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
-                InputMessageContent::Unknown(_) => {
+                InputContentBlock::Unknown(_) => {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
-                InputMessageContent::Text { .. }
-                | InputMessageContent::Template { .. }
-                | InputMessageContent::ToolCall { .. }
-                | InputMessageContent::ToolResult { .. }
-                | InputMessageContent::RawText(..)
-                | InputMessageContent::Thought(..) => {}
+                InputContentBlock::Text { .. }
+                | InputContentBlock::Template { .. }
+                | InputContentBlock::ToolCall { .. }
+                | InputContentBlock::ToolResult { .. }
+                | InputContentBlock::RawText(..)
+                | InputContentBlock::Thought(..) => {}
             }
         }
     }
@@ -297,14 +297,14 @@ fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
             System::Text(text) => {
                 messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text { text: text.clone() })],
+                    content: vec![InputContentBlock::Text(Text { text: text.clone() })],
                 });
             }
             System::Template(arguments) => {
                 let system_message = serde_json::to_string(arguments)?;
                 messages.push(InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: system_message,
                     })],
                 });
@@ -322,37 +322,37 @@ fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
 }
 
 fn serialize_content_for_messages_input(
-    content: &Vec<InputMessageContent>,
-) -> Result<Vec<InputMessageContent>> {
+    content: &Vec<InputContentBlock>,
+) -> Result<Vec<InputContentBlock>> {
     let mut serialized_content = Vec::new();
     for content_block in content {
         match content_block {
-            InputMessageContent::File(image) => {
+            InputContentBlock::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
                 if let File::Url(..) = image {
                     bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
                 }
-                serialized_content.push(InputMessageContent::File(image.clone()));
+                serialized_content.push(InputContentBlock::File(image.clone()));
             }
-            InputMessageContent::Unknown(_) => {
+            InputContentBlock::Unknown(_) => {
                 bail!("Unknown content not supported for LLM judge evaluations")
             }
-            InputMessageContent::ToolCall { .. }
-            | InputMessageContent::ToolResult { .. }
-            | InputMessageContent::RawText { .. }
-            | InputMessageContent::Thought(_) => {
+            InputContentBlock::ToolCall { .. }
+            | InputContentBlock::ToolResult { .. }
+            | InputContentBlock::RawText { .. }
+            | InputContentBlock::Thought(_) => {
                 serialized_content.push(content_block.clone());
             }
-            InputMessageContent::Template(input) => {
+            InputContentBlock::Template(input) => {
                 // Since the LLM Judge does not have the template of the original function,
                 // we instead serialize the arguments and send them as a Text block.
                 let arguments_string = serde_json::to_string(input)?;
-                serialized_content.push(InputMessageContent::Text(Text {
+                serialized_content.push(InputContentBlock::Text(Text {
                     text: arguments_string,
                 }));
             }
-            InputMessageContent::Text(text) => {
-                serialized_content.push(InputMessageContent::Text(Text {
+            InputContentBlock::Text(text) => {
+                serialized_content.push(InputContentBlock::Text(Text {
                     text: text.text.clone(),
                 }));
             }
@@ -438,7 +438,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -455,10 +455,10 @@ mod tests {
             messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    InputMessageContent::Text(Text {
+                    InputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     }),
-                    InputMessageContent::ToolResult(ToolResult {
+                    InputContentBlock::ToolResult(ToolResult {
                         name: "tool".to_string(),
                         result: "it's 24 degrees and cloudy in SF".to_string(),
                         id: "foooo".to_string(),
@@ -476,7 +476,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputContentBlock::File(File::Url(UrlFile {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                     mime_type: None,
                     detail: None,
@@ -551,7 +551,7 @@ mod tests {
             system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "bar".to_string(),
                 })],
             }],
@@ -603,7 +603,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("input".to_string(), "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".into()),
@@ -672,7 +672,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("input".to_string(), "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".into()),
@@ -692,7 +692,7 @@ mod tests {
             system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -701,7 +701,7 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
         assert_eq!(messages[0].content.len(), 1);
-        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
+        if let InputContentBlock::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(text, "You are a helpful assistant");
         } else {
             panic!("Expected Text");
@@ -716,7 +716,7 @@ mod tests {
             ])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -724,7 +724,7 @@ mod tests {
         let messages = prepare_messages_input(&input).unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, Role::User);
-        if let InputMessageContent::Text(Text { text }) = &messages[0].content[0] {
+        if let InputContentBlock::Text(Text { text }) = &messages[0].content[0] {
             assert_eq!(
                 text,
                 r#"{"instructions":"Be helpful","persona":"assistant"}"#
@@ -737,19 +737,19 @@ mod tests {
     #[test]
     fn test_serialize_content_for_messages_input() {
         // Test with Text
-        let content = vec![InputMessageContent::Text(Text {
+        let content = vec![InputContentBlock::Text(Text {
             text: "Hello, world!".to_string(),
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
+        if let InputContentBlock::Text(Text { text }) = &serialized[0] {
             assert_eq!(text, "Hello, world!");
         } else {
             panic!("Expected Text");
         }
 
         // Test with Template
-        let content = vec![InputMessageContent::Template(Template {
+        let content = vec![InputContentBlock::Template(Template {
             name: "test".to_string(),
             arguments: Arguments(serde_json::Map::from_iter([(
                 "key".to_string(),
@@ -758,7 +758,7 @@ mod tests {
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
-        if let InputMessageContent::Text(Text { text }) = &serialized[0] {
+        if let InputContentBlock::Text(Text { text }) = &serialized[0] {
             assert!(text.contains("test") && text.contains("key"));
         } else {
             panic!("Expected Text");
@@ -766,20 +766,20 @@ mod tests {
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
         let content = vec![
-            InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+            InputContentBlock::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                 id: "toolid".to_string(),
                 name: "tool".to_string(),
                 arguments: json!({"arg": "value"}).to_string(),
             })),
-            InputMessageContent::ToolResult(ToolResult {
+            InputContentBlock::ToolResult(ToolResult {
                 name: "tool".to_string(),
                 result: "result".to_string(),
                 id: "toolid".to_string(),
             }),
-            InputMessageContent::RawText(RawText {
+            InputContentBlock::RawText(RawText {
                 value: "raw text".to_string(),
             }),
-            InputMessageContent::Thought(Thought {
+            InputContentBlock::Thought(Thought {
                 text: Some("thought".to_string()),
                 signature: None,
                 summary: None,
@@ -790,7 +790,7 @@ mod tests {
         assert_eq!(serialized.len(), 4);
 
         // Test with Unknown content (should error)
-        let content = vec![InputMessageContent::Unknown(Unknown {
+        let content = vec![InputContentBlock::Unknown(Unknown {
             data: json!({"unknown": "data"}),
             model_name: Some("model".to_string()),
             provider_name: Some("provider".to_string()),
@@ -1016,7 +1016,7 @@ mod tests {
             system: Some(System::Text("System instruction".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "User message".to_string(),
                 })],
             }],
@@ -1067,7 +1067,7 @@ mod tests {
 
         // First message should be system converted to user
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[0].content[0] {
+        if let InputContentBlock::Text(Text { text }) = &prepared_input.messages[0].content[0] {
             assert_eq!(text, "System instruction");
         } else {
             panic!("Expected Text");
@@ -1075,7 +1075,7 @@ mod tests {
 
         // Second message should be original user message
         assert_eq!(prepared_input.messages[1].role, Role::User);
-        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[1].content[0] {
+        if let InputContentBlock::Text(Text { text }) = &prepared_input.messages[1].content[0] {
             assert_eq!(text, "User message");
         } else {
             panic!("Expected Text");
@@ -1083,7 +1083,7 @@ mod tests {
 
         // Third message should contain the generated output
         assert_eq!(prepared_input.messages[2].role, Role::User);
-        if let InputMessageContent::Text(Text { text }) = &prepared_input.messages[2].content[0] {
+        if let InputContentBlock::Text(Text { text }) = &prepared_input.messages[2].content[0] {
             let expected = format!(
                 include_str!("message_output_template_without_reference.txt"),
                 "[{\"type\":\"text\",\"text\":\"Generated output\"}]"
@@ -1126,7 +1126,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Query".to_string(),
                 })],
             }],
@@ -1177,7 +1177,7 @@ mod tests {
         assert_eq!(prepared_input.system, None);
         assert_eq!(prepared_input.messages.len(), 1);
         assert_eq!(prepared_input.messages[0].role, Role::User);
-        if let InputMessageContent::Template(Template { name, arguments }) =
+        if let InputContentBlock::Template(Template { name, arguments }) =
             &prepared_input.messages[0].content[0]
         {
             assert_eq!(name, "user");

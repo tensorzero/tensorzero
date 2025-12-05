@@ -5,7 +5,7 @@ use std::time::Duration;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, StoredDatapoint, System,
+    ClientExt, InputContentBlock, JsonInferenceDatapoint, Role, StoredDatapoint, System,
 };
 use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
@@ -16,7 +16,7 @@ use tensorzero_core::{
         datasets::{DatasetQueries, GetDatapointsParams},
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputContentBlock},
     tool::Tool,
 };
 
@@ -292,7 +292,7 @@ async fn test_create_delete_datapoint_chat() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
+        assert!(matches!(first_content, StoredInputContentBlock::Text(_)));
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
@@ -307,7 +307,7 @@ async fn test_create_delete_datapoint_chat() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(first_content, InputMessageContent::Text(_)));
+        assert!(matches!(first_content, InputContentBlock::Text(_)));
 
         // Verify output if present
         if let Some(output) = &datapoint.output {
@@ -1067,10 +1067,7 @@ async fn test_create_delete_datapoint_json() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            InputMessageContent::Template { .. }
-        ));
+        assert!(matches!(first_content, InputContentBlock::Template { .. }));
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
@@ -1085,10 +1082,7 @@ async fn test_create_delete_datapoint_json() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            InputMessageContent::Template { .. }
-        ));
+        assert!(matches!(first_content, InputContentBlock::Template { .. }));
 
         // Get the output schema
         let output_schema = &datapoint.output_schema;

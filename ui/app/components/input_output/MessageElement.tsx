@@ -1,4 +1,4 @@
-import type { InputMessage, InputMessageContent } from "~/types/tensorzero";
+import type { InputMessage, InputContentBlock } from "~/types/tensorzero";
 import { ContentBlockElement } from "./ContentBlockElement";
 import { MessageWrapper } from "./MessageWrapper";
 import { AddButton } from "~/components/ui/AddButton";
@@ -17,7 +17,7 @@ export function MessageElement({
   onChange?: (updatedMessage: InputMessage) => void;
   onDelete?: () => void;
 }) {
-  const onAppendContentBlock = (contentBlock: InputMessageContent) => {
+  const onAppendContentBlock = (contentBlock: InputContentBlock) => {
     const updatedMessage = { ...message };
     updatedMessage.content = [...updatedMessage.content, contentBlock];
     onChange?.(updatedMessage);
@@ -25,7 +25,7 @@ export function MessageElement({
 
   const onUpdateContentBlock = (
     contentBlockIndex: number,
-    updatedContentBlock: InputMessageContent,
+    updatedContentBlock: InputContentBlock,
   ) => {
     const updatedMessage = { ...message };
     const updatedContent = [...updatedMessage.content];
@@ -81,11 +81,11 @@ export function MessageElement({
 function AddContentBlockButtons({
   onAdd,
 }: {
-  onAdd: (block: InputMessageContent) => void;
+  onAdd: (block: InputContentBlock) => void;
 }) {
   const buttons: Array<{
     label: string;
-    emptyBlock: InputMessageContent;
+    emptyBlock: InputContentBlock;
   }> = [
     {
       label: "Text",

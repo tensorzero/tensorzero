@@ -406,7 +406,7 @@ mod tests {
     use tensorzero_core::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            StoredInput, StoredInputContentBlock, StoredInputMessage, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
@@ -435,7 +435,7 @@ mod tests {
                 )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
                 }],
@@ -500,7 +500,7 @@ mod tests {
                 )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
                 }],
@@ -567,7 +567,7 @@ mod tests {
                 system: Some(System::Text("You are a helpful assistant.".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What's the weather like?".to_string(),
                     })],
                 }],

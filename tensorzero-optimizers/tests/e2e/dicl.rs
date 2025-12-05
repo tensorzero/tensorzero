@@ -3,7 +3,7 @@ use tensorzero::DynamicToolParams;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+    StoredInput, StoredInputContentBlock, StoredInputMessage, Text,
 };
 use tensorzero_core::stored_inference::RenderedSample;
 use tensorzero_optimizers::dicl::{dicl_examples_exist, insert_dicl_examples_with_batching};
@@ -28,7 +28,7 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: input.to_string(),
                 })],
             }],

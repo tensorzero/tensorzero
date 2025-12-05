@@ -9,8 +9,8 @@ use uuid::Uuid;
 use super::use_mock_inference_provider;
 use tensorzero::{
     ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
-    Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
-    Role, System,
+    Input, InputContentBlock, InputMessage, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+    System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
@@ -22,7 +22,7 @@ use tensorzero_core::{
     inference::types::{
         Arguments, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, Usage,
+        StoredInputContentBlock, StoredInputMessage, StoredRequestMessage, Text, Usage,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -213,7 +213,7 @@ pub async fn test_dicl_optimization_chat() {
         )])))),
         messages: vec![InputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(Text {
+            content: vec![InputContentBlock::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -498,7 +498,7 @@ pub async fn test_dicl_optimization_json() {
         )])))),
         messages: vec![InputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(Text {
+            content: vec![InputContentBlock::Text(Text {
                 text: "Who was the author of the Harry Potter series?".to_string(),
             })],
         }],
@@ -1203,7 +1203,7 @@ fn create_pinocchio_example(
                 .map(|s| System::Template(Arguments(s.as_object().unwrap().to_owned()))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: question.to_string(),
                 })],
             }],

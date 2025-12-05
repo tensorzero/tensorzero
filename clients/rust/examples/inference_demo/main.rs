@@ -4,7 +4,7 @@ use std::{io::Write, path::PathBuf};
 
 use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ContentBlockChunk, InferenceOutput,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role,
+    InferenceResponseChunk, Input, InputContentBlock, InputMessage, Role,
 };
 use tensorzero_core::inference::types::Template;
 use tokio_stream::StreamExt;
@@ -78,7 +78,7 @@ async fn main() {
             input: Input {
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: input,
                     })],

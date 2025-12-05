@@ -17,7 +17,7 @@ import type {
   FunctionConfig,
   JsonValue,
   Input,
-  InputMessageContent,
+  InputContentBlock,
 } from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
 
@@ -311,12 +311,12 @@ export async function loadFileDataForInput(input: Input): Promise<Input> {
 }
 
 /**
- * Resolves a StoredInputMessageContent to InputMessageContent.
+ * Resolves a StoredInputContentBlock to InputContentBlock.
  * For files: converts StoredFile to File with file_type: "object_storage" by fetching data.
  */
 async function loadFileDataForInputContent(
-  content: InputMessageContent,
-): Promise<InputMessageContent> {
+  content: InputContentBlock,
+): Promise<InputContentBlock> {
   switch (content.type) {
     case "tool_call":
     case "tool_result":

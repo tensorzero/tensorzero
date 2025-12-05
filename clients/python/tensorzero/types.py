@@ -8,17 +8,9 @@ from uuid import UUID
 
 import httpx
 import uuid_utils
-from typing_extensions import NotRequired, TypedDict, deprecated
+from typing_extensions import NotRequired, TypedDict
 
 from tensorzero.generated_types import (
-    InferenceFilter,
-    InferenceFilterAnd,
-    InferenceFilterBooleanMetric,
-    InferenceFilterFloatMetric,
-    InferenceFilterNot,
-    InferenceFilterOr,
-    InferenceFilterTag,
-    InferenceFilterTime,
     UnsetType,
 )
 
@@ -482,28 +474,6 @@ def parse_workflow_evaluation_run_episode_response(
     return WorkflowEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
 
 
-# DEPRECATED: Use WorkflowEvaluationRunResponse instead
-DynamicEvaluationRunResponse = WorkflowEvaluationRunResponse
-
-
-# DEPRECATED: Use parse_workflow_evaluation_run_response instead
-def parse_dynamic_evaluation_run_response(
-    data: Dict[str, Any],
-) -> WorkflowEvaluationRunResponse:
-    return parse_workflow_evaluation_run_response(data)
-
-
-# DEPRECATED: Use WorkflowEvaluationRunEpisodeResponse instead
-DynamicEvaluationRunEpisodeResponse = WorkflowEvaluationRunEpisodeResponse
-
-
-# DEPRECATED: Use parse_workflow_evaluation_run_episode_response instead
-def parse_dynamic_evaluation_run_episode_response(
-    data: Dict[str, Any],
-) -> WorkflowEvaluationRunEpisodeResponse:
-    return parse_workflow_evaluation_run_episode_response(data)
-
-
 @dataclass
 class ChatDatapointInsert:
     function_name: str
@@ -604,62 +574,6 @@ class TensorZeroTypeEncoder(JSONEncoder):
 
 
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
-
-
-# Types for the experimental list inferences API
-
-
-InferenceFilterTreeNode = InferenceFilter
-"""Deprecated: Use InferenceFilter instead."""
-
-
-@deprecated("Deprecated; use InferenceFilterFloatMetric instead. This alias will be removed in a future version.")
-class FloatMetricFilter(InferenceFilterFloatMetric):
-    """Deprecated: Use InferenceFilterFloatMetric instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterBooleanMetric instead. This alias will be removed in a future version.")
-class BooleanMetricFilter(InferenceFilterBooleanMetric):
-    """Deprecated: Use InferenceFilterBooleanMetric instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterTag instead. This alias will be removed in a future version.")
-class TagFilter(InferenceFilterTag):
-    """Deprecated: Use InferenceFilterTag instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterTime instead. This alias will be removed in a future version.")
-class TimeFilter(InferenceFilterTime):
-    """Deprecated: Use InferenceFilterTime instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterAnd instead. This alias will be removed in a future version.")
-class AndFilter(InferenceFilterAnd):
-    """Deprecated: Use InferenceFilterAnd instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterOr instead. This alias will be removed in a future version.")
-class OrFilter(InferenceFilterOr):
-    """Deprecated: Use InferenceFilterOr instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterNot instead. This alias will be removed in a future version.")
-class NotFilter(InferenceFilterNot):
-    """Deprecated: Use InferenceFilterNot instead."""
-
-    pass
 
 
 @dataclass

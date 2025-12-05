@@ -1,4 +1,4 @@
-use super::{Input, InputMessage, InputMessageContent};
+use super::{Input, InputContentBlock, InputMessage};
 use crate::error::Error;
 use crate::inference::types::{
     Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
@@ -33,18 +33,18 @@ fn convert_tool_call(tool_call: ToolCall) -> ToolCallWrapper {
 
 fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-) -> Result<InputMessageContent, Error> {
+) -> Result<InputContentBlock, Error> {
     Ok(match resolved_input_message_content {
-        ResolvedInputMessageContent::Text(text) => InputMessageContent::Text(text),
-        ResolvedInputMessageContent::Template(template) => InputMessageContent::Template(template),
+        ResolvedInputMessageContent::Text(text) => InputContentBlock::Text(text),
+        ResolvedInputMessageContent::Template(template) => InputContentBlock::Template(template),
         ResolvedInputMessageContent::ToolCall(tool_call) => {
-            InputMessageContent::ToolCall(convert_tool_call(tool_call))
+            InputContentBlock::ToolCall(convert_tool_call(tool_call))
         }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            InputMessageContent::ToolResult(tool_result)
+            InputContentBlock::ToolResult(tool_result)
         }
-        ResolvedInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
-        ResolvedInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
+        ResolvedInputMessageContent::RawText(raw_text) => InputContentBlock::RawText(raw_text),
+        ResolvedInputMessageContent::Thought(thought) => InputContentBlock::Thought(thought),
         ResolvedInputMessageContent::File(resolved) => {
             let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
@@ -52,9 +52,9 @@ fn resolved_input_message_content_to_client_input_message_content(
             let filename = file.filename;
 
             let base64_file = Base64File::new(None, Some(mime_type), data, detail, filename)?;
-            InputMessageContent::File(File::Base64(base64_file))
+            InputContentBlock::File(File::Base64(base64_file))
         }
-        ResolvedInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
+        ResolvedInputMessageContent::Unknown(unknown) => InputContentBlock::Unknown(unknown),
     })
 }
 
@@ -132,7 +132,7 @@ mod tests {
 
         // Verify the result
         match result {
-            InputMessageContent::File(File::Base64(base64_file)) => {
+            InputContentBlock::File(File::Base64(base64_file)) => {
                 assert_eq!(base64_file.mime_type, mime::IMAGE_JPEG);
                 assert_eq!(base64_file.data(), image_data);
             }

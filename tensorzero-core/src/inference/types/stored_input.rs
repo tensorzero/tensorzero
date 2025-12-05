@@ -1,4 +1,4 @@
-use crate::client::{File, InputMessage, InputMessageContent};
+use crate::client::{File, InputContentBlock, InputMessage};
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
@@ -104,7 +104,7 @@ impl StoredInput {
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
-    pub content: Vec<StoredInputMessageContent>,
+    pub content: Vec<StoredInputContentBlock>,
 }
 
 impl StoredInputMessage {
@@ -130,7 +130,7 @@ impl StoredInputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(StoredInputMessageContent::into_input_message_content)
+                .map(StoredInputContentBlock::into_input_message_content)
                 .collect(),
         }
     }
@@ -191,7 +191,7 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                 let content_values = content.ok_or_else(|| de::Error::missing_field("content"))?;
 
                 // Transform legacy Text format to new format
-                let transformed_content: Result<Vec<StoredInputMessageContent>, V::Error> =
+                let transformed_content: Result<Vec<StoredInputContentBlock>, V::Error> =
                     content_values
                         .into_iter()
                         .map(|mut value| {
@@ -244,49 +244,49 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 #[export_schema]
-pub enum StoredInputMessageContent {
-    #[schemars(title = "StoredInputMessageContentText")]
+pub enum StoredInputContentBlock {
+    #[schemars(title = "StoredInputContentBlockText")]
     Text(Text),
-    #[schemars(title = "StoredInputMessageContentTemplate")]
+    #[schemars(title = "StoredInputContentBlockTemplate")]
     Template(Template),
-    #[schemars(title = "StoredInputMessageContentToolCall")]
+    #[schemars(title = "StoredInputContentBlockToolCall")]
     ToolCall(ToolCall),
-    #[schemars(title = "StoredInputMessageContentToolResult")]
+    #[schemars(title = "StoredInputContentBlockToolResult")]
     ToolResult(ToolResult),
-    #[schemars(title = "StoredInputMessageContentRawText")]
+    #[schemars(title = "StoredInputContentBlockRawText")]
     RawText(RawText),
-    #[schemars(title = "StoredInputMessageContentThought")]
+    #[schemars(title = "StoredInputContentBlockThought")]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
+    #[schemars(title = "StoredInputContentBlockFile", with = "ObjectStoragePointer")]
     File(Box<StoredFile>),
-    #[schemars(title = "StoredInputMessageContentUnknown")]
+    #[schemars(title = "StoredInputContentBlockUnknown")]
     Unknown(Unknown),
 }
 
-impl StoredInputMessageContent {
+impl StoredInputContentBlock {
     pub async fn reresolve(
         self,
         resolver: &impl StoragePathResolver,
     ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
-            StoredInputMessageContent::Text(text) => Ok(ResolvedInputMessageContent::Text(text)),
-            StoredInputMessageContent::Template(template) => {
+            StoredInputContentBlock::Text(text) => Ok(ResolvedInputMessageContent::Text(text)),
+            StoredInputContentBlock::Template(template) => {
                 Ok(ResolvedInputMessageContent::Template(template))
             }
-            StoredInputMessageContent::ToolCall(tool_call) => {
+            StoredInputContentBlock::ToolCall(tool_call) => {
                 Ok(ResolvedInputMessageContent::ToolCall(tool_call))
             }
-            StoredInputMessageContent::ToolResult(tool_result) => {
+            StoredInputContentBlock::ToolResult(tool_result) => {
                 Ok(ResolvedInputMessageContent::ToolResult(tool_result))
             }
-            StoredInputMessageContent::RawText(raw_text) => {
+            StoredInputContentBlock::RawText(raw_text) => {
                 Ok(ResolvedInputMessageContent::RawText(raw_text))
             }
-            StoredInputMessageContent::Thought(thought) => {
+            StoredInputContentBlock::Thought(thought) => {
                 Ok(ResolvedInputMessageContent::Thought(thought))
             }
-            StoredInputMessageContent::File(file) => {
+            StoredInputContentBlock::File(file) => {
                 let data = resolver.resolve(file.storage_path.clone()).await?;
                 Ok(ResolvedInputMessageContent::File(Box::new(
                     ObjectStorageFile {
@@ -301,33 +301,31 @@ impl StoredInputMessageContent {
                     },
                 )))
             }
-            StoredInputMessageContent::Unknown(unknown) => {
+            StoredInputContentBlock::Unknown(unknown) => {
                 Ok(ResolvedInputMessageContent::Unknown(unknown))
             }
         }
     }
 
     /// Converts a `StoredInputMessageContent` to the client type `InputMessageContent`, possibly fetching files (later).
-    pub fn into_input_message_content(self) -> InputMessageContent {
+    pub fn into_input_message_content(self) -> InputContentBlock {
         match self {
-            StoredInputMessageContent::Text(text) => InputMessageContent::Text(text),
-            StoredInputMessageContent::Template(template) => {
-                InputMessageContent::Template(template)
+            StoredInputContentBlock::Text(text) => InputContentBlock::Text(text),
+            StoredInputContentBlock::Template(template) => InputContentBlock::Template(template),
+            StoredInputContentBlock::ToolCall(tool_call) => {
+                InputContentBlock::ToolCall(ToolCallWrapper::ToolCall(tool_call))
             }
-            StoredInputMessageContent::ToolCall(tool_call) => {
-                InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(tool_call))
+            StoredInputContentBlock::ToolResult(tool_result) => {
+                InputContentBlock::ToolResult(tool_result)
             }
-            StoredInputMessageContent::ToolResult(tool_result) => {
-                InputMessageContent::ToolResult(tool_result)
-            }
-            StoredInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
-            StoredInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
-            StoredInputMessageContent::File(stored_file) => {
+            StoredInputContentBlock::RawText(raw_text) => InputContentBlock::RawText(raw_text),
+            StoredInputContentBlock::Thought(thought) => InputContentBlock::Thought(thought),
+            StoredInputContentBlock::File(stored_file) => {
                 // Convert StoredFile (ObjectStoragePointer) to File::ObjectStoragePointer
                 // This preserves only the metadata without fetching actual file data
-                InputMessageContent::File(File::ObjectStoragePointer(stored_file.0))
+                InputContentBlock::File(File::ObjectStoragePointer(stored_file.0))
             }
-            StoredInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
+            StoredInputContentBlock::Unknown(unknown) => InputContentBlock::Unknown(unknown),
         }
     }
 }
@@ -521,7 +519,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            StoredInputMessageContent::Text(text) => {
+            StoredInputContentBlock::Text(text) => {
                 assert_eq!(text.text, "Hello, world!");
             }
             _ => panic!("Expected Text variant"),
@@ -540,7 +538,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            StoredInputMessageContent::Template(template) => {
+            StoredInputContentBlock::Template(template) => {
                 assert_eq!(template.name, "user");
                 assert_eq!(template.arguments.0.get("foo").unwrap(), "bar");
                 assert_eq!(template.arguments.0.get("baz").unwrap(), 123);
@@ -561,7 +559,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            StoredInputMessageContent::Text(text) => {
+            StoredInputContentBlock::Text(text) => {
                 assert_eq!(text.text, "Hello, world!");
             }
             _ => panic!("Expected Text variant"),
@@ -586,7 +584,7 @@ mod tests {
     fn test_round_trip_serialization() {
         let message = StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text(Text {
+            content: vec![StoredInputContentBlock::Text(Text {
                 text: "Hello, world!".to_string(),
             })],
         };

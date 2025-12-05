@@ -1,14 +1,50 @@
 import typing as t
-import warnings
 from importlib.metadata import version
 
 import httpx
-from typing_extensions import Any, deprecated
 
 from .client import (
     AsyncTensorZeroGateway,
     BaseTensorZeroGateway,
     TensorZeroGateway,
+)
+
+# Deprecated type aliases (for backward compatibility)
+from .deprecated import (
+    AndFilter,  # pyright: ignore[reportDeprecated]
+    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
+    DiclConfig,  # pyright: ignore[reportDeprecated]
+    DiclOptimizationConfig,
+    DynamicEvaluationRunEpisodeResponse,
+    DynamicEvaluationRunResponse,
+    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
+    InputMessageContent,
+    InputMessageContentFile,  # pyright: ignore[reportDeprecated]
+    InputMessageContentRawText,  # pyright: ignore[reportDeprecated]
+    InputMessageContentTemplate,  # pyright: ignore[reportDeprecated]
+    InputMessageContentText,  # pyright: ignore[reportDeprecated]
+    InputMessageContentThought,  # pyright: ignore[reportDeprecated]
+    InputMessageContentToolCall,  # pyright: ignore[reportDeprecated]
+    InputMessageContentToolResult,  # pyright: ignore[reportDeprecated]
+    InputMessageContentUnknown,  # pyright: ignore[reportDeprecated]
+    NotFilter,  # pyright: ignore[reportDeprecated]
+    OrFilter,  # pyright: ignore[reportDeprecated]
+    ProviderExtraBody,  # pyright: ignore[reportDeprecated]
+    ProviderExtraBodyDelete,  # pyright: ignore[reportDeprecated]
+    ProviderExtraHeader,  # pyright: ignore[reportDeprecated]
+    ProviderExtraHeaderDelete,  # pyright: ignore[reportDeprecated]
+    RenderedStoredInference,
+    StoredInputMessageContent,
+    StoredInputMessageContentFile,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentRawText,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentTemplate,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentText,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentThought,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentToolCall,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentToolResult,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContentUnknown,  # pyright: ignore[reportDeprecated]
+    TagFilter,  # pyright: ignore[reportDeprecated]
+    TimeFilter,  # pyright: ignore[reportDeprecated]
 )
 
 # Generated dataclasses
@@ -42,9 +78,16 @@ from .generated_types import (
     InferenceFilterTag,
     InferenceFilterTime,
     Input,
+    InputContentBlock,
+    InputContentBlockFile,
+    InputContentBlockRawText,
+    InputContentBlockTemplate,
+    InputContentBlockText,
+    InputContentBlockThought,
+    InputContentBlockToolCall,
+    InputContentBlockToolResult,
+    InputContentBlockUnknown,
     InputMessage,
-    InputMessageContentTemplate,
-    InputMessageContentText,
     JsonDatapointOutputUpdate,
     JsonInferenceOutput,
     ListDatapointsRequest,
@@ -53,10 +96,6 @@ from .generated_types import (
     ModelProviderExtraBodyDelete,
     ModelProviderExtraHeader,
     ModelProviderExtraHeaderDelete,
-    ProviderExtraBody,  # DEPRECATED
-    ProviderExtraBodyDelete,  # DEPRECATED
-    ProviderExtraHeader,  # DEPRECATED
-    ProviderExtraHeaderDelete,  # DEPRECATED
     StorageKind,
     StorageKindDisabled,
     StorageKindFilesystem,
@@ -66,14 +105,16 @@ from .generated_types import (
     StoredInferenceChat,
     StoredInferenceJson,
     StoredInput,
+    StoredInputContentBlock,
+    StoredInputContentBlockFile,
+    StoredInputContentBlockRawText,
+    StoredInputContentBlockTemplate,
+    StoredInputContentBlockText,
+    StoredInputContentBlockThought,
+    StoredInputContentBlockToolCall,
+    StoredInputContentBlockToolResult,
+    StoredInputContentBlockUnknown,
     StoredInputMessage,
-    StoredInputMessageContentFile,
-    StoredInputMessageContentTemplate,
-    StoredInputMessageContentText,
-    StoredInputMessageContentThought,
-    StoredInputMessageContentToolCall,
-    StoredInputMessageContentToolResult,
-    StoredInputMessageContentUnknown,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
     VariantExtraBody,
@@ -110,20 +151,15 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndFilter,  # pyright: ignore[reportDeprecated]
     BaseTensorZeroError,
-    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
     ChatInferenceResponse,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
-    DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
     FeedbackResponse,
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -132,12 +168,9 @@ from .types import (
     JsonDatapointInsert,
     JsonInferenceResponse,
     Message,
-    NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
-    OrFilter,  # pyright: ignore[reportDeprecated]
     RawText,
     System,
-    TagFilter,  # pyright: ignore[reportDeprecated]
     Template,
     TensorZeroError,
     TensorZeroInternalError,
@@ -145,7 +178,6 @@ from .types import (
     TextChunk,
     Thought,
     ThoughtChunk,
-    TimeFilter,  # pyright: ignore[reportDeprecated]
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -158,27 +190,9 @@ from .types import (
     WorkflowEvaluationRunResponse,
 )
 
-# DEPRECATED: use RenderedSample instead
-RenderedStoredInference = RenderedSample
 # Type aliases to preserve backward compatibility with main
 ChatDatapoint = LegacyDatapoint.Chat
 JsonDatapoint = LegacyDatapoint.Json
-
-
-# CAREFUL: deprecated
-class DiclOptimizationConfig:
-    def __new__(cls, *args: Any, **kwargs: Any):
-        warnings.warn(
-            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return DICLOptimizationConfig(*args, **kwargs)
-
-
-# CAREFUL: deprecated alias
-DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
-
 
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
@@ -187,7 +201,7 @@ OptimizationConfig = t.Union[
     TogetherSFTConfig,
     DICLOptimizationConfig,
     OpenAIRFTConfig,
-    t.Dict[str, Any],
+    t.Dict[str, t.Any],
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 
@@ -257,9 +271,25 @@ __all__ = [
     "InferenceInput",
     "InferenceResponse",
     "Input",
+    "InputContentBlock",
+    "InputContentBlockFile",
+    "InputContentBlockRawText",
+    "InputContentBlockTemplate",
+    "InputContentBlockText",
+    "InputContentBlockThought",
+    "InputContentBlockToolCall",
+    "InputContentBlockToolResult",
+    "InputContentBlockUnknown",
     "InputMessage",
-    "InputMessageContentTemplate",
-    "InputMessageContentText",
+    "InputMessageContent",  # DEPRECATED
+    "InputMessageContentFile",  # DEPRECATED
+    "InputMessageContentRawText",  # DEPRECATED
+    "InputMessageContentTemplate",  # DEPRECATED
+    "InputMessageContentText",  # DEPRECATED
+    "InputMessageContentThought",  # DEPRECATED
+    "InputMessageContentToolCall",  # DEPRECATED
+    "InputMessageContentToolResult",  # DEPRECATED
+    "InputMessageContentUnknown",  # DEPRECATED
     "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonDatapointOutputUpdate",
@@ -302,14 +332,25 @@ __all__ = [
     "StoredInferenceChat",
     "StoredInferenceJson",
     "StoredInput",
+    "StoredInputContentBlock",
+    "StoredInputContentBlockFile",
+    "StoredInputContentBlockRawText",
+    "StoredInputContentBlockTemplate",
+    "StoredInputContentBlockText",
+    "StoredInputContentBlockThought",
+    "StoredInputContentBlockToolCall",
+    "StoredInputContentBlockToolResult",
+    "StoredInputContentBlockUnknown",
     "StoredInputMessage",
-    "StoredInputMessageContentFile",
-    "StoredInputMessageContentTemplate",
-    "StoredInputMessageContentText",
-    "StoredInputMessageContentThought",
-    "StoredInputMessageContentToolCall",
-    "StoredInputMessageContentToolResult",
-    "StoredInputMessageContentUnknown",
+    "StoredInputMessageContent",  # DEPRECATED
+    "StoredInputMessageContentFile",  # DEPRECATED
+    "StoredInputMessageContentRawText",  # DEPRECATED
+    "StoredInputMessageContentTemplate",  # DEPRECATED
+    "StoredInputMessageContentText",  # DEPRECATED
+    "StoredInputMessageContentThought",  # DEPRECATED
+    "StoredInputMessageContentToolCall",  # DEPRECATED
+    "StoredInputMessageContentToolResult",  # DEPRECATED
+    "StoredInputMessageContentUnknown",  # DEPRECATED
     "System",
     "TagFilter",
     "Template",
