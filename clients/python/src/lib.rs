@@ -57,6 +57,7 @@ use tensorzero_core::{
         datasets::InsertDatapointParams,
         workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     },
+    evaluations::EvaluationConfig,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
@@ -1431,10 +1432,35 @@ impl TensorZeroGateway {
             })
             .transpose()?;
 
+        // Extract evaluation config from app_state
+        let evaluation_config = app_state
+            .config
+            .evaluations
+            .get(&evaluation_name)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "evaluation '{evaluation_name}' not found"
+                ))
+            })?
+            .clone();
+
+        // Get function name and look up function config
+        let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+        let function_config = app_state
+            .config
+            .get_function(&inference_eval_config.function_name)
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "Failed to get function config: {e}"
+                ))
+            })?
+            .into_owned();
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
-            config: app_state.config.clone(),
+            evaluation_config,
+            function_config,
             evaluation_name,
             evaluation_run_id,
             dataset_name,
@@ -2646,10 +2672,35 @@ impl AsyncTensorZeroGateway {
 
             let evaluation_run_id = uuid::Uuid::now_v7();
 
+            // Extract evaluation config from app_state
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "evaluation '{evaluation_name}' not found"
+                    ))
+                })?
+                .clone();
+
+            // Get function name and look up function config
+            let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+            let function_config = app_state
+                .config
+                .get_function(&inference_eval_config.function_name)
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Failed to get function config: {e}"
+                    ))
+                })?
+                .into_owned();
+
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
-                config: app_state.config.clone(),
+                evaluation_config,
+                function_config,
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,

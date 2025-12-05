@@ -73,10 +73,13 @@ pub struct EvaluationCoreArgs {
     /// ClickHouse client for database operations
     pub clickhouse_client: ClickHouseConnectionInfo,
 
-    /// Configuration containing function and evaluation definitions
-    pub config: Arc<Config>,
+    /// The evaluation configuration (pre-resolved by caller)
+    pub evaluation_config: Arc<EvaluationConfig>,
 
-    /// Name of the evaluation to run.
+    /// The function configuration for output schema validation (pre-resolved by caller)
+    pub function_config: Arc<FunctionConfig>,
+
+    /// Name of the evaluation (for tagging/logging purposes)
     pub evaluation_name: String,
 
     /// Unique identifier for this evaluation run
@@ -192,6 +195,21 @@ pub async fn run_evaluation(
     let config = unwritten_config.into_config(&clickhouse_client).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
+
+    // Look up evaluation config from the loaded config
+    let evaluation_config = config
+        .evaluations
+        .get(&args.evaluation_name)
+        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
+        .clone();
+
+    // Get function name and look up function config
+    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+    let function_config = config
+        .get_function(&inference_eval_config.function_name)
+        .map_err(|e| anyhow!("Failed to get function config: {e}"))?
+        .into_owned();
+
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -212,7 +230,8 @@ pub async fn run_evaluation(
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
-        config,
+        evaluation_config,
+        function_config,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
         variant: EvaluationVariant::Name(args.variant_name),
@@ -380,13 +399,8 @@ pub async fn run_evaluation_core_streaming(
         clickhouse_client: args.clickhouse_client,
     });
 
-    // Get evaluation configuration
-    let evaluation_config = args
-        .config
-        .evaluations
-        .get(&args.evaluation_name)
-        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
-        .clone();
+    // Use the pre-resolved evaluation configuration
+    let evaluation_config = args.evaluation_config.clone();
 
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 
@@ -480,7 +494,7 @@ pub async fn run_evaluation_core_streaming(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
-        let config = args.config.clone();
+        let function_config = args.function_config.clone();
         let variant = variant.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
@@ -519,7 +533,7 @@ pub async fn run_evaluation_core_streaming(
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
-                    config: &config,
+                    function_config: &function_config,
                     input: &input,
                     inference_cache,
                 })
@@ -670,7 +684,7 @@ struct InferDatapointParams<'a> {
     datapoint: &'a Datapoint,
     input: &'a Input,
     evaluation_name: &'a str,
-    config: &'a Config,
+    function_config: &'a FunctionConfig,
     inference_cache: CacheEnabledMode,
 }
 
@@ -684,7 +698,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         dataset_name,
         datapoint,
         evaluation_name,
-        config,
+        function_config,
         input,
         inference_cache,
     } = params;
@@ -712,8 +726,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         }
     };
     debug!("Processing output schema");
-    let function_config = config.get_function(function_name)?;
-    let output_schema = match (datapoint.output_schema(), &**function_config) {
+    let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
             if output_schema == &json_function_config.output_schema.value {
