@@ -12,22 +12,19 @@ To regenerate, run:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
-from .unset_type import UNSET, UnsetType
+from typing_extensions import NotRequired
 
 Model = Any
 
 
-@dataclass(kw_only=True)
-class BooleanMetricFilter:
+class BooleanMetricFilter(TypedDict):
     metric_name: str
     value: bool
 
 
-@dataclass(kw_only=True)
-class ContentBlockChatOutputText:
+class ContentBlockChatOutputText(TypedDict):
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -40,14 +37,13 @@ class ContentBlockChatOutputText:
     """
 
     text: str
-    type: Literal["text"] = "text"
+    type: Literal["text"]
 
 
 CreateDatapointsFromInferenceOutputSource = str
 
 
-@dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceIds:
+class CreateDatapointsFromInferenceRequestParamsInferenceIds(TypedDict):
     """
     Create datapoints from specific inference IDs.
     """
@@ -56,11 +52,10 @@ class CreateDatapointsFromInferenceRequestParamsInferenceIds:
     """
     The inference IDs to create datapoints from.
     """
-    type: Literal["inference_ids"] = "inference_ids"
+    type: Literal["inference_ids"]
 
 
-@dataclass(kw_only=True)
-class CreateDatapointsResponse:
+class CreateDatapointsResponse(TypedDict):
     """
     Response from creating datapoints.
     """
@@ -71,13 +66,12 @@ class CreateDatapointsResponse:
     """
 
 
-@dataclass(kw_only=True)
-class DatapointMetadataUpdate:
+class DatapointMetadataUpdate(TypedDict):
     """
     A request to update the metadata of a datapoint.
     """
 
-    name: str | None | UnsetType = UNSET
+    name: NotRequired[str | None]
     """
     Datapoint name.
 
@@ -86,8 +80,7 @@ class DatapointMetadataUpdate:
     """
 
 
-@dataclass(kw_only=True)
-class DeleteDatapointsRequest:
+class DeleteDatapointsRequest(TypedDict):
     """
     Request to delete datapoints from a dataset.
     """
@@ -98,8 +91,7 @@ class DeleteDatapointsRequest:
     """
 
 
-@dataclass(kw_only=True)
-class DeleteDatapointsResponse:
+class DeleteDatapointsResponse(TypedDict):
     """
     Response containing the number of deleted datapoints.
     """
@@ -113,8 +105,7 @@ class DeleteDatapointsResponse:
 Detail = Literal["low", "high", "auto"]
 
 
-@dataclass(kw_only=True)
-class ProviderExtraBody:
+class ProviderExtraBody(TypedDict):
     """
     DEPRECATED: Use `ModelProvider` instead.
     """
@@ -133,13 +124,12 @@ class ProviderExtraBody:
     """
 
 
-@dataclass(kw_only=True)
-class ProviderExtraBodyDelete:
+class ProviderExtraBodyDelete(TypedDict):
     """
     DEPRECATED: Use `ModelProviderDelete` instead.
     """
 
-    delete: Literal[True] = True
+    delete: Literal[True]
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -153,8 +143,7 @@ class ProviderExtraBodyDelete:
     """
 
 
-@dataclass(kw_only=True)
-class VariantExtraBody:
+class VariantExtraBody(TypedDict):
     pointer: str
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
@@ -169,9 +158,8 @@ class VariantExtraBody:
     """
 
 
-@dataclass(kw_only=True)
-class VariantExtraBodyDelete:
-    delete: Literal[True] = True
+class VariantExtraBodyDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -185,8 +173,7 @@ class VariantExtraBodyDelete:
     """
 
 
-@dataclass(kw_only=True)
-class ModelProviderExtraBody:
+class ModelProviderExtraBody(TypedDict):
     model_name: str
     """
     A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
@@ -195,19 +182,18 @@ class ModelProviderExtraBody:
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
+    provider_name: NotRequired[str | None]
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
     value: Any
     """
     The value to set the field to
     """
-    provider_name: str | None = None
-    """
-    A provider name for the model you specified (e.g. `my_openai`)
-    """
 
 
-@dataclass(kw_only=True)
-class ModelProviderExtraBodyDelete:
-    delete: Literal[True] = True
+class ModelProviderExtraBodyDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -219,14 +205,13 @@ class ModelProviderExtraBodyDelete:
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
-    provider_name: str | None = None
+    provider_name: NotRequired[str | None]
     """
     A provider name for the model you specified (e.g. `my_openai`)
     """
 
 
-@dataclass(kw_only=True)
-class AlwaysExtraBody:
+class AlwaysExtraBody(TypedDict):
     pointer: str
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
@@ -237,9 +222,8 @@ class AlwaysExtraBody:
     """
 
 
-@dataclass(kw_only=True)
-class AlwaysExtraBodyDelete:
-    delete: Literal[True] = True
+class AlwaysExtraBodyDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -261,16 +245,14 @@ ExtraBody = (
 )
 
 
-@dataclass(kw_only=True)
-class ExtraBodyReplacementKind1:
+class ExtraBodyReplacementKind1(TypedDict):
     value: Any
 
 
 ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
 
 
-@dataclass(kw_only=True)
-class ProviderExtraHeader:
+class ProviderExtraHeader(TypedDict):
     """
     DEPRECATED: Use `ModelProvider` instead.
     """
@@ -289,13 +271,12 @@ class ProviderExtraHeader:
     """
 
 
-@dataclass(kw_only=True)
-class ProviderExtraHeaderDelete:
+class ProviderExtraHeaderDelete(TypedDict):
     """
     DEPRECATED: Use `ModelProviderDelete` instead.
     """
 
-    delete: Literal[True] = True
+    delete: Literal[True]
     """
     Set to true to remove the header from the model provider request
     """
@@ -309,8 +290,7 @@ class ProviderExtraHeaderDelete:
     """
 
 
-@dataclass(kw_only=True)
-class VariantExtraHeader:
+class VariantExtraHeader(TypedDict):
     name: str
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
@@ -325,9 +305,8 @@ class VariantExtraHeader:
     """
 
 
-@dataclass(kw_only=True)
-class VariantExtraHeaderDelete:
-    delete: Literal[True] = True
+class VariantExtraHeaderDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the header from the model provider request
     """
@@ -341,8 +320,7 @@ class VariantExtraHeaderDelete:
     """
 
 
-@dataclass(kw_only=True)
-class ModelProviderExtraHeader:
+class ModelProviderExtraHeader(TypedDict):
     model_name: str
     """
     A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
@@ -351,19 +329,18 @@ class ModelProviderExtraHeader:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    value: str
-    """
-    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-    """
-    provider_name: str | None = None
+    provider_name: NotRequired[str | None]
     """
     A provider name for the model you specified (e.g. `my_openai`).
     """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
 
 
-@dataclass(kw_only=True)
-class ModelProviderExtraHeaderDelete:
-    delete: Literal[True] = True
+class ModelProviderExtraHeaderDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the header from the model provider request
     """
@@ -375,14 +352,13 @@ class ModelProviderExtraHeaderDelete:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    provider_name: str | None = None
+    provider_name: NotRequired[str | None]
     """
     A provider name for the model you specified (e.g. `my_openai`)
     """
 
 
-@dataclass(kw_only=True)
-class AlwaysExtraHeader:
+class AlwaysExtraHeader(TypedDict):
     name: str
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
@@ -393,9 +369,8 @@ class AlwaysExtraHeader:
     """
 
 
-@dataclass(kw_only=True)
-class AlwaysExtraHeaderDelete:
-    delete: Literal[True] = True
+class AlwaysExtraHeaderDelete(TypedDict):
+    delete: Literal[True]
     """
     Set to true to remove the header from the model provider request
     """
@@ -420,15 +395,13 @@ ExtraHeader = (
 FloatComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 
-@dataclass(kw_only=True)
-class FloatMetricFilter:
+class FloatMetricFilter(TypedDict):
     comparison_operator: FloatComparisonOperator
     metric_name: str
     value: float
 
 
-@dataclass(kw_only=True)
-class GetDatapointsRequest:
+class GetDatapointsRequest(TypedDict):
     """
     Request to get specific datapoints by their IDs.
     Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
@@ -440,29 +413,26 @@ class GetDatapointsRequest:
     """
 
 
-@dataclass(kw_only=True)
 class InferenceFilterFloatMetric(FloatMetricFilter):
     """
     Filter by the value of a float metric
     """
 
-    type: Literal["float_metric"] = "float_metric"
+    type: Literal["float_metric"]
 
 
-@dataclass(kw_only=True)
 class InferenceFilterBooleanMetric(BooleanMetricFilter):
     """
     Filter by the value of a boolean metric
     """
 
-    type: Literal["boolean_metric"] = "boolean_metric"
+    type: Literal["boolean_metric"]
 
 
 InferenceOutputSource = str
 
 
-@dataclass(kw_only=True)
-class InferenceResponseToolCall:
+class InferenceResponseToolCall(TypedDict):
     """
     An InferenceResponseToolCall is a request by a model to call a Tool
     in the form that we return to the client / ClickHouse
@@ -471,9 +441,17 @@ class InferenceResponseToolCall:
     We support looping this back through the TensorZero inference API via the ToolCallWrapper
     """
 
+    arguments: NotRequired[Any]
+    """
+    The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid.
+    """
     id: str
     """
     A Tool Call ID to match up with tool call responses. See #4058.
+    """
+    name: NotRequired[str | None]
+    """
+    The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid.
     """
     raw_arguments: str
     """
@@ -483,18 +461,9 @@ class InferenceResponseToolCall:
     """
     The name of the tool to call, as generated by the model.
     """
-    arguments: Any | None = None
-    """
-    The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid.
-    """
-    name: str | None = None
-    """
-    The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid.
-    """
 
 
-@dataclass(kw_only=True)
-class InputMessageContentText:
+class InputMessageContentText(TypedDict):
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -507,18 +476,16 @@ class InputMessageContentText:
     """
 
     text: str
-    type: Literal["text"] = "text"
+    type: Literal["text"]
 
 
-@dataclass(kw_only=True)
-class InputMessageContentTemplate:
+class InputMessageContentTemplate(TypedDict):
     arguments: dict[str, Any]
     name: str
-    type: Literal["template"] = "template"
+    type: Literal["template"]
 
 
-@dataclass(kw_only=True)
-class InputMessageContentToolResult:
+class InputMessageContentToolResult(TypedDict):
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -526,29 +493,27 @@ class InputMessageContentToolResult:
     id: str
     name: str
     result: str
-    type: Literal["tool_result"] = "tool_result"
+    type: Literal["tool_result"]
 
 
-@dataclass(kw_only=True)
-class InputMessageContentRawText:
+class InputMessageContentRawText(TypedDict):
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
     """
 
-    type: Literal["raw_text"] = "raw_text"
+    type: Literal["raw_text"]
     value: str
 
 
-@dataclass(kw_only=True)
-class JsonDatapointOutputUpdate:
+class JsonDatapointOutputUpdate(TypedDict):
     """
     A request to update the output of a JSON datapoint.
 
     We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
     """
 
-    raw: str | None = None
+    raw: NotRequired[str | None]
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
 
@@ -557,22 +522,20 @@ class JsonDatapointOutputUpdate:
     """
 
 
-@dataclass(kw_only=True)
-class JsonInferenceOutput:
-    parsed: Any | None = None
+class JsonInferenceOutput(TypedDict):
+    parsed: NotRequired[Any]
     """
     This is never omitted from the response even if it's None.
     """
-    raw: str | None = None
+    raw: NotRequired[str | None]
     """
     This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
     It's rare and unexpected from the model, but it's possible.
     """
 
 
-@dataclass(kw_only=True)
-class OpenAICustomToolFormatText:
-    type: Literal["text"] = "text"
+class OpenAICustomToolFormatText(TypedDict):
+    type: Literal["text"]
 
 
 OpenAIGrammarSyntax = Literal["lark", "regex"]
@@ -581,14 +544,12 @@ OpenAIGrammarSyntax = Literal["lark", "regex"]
 OrderDirection = Literal["ascending", "descending"]
 
 
-@dataclass(kw_only=True)
-class ProviderToolScopeModelProvider:
+class ProviderToolScopeModelProvider(TypedDict):
     model_name: str
-    provider_name: str | None = None
+    provider_name: NotRequired[str | None]
 
 
-@dataclass(kw_only=True)
-class RawText:
+class RawText(TypedDict):
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
@@ -600,28 +561,26 @@ class RawText:
 Role = Literal["user", "assistant"]
 
 
-@dataclass(kw_only=True)
-class StorageKindS3Compatible:
+class StorageKindS3Compatible(TypedDict):
     """
     Configuration for the object storage backend
     Currently, we only support S3-compatible object storage and local filesystem storage
     We test against Amazon S3, GCS, Cloudflare R2, and Minio
     """
 
-    type: Literal["s3_compatible"] = "s3_compatible"
-    allow_http: bool | None = None
-    bucket_name: str | None = None
-    endpoint: str | None = None
-    prefix: str | None = ""
+    allow_http: NotRequired[bool | None]
+    bucket_name: NotRequired[str | None]
+    endpoint: NotRequired[str | None]
+    prefix: NotRequired[str]
     """
     An extra prefix to prepend to the object key.
     This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
     """
-    region: str | None = None
+    region: NotRequired[str | None]
+    type: Literal["s3_compatible"]
 
 
-@dataclass(kw_only=True)
-class StorageKindFilesystem:
+class StorageKindFilesystem(TypedDict):
     """
     Configuration for the object storage backend
     Currently, we only support S3-compatible object storage and local filesystem storage
@@ -629,25 +588,23 @@ class StorageKindFilesystem:
     """
 
     path: str
-    type: Literal["filesystem"] = "filesystem"
+    type: Literal["filesystem"]
 
 
-@dataclass(kw_only=True)
-class StorageKindDisabled:
+class StorageKindDisabled(TypedDict):
     """
     Configuration for the object storage backend
     Currently, we only support S3-compatible object storage and local filesystem storage
     We test against Amazon S3, GCS, Cloudflare R2, and Minio
     """
 
-    type: Literal["disabled"] = "disabled"
+    type: Literal["disabled"]
 
 
 StorageKind = StorageKindS3Compatible | StorageKindFilesystem | StorageKindDisabled
 
 
-@dataclass(kw_only=True)
-class StoragePath:
+class StoragePath(TypedDict):
     """
     Path to a file in an object storage backend.
     This is part of the public API for `File`s. In particular, this is useful for roundtripping
@@ -659,8 +616,7 @@ class StoragePath:
     path: str
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentText:
+class StoredInputMessageContentText(TypedDict):
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -673,18 +629,16 @@ class StoredInputMessageContentText:
     """
 
     text: str
-    type: Literal["text"] = "text"
+    type: Literal["text"]
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentTemplate:
+class StoredInputMessageContentTemplate(TypedDict):
     arguments: dict[str, Any]
     name: str
-    type: Literal["template"] = "template"
+    type: Literal["template"]
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentToolResult:
+class StoredInputMessageContentToolResult(TypedDict):
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -692,34 +646,32 @@ class StoredInputMessageContentToolResult:
     id: str
     name: str
     result: str
-    type: Literal["tool_result"] = "tool_result"
+    type: Literal["tool_result"]
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentRawText:
+class StoredInputMessageContentRawText(TypedDict):
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
     """
 
-    type: Literal["raw_text"] = "raw_text"
+    type: Literal["raw_text"]
     value: str
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentFile:
+class StoredInputMessageContentFile(TypedDict):
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
     Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
     """
 
+    detail: NotRequired[Detail | None]
+    filename: NotRequired[str | None]
     mime_type: str
+    source_url: NotRequired[str | None]
     storage_path: StoragePath
-    type: Literal["file"] = "file"
-    detail: Detail | None = None
-    filename: str | None = None
-    source_url: str | None = None
+    type: Literal["file"]
 
 
 System = str | dict[str, Any]
@@ -728,8 +680,7 @@ System = str | dict[str, Any]
 TagComparisonOperator = Literal["=", "!="]
 
 
-@dataclass(kw_only=True)
-class TagFilter:
+class TagFilter(TypedDict):
     """
     Filter by tag key-value pair.
     """
@@ -739,14 +690,12 @@ class TagFilter:
     value: str
 
 
-@dataclass(kw_only=True)
-class Template:
+class Template(TypedDict):
     arguments: dict[str, Any]
     name: str
 
 
-@dataclass(kw_only=True)
-class Text:
+class Text(TypedDict):
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -761,10 +710,9 @@ class Text:
     text: str
 
 
-@dataclass(kw_only=True)
-class ThoughtSummaryBlockSummaryText:
+class ThoughtSummaryBlockSummaryText(TypedDict):
     text: str
-    type: Literal["summary_text"] = "summary_text"
+    type: Literal["summary_text"]
 
 
 ThoughtSummaryBlock = ThoughtSummaryBlockSummaryText
@@ -773,8 +721,7 @@ ThoughtSummaryBlock = ThoughtSummaryBlockSummaryText
 TimeComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 
-@dataclass(kw_only=True)
-class TimeFilter:
+class TimeFilter(TypedDict):
     """
     Filter by timestamp.
     """
@@ -783,8 +730,7 @@ class TimeFilter:
     time: str
 
 
-@dataclass(kw_only=True)
-class FunctionTool:
+class FunctionTool(TypedDict):
     """
     `FunctionTool` is a particular kind of tool that relies
     on the client to execute a function on their side (a ToolCall content block)
@@ -796,8 +742,7 @@ class FunctionTool:
     description: str
     name: str
     parameters: Any
-    type: Literal["function"] = "function"
-    strict: bool | None = False
+    strict: NotRequired[bool]
     """
     `strict` here specifies that TensorZero should attempt to use any facilities
     available from the model provider to force the model to generate an accurate tool call,
@@ -805,10 +750,10 @@ class FunctionTool:
     This imposes additional restrictions on the JSON schema that may vary across providers
     so we allow it to be configurable.
     """
+    type: Literal["function"]
 
 
-@dataclass(kw_only=True)
-class ToolCall:
+class ToolCall(TypedDict):
     arguments: str
     id: str
     name: str
@@ -817,8 +762,7 @@ class ToolCall:
 ToolCallWrapper = ToolCall | InferenceResponseToolCall
 
 
-@dataclass(kw_only=True)
-class ToolChoiceSpecific:
+class ToolChoiceSpecific(TypedDict):
     """
     Forces the LLM to call a specific tool. The String is the name of the tool.
     """
@@ -829,8 +773,7 @@ class ToolChoiceSpecific:
 ToolChoice = Literal["none", "auto", "required"] | ToolChoiceSpecific
 
 
-@dataclass(kw_only=True)
-class ToolResult:
+class ToolResult(TypedDict):
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -840,8 +783,7 @@ class ToolResult:
     result: str
 
 
-@dataclass(kw_only=True)
-class Unknown:
+class Unknown(TypedDict):
     """
     Struct that represents an unknown provider-specific content block.
     We pass this along as-is without any validation or transformation.
@@ -851,18 +793,17 @@ class Unknown:
     """
     The underlying content block to be passed to the model provider.
     """
-    model_name: str | None = None
+    model_name: NotRequired[str | None]
     """
     A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
     """
-    provider_name: str | None = None
+    provider_name: NotRequired[str | None]
     """
     A provider name for the model you specified (e.g. `my_openai`)
     """
 
 
-@dataclass(kw_only=True)
-class UpdateDatapointMetadataRequest:
+class UpdateDatapointMetadataRequest(TypedDict):
     """
     A request to update the metadata of a single datapoint.
     """
@@ -871,7 +812,7 @@ class UpdateDatapointMetadataRequest:
     """
     The ID of the datapoint to update. Required.
     """
-    name: str | None | UnsetType = UNSET
+    name: NotRequired[str | None]
     """
     Datapoint name.
 
@@ -880,8 +821,7 @@ class UpdateDatapointMetadataRequest:
     """
 
 
-@dataclass(kw_only=True)
-class UpdateDatapointsMetadataRequest:
+class UpdateDatapointsMetadataRequest(TypedDict):
     """
     Request to update metadata for one or more datapoints in a dataset.
     Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
@@ -893,8 +833,7 @@ class UpdateDatapointsMetadataRequest:
     """
 
 
-@dataclass(kw_only=True)
-class UpdateDatapointsResponse:
+class UpdateDatapointsResponse(TypedDict):
     """
     A response to a request to update one or more datapoints in a dataset.
     """
@@ -906,69 +845,62 @@ class UpdateDatapointsResponse:
     """
 
 
-@dataclass(kw_only=True)
-class UrlFile:
+class UrlFile(TypedDict):
     """
     A file that can be located at a URL
     """
 
+    detail: NotRequired[Detail | None]
+    filename: NotRequired[str | None]
+    mime_type: NotRequired[str | None]
     url: str
-    detail: Detail | None = None
-    filename: str | None = None
-    mime_type: str | None = None
 
 
-@dataclass(kw_only=True)
-class Base64File:
+class Base64File(TypedDict):
     """
     A file already encoded as base64
     """
 
     data: str
+    detail: NotRequired[Detail | None]
+    filename: NotRequired[str | None]
     mime_type: str
-    detail: Detail | None = None
-    filename: str | None = None
-    source_url: str | None = None
+    source_url: NotRequired[str | None]
 
 
-@dataclass(kw_only=True)
 class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
     """
     Defines the types of content block that can come from a `chat` function
     """
 
-    type: Literal["tool_call"] = "tool_call"
+    type: Literal["tool_call"]
 
 
-@dataclass(kw_only=True)
 class ContentBlockChatOutputUnknown(Unknown):
     """
     Defines the types of content block that can come from a `chat` function
     """
 
-    type: Literal["unknown"] = "unknown"
+    type: Literal["unknown"]
 
 
-@dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     """
     Filter by tag key-value pair
     """
 
-    type: Literal["tag"] = "tag"
+    type: Literal["tag"]
 
 
-@dataclass(kw_only=True)
 class TimeDatapointFilter(TimeFilter):
     """
     Filter by datapoint update time
     """
 
-    type: Literal["time"] = "time"
+    type: Literal["time"]
 
 
-@dataclass(kw_only=True)
-class DatapointOrderByTimestamp:
+class DatapointOrderByTimestamp(TypedDict):
     """
     Creation timestamp of the datapoint.
     """
@@ -977,11 +909,10 @@ class DatapointOrderByTimestamp:
     """
     The ordering direction.
     """
-    by: Literal["timestamp"] = "timestamp"
+    by: Literal["timestamp"]
 
 
-@dataclass(kw_only=True)
-class DatapointOrderBySearchRelevance:
+class DatapointOrderBySearchRelevance(TypedDict):
     """
     Relevance score of the search query in the input and output of the datapoint.
     Requires a search query (experimental). If it's not provided, we return an error.
@@ -994,37 +925,40 @@ class DatapointOrderBySearchRelevance:
     """
     The ordering direction.
     """
-    by: Literal["search_relevance"] = "search_relevance"
+    by: Literal["search_relevance"]
 
 
 DatapointOrderBy = DatapointOrderByTimestamp | DatapointOrderBySearchRelevance
 
 
-@dataclass(kw_only=True)
 class FileUrlFile(UrlFile):
     """
     A file for an inference or a datapoint.
     """
 
-    file_type: Literal["url"] = "url"
+    file_type: Literal["url"]
 
 
-@dataclass(kw_only=True)
 class FileBase64(Base64File):
     """
     A file for an inference or a datapoint.
     """
 
-    file_type: Literal["base64"] = "base64"
+    file_type: Literal["base64"]
 
 
-@dataclass(kw_only=True)
-class GetInferencesRequest:
+class GetInferencesRequest(TypedDict):
     """
     Request to get specific inferences by their IDs.
     Used by the `POST /v1/inferences/get_inferences` endpoint.
     """
 
+    function_name: NotRequired[str | None]
+    """
+    Optional function name to filter by.
+    Including this improves query performance since `function_name` is the first column
+    in the ClickHouse primary key.
+    """
     ids: list[str]
     """
     The IDs of the inferences to retrieve. Required.
@@ -1035,38 +969,28 @@ class GetInferencesRequest:
     Determines whether to return the original inference output or demonstration feedback
     (manually-curated output) if available.
     """
-    function_name: str | None = None
-    """
-    Optional function name to filter by.
-    Including this improves query performance since `function_name` is the first column
-    in the ClickHouse primary key.
-    """
 
 
-@dataclass(kw_only=True)
 class InferenceFilterTag(TagFilter):
     """
     Filter by tag key-value pair
     """
 
-    type: Literal["tag"] = "tag"
+    type: Literal["tag"]
 
 
-@dataclass(kw_only=True)
 class InferenceFilterTime(TimeFilter):
     """
     Filter by the timestamp of an inference.
     """
 
-    type: Literal["time"] = "time"
+    type: Literal["time"]
 
 
-@dataclass(kw_only=True)
-class InputMessageContentToolCall:
-    type: Literal["tool_call"] = "tool_call"
+class InputMessageContentToolCall(TypedDict):
+    type: Literal["tool_call"]
 
 
-@dataclass(kw_only=True)
 class InputMessageContentUnknown(Unknown):
     """
     An unknown content block type, used to allow passing provider-specific
@@ -1076,26 +1000,24 @@ class InputMessageContentUnknown(Unknown):
     without any validation or transformation by TensorZero.
     """
 
-    type: Literal["unknown"] = "unknown"
+    type: Literal["unknown"]
 
 
-@dataclass(kw_only=True)
-class ObjectStorageError:
+class ObjectStorageError(TypedDict):
     """
     A file that we failed to read from object storage.
     This struct can NOT be stored in the database.
     """
 
+    detail: NotRequired[Detail | None]
+    error: NotRequired[str | None]
+    filename: NotRequired[str | None]
     mime_type: str
+    source_url: NotRequired[str | None]
     storage_path: StoragePath
-    detail: Detail | None = None
-    error: str | None = None
-    filename: str | None = None
-    source_url: str | None = None
 
 
-@dataclass(kw_only=True)
-class ObjectStorageFile:
+class ObjectStorageFile(TypedDict):
     """
     A file stored in an object storage backend, with data.
     This struct can NOT be stored in the database.
@@ -1103,36 +1025,33 @@ class ObjectStorageFile:
     """
 
     data: str
+    detail: NotRequired[Detail | None]
+    filename: NotRequired[str | None]
     mime_type: str
+    source_url: NotRequired[str | None]
     storage_path: StoragePath
-    detail: Detail | None = None
-    filename: str | None = None
-    source_url: str | None = None
 
 
-@dataclass(kw_only=True)
-class ObjectStoragePointer:
+class ObjectStoragePointer(TypedDict):
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
     Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
     """
 
+    detail: NotRequired[Detail | None]
+    filename: NotRequired[str | None]
     mime_type: str
+    source_url: NotRequired[str | None]
     storage_path: StoragePath
-    detail: Detail | None = None
-    filename: str | None = None
-    source_url: str | None = None
 
 
-@dataclass(kw_only=True)
-class OpenAIGrammarDefinition:
+class OpenAIGrammarDefinition(TypedDict):
     definition: str
     syntax: OpenAIGrammarSyntax
 
 
-@dataclass(kw_only=True)
-class OrderByTimestamp:
+class OrderByTimestamp(TypedDict):
     """
     Creation timestamp of the item.
     """
@@ -1141,11 +1060,10 @@ class OrderByTimestamp:
     """
     The ordering direction.
     """
-    by: Literal["timestamp"] = "timestamp"
+    by: Literal["timestamp"]
 
 
-@dataclass(kw_only=True)
-class OrderByMetric:
+class OrderByMetric(TypedDict):
     """
     Value of a metric.
     """
@@ -1154,15 +1072,14 @@ class OrderByMetric:
     """
     The ordering direction.
     """
-    by: Literal["metric"] = "metric"
+    by: Literal["metric"]
     name: str
     """
     The name of the metric to order by.
     """
 
 
-@dataclass(kw_only=True)
-class OrderBySearchRelevance:
+class OrderBySearchRelevance(TypedDict):
     """
     Relevance score of the search query in the input and output of the item.
     Requires a search query (experimental). If it's not provided, we return an error.
@@ -1175,7 +1092,7 @@ class OrderBySearchRelevance:
     """
     The ordering direction.
     """
-    by: Literal["search_relevance"] = "search_relevance"
+    by: Literal["search_relevance"]
 
 
 OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
@@ -1184,44 +1101,40 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
-@dataclass(kw_only=True)
 class StoredInputMessageContentToolCall(ToolCall):
-    type: Literal["tool_call"] = "tool_call"
+    type: Literal["tool_call"]
 
 
-@dataclass(kw_only=True)
 class StoredInputMessageContentUnknown(Unknown):
-    type: Literal["unknown"] = "unknown"
+    type: Literal["unknown"]
 
 
-@dataclass(kw_only=True)
-class Thought:
+class Thought(TypedDict):
     """
     Struct that represents a model's reasoning
     """
 
-    _internal_provider_type: str | None = None
+    _internal_provider_type: NotRequired[str | None]
     """
     When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
     """
-    signature: str | None = None
+    signature: NotRequired[str | None]
     """
     An optional signature - currently, this is only used with Anthropic,
     and is ignored by other providers.
     """
-    summary: list[ThoughtSummaryBlock] | None = None
-    text: str | None = None
+    summary: NotRequired[list[ThoughtSummaryBlock]]
+    text: NotRequired[str | None]
 
 
-@dataclass(kw_only=True)
 class ContentBlockChatOutputThought(Thought):
     """
     Defines the types of content block that can come from a `chat` function
     """
 
-    type: Literal["thought"] = "thought"
+    type: Literal["thought"]
 
 
 ContentBlockChatOutput = (
@@ -1232,44 +1145,39 @@ ContentBlockChatOutput = (
 )
 
 
-@dataclass(kw_only=True)
 class FileObjectStoragePointer(ObjectStoragePointer):
     """
     A file for an inference or a datapoint.
     """
 
-    file_type: Literal["object_storage_pointer"] = "object_storage_pointer"
+    file_type: Literal["object_storage_pointer"]
 
 
-@dataclass(kw_only=True)
 class FileObjectStorage(ObjectStorageFile):
     """
     A file for an inference or a datapoint.
     """
 
-    file_type: Literal["object_storage"] = "object_storage"
+    file_type: Literal["object_storage"]
 
 
-@dataclass(kw_only=True)
 class FileObjectStorageError(ObjectStorageError):
     """
     A file for an inference or a datapoint.
     """
 
-    file_type: Literal["object_storage_error"] = "object_storage_error"
+    file_type: Literal["object_storage_error"]
 
 
 File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorage | FileObjectStorageError
 
 
-@dataclass(kw_only=True)
 class InputMessageContentThought(Thought):
-    type: Literal["thought"] = "thought"
+    type: Literal["thought"]
 
 
-@dataclass(kw_only=True)
-class InputMessageContentFile:
-    type: Literal["file"] = "file"
+class InputMessageContentFile(TypedDict):
+    type: Literal["file"]
 
 
 InputMessageContent = (
@@ -1284,24 +1192,21 @@ InputMessageContent = (
 )
 
 
-@dataclass(kw_only=True)
-class OpenAICustomToolFormatGrammar:
+class OpenAICustomToolFormatGrammar(TypedDict):
     grammar: OpenAIGrammarDefinition
-    type: Literal["grammar"] = "grammar"
+    type: Literal["grammar"]
 
 
 OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGrammar
 
 
-@dataclass(kw_only=True)
-class ProviderTool:
+class ProviderTool(TypedDict):
+    scope: NotRequired[ProviderToolScope]
     tool: Any
-    scope: ProviderToolScope | None = None
 
 
-@dataclass(kw_only=True)
 class StoredInputMessageContentThought(Thought):
-    type: Literal["thought"] = "thought"
+    type: Literal["thought"]
 
 
 StoredInputMessageContent = (
@@ -1316,8 +1221,7 @@ StoredInputMessageContent = (
 )
 
 
-@dataclass(kw_only=True)
-class OpenAICustomTool:
+class OpenAICustomTool(TypedDict):
     """
     `OpenAICustomTool` represents OpenAI's custom tool format, which allows
     for text or grammar-based tool definitions beyond standard function calling.
@@ -1326,48 +1230,47 @@ class OpenAICustomTool:
     shape so we implement a conversion in `responses.rs`.
     """
 
+    description: NotRequired[str | None]
+    format: NotRequired[OpenAICustomToolFormat | None]
     name: str
-    type: Literal["openai_custom"] = "openai_custom"
-    description: str | None = None
-    format: OpenAICustomToolFormat | None = None
+    type: Literal["openai_custom"]
 
 
 Tool = FunctionTool | OpenAICustomTool
 
 
-@dataclass(kw_only=True)
-class UpdateDynamicToolParamsRequest:
+class UpdateDynamicToolParamsRequest(TypedDict):
     """
     A request to update the dynamic tool parameters of a datapoint.
     """
 
-    additional_tools: list[Tool] | None = None
+    additional_tools: NotRequired[list[Tool]]
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
     Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: NotRequired[list[str]]
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy.
 
@@ -1376,8 +1279,7 @@ class UpdateDynamicToolParamsRequest:
     """
 
 
-@dataclass(kw_only=True)
-class DynamicToolParams:
+class DynamicToolParams(TypedDict):
     """
     Wire/API representation of dynamic tool parameters for inference requests.
 
@@ -1446,34 +1348,33 @@ class DynamicToolParams:
     See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
     """
 
-    additional_tools: list[Tool] | None = None
+    additional_tools: NotRequired[list[Tool]]
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
     """
-    allowed_tools: list[str] | None = None
+    allowed_tools: NotRequired[list[str]]
     """
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    parallel_tool_calls: bool | None = None
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     """
-    tool_choice: ToolChoice | None = None
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
 
 
-@dataclass(kw_only=True)
-class InputMessage:
+class InputMessage(TypedDict):
     """
     InputMessage and Role are our representation of the input sent by the client
     prior to any processing into LLM representations below.
@@ -1484,8 +1385,7 @@ class InputMessage:
     role: Role
 
 
-@dataclass(kw_only=True)
-class StoredInputMessage:
+class StoredInputMessage(TypedDict):
     """
     `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
     """
@@ -1494,43 +1394,40 @@ class StoredInputMessage:
     role: Role
 
 
-@dataclass(kw_only=True)
-class Input:
+class Input(TypedDict):
     """
     API representation of an input to a model.
     """
 
-    messages: list[InputMessage] | None = field(default_factory=lambda: [])
+    messages: NotRequired[list[InputMessage]]
     """
     Messages in the input.
     """
-    system: System | None = None
+    system: NotRequired[System | None]
     """
     System prompt of the input.
     """
 
 
-@dataclass(kw_only=True)
-class JsonInferenceDatapoint:
+class JsonInferenceDatapoint(TypedDict):
+    auxiliary: NotRequired[str]
     dataset_name: str
+    episode_id: NotRequired[str | None]
     function_name: str
     id: str
     input: Input
+    is_custom: NotRequired[bool]
     is_deleted: bool
+    name: NotRequired[str | None]
+    output: NotRequired[JsonInferenceOutput | None]
     output_schema: Any
+    source_inference_id: NotRequired[str | None]
+    staled_at: NotRequired[str | None]
+    tags: NotRequired[dict[str, Any] | None]
     updated_at: str
-    auxiliary: str | None = None
-    episode_id: str | None = None
-    is_custom: bool | None = False
-    name: str | None = None
-    output: JsonInferenceOutput | None = None
-    source_inference_id: str | None = None
-    staled_at: str | None = None
-    tags: dict[str, Any] | None = None
 
 
-@dataclass(kw_only=True)
-class StoredInput:
+class StoredInput(TypedDict):
     """
     The input type that we directly store in ClickHouse.
     This is almost identical to `ResolvedInput`, but without `File` data.
@@ -1540,115 +1437,111 @@ class StoredInput:
     `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
     """
 
-    messages: list[StoredInputMessage] | None = field(default_factory=lambda: [])
-    system: System | None = None
+    messages: NotRequired[list[StoredInputMessage]]
+    system: NotRequired[System | None]
 
 
-@dataclass(kw_only=True)
-class StoredJsonInference:
+class StoredJsonInference(TypedDict):
+    dispreferred_outputs: NotRequired[list[JsonInferenceOutput]]
     episode_id: str
     function_name: str
     inference_id: str
     input: StoredInput
     output: JsonInferenceOutput
     output_schema: Any
+    tags: NotRequired[dict[str, str]]
     timestamp: str
     variant_name: str
-    dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
-    tags: dict[str, str] | None = field(default_factory=lambda: {})
 
 
-@dataclass(kw_only=True)
-class UpdateChatDatapointRequestInternal:
+class UpdateChatDatapointRequestInternal(TypedDict):
     """
     An update request for a chat datapoint.
     """
 
-    id: str
-    """
-    The ID of the datapoint to update. Required.
-    """
-    additional_tools: list[Tool] | None = None
+    additional_tools: NotRequired[list[Tool]]
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
     Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: NotRequired[list[str]]
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    input: Input | None = None
+    id: str
+    """
+    The ID of the datapoint to update. Required.
+    """
+    input: NotRequired[Input | None]
     """
     Datapoint input. If omitted, it will be left unchanged.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    metadata: NotRequired[DatapointMetadataUpdate | None]
     """
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: NotRequired[str | None]
     """
     Datapoint name.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: list[ContentBlockChatOutput] | None | UnsetType = UNSET
+    output: NotRequired[list[ContentBlockChatOutput]]
     """
     Chat datapoint output.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing output (and can be an empty list).
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    tags: dict[str, Any] | None = None
+    tags: NotRequired[dict[str, Any] | None]
     """
     Datapoint tags.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing tags.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
-    tool_params: UpdateDynamicToolParamsRequest | None = None
+    tool_params: NotRequired[UpdateDynamicToolParamsRequest | None]
     """
     DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
     Moving forward, don't nest these fields.
     """
 
 
-@dataclass(kw_only=True)
 class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
     """
     Request to update a chat datapoint.
     """
 
-    type: Literal["chat"] = "chat"
+    type: Literal["chat"]
 
 
-@dataclass(kw_only=True)
-class UpdateJsonDatapointRequestInternal:
+class UpdateJsonDatapointRequestInternal(TypedDict):
     """
     An update request for a JSON datapoint.
     """
@@ -1657,93 +1550,105 @@ class UpdateJsonDatapointRequestInternal:
     """
     The ID of the datapoint to update. Required.
     """
-    input: Input | None = None
+    input: NotRequired[Input | None]
     """
     Datapoint input. If omitted, it will be left unchanged.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    metadata: NotRequired[DatapointMetadataUpdate | None]
     """
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: NotRequired[str | None]
     """
     Datapoint name.
 
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: JsonDatapointOutputUpdate | None | UnsetType = UNSET
+    output: NotRequired[JsonDatapointOutputUpdate | None]
     """
     JSON datapoint output.
     If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
     inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.
     """
-    output_schema: Any | None = None
+    output_schema: NotRequired[Any]
     """
     The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     If not provided, the function's output schema will be used.
     """
-    tags: dict[str, Any] | None = None
+    tags: NotRequired[dict[str, Any] | None]
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will be overwrite the existing tags.
     """
 
 
-@dataclass(kw_only=True)
-class ChatInferenceDatapoint:
+class ChatInferenceDatapoint(TypedDict):
     """
     Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
     This one should be used in all public interfaces.
     """
 
-    dataset_name: str
-    function_name: str
-    id: str
-    input: Input
-    is_deleted: bool
-    updated_at: str
-    additional_tools: list[Tool] | None = None
+    additional_tools: NotRequired[list[Tool]]
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
     """
-    allowed_tools: list[str] | None = None
+    allowed_tools: NotRequired[list[str]]
     """
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    auxiliary: str | None = None
-    episode_id: str | None = None
-    is_custom: bool | None = False
-    name: str | None = None
-    output: list[ContentBlockChatOutput] | None = None
-    parallel_tool_calls: bool | None = None
+    auxiliary: NotRequired[str]
+    dataset_name: str
+    episode_id: NotRequired[str | None]
+    function_name: str
+    id: str
+    input: Input
+    is_custom: NotRequired[bool]
+    is_deleted: bool
+    name: NotRequired[str | None]
+    output: NotRequired[list[ContentBlockChatOutput]]
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     """
-    source_inference_id: str | None = None
-    staled_at: str | None = None
-    tags: dict[str, Any] | None = None
-    tool_choice: ToolChoice | None = None
+    source_inference_id: NotRequired[str | None]
+    staled_at: NotRequired[str | None]
+    tags: NotRequired[dict[str, Any] | None]
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
+    updated_at: str
 
 
-@dataclass(kw_only=True)
-class CreateChatDatapointRequest:
+class CreateChatDatapointRequest(TypedDict):
     """
     A request to create a chat datapoint.
     """
 
+    additional_tools: NotRequired[list[Tool]]
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    allowed_tools: NotRequired[list[str]]
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    episode_id: NotRequired[str | None]
+    """
+    Episode ID that the datapoint belongs to. Optional.
+    """
     function_name: str
     """
     The function name for this datapoint. Required.
@@ -1752,63 +1657,51 @@ class CreateChatDatapointRequest:
     """
     Input to the function. Required.
     """
-    additional_tools: list[Tool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    episode_id: str | None = None
-    """
-    Episode ID that the datapoint belongs to. Optional.
-    """
-    name: str | None = None
+    name: NotRequired[str | None]
     """
     Human-readable name for the datapoint. Optional.
     """
-    output: list[ContentBlockChatOutput] | None = None
+    output: NotRequired[list[ContentBlockChatOutput]]
     """
     Chat datapoint output. Optional.
     """
-    parallel_tool_calls: bool | None = None
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     """
-    tags: dict[str, Any] | None = None
+    tags: NotRequired[dict[str, Any] | None]
     """
     Tags associated with this datapoint. Optional.
     """
-    tool_choice: ToolChoice | None = None
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
 
 
-@dataclass(kw_only=True)
 class CreateDatapointRequestChat(CreateChatDatapointRequest):
     """
     Request to create a chat datapoint.
     """
 
-    type: Literal["chat"] = "chat"
+    type: Literal["chat"]
 
 
-@dataclass(kw_only=True)
-class CreateJsonDatapointRequest:
+class CreateJsonDatapointRequest(TypedDict):
     """
     A request to create a JSON datapoint.
     """
 
+    episode_id: NotRequired[str | None]
+    """
+    Episode ID that the datapoint belongs to. Optional.
+    """
     function_name: str
     """
     The function name for this datapoint. Required.
@@ -1817,54 +1710,47 @@ class CreateJsonDatapointRequest:
     """
     Input to the function. Required.
     """
-    episode_id: str | None = None
-    """
-    Episode ID that the datapoint belongs to. Optional.
-    """
-    name: str | None = None
+    name: NotRequired[str | None]
     """
     Human-readable name for the datapoint. Optional.
     """
-    output: JsonDatapointOutputUpdate | None = None
+    output: NotRequired[JsonDatapointOutputUpdate | None]
     """
     JSON datapoint output. Optional.
     """
-    output_schema: Any | None = None
+    output_schema: NotRequired[Any]
     """
     The output schema of the JSON datapoint. Optional.
     If not provided, the function's output schema will be used. If provided, it will be validated.
     """
-    tags: dict[str, Any] | None = None
+    tags: NotRequired[dict[str, Any] | None]
     """
     Tags associated with this datapoint. Optional.
     """
 
 
-@dataclass(kw_only=True)
 class DatapointChat(ChatInferenceDatapoint):
     """
     Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
     This one should be used in all public interfaces.
     """
 
-    type: Literal["chat"] = "chat"
+    type: Literal["chat"]
 
 
-@dataclass(kw_only=True)
 class DatapointJson(JsonInferenceDatapoint):
     """
     Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
     This one should be used in all public interfaces.
     """
 
-    type: Literal["json"] = "json"
+    type: Literal["json"]
 
 
 Datapoint = DatapointChat | DatapointJson
 
 
-@dataclass(kw_only=True)
-class GetDatapointsResponse:
+class GetDatapointsResponse(TypedDict):
     """
     Response containing the requested datapoints.
     """
@@ -1875,84 +1761,79 @@ class GetDatapointsResponse:
     """
 
 
-@dataclass(kw_only=True)
-class StoredChatInference:
+class StoredChatInference(TypedDict):
     """
     Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
     """
 
+    additional_tools: NotRequired[list[Tool]]
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    allowed_tools: NotRequired[list[str]]
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    dispreferred_outputs: NotRequired[list[list[ContentBlockChatOutput]]]
     episode_id: str
     function_name: str
     inference_id: str
     input: StoredInput
     output: list[ContentBlockChatOutput]
-    timestamp: str
-    variant_name: str
-    additional_tools: list[Tool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
-    parallel_tool_calls: bool | None = None
+    parallel_tool_calls: NotRequired[bool | None]
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    provider_tools: NotRequired[list[ProviderTool]]
     """
     Provider-specific tool configurations
     """
-    tags: dict[str, str] | None = field(default_factory=lambda: {})
-    tool_choice: ToolChoice | None = None
+    tags: NotRequired[dict[str, str]]
+    timestamp: str
+    tool_choice: NotRequired[ToolChoice | None]
     """
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
+    variant_name: str
 
 
-@dataclass(kw_only=True)
 class StoredInferenceChat(StoredChatInference):
     """
     Wire variant of StoredInference for API responses with Python/TypeScript bindings
     This one should be used in all public interfaces
     """
 
-    type: Literal["chat"] = "chat"
+    type: Literal["chat"]
 
 
-@dataclass(kw_only=True)
 class StoredInferenceJson(StoredJsonInference):
     """
     Wire variant of StoredInference for API responses with Python/TypeScript bindings
     This one should be used in all public interfaces
     """
 
-    type: Literal["json"] = "json"
+    type: Literal["json"]
 
 
 StoredInference = StoredInferenceChat | StoredInferenceJson
 
 
-@dataclass(kw_only=True)
 class UpdateJsonDatapointRequest(UpdateJsonDatapointRequestInternal):
     """
     Request to update a JSON datapoint.
     """
 
-    type: Literal["json"] = "json"
+    type: Literal["json"]
 
 
 UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
 
 
-@dataclass(kw_only=True)
-class UpdateDatapointsRequest:
+class UpdateDatapointsRequest(TypedDict):
     """
     Request to update one or more datapoints in a dataset.
     """
@@ -1963,20 +1844,18 @@ class UpdateDatapointsRequest:
     """
 
 
-@dataclass(kw_only=True)
 class CreateDatapointRequestJson(CreateJsonDatapointRequest):
     """
     Request to create a JSON datapoint.
     """
 
-    type: Literal["json"] = "json"
+    type: Literal["json"]
 
 
 CreateDatapointRequest = CreateDatapointRequestChat | CreateDatapointRequestJson
 
 
-@dataclass(kw_only=True)
-class CreateDatapointsRequest:
+class CreateDatapointsRequest(TypedDict):
     """
     Request to create datapoints manually.
     Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
@@ -1988,8 +1867,7 @@ class CreateDatapointsRequest:
     """
 
 
-@dataclass(kw_only=True)
-class GetInferencesResponse:
+class GetInferencesResponse(TypedDict):
     """
     Response containing the requested inferences.
     """
@@ -2000,22 +1878,21 @@ class GetInferencesResponse:
     """
 
 
-@dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
+class CreateDatapointsFromInferenceRequestParamsInferenceQuery(TypedDict):
     """
     Create datapoints from an inference query.
     """
 
+    filters: NotRequired[InferenceFilter | None]
+    """
+    Filters to apply when querying inferences, optional.
+    """
     function_name: str
     """
     The function name to filter inferences by.
     """
-    type: Literal["inference_query"] = "inference_query"
-    filters: InferenceFilter | None = None
-    """
-    Filters to apply when querying inferences, optional.
-    """
-    variant_name: str | None = None
+    type: Literal["inference_query"]
+    variant_name: NotRequired[str | None]
     """
     Variant name to filter inferences by, optional.
     """
@@ -2026,67 +1903,61 @@ CreateDatapointsFromInferenceRequestParams = (
 )
 
 
-@dataclass(kw_only=True)
-class AndDatapointFilter:
+class AndDatapointFilter(TypedDict):
     """
     Logical AND of multiple filters
     """
 
     children: list[DatapointFilter]
-    type: Literal["and"] = "and"
+    type: Literal["and"]
 
 
-@dataclass(kw_only=True)
-class OrDatapointFilter:
+class OrDatapointFilter(TypedDict):
     """
     Logical OR of multiple filters
     """
 
     children: list[DatapointFilter]
-    type: Literal["or"] = "or"
+    type: Literal["or"]
 
 
-@dataclass(kw_only=True)
-class NotDatapointFilter:
+class NotDatapointFilter(TypedDict):
     """
     Logical NOT of a filter
     """
 
     child: DatapointFilter
-    type: Literal["not"] = "not"
+    type: Literal["not"]
 
 
 DatapointFilter = TagDatapointFilter | TimeDatapointFilter | AndDatapointFilter | OrDatapointFilter | NotDatapointFilter
 
 
-@dataclass(kw_only=True)
-class InferenceFilterAnd:
+class InferenceFilterAnd(TypedDict):
     """
     Logical AND of multiple filters
     """
 
     children: list[InferenceFilter]
-    type: Literal["and"] = "and"
+    type: Literal["and"]
 
 
-@dataclass(kw_only=True)
-class InferenceFilterOr:
+class InferenceFilterOr(TypedDict):
     """
     Logical OR of multiple filters
     """
 
     children: list[InferenceFilter]
-    type: Literal["or"] = "or"
+    type: Literal["or"]
 
 
-@dataclass(kw_only=True)
-class InferenceFilterNot:
+class InferenceFilterNot(TypedDict):
     """
     Logical NOT of a filter
     """
 
     child: InferenceFilter
-    type: Literal["not"] = "not"
+    type: Literal["not"]
 
 
 InferenceFilter = (
@@ -2100,44 +1971,43 @@ InferenceFilter = (
 )
 
 
-@dataclass(kw_only=True)
-class ListDatapointsRequest:
+class ListDatapointsRequest(TypedDict):
     """
     Request to list datapoints from a dataset with pagination and filters.
     Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
     """
 
-    filter: DatapointFilter | None = None
+    filter: NotRequired[DatapointFilter | None]
     """
     Optional filter to apply when querying datapoints.
     Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
     """
-    function_name: str | None = None
+    function_name: NotRequired[str | None]
     """
     Optional function name to filter datapoints by.
     If provided, only datapoints from this function will be returned.
     """
-    limit: int | None = None
+    limit: NotRequired[int | None]
     """
     The maximum number of datapoints to return.
     Defaults to 20.
     """
-    offset: int | None = None
+    offset: NotRequired[int | None]
     """
     The number of datapoints to skip before starting to return results.
     Defaults to 0.
     """
-    order_by: list[DatapointOrderBy] | None = None
+    order_by: NotRequired[list[DatapointOrderBy]]
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
     """
-    page_size: int | None = None
+    page_size: NotRequired[int | None]
     """
     The maximum number of datapoints to return. Defaults to 20.
     Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
     """
-    search_query_experimental: str | None = None
+    search_query_experimental: NotRequired[str | None]
     """
     Text query to filter. Case-insensitive substring search over the datapoints' input and output.
 
@@ -2154,61 +2024,60 @@ class ListDatapointsRequest:
     """
 
 
-@dataclass(kw_only=True)
-class ListInferencesRequest:
+class ListInferencesRequest(TypedDict):
     """
     Request to list inferences with pagination and filters.
     Used by the `POST /v1/inferences/list_inferences` endpoint.
     """
 
-    output_source: InferenceOutputSource
-    """
-    Source of the inference output. Determines whether to return the original
-    inference output or demonstration feedback (manually-curated output) if available.
-    """
-    after: str | None = None
+    after: NotRequired[str | None]
     """
     Optional inference ID to paginate after (exclusive).
     Returns inferences with IDs after this one (later in time).
     Cannot be used together with `before` or `offset`.
     """
-    before: str | None = None
+    before: NotRequired[str | None]
     """
     Optional inference ID to paginate before (exclusive).
     Returns inferences with IDs before this one (earlier in time).
     Cannot be used together with `after` or `offset`.
     """
-    episode_id: str | None = None
+    episode_id: NotRequired[str | None]
     """
     Optional episode ID to filter inferences by.
     If provided, only inferences from this episode will be returned.
     """
-    filter: InferenceFilter | None = None
+    filter: NotRequired[InferenceFilter | None]
     """
     Optional filter to apply when querying inferences.
     Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
     """
-    function_name: str | None = None
+    function_name: NotRequired[str | None]
     """
     Optional function name to filter inferences by.
     If provided, only inferences from this function will be returned.
     """
-    limit: int | None = None
+    limit: NotRequired[int | None]
     """
     The maximum number of inferences to return.
     Defaults to 20.
     """
-    offset: int | None = None
+    offset: NotRequired[int | None]
     """
     The number of inferences to skip before starting to return results.
     Defaults to 0.
     """
-    order_by: list[OrderBy] | None = None
+    order_by: NotRequired[list[OrderBy]]
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
     """
-    search_query_experimental: str | None = None
+    output_source: InferenceOutputSource
+    """
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
+    """
+    search_query_experimental: NotRequired[str | None]
     """
     Text query to filter. Case-insensitive substring search over the inferences' input and output.
 
@@ -2223,7 +2092,7 @@ class ListInferencesRequest:
       filters, it will perform a full table scan, which may be extremely slow depending
       on the data volume.
     """
-    variant_name: str | None = None
+    variant_name: NotRequired[str | None]
     """
     Optional variant name to filter inferences by.
     If provided, only inferences from this variant will be returned.

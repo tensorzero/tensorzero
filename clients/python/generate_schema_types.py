@@ -170,11 +170,11 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 "--output",
                 str(output_file),
                 "--output-model-type",
-                "dataclasses.dataclass",
+                "typing.TypedDict",
                 "--target-python-version",
                 "3.10",
                 # For types with a single literal field (like `type = Literal["text"]`), generate default value for it
-                "--use-one-literal-as-default",
+                # "--use-one-literal-as-default",
                 # Use list, dict instead of List, Dict
                 "--use-standard-collections",
                 # Use keyword-only arguments for dataclasses; otherwise we are sensitive to
@@ -200,8 +200,8 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 # Use field descriptions for docstrings
                 "--use-field-description",
                 # Explicitly pass extra keys to handle double-optional generation
-                "--field-extra-keys",
-                "x-double-option",
+                # "--field-extra-keys",
+                # "x-double-option",
                 # Use custom dataclass template for double-optionals
                 "--custom-template-dir",
                 str(templates_dir),
