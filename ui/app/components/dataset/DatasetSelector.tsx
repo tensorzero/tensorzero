@@ -29,12 +29,11 @@ interface DatasetSelectorProps {
   disabled?: boolean;
 }
 
-// TODO Create new datasets within this component
 export function DatasetSelector({
   selected,
   onSelect,
   functionName,
-  placeholder = "Select a dataset",
+  placeholder,
   allowCreation = true,
   className,
   buttonProps,
@@ -59,6 +58,18 @@ export function DatasetSelector({
       }),
     [datasets],
   );
+
+  if (placeholder === undefined) {
+    if (allowCreation) {
+      if (recentlyUpdatedDatasets.length > 0) {
+        placeholder = "Create or find a dataset";
+      } else {
+        placeholder = "Create a new dataset";
+      }
+    } else {
+      placeholder = "Select a dataset";
+    }
+  }
 
   // Selected dataset, if an existing one was selected
   const existingSelectedDataset = useMemo(
@@ -95,7 +106,9 @@ export function DatasetSelector({
             ) : (
               <span className="flex flex-row items-center gap-2">
                 <ButtonIcon as={Table} variant="tertiary" />
-                {placeholder}
+                <span className="text-fg-secondary flex text-sm">
+                  {placeholder}
+                </span>
               </span>
             )}
 
@@ -117,13 +130,7 @@ export function DatasetSelector({
           <Command>
             {/* TODO Naming/character constraints/disallow typing certain characters? */}
             <CommandInput
-              placeholder={
-                allowCreation
-                  ? recentlyUpdatedDatasets.length > 0
-                    ? "Create or find a dataset..."
-                    : "Create a new dataset..."
-                  : "Find a dataset..."
-              }
+              placeholder={placeholder}
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"

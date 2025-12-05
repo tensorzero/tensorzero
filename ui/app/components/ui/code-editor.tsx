@@ -175,9 +175,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   const debouncedFlush = useMemo(
     () =>
-      debounce(() => {
-        flushPending();
-      }, 100),
+      debounce(
+        () => {
+          flushPending();
+        },
+        100,
+        { leading: true, trailing: true },
+      ),
     [flushPending],
   );
 

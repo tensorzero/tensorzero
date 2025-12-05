@@ -27,7 +27,10 @@ export function ChatOutputElement({
 
   if (output === undefined) {
     return (
-      <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
+      <div
+        className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4"
+        data-testid="chat-output"
+      >
         {isEditing ? (
           <AddOutputButtons onAdd={onAddOutput} />
         ) : (
@@ -38,7 +41,10 @@ export function ChatOutputElement({
   }
 
   return (
-    <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
+    <div
+      className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4"
+      data-testid="chat-output"
+    >
       <ExpandableElement maxHeight={maxHeight}>
         <ChatOutputMessageElement
           output={output}
