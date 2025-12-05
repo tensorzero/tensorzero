@@ -1,5 +1,5 @@
 import type { Config, FunctionConfig } from "~/types/tensorzero";
-import { getConfig as getConfigNative } from "tensorzero-node";
+import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
 
@@ -29,16 +29,26 @@ We will likely address this with some form of query library down the line.
 
 export async function loadConfig(): Promise<Config> {
   const env = getEnv();
+
+  // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
+  if (env.TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY) {
+    const client = getTensorZeroClient();
+    return await client.getUiConfig();
+  }
+
+  // Otherwise use disk loading via tensorzero-node (legacy behavior)
+  const { getConfig: getConfigNative } = await import("tensorzero-node");
   if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
     return await getConfigNative(null);
   }
-  const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
-  return config;
+  return await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
 }
 
 /**
  * Helper function to get the config path used by the UI.
  * Returns null if using default config, otherwise returns the config path.
+ * @deprecated This function is deprecated and will be removed in a future version.
+ * Config is now loaded from the gateway, not from disk.
  */
 export function getConfigPath(): string | null {
   const env = getEnv();
