@@ -211,9 +211,11 @@ async fn test_workflow_evaluation_nonexistent_function() {
     };
     let result = client.workflow_evaluation_run(params).await.unwrap_err();
     println!("Result: {result:#?}");
-    assert!(result
-        .to_string()
-        .contains("Unknown function: nonexistent_function"));
+    assert!(
+        result
+            .to_string()
+            .contains("Unknown function: nonexistent_function")
+    );
 }
 
 /// Test that the variant behavior is default if we use a different function name
@@ -455,9 +457,11 @@ async fn test_bad_workflow_evaluation_run() {
     };
     let response = client.inference(inference_params).await.unwrap_err();
     println!("Response: {response:#?}");
-    assert!(response
-        .to_string()
-        .contains("Workflow evaluation run not found"));
+    assert!(
+        response
+            .to_string()
+            .contains("Workflow evaluation run not found")
+    );
 }
 
 #[tokio::test]
@@ -471,7 +475,9 @@ async fn test_workflow_evaluation_tag_validation() {
         display_name: Some("test_display_name".to_string()),
     };
     let workflow_evaluation_info = client.workflow_evaluation_run(params).await.unwrap_err();
-    assert!(workflow_evaluation_info
-        .to_string()
-        .contains("Tag name cannot start with 'tensorzero::'"));
+    assert!(
+        workflow_evaluation_info
+            .to_string()
+            .contains("Tag name cannot start with 'tensorzero::'")
+    );
 }

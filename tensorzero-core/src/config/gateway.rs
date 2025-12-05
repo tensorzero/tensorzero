@@ -87,10 +87,12 @@ impl UninitializedGatewayConfig {
         {
             value
         } else {
-            if let Some(info) = object_store_info {
-                if !matches!(info.kind, StorageKind::Disabled) {
-                    tracing::info!("Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled.");
-                }
+            if let Some(info) = object_store_info
+                && !matches!(info.kind, StorageKind::Disabled)
+            {
+                tracing::info!(
+                    "Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled."
+                );
             }
             false
         };

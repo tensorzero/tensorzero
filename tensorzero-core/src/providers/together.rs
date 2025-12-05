@@ -1,11 +1,11 @@
 use std::{borrow::Cow, time::Duration};
 
-use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
 use crate::inference::types::RequestMessage;
+use crate::inference::types::chat_completion_inference_params::{
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+};
 use crate::providers::openai::OpenAIMessagesConfig;
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -17,12 +17,12 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -32,17 +32,17 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, Error, ErrorDetails},
     inference::types::{
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, Text, TextChunk, Thought, ThoughtChunk,
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
     },
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
+use super::helpers_thinking_block::{ThinkingState, process_think_blocks};
 use super::openai::{
-    get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAIToolType, OpenAIUsage,
+    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, OpenAIUsage, get_chat_url,
+    handle_openai_error, tensorzero_to_openai_messages,
 };
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{

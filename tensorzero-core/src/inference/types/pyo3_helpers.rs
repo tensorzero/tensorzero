@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyDict};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, sync::PyOnceLock, types::PyModule};
 use pyo3::{intern, prelude::*};
-use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -13,6 +13,7 @@ use crate::inference::types::stored_input::{StoredInput, StoredInputMessageConte
 use crate::inference::types::{
     ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
 };
+use crate::optimization::UninitializedOptimizerConfig;
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
@@ -20,7 +21,6 @@ use crate::optimization::gepa::UninitializedGEPAConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
-use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };

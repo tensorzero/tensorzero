@@ -13,7 +13,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::{check_duplicates_across, check_duplicates_within, VariantSampler};
+use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 
 /// Pure function for uniform sampling logic.
 /// Given a uniform sample in [0, 1), selects a variant from active_variants
@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
     use crate::db::clickhouse::ClickHouseConnectionInfo;
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
     fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
         names
@@ -529,10 +529,12 @@ mod tests {
 
         let result = config.load(&variants);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("candidate variant `INVALID` does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("candidate variant `INVALID` does not exist")
+        );
     }
 
     #[test]
@@ -546,10 +548,12 @@ mod tests {
 
         let result = config.load(&variants);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("fallback variant `INVALID` does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("fallback variant `INVALID` does not exist")
+        );
     }
 
     #[test]
@@ -563,10 +567,12 @@ mod tests {
 
         let result = config.load(&variants);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("candidate_variants cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("candidate_variants cannot be empty")
+        );
     }
 
     #[test]
@@ -784,10 +790,12 @@ mod tests {
             .setup(db, "test_function", &postgres, cancel_token)
             .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no valid sampling strategy"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no valid sampling strategy")
+        );
     }
 
     #[tokio::test]

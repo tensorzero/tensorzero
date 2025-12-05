@@ -14,6 +14,7 @@ import {
 import { TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  Config,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -630,6 +631,20 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetInferencesResponse;
+  }
+
+  /**
+   * Fetches the gateway configuration for the UI.
+   * @returns A promise that resolves with the Config object
+   * @throws Error if the request fails
+   */
+  async getUiConfig(): Promise<Config> {
+    const response = await this.fetch("/internal/ui-config", { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as Config;
   }
 
   private async fetch(

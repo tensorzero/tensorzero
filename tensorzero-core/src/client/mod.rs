@@ -1,8 +1,8 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::unwritten::UnwrittenConfig;
 use crate::config::ConfigFileGlob;
-use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
+use crate::config::unwritten::UnwrittenConfig;
+use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     db::postgres::PostgresConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{setup_clickhouse, setup_postgres, GatewayHandle},
+    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres},
 };
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::Event;
@@ -193,8 +193,7 @@ impl HTTPGateway {
             // Discard the stream if it has an error
             let res = event_source.next().await;
             #[expect(clippy::panic)]
-            let Some(Err(e)) = res
-            else {
+            let Some(Err(e)) = res else {
                 panic!("Peeked error but got non-err {res:?}");
             };
             let err_str = format!("Error in streaming response: {e:?}");
@@ -501,7 +500,9 @@ impl ClientBuilder {
                             glob,
                         })?
                 } else {
-                    tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
+                    tracing::info!(
+                        "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+                    );
                     Config::new_empty()
                         .await
                         .map_err(|e| ClientBuilderError::ConfigParsing {
@@ -563,8 +564,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
             ClientBuilderMode::FromComponents {
@@ -608,8 +607,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
         }
@@ -623,8 +620,6 @@ impl ClientBuilder {
                 timeout: None,
             }),
             verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 
@@ -740,8 +735,6 @@ impl ClientBuilder {
                 verbose_errors: self.verbose_errors,
             })),
             verbose_errors: self.verbose_errors,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 }
@@ -751,8 +744,6 @@ impl ClientBuilder {
 pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
-    #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -846,10 +837,6 @@ impl Client {
                     })
                     .into(),
                 })?;
-                #[cfg(feature = "e2e_tests")]
-                {
-                    *self.last_body.lock().await = Some(body.clone());
-                }
                 let mut builder = client
                     .http_client
                     .post(url)
@@ -1174,7 +1161,9 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 
     #[tokio::test]
@@ -1194,7 +1183,11 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+        assert!(logs_contain(
+            "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+        ));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 }

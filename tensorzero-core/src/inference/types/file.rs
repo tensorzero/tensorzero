@@ -602,7 +602,12 @@ impl File {
     pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url(url_file) => {
-                let UrlFile { url, mime_type, detail, filename } = url_file;
+                let UrlFile {
+                    url,
+                    mime_type,
+                    detail,
+                    filename,
+                } = url_file;
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
@@ -613,7 +618,10 @@ impl File {
                 // Check status code
                 let status = response.status();
                 if !status.is_success() {
-                    let error_body = response.text().await.unwrap_or_else(|_| String::from("(unable to read response body)"));
+                    let error_body = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| String::from("(unable to read response body)"));
                     return Err(Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
                         message: format!("HTTP error {status}: {error_body}"),
@@ -650,21 +658,23 @@ impl File {
                             })?;
 
                         // Check if Content-Type header differs and log warning
-                        if let Some(content_type) = &content_type_header {
-                            if let Ok(content_type_str) = content_type.to_str() {
-                                if let Ok(header_mime) = content_type_str.parse::<MediaType>() {
-                                    if header_mime != inferred_mime {
-                                        tracing::warn!(
-                                            "Inferred MIME type `{}` differs from Content-Type header `{}` for URL {}. The gateway will send `{}` to the model provider",
-                                            inferred_mime,
-                                            header_mime,
-                                            url,
-                                            inferred_mime,
-                                        );
-                                    }
-                                } else {
-                                    tracing::warn!("Content-Type header is not a valid mime type: `{content_type_str}`");
+                        if let Some(content_type) = &content_type_header
+                            && let Ok(content_type_str) = content_type.to_str()
+                        {
+                            if let Ok(header_mime) = content_type_str.parse::<MediaType>() {
+                                if header_mime != inferred_mime {
+                                    tracing::warn!(
+                                        "Inferred MIME type `{}` differs from Content-Type header `{}` for URL {}. The gateway will send `{}` to the model provider",
+                                        inferred_mime,
+                                        header_mime,
+                                        url,
+                                        inferred_mime,
+                                    );
                                 }
+                            } else {
+                                tracing::warn!(
+                                    "Content-Type header is not a valid mime type: `{content_type_str}`"
+                                );
                             }
                         }
 
@@ -709,39 +719,44 @@ impl File {
                     filename,
                 })
             }
-            File::Base64(base64_file) => {
-                Ok(Base64File { source_url: None, ..base64_file })
-            }
+            File::Base64(base64_file) => Ok(Base64File {
+                source_url: None,
+                ..base64_file
+            }),
             File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ObjectStoragePointer::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!(
+                    "File::ObjectStoragePointer::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             })),
             File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!(
+                    "File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             })),
             File::ObjectStorageError(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ObjectStorageError::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!(
+                    "File::ObjectStorageError::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             })),
         }
     }
 
     pub fn into_stored_file(self) -> Result<StoredFile, Error> {
         match self {
-            File::ObjectStorage(ObjectStorageFile { file, .. }) | File::ObjectStoragePointer(file) | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
-                Ok(StoredFile(file))
-            }
-            File::Url(_) | File::Base64(_) => {
-                Err(Error::new(ErrorDetails::InternalError {
-                    message: format!(
-                        "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
-                    ),
-                }))
-            }
+            File::ObjectStorage(ObjectStorageFile { file, .. })
+            | File::ObjectStoragePointer(file)
+            | File::ObjectStorageError(ObjectStorageError { file, .. }) => Ok(StoredFile(file)),
+            File::Url(_) | File::Base64(_) => Err(Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })),
         }
     }
 }
@@ -845,7 +860,9 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
-                tracing::warn!("Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct.");
+                tracing::warn!(
+                    "Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct."
+                );
             }
             guess.copied()
         }
@@ -872,10 +889,10 @@ pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        file::{sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer},
+        ContentBlock, RequestMessage, Role,
+        file::{ObjectStorageFile, ObjectStoragePointer, sanitize_raw_request},
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
-        ContentBlock, RequestMessage, Role,
     };
 
     #[test]
@@ -1048,9 +1065,9 @@ mod tests {
 
     mod file_serde_tests {
         use crate::inference::types::{
+            File,
             file::{Base64File, ObjectStoragePointer, UrlFile},
             storage::{StorageKind, StoragePath},
-            File,
         };
 
         #[test]

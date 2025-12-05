@@ -1,5 +1,5 @@
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde::Deserialize;
 use tracing::instrument;
 
@@ -147,10 +147,12 @@ mod tests {
 
         let result = delete_datapoints(&mock_clickhouse, invalid_name, request).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid dataset name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid dataset name")
+        );
     }
 
     #[tokio::test]
@@ -160,9 +162,11 @@ mod tests {
 
         let result = delete_dataset(&mock_clickhouse, invalid_name).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid dataset name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid dataset name")
+        );
     }
 }

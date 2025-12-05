@@ -4,11 +4,11 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{debug_handler, Extension, Json};
+use axum::{Extension, Json, debug_handler};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::{time::Instant, try_join};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -19,12 +19,12 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
+    ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{
-    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert,
+    StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    deserialize_optional_tool_info,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
@@ -1531,9 +1531,10 @@ mod tests {
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Demonstration does not fit function output schema"));
+        assert!(
+            err.to_string()
+                .contains("Demonstration does not fit function output schema")
+        );
 
         // Case 7: Mismatched function type - Chat function with JSON demonstration info
         let value = json!("Hello, world!");

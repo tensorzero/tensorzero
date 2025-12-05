@@ -1,9 +1,7 @@
 import type { Config, FunctionConfig } from "~/types/tensorzero";
-import { getConfig as getConfigNative } from "tensorzero-node";
+import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
-
-const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
 /*
 Config Context provider:
@@ -31,16 +29,26 @@ We will likely address this with some form of query library down the line.
 
 export async function loadConfig(): Promise<Config> {
   const env = getEnv();
+
+  // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
+  if (env.TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY) {
+    const client = getTensorZeroClient();
+    return await client.getUiConfig();
+  }
+
+  // Otherwise use disk loading via tensorzero-node (legacy behavior)
+  const { getConfig: getConfigNative } = await import("tensorzero-node");
   if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
     return await getConfigNative(null);
   }
-  const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
-  return config;
+  return await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
 }
 
 /**
  * Helper function to get the config path used by the UI.
  * Returns null if using default config, otherwise returns the config path.
+ * @deprecated This function is deprecated and will be removed in a future version.
+ * Config is now loaded from the gateway, not from disk.
  */
 export function getConfigPath(): string | null {
   const env = getEnv();
@@ -50,12 +58,7 @@ export function getConfigPath(): string | null {
   return env.TENSORZERO_UI_CONFIG_PATH;
 }
 
-interface ConfigCache {
-  data: Config;
-  timestamp: number;
-}
-
-let configCache: ConfigCache | null = null;
+let configCache: Config | undefined = undefined;
 
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
@@ -69,48 +72,18 @@ const defaultFunctionConfig: FunctionConfig = {
   experimentation: { type: "uniform" },
 };
 
-export function getDefaultFunctionConfigWithVariant(
-  model_name: string,
-): FunctionConfig {
-  const functionConfig = defaultFunctionConfig;
-  functionConfig.variants[model_name] = {
-    inner: {
-      type: "chat_completion",
-      model: model_name,
-      weight: null,
-      templates: {},
-      temperature: null,
-      top_p: null,
-      max_tokens: null,
-      presence_penalty: null,
-      frequency_penalty: null,
-      seed: null,
-      stop_sequences: null,
-      json_mode: null,
-      retries: { num_retries: 0, max_delay_s: 0 },
-    },
-    timeouts: {
-      non_streaming: { total_ms: null },
-      streaming: { ttft_ms: null },
-    },
-  };
-  return functionConfig;
-}
-
 export async function getConfig() {
-  const now = Date.now();
-
-  if (configCache && now - configCache.timestamp < CACHE_TTL_MS) {
-    return configCache.data;
+  if (configCache) {
+    return configCache;
   }
 
-  // Cache is invalid or doesn't exist, reload it
+  // Cache doesn't exist, load it.
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
   freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
-  configCache = { data: freshConfig, timestamp: now };
-  return freshConfig;
+  configCache = freshConfig;
+  return configCache;
 }
 
 /**

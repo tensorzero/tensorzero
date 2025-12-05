@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use minijinja_utils::AnalysisError;
 use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fmt::{Debug, Display};
 use thiserror::Error;
 use tokio::sync::OnceCell;
@@ -17,8 +17,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::db::clickhouse::migration_manager::get_run_migrations_command;
-use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
+use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -943,9 +943,15 @@ impl std::fmt::Display for ErrorDetails {
                 streaming,
             } => {
                 if *streaming {
-                    write!(f, "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
                 } else {
-                    write!(f, "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
                 }
             }
             ErrorDetails::VariantTimeout {
@@ -955,9 +961,15 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 let variant_description = format!("Variant `{variant_name}`");
                 if *streaming {
-                    write!(f, "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
+                    )
                 } else {
-                    write!(f, "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})")
+                    write!(
+                        f,
+                        "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
+                    )
                 }
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
@@ -973,7 +985,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error fetching file from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
-                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
+                write!(
+                    f,
+                    "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
+                )
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,
@@ -1037,7 +1052,10 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ClickHouseMigrationsDisabled => {
                 let run_migrations_command: String = get_run_migrations_command();
-                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
+                write!(
+                    f,
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`"
+                )
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
@@ -1055,13 +1073,19 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::DiclMissingOutput => {
-                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`.")
+                write!(
+                    f,
+                    "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`."
+                )
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
             }
             ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
-                write!(f, "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique.")
+                write!(
+                    f,
+                    "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique."
+                )
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
@@ -1100,7 +1124,10 @@ impl std::fmt::Display for ErrorDetails {
                             load.source_quote
                         )?;
                     }
-                    writeln!(f, "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior.")?;
+                    writeln!(
+                        f,
+                        "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior."
+                    )?;
                     Ok(())
                 }
             },
@@ -1191,7 +1218,10 @@ impl std::fmt::Display for ErrorDetails {
                             .map_or(String::new(), |r| format!("\nRaw response: {r}"))
                     )
                 } else {
-                    write!(f, "Inference stream closed due to error from {provider_type} server: {message}")
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {provider_type} server: {message}"
+                    )
                 }
             }
             ErrorDetails::InferenceTimeout { variant_name } => {
@@ -1220,10 +1250,16 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid client mode: {mode}. {message}")
             }
             ErrorDetails::InvalidDiclConfig { message } => {
-                write!(f, "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new")
+                write!(
+                    f,
+                    "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
+                )
             }
             ErrorDetails::InvalidDatasetName { dataset_name } => {
-                write!(f, "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"")
+                write!(
+                    f,
+                    "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\""
+                )
             }
             ErrorDetails::InvalidWorkflowEvaluationRun { episode_id } => {
                 write!(
@@ -1248,7 +1284,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid {kind} ID: {message}")
             }
             ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
-                write!(f, "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\".")
+                write!(
+                    f,
+                    "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\"."
+                )
             }
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
@@ -1292,7 +1331,10 @@ impl std::fmt::Display for ErrorDetails {
                 function_name,
                 variant_name,
             } => {
-                write!(f, "Invalid variant for optimization: {variant_name} for function: {function_name}")
+                write!(
+                    f,
+                    "Invalid variant for optimization: {variant_name} for function: {function_name}"
+                )
             }
             ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
             ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
@@ -1441,7 +1483,10 @@ impl std::fmt::Display for ErrorDetails {
                     write!(
                         f,
                         "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
-                        limit.resource.as_str(), scope, limit.requested, limit.available
+                        limit.resource.as_str(),
+                        scope,
+                        limit.requested,
+                        limit.available
                     )
                 } else {
                     writeln!(
@@ -1463,7 +1508,10 @@ impl std::fmt::Display for ErrorDetails {
                         write!(
                             f,
                             "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
-                            limit.resource.as_str(), scope, limit.requested, limit.available
+                            limit.resource.as_str(),
+                            scope,
+                            limit.requested,
+                            limit.available
                         )?;
                     }
                     Ok(())
@@ -1537,7 +1585,10 @@ impl std::fmt::Display for ErrorDetails {
                 function_type,
                 variant_type,
             } => {
-                write!(f, "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`")
+                write!(
+                    f,
+                    "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`"
+                )
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {raw_uuid}")

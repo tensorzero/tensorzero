@@ -1,0 +1,11 @@
+[package]
+name = "tensorzero-unsafe-helpers"
+edition = "2024"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+# NOTE - we do not inherit lints from the workspace, so we need to allow unsafe code in this crate
+[lints]

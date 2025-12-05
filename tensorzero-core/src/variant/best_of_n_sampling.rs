@@ -7,21 +7,21 @@ use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, System,
+    FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    System, batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
@@ -849,7 +849,7 @@ mod tests {
     use crate::rate_limiting::ScopeInfo;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
+        config::{UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
@@ -1200,9 +1200,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,

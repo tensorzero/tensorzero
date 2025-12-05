@@ -31,7 +31,7 @@ fn argmax_with_ties(values: &[f64]) -> Vec<usize> {
     let max_indices: Vec<usize> = values
         .iter()
         .enumerate()
-        .filter(|(_, &v)| (v - max_val).abs() < tolerance)
+        .filter(|&(_, &v)| (v - max_val).abs() < tolerance)
         .map(|(i, _)| i)
         .collect();
 
