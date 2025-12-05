@@ -6,8 +6,8 @@ use std::{
     time::Instant,
 };
 
-use axum::{routing::post, Router};
-use provider_proxy::{run_server, Args, CacheMode};
+use axum::{Router, routing::post};
+use provider_proxy::{Args, CacheMode, run_server};
 use rand::Rng;
 use tokio::{sync::oneshot, task::JoinHandle};
 
