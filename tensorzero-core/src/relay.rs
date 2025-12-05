@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Instant};
 
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use url::Url;
 
 use crate::client::{ClientBuilder, ClientBuilderMode, ContentBlockChunk, InferenceResponseChunk};
@@ -20,9 +20,9 @@ use crate::{
     endpoints::inference::{ChatCompletionInferenceParams, InferenceClients},
     error::{Error, ErrorDetails},
     inference::types::{
-        resolved_input::LazyFile, ContentBlock, ContentBlockChatOutput, ContentBlockOutput,
-        Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs, Text,
+        ContentBlock, ContentBlockChatOutput, ContentBlockOutput, Latency,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+        Text, resolved_input::LazyFile,
     },
     tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef},
     variant::JsonMode,

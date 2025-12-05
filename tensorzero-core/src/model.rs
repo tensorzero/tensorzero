@@ -71,8 +71,8 @@ use crate::providers::{
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
     groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider,
-    together::TogetherProvider, vllm::VLLMProvider, xai::XAIProvider,
+    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
+    xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -442,16 +442,17 @@ impl ModelConfig {
         let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             if let Some(relay) = &clients.relay
-                && !self.skip_relay {
-                    let response = relay
-                        .relay_non_streaming(model_name, request, clients)
-                        .await?;
-                    return Ok(ModelInferenceResponse::new(
-                        response,
-                        "tensorzero::relay".into(),
-                        false,
-                    ));
-                }
+                && !self.skip_relay
+            {
+                let response = relay
+                    .relay_non_streaming(model_name, request, clients)
+                    .await?;
+                return Ok(ModelInferenceResponse::new(
+                    response,
+                    "tensorzero::relay".into(),
+                    false,
+                ));
+            }
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {
@@ -558,21 +559,22 @@ impl ModelConfig {
         let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             if let Some(relay) = &clients.relay
-                && !self.skip_relay {
-                    // Note - we do *not* call wrap_provider_stream,
-                    // since we don't want caching or (model provider) OTEL attributes
-                    let (stream, raw_request) =
-                        relay.relay_streaming(model_name, request, clients).await?;
-                    return Ok(StreamResponseAndMessages {
-                        response: StreamResponse {
-                            stream: stream.instrument(Span::current()),
-                            raw_request,
-                            model_provider_name: "tensorzero::relay".into(),
-                            cached: false,
-                        },
-                        messages: request.messages.clone(),
-                    });
-                }
+                && !self.skip_relay
+            {
+                // Note - we do *not* call wrap_provider_stream,
+                // since we don't want caching or (model provider) OTEL attributes
+                let (stream, raw_request) =
+                    relay.relay_streaming(model_name, request, clients).await?;
+                return Ok(StreamResponseAndMessages {
+                    response: StreamResponse {
+                        stream: stream.instrument(Span::current()),
+                        raw_request,
+                        model_provider_name: "tensorzero::relay".into(),
+                        cached: false,
+                    },
+                    messages: request.messages.clone(),
+                });
+            }
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ProviderNotFound {

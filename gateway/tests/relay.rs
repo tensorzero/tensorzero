@@ -82,7 +82,12 @@ async fn test_relay_non_streaming() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200, "Response: {:?}", response.text().await);
+    assert_eq!(
+        response.status(),
+        200,
+        "Response: {:?}",
+        response.text().await
+    );
     let body: serde_json::Value = response.json().await.unwrap();
 
     // Verify we got a successful inference response
@@ -99,8 +104,26 @@ async fn test_relay_non_streaming() {
 
 #[tokio::test]
 async fn test_relay_streaming() {
-    let downstream_config = "";
-    let relay_config = "";
+    // Configure downstream with working provider ("good")
+    let downstream_config = r#"
+[models.streaming_model]
+routing = ["good"]
+
+[models.streaming_model.providers.good]
+type = "dummy"
+model_name = "good"
+"#;
+    // Configure relay with failing provider ("error")
+    // If relay forwards to downstream, we get success from downstream's "good" provider
+    // If relay handles locally, we get an error from relay's "error" provider
+    let relay_config = r#"
+[models.streaming_model]
+routing = ["error"]
+
+[models.streaming_model.providers.error]
+type = "dummy"
+model_name = "error"
+"#;
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
 
@@ -109,7 +132,7 @@ async fn test_relay_streaming() {
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::good",
+            "model_name": "streaming_model",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -125,14 +148,15 @@ async fn test_relay_streaming() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200);
+    // Should succeed because relay forwards to downstream's working provider
+    assert_eq!(response.status(), 200, "Streaming request should succeed via relay");
 
     // Read the streaming response
     let body = response.text().await.unwrap();
     let lines: Vec<&str> = body.lines().collect();
 
-    // Should have multiple SSE lines
-    assert!(lines.len() > 1, "Expected multiple streaming chunks");
+    // Should have multiple SSE lines (proves we got actual streaming content from downstream)
+    assert!(lines.len() > 1, "Expected multiple streaming chunks from downstream");
 
     // All non-empty lines should start with "data: "
     for line in lines.iter().filter(|l| !l.is_empty()) {
@@ -322,10 +346,16 @@ model_name = "error"
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
 
     assert!(body.get("inference_id").is_some());
-    assert!(body.get("content").is_some(), "Should have content from downstream");
+    assert!(
+        body.get("content").is_some(),
+        "Should have content from downstream"
+    );
     // Verify we got actual content (proving it came from downstream's "good" provider, not relay's "error")
     let content = body["content"].as_array().unwrap();
-    assert!(!content.is_empty(), "Expected non-empty content from downstream");
+    assert!(
+        !content.is_empty(),
+        "Expected non-empty content from downstream"
+    );
 }
 
 #[tokio::test]
@@ -382,7 +412,10 @@ model = "dummy::good"
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
 
     assert!(body.get("inference_id").is_some());
-    assert!(body.get("content").is_some(), "Should have content from inference");
+    assert!(
+        body.get("content").is_some(),
+        "Should have content from inference"
+    );
     let content = body["content"].as_array().unwrap();
     assert!(!content.is_empty(), "Expected non-empty content");
 }
