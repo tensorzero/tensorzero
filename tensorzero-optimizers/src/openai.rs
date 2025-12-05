@@ -145,12 +145,12 @@ impl<'a> OpenAISupervisedRow<'a> {
         )
         .await?;
         let Some(output) = &inference.output else {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         };
         if output.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         }
@@ -230,12 +230,12 @@ impl<'a> OpenAIReinforcementRow<'a> {
         )
         .await?;
         let Some(output) = &inference.output else {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         };
         if output.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         }
@@ -262,7 +262,7 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
 
     fn try_from(blocks: &'a Vec<ContentBlockChatOutput>) -> Result<Self, Self::Error> {
         if blocks.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "Output content blocks is empty".to_string(),
             }));
         }

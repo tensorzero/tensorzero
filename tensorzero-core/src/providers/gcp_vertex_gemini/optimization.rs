@@ -90,12 +90,12 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
                     }],
                 });
         let Some(output) = &inference.output else {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         };
         if output.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         }

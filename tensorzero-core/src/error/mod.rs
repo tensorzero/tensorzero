@@ -414,7 +414,7 @@ pub enum ErrorDetails {
     InvalidProviderConfig {
         message: String,
     },
-    InvalidRenderedStoredInference {
+    InvalidRenderedSample {
         message: String,
     },
     InvalidRequest {
@@ -656,7 +656,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRenderedSample { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
@@ -812,7 +812,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidRenderedStoredInference { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidRenderedSample { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
@@ -1278,7 +1278,7 @@ impl std::fmt::Display for ErrorDetails {
             ),
             ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
             ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
-            ErrorDetails::InvalidRenderedStoredInference { message } => {
+            ErrorDetails::InvalidRenderedSample { message } => {
                 write!(f, "Invalid rendered stored inference: {message}")
             }
             ErrorDetails::InvalidTemplatePath => {

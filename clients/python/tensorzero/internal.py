@@ -11,7 +11,7 @@ from tensorzero.types import ContentBlock, Tool
 
 
 # NOTE: there are two different message types. This one is to hint that
-# the RenderedStoredInference.input.messages field is a list of this type.
+# the RenderedSample.input.messages field is a list of this type.
 # The other one is for inputs and uses Any on the way in.
 # This must change as the Python codebase evolves.
 @dataclass

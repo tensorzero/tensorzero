@@ -335,7 +335,7 @@ impl<'a> FireworksSupervisedRow<'a> {
             .parallel_tool_calls
             .unwrap_or_default()
         {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "Parallel tool calls are not supported for Fireworks".to_string(),
             }));
         }
@@ -366,12 +366,12 @@ impl<'a> FireworksSupervisedRow<'a> {
         .await?;
 
         let Some(output) = &inference.output else {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         };
         if output.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+            return Err(Error::new(ErrorDetails::InvalidRenderedSample {
                 message: "No output in inference".to_string(),
             }));
         }

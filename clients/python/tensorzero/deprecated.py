@@ -5,9 +5,7 @@ This module contains deprecated types that have been renamed.
 Import from the main tensorzero module instead of using the old names directly.
 """
 
-import warnings
-
-from typing_extensions import Any, deprecated
+from typing_extensions import deprecated
 
 from .generated_types import (
     InferenceFilter,
@@ -59,27 +57,38 @@ from .types import (
     WorkflowEvaluationRunResponse,
 )
 
-# DEPRECATED: use RenderedSample instead
-RenderedStoredInference = RenderedSample
+# 2026.1+
 
-
-# CAREFUL: deprecated
-class DiclOptimizationConfig:
-    def __new__(cls, *args: Any, **kwargs: Any):
-        warnings.warn(
-            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return DICLOptimizationConfig(*args, **kwargs)
-
-
-# CAREFUL: deprecated alias
 DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
+DiclOptimizationConfig = deprecated("Use DICLOptimizationConfig instead")(DICLOptimizationConfig)
 
-# CAREFUL: deprecated aliases for InputMessageContent* -> InputContentBlock*
+RenderedStoredInference = deprecated("Use RenderedSample instead")(RenderedSample)
+
+InferenceFilterTreeNode = InferenceFilter
+
+FloatMetricFilter = deprecated("Use InferenceFilterFloatMetric instead")(InferenceFilterFloatMetric)
+BooleanMetricFilter = deprecated("Use InferenceFilterBooleanMetric instead")(InferenceFilterBooleanMetric)
+TagFilter = deprecated("Use InferenceFilterTag instead")(InferenceFilterTag)
+TimeFilter = deprecated("Use InferenceFilterTime instead")(InferenceFilterTime)
+AndFilter = deprecated("Use InferenceFilterAnd instead")(InferenceFilterAnd)
+OrFilter = deprecated("Use InferenceFilterOr instead")(InferenceFilterOr)
+NotFilter = deprecated("Use InferenceFilterNot instead")(InferenceFilterNot)
+
+# 2026.2+
+
+ProviderExtraBody = deprecated("Use ModelProviderExtraBody instead")(_ProviderExtraBody)
+ProviderExtraBodyDelete = deprecated("Use ModelProviderExtraBodyDelete instead")(_ProviderExtraBodyDelete)
+ProviderExtraHeader = deprecated("Use ModelProviderExtraHeader instead")(_ProviderExtraHeader)
+ProviderExtraHeaderDelete = deprecated("Use ModelProviderExtraHeaderDelete instead")(_ProviderExtraHeaderDelete)
+
+DynamicEvaluationRunResponse = deprecated("Use WorkflowEvaluationRunResponse instead")(WorkflowEvaluationRunResponse)
+DynamicEvaluationRunEpisodeResponse = deprecated("Use WorkflowEvaluationRunEpisodeResponse instead")(
+    WorkflowEvaluationRunEpisodeResponse
+)
+
+# 2026.3+
+
 InputMessageContent = InputContentBlock
-"""Deprecated: Use InputContentBlock instead."""
 InputMessageContentFile = deprecated("Use InputContentBlockFile instead")(InputContentBlockFile)
 InputMessageContentRawText = deprecated("Use InputContentBlockRawText instead")(InputContentBlockRawText)
 InputMessageContentTemplate = deprecated("Use InputContentBlockTemplate instead")(InputContentBlockTemplate)
@@ -89,9 +98,7 @@ InputMessageContentToolCall = deprecated("Use InputContentBlockToolCall instead"
 InputMessageContentToolResult = deprecated("Use InputContentBlockToolResult instead")(InputContentBlockToolResult)
 InputMessageContentUnknown = deprecated("Use InputContentBlockUnknown instead")(InputContentBlockUnknown)
 
-# CAREFUL: deprecated aliases for StoredInputMessageContent* -> StoredInputContentBlock*
 StoredInputMessageContent = StoredInputContentBlock
-"""Deprecated: Use StoredInputContentBlock instead."""
 StoredInputMessageContentFile = deprecated("Use StoredInputContentBlockFile instead")(StoredInputContentBlockFile)
 StoredInputMessageContentRawText = deprecated("Use StoredInputContentBlockRawText instead")(
     StoredInputContentBlockRawText
@@ -112,68 +119,3 @@ StoredInputMessageContentToolResult = deprecated("Use StoredInputContentBlockToo
 StoredInputMessageContentUnknown = deprecated("Use StoredInputContentBlockUnknown instead")(
     StoredInputContentBlockUnknown
 )
-
-# CAREFUL: deprecated aliases for ProviderExtra* -> ModelProviderExtra*
-ProviderExtraBody = deprecated("Use ModelProviderExtraBody instead")(_ProviderExtraBody)
-ProviderExtraBodyDelete = deprecated("Use ModelProviderExtraBodyDelete instead")(_ProviderExtraBodyDelete)
-ProviderExtraHeader = deprecated("Use ModelProviderExtraHeader instead")(_ProviderExtraHeader)
-ProviderExtraHeaderDelete = deprecated("Use ModelProviderExtraHeaderDelete instead")(_ProviderExtraHeaderDelete)
-
-# CAREFUL: deprecated aliases for DynamicEvaluation* -> WorkflowEvaluation*
-DynamicEvaluationRunResponse = WorkflowEvaluationRunResponse
-"""Deprecated: Use WorkflowEvaluationRunResponse instead."""
-DynamicEvaluationRunEpisodeResponse = WorkflowEvaluationRunEpisodeResponse
-"""Deprecated: Use WorkflowEvaluationRunEpisodeResponse instead."""
-
-# CAREFUL: deprecated aliases for inference filters
-InferenceFilterTreeNode = InferenceFilter
-"""Deprecated: Use InferenceFilter instead."""
-
-
-@deprecated("Deprecated; use InferenceFilterFloatMetric instead. This alias will be removed in a future version.")
-class FloatMetricFilter(InferenceFilterFloatMetric):
-    """Deprecated: Use InferenceFilterFloatMetric instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterBooleanMetric instead. This alias will be removed in a future version.")
-class BooleanMetricFilter(InferenceFilterBooleanMetric):
-    """Deprecated: Use InferenceFilterBooleanMetric instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterTag instead. This alias will be removed in a future version.")
-class TagFilter(InferenceFilterTag):
-    """Deprecated: Use InferenceFilterTag instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterTime instead. This alias will be removed in a future version.")
-class TimeFilter(InferenceFilterTime):
-    """Deprecated: Use InferenceFilterTime instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterAnd instead. This alias will be removed in a future version.")
-class AndFilter(InferenceFilterAnd):
-    """Deprecated: Use InferenceFilterAnd instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterOr instead. This alias will be removed in a future version.")
-class OrFilter(InferenceFilterOr):
-    """Deprecated: Use InferenceFilterOr instead."""
-
-    pass
-
-
-@deprecated("Deprecated; use InferenceFilterNot instead. This alias will be removed in a future version.")
-class NotFilter(InferenceFilterNot):
-    """Deprecated: Use InferenceFilterNot instead."""
-
-    pass

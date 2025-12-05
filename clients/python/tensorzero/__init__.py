@@ -14,11 +14,12 @@ from .deprecated import (
     AndFilter,  # pyright: ignore[reportDeprecated]
     BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     DiclConfig,  # pyright: ignore[reportDeprecated]
-    DiclOptimizationConfig,
-    DynamicEvaluationRunEpisodeResponse,
-    DynamicEvaluationRunResponse,
+    DiclOptimizationConfig,  # pyright: ignore[reportDeprecated]
+    DynamicEvaluationRunEpisodeResponse,  # pyright: ignore[reportDeprecated]
+    DynamicEvaluationRunResponse,  # pyright: ignore[reportDeprecated]
     FloatMetricFilter,  # pyright: ignore[reportDeprecated]
-    InputMessageContent,
+    InferenceFilterTreeNode,  # pyright: ignore[reportDeprecated]
+    InputMessageContent,  # pyright: ignore[reportDeprecated]
     InputMessageContentFile,  # pyright: ignore[reportDeprecated]
     InputMessageContentRawText,  # pyright: ignore[reportDeprecated]
     InputMessageContentTemplate,  # pyright: ignore[reportDeprecated]
@@ -33,8 +34,8 @@ from .deprecated import (
     ProviderExtraBodyDelete,  # pyright: ignore[reportDeprecated]
     ProviderExtraHeader,  # pyright: ignore[reportDeprecated]
     ProviderExtraHeaderDelete,  # pyright: ignore[reportDeprecated]
-    RenderedStoredInference,
-    StoredInputMessageContent,
+    RenderedStoredInference,  # pyright: ignore[reportDeprecated]
+    StoredInputMessageContent,  # pyright: ignore[reportDeprecated]
     StoredInputMessageContentFile,  # pyright: ignore[reportDeprecated]
     StoredInputMessageContentRawText,  # pyright: ignore[reportDeprecated]
     StoredInputMessageContentTemplate,  # pyright: ignore[reportDeprecated]
@@ -268,6 +269,7 @@ __all__ = [
     "InferenceFilterOr",
     "InferenceFilterTag",
     "InferenceFilterTime",
+    "InferenceFilterTreeNode",  # DEPRECATED
     "InferenceInput",
     "InferenceResponse",
     "Input",

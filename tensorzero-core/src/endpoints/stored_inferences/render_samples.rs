@@ -37,9 +37,9 @@ pub async fn render_samples<T: StoredSample>(
             .map(|(sample, resolved_input)| async {
                 // resolved_example is a StoredInference that was successfully processed by reresolve.
                 // Now, attempt to render it.
-                // render_stored_inference returns Result<RenderedStoredInference, Error>.
-                // .ok() converts this to Option<RenderedStoredInference>.
-                // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
+                // render_stored_inference returns Result<RenderedSample, Error>.
+                // .ok() converts this to Option<RenderedSample>.
+                // filter_map will keep Some(RenderedSample) and discard None (if rendering failed).
                 render_stored_sample(sample, resolved_input, &config, &variants)
                     .await
                     .ok()
