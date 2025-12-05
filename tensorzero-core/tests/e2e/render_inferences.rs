@@ -107,9 +107,11 @@ pub async fn test_render_samples_no_variant() {
         )
         .await
         .unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variant notavariant for function basic_test not found."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variant notavariant for function basic_test not found.")
+    );
     assert!(logs_contain(
         "Variant notavariant for function basic_test not found."
     ));
@@ -168,9 +170,10 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -190,14 +193,18 @@ pub async fn test_render_samples_normal() {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![(
+                            "country".to_string(),
+                            json!("Japan"),
+                        )])),
                     })],
                 }],
             },
@@ -219,9 +226,10 @@ pub async fn test_render_samples_normal() {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -229,13 +237,15 @@ pub async fn test_render_samples_normal() {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                name: Some("get_temperature".to_string()),
-                arguments: Some(json!({"location": "Tokyo"})),
-                id: Uuid::now_v7().to_string(),
-                raw_name: "get_temperature".to_string(),
-                raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
-            })],
+            output: vec![ContentBlockChatOutput::ToolCall(
+                InferenceResponseToolCall {
+                    name: Some("get_temperature".to_string()),
+                    arguments: Some(json!({"location": "Tokyo"})),
+                    id: Uuid::now_v7().to_string(),
+                    raw_name: "get_temperature".to_string(),
+                    raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
+                },
+            )],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::new_for_test(
@@ -263,9 +273,10 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -285,7 +296,9 @@ pub async fn test_render_samples_normal() {
                                         endpoint: None,
                                         allow_http: None,
                                     },
-                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                                    path: Path::from(
+                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
                                 },
                                 filename: None,
                             },
@@ -649,9 +662,11 @@ pub async fn test_render_datapoints_no_variant() {
         )
         .await
         .unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variant notavariant for function basic_test not found."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variant notavariant for function basic_test not found.")
+    );
     assert!(logs_contain(
         "Variant notavariant for function basic_test not found."
     ));
@@ -718,9 +733,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -745,14 +761,18 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![(
+                            "country".to_string(),
+                            json!("Japan"),
+                        )])),
                     })],
                 }],
             },
@@ -776,9 +796,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -786,13 +807,15 @@ pub async fn test_render_datapoints_normal() {
                     })],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                name: Some("get_temperature".to_string()),
-                arguments: Some(json!({"location": "Tokyo"})),
-                id: Uuid::now_v7().to_string(),
-                raw_name: "get_temperature".to_string(),
-                raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
-            })]),
+            output: Some(vec![ContentBlockChatOutput::ToolCall(
+                InferenceResponseToolCall {
+                    name: Some("get_temperature".to_string()),
+                    arguments: Some(json!({"location": "Tokyo"})),
+                    id: Uuid::now_v7().to_string(),
+                    raw_name: "get_temperature".to_string(),
+                    raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
+                },
+            )]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
@@ -823,9 +846,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -845,7 +869,9 @@ pub async fn test_render_datapoints_normal() {
                                         endpoint: None,
                                         allow_http: None,
                                     },
-                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                                    path: Path::from(
+                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
                                 },
                                 filename: None,
                             },

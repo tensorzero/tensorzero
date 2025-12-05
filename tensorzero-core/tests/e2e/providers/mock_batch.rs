@@ -17,7 +17,7 @@
 
 use http::StatusCode;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse, endpoints::batch_inference::PollPathParams,
@@ -30,8 +30,9 @@ use crate::{
     providers::{
         batch::{check_clickhouse_batch_request_status, get_poll_batch_inference_url},
         common::{
-            check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-            check_inference_params_response, check_json_mode_inference_response,
+            E2ETestProvider, check_dynamic_json_mode_inference_response,
+            check_dynamic_tool_use_inference_response, check_inference_params_response,
+            check_json_mode_inference_response,
             check_multi_turn_parallel_tool_use_inference_response,
             check_parallel_tool_use_inference_response, check_simple_image_inference_response,
             check_tool_use_multi_turn_inference_response,
@@ -40,7 +41,7 @@ use crate::{
             check_tool_use_tool_choice_auto_used_inference_response,
             check_tool_use_tool_choice_none_inference_response,
             check_tool_use_tool_choice_required_inference_response,
-            check_tool_use_tool_choice_specific_inference_response, E2ETestProvider,
+            check_tool_use_tool_choice_specific_inference_response,
         },
     },
 };

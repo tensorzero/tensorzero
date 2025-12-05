@@ -6,8 +6,8 @@ use crate::{
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
-        extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        Input,
+        Input, extra_body::UnfilteredInferenceExtraBody,
+        extra_headers::UnfilteredInferenceExtraHeaders,
     },
     tool::DynamicToolParams,
 };

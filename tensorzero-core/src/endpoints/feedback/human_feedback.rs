@@ -1,4 +1,4 @@
-use super::{throttled_get_function_info, FunctionInfo};
+use super::{FunctionInfo, throttled_get_function_info};
 use crate::{
     config::MetricConfigLevel,
     db::clickhouse::{ClickHouseConnectionInfo, TableName},

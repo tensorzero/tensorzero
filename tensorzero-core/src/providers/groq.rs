@@ -5,7 +5,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -13,20 +13,20 @@ use tokio::time::Instant;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
-    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse,
-    resolved_input::{FileUrl, LazyFile},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Unknown, Usage,
+    batch::StartBatchProviderInferenceResponse,
+    resolved_input::{FileUrl, LazyFile},
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
@@ -703,8 +703,8 @@ async fn tensorzero_to_groq_user_messages(
                 {
                     if detail.is_some() {
                         tracing::warn!(
-                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                            );
+                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                        );
                     }
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
@@ -722,8 +722,8 @@ async fn tensorzero_to_groq_user_messages(
                     let ObjectStorageFile { file, data } = &*resolved_file;
                     if file.detail.is_some() {
                         tracing::warn!(
-                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                            );
+                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                        );
                     }
                     user_content_blocks.push(GroqContentBlock::ImageUrl {
                         image_url: GroqImageUrl {
@@ -802,8 +802,8 @@ async fn tensorzero_to_groq_assistant_messages(
                 {
                     if detail.is_some() {
                         tracing::warn!(
-                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                            );
+                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                        );
                     }
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
@@ -821,8 +821,8 @@ async fn tensorzero_to_groq_assistant_messages(
                     let ObjectStorageFile { file, data } = &*resolved_file;
                     if file.detail.is_some() {
                         tracing::warn!(
-                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                            );
+                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                        );
                     }
                     assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                         image_url: GroqImageUrl {
@@ -1142,17 +1142,16 @@ impl<'a> GroqRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request)?;
 
-        if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(GroqRequestMessage::System(_)) = messages.first() {
-                if let GroqRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = GroqRequestMessage::User(GroqUserRequestMessage {
-                        content: vec![GroqContentBlock::Text {
-                            text: system_msg.content,
-                        }],
-                    });
-                    messages.insert(0, user_msg);
-                }
-            }
+        if model.to_lowercase().starts_with("o1-mini")
+            && let Some(GroqRequestMessage::System(_)) = messages.first()
+            && let GroqRequestMessage::System(system_msg) = messages.remove(0)
+        {
+            let user_msg = GroqRequestMessage::User(GroqUserRequestMessage {
+                content: vec![GroqContentBlock::Text {
+                    text: system_msg.content,
+                }],
+            });
+            messages.insert(0, user_msg);
         }
 
         let mut groq_request = GroqRequest {
@@ -1484,8 +1483,8 @@ fn groq_to_tensorzero_chunk(
 mod tests {
     use std::borrow::Cow;
 
-    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use serde_json::json;
 
     use super::*;

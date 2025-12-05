@@ -25,8 +25,8 @@ use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfigChat;
 use crate::function::FunctionConfigJson;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
-use crate::tool::create_json_mode_tool_call_config;
 use crate::tool::ToolChoice;
+use crate::tool::create_json_mode_tool_call_config;
 use std::collections::HashSet;
 
 /// Returns the `tensorzero::hello_chat` function configuration.

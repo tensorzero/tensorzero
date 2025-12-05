@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::{current_timestamp, ContentBlockChunk, FinishReason};
+use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp};
 
 use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
 

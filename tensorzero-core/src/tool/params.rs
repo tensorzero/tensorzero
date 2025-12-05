@@ -190,45 +190,46 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
         } = batch_dynamic_tool_params;
 
         // Verify all provided Vecs have the same length
-        if let Some(allowed_tools) = &allowed_tools {
-            if allowed_tools.len() != num_inferences {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "allowed_tools vector length ({}) does not match number of inferences ({})",
-                        allowed_tools.len(),
-                        num_inferences
-                    ),
-                }
-                .into());
+        if let Some(allowed_tools) = &allowed_tools
+            && allowed_tools.len() != num_inferences
+        {
+            return Err(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "allowed_tools vector length ({}) does not match number of inferences ({})",
+                    allowed_tools.len(),
+                    num_inferences
+                ),
             }
+            .into());
         }
-        if let Some(additional_tools) = &additional_tools {
-            if additional_tools.len() != num_inferences {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "additional_tools vector length ({}) does not match number of inferences ({})",
-                        additional_tools.len(),
-                        num_inferences
-                    ),
-                }
-                .into());
+        if let Some(additional_tools) = &additional_tools
+            && additional_tools.len() != num_inferences
+        {
+            return Err(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "additional_tools vector length ({}) does not match number of inferences ({})",
+                    additional_tools.len(),
+                    num_inferences
+                ),
             }
+            .into());
         }
-        if let Some(tool_choice) = &tool_choice {
-            if tool_choice.len() != num_inferences {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "tool_choice vector length ({}) does not match number of inferences ({})",
-                        tool_choice.len(),
-                        num_inferences
-                    ),
-                }
-                .into());
+        if let Some(tool_choice) = &tool_choice
+            && tool_choice.len() != num_inferences
+        {
+            return Err(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "tool_choice vector length ({}) does not match number of inferences ({})",
+                    tool_choice.len(),
+                    num_inferences
+                ),
             }
+            .into());
         }
-        if let Some(parallel_tool_calls) = &parallel_tool_calls {
-            if parallel_tool_calls.len() != num_inferences {
-                return Err(ErrorDetails::InvalidRequest {
+        if let Some(parallel_tool_calls) = &parallel_tool_calls
+            && parallel_tool_calls.len() != num_inferences
+        {
+            return Err(ErrorDetails::InvalidRequest {
                     message: format!(
                         "parallel_tool_calls vector length ({}) does not match number of inferences ({})",
                         parallel_tool_calls.len(),
@@ -236,18 +237,18 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     ),
                 }
                 .into());
-            }
         }
-        if let Some(provider_tools) = &provider_tools {
-            if provider_tools.len() != num_inferences {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "provider_tools vector length ({}) does not match number of inferences ({})",
-                        provider_tools.len(),
-                        num_inferences
-                    )
-                }.into());
+        if let Some(provider_tools) = &provider_tools
+            && provider_tools.len() != num_inferences
+        {
+            return Err(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "provider_tools vector length ({}) does not match number of inferences ({})",
+                    provider_tools.len(),
+                    num_inferences
+                ),
             }
+            .into());
         }
         // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
         let allowed_tools = allowed_tools.unwrap_or_default();

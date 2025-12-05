@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use tensorzero::{ClientExt, GetDatapointParams, StoredDatapoint};
 use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
 use tensorzero_core::endpoints::datasets::v1::types::{

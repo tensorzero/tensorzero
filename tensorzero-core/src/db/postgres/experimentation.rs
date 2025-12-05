@@ -1,5 +1,5 @@
 use crate::{
-    db::{postgres::PostgresConnectionInfo, ExperimentationQueries},
+    db::{ExperimentationQueries, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails},
 };
 
