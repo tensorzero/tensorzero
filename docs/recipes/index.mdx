@@ -64,8 +64,14 @@ Read more about our [Vision & Roadmap](/vision-and-roadmap/).
 
 ## Prompt Optimization
 
-TensorZero offers a prompt optimization recipe, MIPRO, which jointly optimizes instructions and few-shot examples.
-More recipes for prompt optimization are planned.
+TensorZero offers prompt optimization recipes that automatically improve your prompts using historical inference data.
+
+### GEPA
+
+GEPA (Genetic-Pareto) is an automated prompt optimization method that evolves prompts through iterative evaluation, analysis, and mutation.
+It uses LLMs to analyze inference results and propose prompt improvements, then filters variants using Pareto frontier selection to balance multiple objectives.
+
+See [Automated Prompt Engineering with GEPA](https://github.com/tensorzero/tensorzero/tree/main/recipes/gepa) on GitHub for more details.
 
 ### MIPRO
 
