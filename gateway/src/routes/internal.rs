@@ -41,4 +41,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/datasets",
             get(endpoints::datasets::v1::list_datasets_handler),
         )
+        .route(
+            "/internal/feedback/{metric_name}",
+            get(endpoints::feedback::get_feedback_handler),
+        )
 }

@@ -1,9 +1,11 @@
+use crate::config::MetricConfigType;
 use crate::error::Error;
 use async_trait::async_trait;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::TableBounds;
@@ -83,6 +85,15 @@ pub trait FeedbackQueries {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
+
+    /// Queries feedback for a specific metric, aggregating by target_id to get the latest value
+    async fn get_feedback_by_metric(
+        &self,
+        metric_name: &str,
+        metric_type: MetricConfigType,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<MetricFeedbackRow>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -212,4 +223,14 @@ pub struct FeedbackBoundsByType {
     pub float: TableBounds,
     pub comment: TableBounds,
     pub demonstration: TableBounds,
+}
+
+/// A row representing aggregated feedback for a specific metric
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MetricFeedbackRow {
+    pub target_id: Uuid,
+    pub value: Value,
+    pub tags: HashMap<String, String>,
+    pub feedback_id: Uuid,
 }

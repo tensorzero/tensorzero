@@ -64,6 +64,8 @@ pub use tensorzero_core::endpoints::datasets::{
     StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
+pub use tensorzero_core::endpoints::feedback::GetFeedbackQueryParams;
+pub use tensorzero_core::endpoints::feedback::GetFeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
@@ -456,6 +458,31 @@ pub trait ClientExt {
         &self,
         function_name: &str,
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
+
+    // ================================================================
+    // Feedback operations
+    // ================================================================
+    /// Gets feedback for a specific metric, aggregated by target_id to get the latest value.
+    ///
+    /// # Arguments
+    ///
+    /// * `metric_name` - The name of the metric to get feedback for.
+    /// * `limit` - Optional limit on the number of results (default: 100, max: 1000).
+    /// * `offset` - Optional offset for pagination (default: 0).
+    ///
+    /// # Returns
+    ///
+    /// A `GetFeedbackResponse` containing the feedback rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails or if the metric is not found.
+    async fn get_feedback(
+        &self,
+        metric_name: &str,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<GetFeedbackResponse, TensorZeroError>;
 
     // ================================================================
     // Config access
@@ -1352,6 +1379,47 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)?;
                     Ok(response.probabilities)
+                })
+                .await?)
+            }
+        }
+    }
+
+    async fn get_feedback(
+        &self,
+        metric_name: &str,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<GetFeedbackResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let endpoint = format!("internal/feedback/{metric_name}");
+                let url = client
+                    .base_url
+                    .join(&endpoint)
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/feedback/{metric_name} endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let mut builder = client.http_client.get(url);
+                if limit.is_some() || offset.is_some() {
+                    builder = builder.query(&GetFeedbackQueryParams { limit, offset });
+                }
+                client.send_and_parse_http_response(builder).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::feedback::get_feedback(
+                        gateway.handle.app_state.clone(),
+                        metric_name.to_string(),
+                        GetFeedbackQueryParams { limit, offset },
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }

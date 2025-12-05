@@ -4,11 +4,12 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::{
+    config::MetricConfigType,
     db::{
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow,
+            FeedbackRow, FloatMetricFeedbackRow, MetricFeedbackRow,
         },
         FeedbackQueries, TableBounds, TimeWindow,
     },
@@ -810,6 +811,44 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &query_params).await?;
 
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_feedback_by_metric(
+        &self,
+        metric_name: &str,
+        metric_type: MetricConfigType,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<MetricFeedbackRow>, Error> {
+        let table_name = metric_type.to_clickhouse_table_name();
+
+        let query = format!(
+            r"
+            SELECT
+                target_id,
+                argMax(value, toUInt128(id)) as value,
+                argMax(tags, toUInt128(id)) as tags,
+                uint_to_uuid(max(toUInt128(id))) as feedback_id
+            FROM {table_name}
+            WHERE metric_name = {{metric_name:String}}
+            GROUP BY target_id
+            ORDER BY max(toUInt128(id)) DESC
+            LIMIT {{limit:UInt32}}
+            OFFSET {{offset:UInt32}}
+            FORMAT JSONEachRow
+            "
+        );
+
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let params = HashMap::from([
+            ("metric_name", metric_name),
+            ("limit", limit_str.as_str()),
+            ("offset", offset_str.as_str()),
+        ]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
         parse_json_rows(response.response.as_str())
     }
 }
