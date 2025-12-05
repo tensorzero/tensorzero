@@ -269,6 +269,246 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
         sys.exit(1)
 
 
+def generate_typed_dicts_from_schema(schema_file: Path, templates_dir: Path, output_file: Path) -> None:
+    """
+    Generate Python TypedDicts from a JSON schema file using datamodel-code-generator.
+    
+    This is useful for API input types where we want to accept dictionaries.
+
+    Args:
+        schema_file: Path to the JSON schema file
+        templates_dir: Path to the templates directory
+        output_file: Path to write the generated Python code
+    """
+    print(f"Generating TypedDicts from {schema_file.name}...")
+
+    try:
+        # Use datamodel-code-generator to generate TypedDicts
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "datamodel_code_generator",
+                "--input",
+                str(schema_file),
+                "--input-file-type",
+                "jsonschema",
+                "--output",
+                str(output_file),
+                "--output-model-type",
+                "typing.TypedDict",
+                "--target-python-version",
+                "3.10",
+                # Use list, dict instead of List, Dict
+                "--use-standard-collections",
+                # Use keyword-only arguments for dataclasses; otherwise we are sensitive to
+                # field ordering.
+                "--keyword-only",
+                # For enums / unions, customize the title with schemars to control their names
+                "--use-title-as-name",
+                # Don't add generation timestamp
+                "--disable-timestamp",
+                # Generate Literal["a", "b", "c"] for unit enum values
+                "--enum-field-as-literal",
+                "all",
+                # Do not prefix fields with anything, even if they start with an underscore
+                "--special-field-name-prefix",
+                "",
+                # Do not generate __future__ imports; they conflict with custom file headers
+                "--disable-future-imports",
+                # Generate union types as `A | B` instead of `Union[A, B]`
+                "--use-union-operator",
+                # Use schema / class descriptions for docstrings
+                "--use-schema-description",
+                # Use field descriptions for docstrings
+                "--use-field-description",
+                # # Use custom dataclass template for double-optionals
+                # "--custom-template-dir",
+                # str(templates_dir),
+                # Use a custom file header to include the Unset sentinel value
+                "--custom-file-header-path",
+                str(templates_dir / "generated_types_header.py.template"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating TypedDicts from {schema_file.name}:", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError:
+        print("Error: datamodel-code-generator not found.", file=sys.stderr)
+        print("Install it with: pip install 'datamodel-code-generator[http]'", file=sys.stderr)
+        sys.exit(1)
+
+    # Format and fix the generated dataclasses with ruff
+    try:
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "check",
+                str(output_file),
+                "--extend-select=I",
+                "--fix",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "format",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"Error fixing and formatting generated TypedDicts: {e}", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        sys.exit(1)
+
+
+
+def generate_pydantic_models_from_schema(schema_file: Path, templates_dir: Path, output_file: Path) -> None:
+    """
+    Generate Python Pydantic models from a JSON schema file using datamodel-code-generator.
+    
+    This is useful for API input types where we want to accept dictionaries.
+
+    Args:
+        schema_file: Path to the JSON schema file
+        templates_dir: Path to the templates directory
+        output_file: Path to write the generated Python code
+    """
+    print(f"Generating Pydantic models from {schema_file.name}...")
+
+    try:
+        # Use datamodel-code-generator to generate Pydantic models
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "datamodel_code_generator",
+                "--input",
+                str(schema_file),
+                "--input-file-type",
+                "jsonschema",
+                "--output",
+                str(output_file),
+                "--output-model-type",
+                "pydantic_v2.BaseModel",
+                "--target-python-version",
+                "3.10",
+                # Use list, dict instead of List, Dict
+                "--use-standard-collections",
+                # Use keyword-only arguments for dataclasses; otherwise we are sensitive to
+                # field ordering.
+                "--keyword-only",
+                # For enums / unions, customize the title with schemars to control their names
+                "--use-title-as-name",
+                # Don't add generation timestamp
+                "--disable-timestamp",
+                # Generate Literal["a", "b", "c"] for unit enum values
+                "--enum-field-as-literal",
+                "all",
+                # Do not generate __future__ imports; they conflict with custom file headers
+                "--disable-future-imports",
+                # Generate union types as `A | B` instead of `Union[A, B]`
+                "--use-union-operator",
+                # Use schema / class descriptions for docstrings
+                "--use-schema-description",
+                # Use field descriptions for docstrings
+                "--use-field-description",
+                # # Use custom dataclass template for double-optionals
+                # "--custom-template-dir",
+                # str(templates_dir),
+                # Use a custom file header to include the Unset sentinel value
+                "--custom-file-header-path",
+                str(templates_dir / "generated_types_header.py.template"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating Pydantic models from {schema_file.name}:", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        sys.exit(1)
+    except FileNotFoundError:
+        print("Error: datamodel-code-generator not found.", file=sys.stderr)
+        print("Install it with: pip install 'datamodel-code-generator[http]'", file=sys.stderr)
+        sys.exit(1)
+
+    # Format and fix the generated Pydantic models with ruff
+    try:
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "check",
+                str(output_file),
+                "--extend-select=I",
+                "--fix",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "format",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"Error fixing and formatting generated Pydantic models: {e}", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        sys.exit(1)
+
+
+
+
 def generate_rust_schemas(repo_root: Path, schema_dir: Path) -> None:
     """
     Run cargo tests to generate JSON schemas from Rust types.
@@ -311,7 +551,9 @@ def main() -> None:
     script_dir = Path(__file__).parent
     repo_root = (script_dir / "../..").resolve()
     schema_dir = repo_root / "clients" / "schemas"
-    output_file = script_dir / "tensorzero" / "generated_types.py"
+    dataclasses_output_file = script_dir / "tensorzero" / "generated_types.py"
+    typed_dicts_output_file = script_dir / "tensorzero" / "generated_types_typed_dicts.py"
+    pydantic_models_output_file = script_dir / "tensorzero" / "generated_types_pydantic_models.py"
     temp_dir = script_dir / ".temp_schemas"
     templates_dir = script_dir / "templates"
     custom_header_file = templates_dir / "generated_types_header.py"
@@ -329,7 +571,6 @@ def main() -> None:
     print("Step 2: Generating Python dataclasses from JSON schemas")
     print("=" * 70)
     print(f"Schema directory: {schema_dir}")
-    print(f"Output file: {output_file}")
     print()
 
     # Find all schema files
@@ -341,7 +582,7 @@ def main() -> None:
     if len(schema_files) == 0:
         print("No schema files found, using header file only...")
         # Copy custom_header_file to output_file
-        shutil.copy(custom_header_file, output_file)
+        shutil.copy(custom_header_file, dataclasses_output_file)
         return
 
     # Create temp directory for individual generated files
@@ -353,7 +594,12 @@ def main() -> None:
         preprocess_and_merge_schemas(schema_files, merged_schema_file)
 
         # Generate dataclasses from merged schema
-        generate_dataclasses_from_schema(merged_schema_file, templates_dir, output_file)
+        print(f"Generating dataclasses at {dataclasses_output_file}...")
+        generate_dataclasses_from_schema(merged_schema_file, templates_dir, dataclasses_output_file)
+        print(f"Generating TypedDicts at {typed_dicts_output_file}...")
+        generate_typed_dicts_from_schema(merged_schema_file, templates_dir, typed_dicts_output_file)
+        print(f"Generating Pydantic models at {pydantic_models_output_file}...")
+        generate_pydantic_models_from_schema(merged_schema_file, templates_dir, pydantic_models_output_file)
 
     finally:
         # Clean up temp files
