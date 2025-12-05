@@ -20,7 +20,6 @@ pub mod mistral;
 pub mod openai;
 pub mod openrouter;
 pub mod sglang;
-//pub mod tensorzero_relay;
 #[cfg(test)]
 pub mod test_helpers;
 pub mod tgi;
