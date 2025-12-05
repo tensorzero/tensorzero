@@ -23,6 +23,7 @@ use super::wire::ToolCall;
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
+#[schemars(title = "InferenceResponseToolCallInternal")]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,

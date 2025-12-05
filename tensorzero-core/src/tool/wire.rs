@@ -77,11 +77,19 @@ impl ToolCall {
 /// but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[schemars(description = "")]
 #[serde(untagged)]
-#[export_schema]
 pub enum ToolCallWrapper {
+    #[schemars(title = "MessageContentToolCall")]
     ToolCall(ToolCall), // the format we store in the database
+    #[schemars(title = "InferenceResponseToolCall")]
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
+}
+
+#[derive(JsonSchema)]
+pub(crate) struct ToolCallWrapperJsonSchema {
+    #[serde(flatten)]
+    _tool_call_wrapper: ToolCallWrapper,
 }
 
 /// - ToolCallWrapper::ToolCall: passthrough

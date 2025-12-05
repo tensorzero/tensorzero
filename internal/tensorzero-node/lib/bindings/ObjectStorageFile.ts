@@ -5,7 +5,7 @@ import type { StoragePath } from "./StoragePath";
 /**
  * A file stored in an object storage backend, with data.
  * This struct can NOT be stored in the database.
- * Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+ * Note: `File` supports both `ObjectStoragePointer` and `ObjectStorageFile`.
  */
 export type ObjectStorageFile = {
   data: string;

@@ -20,8 +20,6 @@ from typing_extensions import deprecated
 # PyO3
 from tensorzero import (
     ChatDatapointInsert,
-    ChatInferenceOutput,
-    ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
@@ -35,14 +33,9 @@ from tensorzero import (
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
-from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
 # TODO: clean these up.
-from tensorzero.types import (
-    EvaluatorStatsDict,
-    JsonInferenceOutput,
-    OrderBy,
-)
+from tensorzero.types import EvaluatorStatsDict
 
 # Generated types
 # NOTE(shuyangli): generated types should not be re-exported from the stub; they should be exported in __init__.py.
@@ -58,21 +51,13 @@ from .generated_types import (
     Input,
     ListDatapointsRequest,
     ListInferencesRequest,
+    OrderBy,
+    RenderedSample,
     StoredInference,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
 )
-
-@final
-class ResolvedInputMessage:
-    role: Literal["user", "assistant"]
-    content: List[ContentBlock]
-
-@final
-class ResolvedInput:
-    system: Optional[str | Dict[str, Any]]
-    messages: List[ResolvedInputMessage]
 
 @final
 class EvaluationJobHandler:
@@ -161,28 +146,6 @@ class AsyncEvaluationJobHandler:
         ...
 
     def __repr__(self) -> str: ...
-
-@final
-class RenderedSample:
-    function_name: str
-    input: ModelInput
-    stored_input: ResolvedInput
-    output: Optional[ChatInferenceOutput]
-    stored_output: Optional[Union[ChatInferenceOutput, JsonInferenceOutput]]
-    episode_id: Optional[UUID]
-    inference_id: Optional[UUID]
-    tool_params: Optional[ToolCallConfigDatabaseInsert]
-    output_schema: Optional[Dict[str, Any]]
-    dispreferred_outputs: List[ChatInferenceOutput] = []
-    tags: Dict[str, str]
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
 
 @final
 class OptimizationJobHandle:
@@ -897,7 +860,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilter] = None,
         output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
+        order_by: Optional[Sequence[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -1444,7 +1407,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         filters: Optional[InferenceFilter] = None,
         output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
+        order_by: Optional[Sequence[OrderBy]] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[StoredInference]:
@@ -1596,9 +1559,6 @@ __all__ = [
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
-    "RenderedSample",
-    "ResolvedInput",
-    "ResolvedInputMessage",
     "TensorZeroGateway",
     "TogetherSFTConfig",
     "VariantsConfig",

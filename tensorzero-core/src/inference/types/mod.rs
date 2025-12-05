@@ -63,10 +63,10 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use std::borrow::Borrow;
 use std::{
     borrow::Cow,
@@ -97,6 +97,7 @@ use crate::rate_limiting::{
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
+use crate::tool::wire::ToolCallWrapperJsonSchema;
 use crate::tool::{
     deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
     ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
@@ -723,32 +724,108 @@ pub enum System {
     Template(Arguments),
 }
 
+/// A placeholder type for custom JSON schema generation for the `InputMessageContentFile`
+/// nested enum type. Nested enums are not easily supported by code generation tools.
+struct InputMessageContentFileSchema {}
+
+impl JsonSchema for InputMessageContentFileSchema {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("InputMessageContentFileSchema")
+    }
+
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        // 1. Get the base schema (likely a $ref)
+        let mut base_schema = File::json_schema(gen);
+        // return base_schema;
+
+        // 2. Convert to generic Value to manipulate freely
+        let root = base_schema.ensure_object();
+
+        // 3. Mutate the oneOf variants
+        // We look for "oneOf": [ ... ]
+        if let Some(variants) = root.get_mut("oneOf").and_then(|v| v.as_array_mut()) {
+            for variant in variants {
+                // A. Update Title if it exists
+                // Look for "title" in root or inside "metadata"
+
+                // JsonSchema implementation is only called during code generation in test code, so it's safe to panic.
+                #[expect(clippy::expect_used)]
+                let existing_title = variant
+                    .get("title")
+                    .expect("Each variant of `File` must have a title");
+
+                #[expect(clippy::expect_used)]
+                let new_title = format!(
+                    "MessageContentInput{}",
+                    existing_title.as_str().expect("Title must be a string")
+                );
+                variant["title"] = Value::String(new_title);
+
+                // B. Inject "type": "file"
+                // Ensure properties object exists
+                if variant.get("properties").is_none() {
+                    variant["properties"] = json!({});
+                }
+
+                // Set type = file
+                variant["properties"]["type"] = json!({
+                    "type": "string",
+                    "const": "file"
+                });
+
+                // C. Add to Required
+                if variant.get("required").is_none() {
+                    variant["required"] = json!([]);
+                }
+                if let Some(req_array) = variant["required"].as_array_mut() {
+                    let type_key = json!("type");
+                    if !req_array.contains(&type_key) {
+                        req_array.push(type_key);
+                    }
+                }
+            }
+        }
+
+        // 5. Update the root title of the wrapper itself
+        // This ensures the main union is named "InputMessageContentFile"
+        root.insert("title".to_string(), json!("InputMessageContentFile"));
+
+        // 6. Convert back to Schema
+        root.clone().into()
+    }
+
+    fn inline_schema() -> bool {
+        false
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum InputMessageContent {
-    #[schemars(title = "InputMessageContentText")]
+    #[schemars(title = "MessageContentText")]
     Text(Text),
-    #[schemars(title = "InputMessageContentTemplate")]
+    #[schemars(title = "MessageContentTemplate")]
     Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
+    #[schemars(
+        title = "InputMessageContentToolCall",
+        with = "ToolCallWrapperJsonSchema"
+    )]
     ToolCall(ToolCallWrapper),
-    #[schemars(title = "InputMessageContentToolResult")]
+    #[schemars(title = "MessageContentToolResult")]
     ToolResult(ToolResult),
-    #[schemars(title = "InputMessageContentRawText")]
+    #[schemars(title = "MessageContentRawText")]
     RawText(RawText),
-    #[schemars(title = "InputMessageContentThought")]
+    #[schemars(title = "MessageContentThought")]
     Thought(Thought),
     #[serde(alias = "image")]
-    #[schemars(title = "InputMessageContentFile")]
+    #[schemars(
+        title = "InputMessageContentFile",
+        with = "InputMessageContentFileSchema"
+    )]
     File(File),
-    /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    /// of TensorZero.
-    /// The `data` field holds the original content block from the provider,
-    /// without any validation or transformation by TensorZero.
-    #[schemars(title = "InputMessageContentUnknown")]
+    #[schemars(title = "MessageContentUnknown")]
     Unknown(Unknown),
 }
 
@@ -863,8 +940,9 @@ impl RawText {
     }
 }
 
-/// Struct that represents an unknown provider-specific content block.
-/// We pass this along as-is without any validation or transformation.
+/// Struct that represents an unknown provider-specific content block (e.g. Anthropic's `redacted_thinking`) in and out
+/// of TensorZero. We pass this along as-is without any validation or transformation.
+/// The `data` field holds the original content block from the provider.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
@@ -1128,15 +1206,21 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(description = "")]
 pub enum ResolvedContentBlock {
+    #[schemars(title = "MessageContentText")]
     Text(Text),
+    #[schemars(title = "MessageContentToolCall")]
     ToolCall(ToolCall),
+    #[schemars(title = "MessageContentToolResult")]
     ToolResult(ToolResult),
+    #[schemars(title = "MessageContentObjectStorageFile")]
     File(Box<ObjectStorageFile>),
+    #[schemars(title = "MessageContentThought")]
     Thought(Thought),
+    #[schemars(title = "MessageContentUnknown")]
     Unknown(Unknown),
 }
 
@@ -1192,19 +1276,18 @@ pub enum ContentBlockOutput {
     Unknown(Unknown),
 }
 
-/// Defines the types of content block that can come from a `chat` function
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
-    #[schemars(title = "ContentBlockChatOutputText")]
+    #[schemars(title = "MessageContentText")]
     Text(Text),
-    #[schemars(title = "ContentBlockChatOutputToolCall")]
+    #[schemars(title = "InferenceResponseToolCall")]
     ToolCall(InferenceResponseToolCall),
-    #[schemars(title = "ContentBlockChatOutputThought")]
+    #[schemars(title = "MessageContentThought")]
     Thought(Thought),
-    #[schemars(title = "ContentBlockChatOutputUnknown")]
+    #[schemars(title = "MessageContentUnknown")]
     Unknown(Unknown),
 }
 
@@ -1415,10 +1498,8 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<ResolvedRequestMessage>,
@@ -1431,15 +1512,8 @@ impl std::fmt::Display for ModelInput {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ModelInput {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {

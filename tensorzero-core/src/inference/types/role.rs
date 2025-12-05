@@ -1,7 +1,5 @@
 //! The role of a TensorZero input message: user or assistant
 
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +10,6 @@ use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEM
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]
 pub enum Role {
     User,
@@ -43,13 +40,5 @@ impl std::fmt::Display for Role {
             Role::User => write!(f, "user"),
             Role::Assistant => write!(f, "assistant"),
         }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Role {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
