@@ -240,6 +240,11 @@ jobs:
           echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
           echo "API key written to fixtures/.env"
 
+      # This will skip images from the still-running containers, but will free up all of the temporary
+      # images from the multi-stage builder (if we built any containers locally)
+      - name: Prune docker images to free to disk space
+        run: docker system prune -af
+
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
         run: |
