@@ -74,7 +74,7 @@ export function DatasetSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="group w-full justify-between border font-normal"
+            className="group w-full justify-between border"
             disabled={disabled}
             {...buttonProps}
           >
