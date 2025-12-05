@@ -25,7 +25,6 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
-import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
@@ -34,7 +33,6 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
-import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -168,49 +166,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
+/** Response type from /api/feedback endpoint */
+type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
-
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const _action = formData.get("_action");
-
-  switch (_action) {
-    case "addFeedback": {
-      try {
-        const response = await addHumanFeedback(formData);
-        const url = new URL(request.url);
-        url.searchParams.delete("beforeFeedback");
-        url.searchParams.delete("afterFeedback");
-        url.searchParams.set("newFeedbackId", response.feedback_id);
-        return data<ActionData>({ redirectTo: url.pathname + url.search });
-      } catch (error) {
-        if (isTensorZeroServerError(error)) {
-          return data<ActionData>(
-            { error: error.message },
-            { status: error.status },
-          );
-        }
-        return data<ActionData>(
-          { error: "Unknown server error. Try again." },
-          { status: 500 },
-        );
-      }
-    }
-
-    case null:
-      logger.error("No action provided");
-      return data<ActionData>({ error: "No action provided" }, { status: 400 });
-
-    default:
-      logger.error(`Unknown action: ${_action}`);
-      return data<ActionData>(
-        { error: `Unknown action: ${_action}` },
-        { status: 400 },
-      );
-  }
-}
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
@@ -297,7 +256,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !feedbackBounds.first_id ||
     feedbackBounds.first_id === bottomFeedback.id;
 
-  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
+  const humanFeedbackFetcher = useFetcherWithReset<FeedbackActionData>();
   const formError =
     humanFeedbackFetcher.state === "idle"
       ? (humanFeedbackFetcher.data?.error ?? null)
@@ -329,7 +288,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             }}
             trigger={<HumanFeedbackButton />}
           >
-            <humanFeedbackFetcher.Form method="post">
+            <humanFeedbackFetcher.Form method="post" action="/api/feedback">
               <HumanFeedbackForm
                 episodeId={episode_id}
                 formError={formError}

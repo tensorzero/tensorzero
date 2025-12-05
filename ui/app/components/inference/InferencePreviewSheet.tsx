@@ -36,8 +36,8 @@ export function InferencePreviewSheet({
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  // Track the previous inference ID to detect when it changes
-  const prevInferenceIdRef = useRef<string | null>(null);
+  // Track the inference ID that was last fetched to detect when it changes
+  const lastFetchedInferenceIdRef = useRef<string | null>(null);
 
   // Extract stable values from fetcher for dependency arrays
   const fetcherState = fetcher.state;
@@ -49,8 +49,9 @@ export function InferencePreviewSheet({
     if (!isOpen || !inferenceId) return;
 
     // Check if inference ID changed - if so, always refetch
-    const inferenceIdChanged = prevInferenceIdRef.current !== inferenceId;
-    prevInferenceIdRef.current = inferenceId;
+    const inferenceIdChanged =
+      lastFetchedInferenceIdRef.current !== inferenceId;
+    lastFetchedInferenceIdRef.current = inferenceId;
 
     // Only fetch if we don't have data, data is for a different inference, or ID changed
     if (
@@ -89,7 +90,7 @@ export function InferencePreviewSheet({
     fetcher.state === "idle" &&
     !fetcher.data &&
     inferenceId !== null &&
-    prevInferenceIdRef.current === inferenceId;
+    lastFetchedInferenceIdRef.current === inferenceId;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>

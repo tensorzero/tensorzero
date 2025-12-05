@@ -1,6 +1,7 @@
-import type {
-  ParsedInferenceRow,
-  ParsedModelInferenceRow,
+import {
+  isJsonOutput,
+  type ParsedInferenceRow,
+  type ParsedModelInferenceRow,
 } from "~/utils/clickhouse/inference";
 import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
 import { useEffect, useState } from "react";
@@ -445,11 +446,12 @@ function prepareDemonstrationFromVariantOutput(
   variantOutput: VariantResponseInfo,
 ) {
   const output = variantOutput.output;
-  if (Array.isArray(output)) {
-    return output;
-  } else if (output && "parsed" in output) {
+  if (output === undefined) {
+    return undefined;
+  }
+  if (isJsonOutput(output)) {
     return output.parsed;
   } else {
-    throw new Error("Invalid variant output");
+    return output;
   }
 }
