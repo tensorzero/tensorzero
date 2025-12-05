@@ -5,6 +5,9 @@ This module contains deprecated types that have been renamed.
 Import from the main tensorzero module instead of using the old names directly.
 """
 
+import warnings
+from typing import Any
+
 from typing_extensions import deprecated
 
 from .generated_types import (
@@ -60,7 +63,17 @@ from .types import (
 # 2026.1+
 
 DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
-DiclOptimizationConfig = deprecated("Use DICLOptimizationConfig instead")(DICLOptimizationConfig)
+
+
+class DiclOptimizationConfig:
+    def __new__(cls, *args: Any, **kwargs: Any):
+        warnings.warn(
+            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return DICLOptimizationConfig(*args, **kwargs)
+
 
 RenderedStoredInference = deprecated("Use RenderedSample instead")(RenderedSample)
 
