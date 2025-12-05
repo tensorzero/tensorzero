@@ -63,7 +63,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -993,30 +993,100 @@ pub enum ThoughtSummaryBlock {
 }
 
 /// Struct that represents a model's reasoning
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[export_schema]
 pub struct Thought {
-    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub signature: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub summary: Option<Vec<ThoughtSummaryBlock>>,
+
     /// When set, this `Thought` block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
     #[serde(
-        rename = "_internal_provider_type",
+        alias = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(optional)]
     pub provider_type: Option<String>,
+}
+
+// A custom schema implementation for the Thought struct that lies about the `_internal_provider_type` field.
+// TODO(#5001): The old field is deprecated in 2025.12; we can remove the serializer in 2026.2+.
+impl JsonSchema for Thought {
+    fn schema_name() -> Cow<'static, str> {
+        "Thought".into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        // The JSON schema for the Thought struct, with special aliasing for the _internal_provider_type field.
+        /// Struct that represents a model's reasoning
+        #[expect(dead_code)]
+        #[derive(JsonSchema)]
+        #[schemars(inline)] // Inline to prevent it from getting its own name
+        struct ThoughtJsonSchema {
+            pub text: Option<String>,
+            /// An optional signature - currently, this is only used with Anthropic,
+            /// and is ignored by other providers.
+            pub signature: Option<String>,
+
+            pub summary: Option<Vec<ThoughtSummaryBlock>>,
+
+            /// When set, this `Thought` block will only be used for providers
+            /// matching this type (e.g. `anthropic`). Other providers will emit
+            /// a warning and discard the block.
+            pub provider_type: Option<String>,
+
+            /// Deprecated name for `provider_type` field, will be removed in 2026.2+.
+            pub _internal_provider_type: Option<String>,
+        }
+
+        generator.subschema_for::<ThoughtJsonSchema>()
+    }
+}
+
+// Custom serializer to also serialize the deprecated `_internal_provider_type` field for backcompat.
+// TODO(#5001): The old field is deprecated in 2025.12; we can remove the serializer in 2026.2+.
+impl Serialize for Thought {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        // Count non-None fields: text is always present, others are optional
+        let mut field_count = 1; // text
+        if self.signature.is_some() {
+            field_count += 1;
+        }
+        if self.summary.is_some() {
+            field_count += 1;
+        }
+        if self.provider_type.is_some() {
+            field_count += 2; // provider_type + _internal_provider_type (backcompat)
+        }
+
+        let mut state = serializer.serialize_struct("Thought", field_count)?;
+        state.serialize_field("text", &self.text)?;
+        if let Some(ref signature) = self.signature {
+            state.serialize_field("signature", signature)?;
+        }
+        if let Some(ref summary) = self.summary {
+            state.serialize_field("summary", summary)?;
+        }
+        if let Some(ref provider_type) = self.provider_type {
+            state.serialize_field("provider_type", provider_type)?;
+            // Backcompat: also emit legacy field name
+            state.serialize_field("_internal_provider_type", provider_type)?;
+        }
+        state.end()
+    }
 }
 
 impl RateLimitedInputContent for Thought {
@@ -3379,5 +3449,53 @@ mod tests {
 
         // Conflict: both old and new fields
         assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
+    }
+
+    // TODO(#5001): Remove after 2026.2+.
+    #[test]
+    fn test_thought_provider_type_serde_backcompat() {
+        // Test deserialization from new field name
+        let thought: Thought =
+            serde_json::from_value(json!({"text": "thinking", "provider_type": "anthropic"}))
+                .unwrap();
+        assert_eq!(thought.text, Some("thinking".to_string()));
+        assert_eq!(thought.provider_type, Some("anthropic".to_string()));
+
+        // Test deserialization from legacy field name
+        let thought: Thought = serde_json::from_value(
+            json!({"text": "thinking", "_internal_provider_type": "anthropic"}),
+        )
+        .unwrap();
+        assert_eq!(thought.text, Some("thinking".to_string()));
+        assert_eq!(thought.provider_type, Some("anthropic".to_string()));
+
+        // Test deserialization without provider_type
+        let thought: Thought = serde_json::from_value(json!({"text": "thinking"})).unwrap();
+        assert_eq!(thought.text, Some("thinking".to_string()));
+        assert_eq!(thought.provider_type, None);
+
+        // Test serialization emits both field names for backcompat
+        let thought = Thought {
+            text: Some("thinking".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: Some("anthropic".to_string()),
+        };
+        let serialized = serde_json::to_value(&thought).unwrap();
+        assert_eq!(serialized["text"], "thinking");
+        assert_eq!(serialized["provider_type"], "anthropic");
+        assert_eq!(serialized["_internal_provider_type"], "anthropic");
+
+        // Test serialization omits both fields when provider_type is None
+        let thought = Thought {
+            text: Some("thinking".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: None,
+        };
+        let serialized = serde_json::to_value(&thought).unwrap();
+        assert_eq!(serialized["text"], "thinking");
+        assert!(serialized.get("provider_type").is_none());
+        assert!(serialized.get("_internal_provider_type").is_none());
     }
 }
