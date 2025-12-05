@@ -98,7 +98,6 @@ metrics-exporter-prometheus = { version = "0.18.0", features = [
 ], default-features = false }
 schemars = "1.1.0"
 moka = { version = "0.12.10", features = ["sync"] }
-env = "1.0.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
