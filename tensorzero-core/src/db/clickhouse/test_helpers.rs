@@ -5,7 +5,8 @@
     clippy::unwrap_used
 )]
 use crate::config::BatchWritesConfig;
-use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
+use crate::endpoints::datasets::JsonInferenceDatapoint;
 use crate::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
 };

@@ -4,9 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{
-    ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, StoredDatapoint, System,
-};
+use tensorzero::{ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, System};
 use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
@@ -2957,7 +2955,8 @@ async fn test_stale_dataset_mixed_staled_fresh() {
 #[tokio::test]
 async fn test_update_datapoint_preserves_tool_call_ids() {
     use tensorzero_core::{
-        db::datasets::{ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries},
+        db::datasets::DatasetQueries,
+        db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint},
         inference::types::{ContentBlockChatOutput, StoredInput},
         tool::InferenceResponseToolCall,
     };
@@ -2994,7 +2993,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     });
 
     // Create initial datapoint using ClickHouse directly with tool calls that have IDs
-    let initial_datapoint = ChatInferenceDatapointInsert {
+    let initial_datapoint = StoredChatInferenceDatapoint {
         dataset_name: dataset_name.to_string(),
         function_name: "basic_test".to_string(),
         id: datapoint_id,
@@ -3019,10 +3018,12 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
     };
 
     clickhouse
-        .insert_datapoints(&[DatapointInsert::Chat(initial_datapoint)])
+        .insert_datapoints(&[StoredDatapoint::Chat(initial_datapoint)])
         .await
         .unwrap();
 

@@ -45,10 +45,13 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetQueries, DatasetQueryParams,
+    CountDatapointsForDatasetFunctionParams, DatasetQueries, DatasetQueryParams,
     GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
+pub use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
+};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
@@ -61,7 +64,6 @@ pub use tensorzero_core::endpoints::datasets::v1::types::{
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
-    StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;

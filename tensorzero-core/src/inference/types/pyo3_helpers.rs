@@ -8,7 +8,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
+use crate::db::stored_datapoint::StoredDatapoint;
+use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
 use crate::inference::types::{
     ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent, Unknown,
