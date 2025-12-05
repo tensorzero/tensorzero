@@ -282,7 +282,7 @@ async fn test_read_old_write_new() {
     target_server_handle.await.unwrap().unwrap();
 
     let file_path = file_path.lock().unwrap().as_ref().unwrap().clone();
-    let file_mtime = file_mtime.lock().unwrap().as_ref().unwrap().clone();
+    let file_mtime = *file_mtime.lock().unwrap().as_ref().unwrap();
 
     // Wait for the file to be modified on disk
     loop {
