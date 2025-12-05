@@ -14,13 +14,13 @@ use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::ResolvedInputContentBlock;
 use crate::inference::types::ResolvedInputMessage;
-use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
-use crate::inference::types::StoredInputMessageContent;
+use crate::inference::types::StoredInputContentBlock;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
-use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
+use crate::inference::types::resolved_input::LazyResolvedInputContentBlock;
 use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, Text, batch::StartBatchModelInferenceWithMetadata,
@@ -439,11 +439,11 @@ impl Variant for DiclConfig {
 }
 
 fn lazy_content_to_resolved_discarding_incompatible(
-    content: LazyResolvedInputMessageContent,
-) -> Result<ResolvedInputMessageContent, Error> {
+    content: LazyResolvedInputContentBlock,
+) -> Result<ResolvedInputContentBlock, Error> {
     Ok(match content {
-        LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
-        LazyResolvedInputMessageContent::Template(template) => {
+        LazyResolvedInputContentBlock::Text(text) => ResolvedInputContentBlock::Text(text),
+        LazyResolvedInputContentBlock::Template(template) => {
             // Stringify template as JSON for DICL
             let json_str = serde_json::to_string(&serde_json::json!({
                 "type": "template",
@@ -455,22 +455,22 @@ fn lazy_content_to_resolved_discarding_incompatible(
                     message: format!("Failed to stringify template content block: {e}"),
                 })
             })?;
-            ResolvedInputMessageContent::Text(Text { text: json_str })
+            ResolvedInputContentBlock::Text(Text { text: json_str })
         }
-        LazyResolvedInputMessageContent::ToolCall(tool_call) => {
-            ResolvedInputMessageContent::ToolCall(tool_call)
+        LazyResolvedInputContentBlock::ToolCall(tool_call) => {
+            ResolvedInputContentBlock::ToolCall(tool_call)
         }
-        LazyResolvedInputMessageContent::ToolResult(tool_result) => {
-            ResolvedInputMessageContent::ToolResult(tool_result)
+        LazyResolvedInputContentBlock::ToolResult(tool_result) => {
+            ResolvedInputContentBlock::ToolResult(tool_result)
         }
-        LazyResolvedInputMessageContent::RawText(raw_text) => {
-            ResolvedInputMessageContent::RawText(raw_text)
+        LazyResolvedInputContentBlock::RawText(raw_text) => {
+            ResolvedInputContentBlock::RawText(raw_text)
         }
-        LazyResolvedInputMessageContent::Thought(thought) => {
-            ResolvedInputMessageContent::Thought(thought)
+        LazyResolvedInputContentBlock::Thought(thought) => {
+            ResolvedInputContentBlock::Thought(thought)
         }
         // We cannot meaningfully embed images into dicl inputs, so reject the request.
-        LazyResolvedInputMessageContent::File(..) => {
+        LazyResolvedInputContentBlock::File(..) => {
             return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                 content_block_type: "image".to_string(),
                 provider_type: "dicl".to_string(),
@@ -478,7 +478,7 @@ fn lazy_content_to_resolved_discarding_incompatible(
         }
         // `Unknown` blocks will need special handling (we don't want the literal string "unknown")
         // to show up in the LLM input, so reject the request for now.
-        LazyResolvedInputMessageContent::Unknown { .. } => {
+        LazyResolvedInputContentBlock::Unknown { .. } => {
             return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
                 content_block_type: "unknown".to_string(),
                 provider_type: "dicl".to_string(),
@@ -746,13 +746,13 @@ impl DiclConfig {
         message: &LazyResolvedInputMessage,
         templates: &TemplateConfig<'_>,
     ) -> Result<RequestMessage, Error> {
-        let transformed_content: Vec<LazyResolvedInputMessageContent> = message
+        let transformed_content: Vec<LazyResolvedInputContentBlock> = message
             .content
             .iter()
             .map(
-                |content_block| -> Result<LazyResolvedInputMessageContent, Error> {
+                |content_block| -> Result<LazyResolvedInputContentBlock, Error> {
                     match content_block {
-                        LazyResolvedInputMessageContent::Template(template_input) => {
+                        LazyResolvedInputContentBlock::Template(template_input) => {
                             // Stringify the template as JSON since DICL variants don't have a concept of templates
                             let json_str = serde_json::to_string(&serde_json::json!({
                                 "type": "template",
@@ -766,9 +766,7 @@ impl DiclConfig {
                                     ),
                                 })
                             })?;
-                            Ok(LazyResolvedInputMessageContent::Text(Text {
-                                text: json_str,
-                            }))
+                            Ok(LazyResolvedInputContentBlock::Text(Text { text: json_str }))
                         }
                         other => Ok(other.clone()),
                     }
@@ -886,7 +884,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let StoredInputMessageContent::File(_) = content {
+                if let StoredInputContentBlock::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -984,7 +982,7 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
+            Arguments, ResolvedInputContentBlock, ResolvedInputMessage, Role, Template, Text,
             storage::{StorageKind, StoragePath},
         },
         tool::{InferenceResponseToolCall, ToolCall},
@@ -1008,13 +1006,13 @@ mod tests {
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, assistant!".to_string(),
                     })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, user!".to_string(),
                     })],
                 },
@@ -1113,10 +1111,10 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text(Text {
+                        ResolvedInputContentBlock::Text(Text {
                             text: "Hello, assistant!".to_string(),
                         }),
-                        ResolvedInputMessageContent::ToolCall(ToolCall {
+                        ResolvedInputContentBlock::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
                             name: "search_tool".to_string(),
                             arguments: "{\"query\": \"rust programming\"}".to_string(),
@@ -1125,7 +1123,7 @@ mod tests {
                 },
                 ResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![ResolvedInputMessageContent::Text(Text {
+                    content: vec![ResolvedInputContentBlock::Text(Text {
                         text: "Here are the search results for rust programming.".to_string(),
                     })],
                 },
@@ -1161,7 +1159,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the boiling point of water?".to_string(),
                         })],
                     }],
@@ -1184,10 +1182,10 @@ mod tests {
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
-                            StoredInputMessageContent::Text(Text {
+                            StoredInputContentBlock::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
-                            StoredInputMessageContent::File(Box::new(StoredFile(
+                            StoredInputContentBlock::File(Box::new(StoredFile(
                                 ObjectStoragePointer {
                                     source_url: None,
                                     mime_type: mime::IMAGE_PNG,
@@ -1237,7 +1235,7 @@ mod tests {
                 ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the boiling point of water?".to_string(),
                     })],
                 }],
@@ -1281,7 +1279,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the boiling point of water?".to_string(),
                         })],
                     }],
@@ -1303,7 +1301,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     }],
@@ -1351,7 +1349,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "Provide a sample JSON response.".to_string(),
                         })],
                     }],
@@ -1379,7 +1377,7 @@ mod tests {
                     ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "Provide another JSON response.".to_string(),
                         })],
                     }],
@@ -1447,13 +1445,13 @@ mod tests {
             messages: vec![
                 LazyResolvedInputMessage {
                     role: Role::User,
-                    content: vec![LazyResolvedInputMessageContent::Text(Text {
+                    content: vec![LazyResolvedInputContentBlock::Text(Text {
                         text: "Hello, how are you?".to_string(),
                     })],
                 },
                 LazyResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![LazyResolvedInputMessageContent::Text(Text {
+                    content: vec![LazyResolvedInputContentBlock::Text(Text {
                         text: "I'm doing great!".to_string(),
                     })],
                 },
@@ -1564,7 +1562,7 @@ mod tests {
             system: Some(System::Text("Custom system from input".to_string())),
             messages: vec![LazyResolvedInputMessage {
                 role: Role::User,
-                content: vec![LazyResolvedInputMessageContent::Text(Text {
+                content: vec![LazyResolvedInputContentBlock::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -1578,7 +1576,7 @@ mod tests {
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Example question".to_string(),
                 })],
             }],
@@ -1761,7 +1759,7 @@ mod tests {
     async fn test_prepare_request_message_dicl_with_template() {
         let message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     serde_json::json!({"key": "value"})
@@ -1794,7 +1792,7 @@ mod tests {
     async fn test_prepare_request_message_dicl_without_template() {
         let message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Text(Text {
+            content: vec![LazyResolvedInputContentBlock::Text(Text {
                 text: "Hello".to_string(),
             })],
         };
@@ -1816,7 +1814,7 @@ mod tests {
 
     #[test]
     fn test_lazy_content_to_resolved_with_template() {
-        let template = LazyResolvedInputMessageContent::Template(Template {
+        let template = LazyResolvedInputContentBlock::Template(Template {
             name: "test_template".to_string(),
             arguments: Arguments(
                 serde_json::json!({"foo": "bar"})
@@ -1829,7 +1827,7 @@ mod tests {
         let result = lazy_content_to_resolved_discarding_incompatible(template).unwrap();
 
         match result {
-            ResolvedInputMessageContent::Text(Text { text }) => {
+            ResolvedInputContentBlock::Text(Text { text }) => {
                 let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
                 assert_eq!(parsed["type"], "template");
                 assert_eq!(parsed["name"], "test_template");

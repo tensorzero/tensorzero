@@ -17,7 +17,7 @@ use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::{Base64FileMetadata, Detail};
 use crate::inference::types::stored_input::{
-    StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredFile, StoredInput, StoredInputContentBlock, StoredInputMessage,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, Template};
 use crate::rate_limiting::RateLimitedInputContent;
@@ -39,7 +39,7 @@ pub struct LazyResolvedInput {
 #[derive(Clone, Debug)]
 pub struct LazyResolvedInputMessage {
     pub role: Role,
-    pub content: Vec<LazyResolvedInputMessageContent>,
+    pub content: Vec<LazyResolvedInputContentBlock>,
 }
 
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
@@ -96,10 +96,10 @@ pub struct FileUrl {
     pub detail: Option<Detail>,
 }
 
-/// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
+/// Holds a lazily-resolved file from a `LazyResolvedInputContentBlock::File`.
 /// This is constructed as either:
-/// 1. An immediately-ready future, when we're converting a `ResolvedInputMessageContent` to a `LazyResolvedInputMessageContent`
-/// 2. A network fetch future, when we're resolving an image url in `InputMessageContent::File`.
+/// 1. An immediately-ready future, when we're converting a `ResolvedInputContentBlock` to a `LazyResolvedInputContentBlock`
+/// 2. A network fetch future, when we're resolving an image url in `InputContentBlock::File`.
 ///
 /// This future is `Shared`, so that we can `.await` it from multiple different model providers
 /// (if we're not forwarding an image url to the model provider), as well as when writing the
@@ -108,7 +108,7 @@ pub type FileFuture =
     Shared<Pin<Box<dyn Future<Output = Result<ObjectStorageFile, Error>> + Send>>>;
 
 #[derive(Clone, Debug)]
-pub enum LazyResolvedInputMessageContent {
+pub enum LazyResolvedInputContentBlock {
     Text(Text),
     Template(Template),
     ToolCall(ToolCall),
@@ -228,7 +228,7 @@ impl ResolvedInput {
         if config.gateway.observability.enabled.unwrap_or(true) {
             for message in self.messages {
                 for content_block in message.content {
-                    if let ResolvedInputMessageContent::File(resolved) = content_block {
+                    if let ResolvedInputContentBlock::File(resolved) = content_block {
                         let raw = match Base64File::new(
                             resolved.file.source_url.clone(),
                             Some(resolved.file.mime_type.clone()),
@@ -300,7 +300,7 @@ impl ResolvedInput {
 #[ts(export)]
 pub struct ResolvedInputMessage {
     pub role: Role,
-    pub content: Vec<ResolvedInputMessageContent>,
+    pub content: Vec<ResolvedInputContentBlock>,
 }
 
 impl ResolvedInputMessage {
@@ -310,7 +310,7 @@ impl ResolvedInputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(ResolvedInputMessageContent::into_stored_input_message_content)
+                .map(ResolvedInputContentBlock::into_stored_input_message_content)
                 .collect(),
         }
     }
@@ -321,7 +321,7 @@ impl ResolvedInputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(ResolvedInputMessageContent::into_lazy_resolved_input_message_content)
+                .map(ResolvedInputContentBlock::into_lazy_resolved_input_message_content)
                 .collect(),
         }
     }
@@ -369,7 +369,7 @@ impl ResolvedInputMessage {
 )]
 #[derive(ts_rs::TS)]
 #[ts(export)]
-pub enum ResolvedInputMessageContent {
+pub enum ResolvedInputContentBlock {
     Text(Text),
     Template(Template),
     ToolCall(ToolCall),
@@ -381,58 +381,58 @@ pub enum ResolvedInputMessageContent {
     Unknown(Unknown),
 }
 
-impl ResolvedInputMessageContent {
-    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
+impl ResolvedInputContentBlock {
+    pub fn into_stored_input_message_content(self) -> StoredInputContentBlock {
         match self {
-            ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
-            ResolvedInputMessageContent::Template(template) => {
-                StoredInputMessageContent::Template(template)
+            ResolvedInputContentBlock::Text(text) => StoredInputContentBlock::Text(text),
+            ResolvedInputContentBlock::Template(template) => {
+                StoredInputContentBlock::Template(template)
             }
-            ResolvedInputMessageContent::ToolCall(tool_call) => {
-                StoredInputMessageContent::ToolCall(tool_call)
+            ResolvedInputContentBlock::ToolCall(tool_call) => {
+                StoredInputContentBlock::ToolCall(tool_call)
             }
-            ResolvedInputMessageContent::ToolResult(tool_result) => {
-                StoredInputMessageContent::ToolResult(tool_result)
+            ResolvedInputContentBlock::ToolResult(tool_result) => {
+                StoredInputContentBlock::ToolResult(tool_result)
             }
-            ResolvedInputMessageContent::RawText(raw_text) => {
-                StoredInputMessageContent::RawText(raw_text)
+            ResolvedInputContentBlock::RawText(raw_text) => {
+                StoredInputContentBlock::RawText(raw_text)
             }
-            ResolvedInputMessageContent::Thought(thought) => {
-                StoredInputMessageContent::Thought(thought)
+            ResolvedInputContentBlock::Thought(thought) => {
+                StoredInputContentBlock::Thought(thought)
             }
-            ResolvedInputMessageContent::File(resolved) => {
-                StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+            ResolvedInputContentBlock::File(resolved) => {
+                StoredInputContentBlock::File(Box::new(StoredFile(resolved.file)))
             }
-            ResolvedInputMessageContent::Unknown(unknown) => {
-                StoredInputMessageContent::Unknown(unknown)
+            ResolvedInputContentBlock::Unknown(unknown) => {
+                StoredInputContentBlock::Unknown(unknown)
             }
         }
     }
 
-    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
+    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputContentBlock {
         match self {
-            ResolvedInputMessageContent::Text(text) => LazyResolvedInputMessageContent::Text(text),
-            ResolvedInputMessageContent::Template(template) => {
-                LazyResolvedInputMessageContent::Template(template)
+            ResolvedInputContentBlock::Text(text) => LazyResolvedInputContentBlock::Text(text),
+            ResolvedInputContentBlock::Template(template) => {
+                LazyResolvedInputContentBlock::Template(template)
             }
-            ResolvedInputMessageContent::ToolCall(tool_call) => {
-                LazyResolvedInputMessageContent::ToolCall(tool_call)
+            ResolvedInputContentBlock::ToolCall(tool_call) => {
+                LazyResolvedInputContentBlock::ToolCall(tool_call)
             }
-            ResolvedInputMessageContent::ToolResult(tool_result) => {
-                LazyResolvedInputMessageContent::ToolResult(tool_result)
+            ResolvedInputContentBlock::ToolResult(tool_result) => {
+                LazyResolvedInputContentBlock::ToolResult(tool_result)
             }
 
-            ResolvedInputMessageContent::RawText(raw_text) => {
-                LazyResolvedInputMessageContent::RawText(raw_text)
+            ResolvedInputContentBlock::RawText(raw_text) => {
+                LazyResolvedInputContentBlock::RawText(raw_text)
             }
-            ResolvedInputMessageContent::Thought(thought) => {
-                LazyResolvedInputMessageContent::Thought(thought)
+            ResolvedInputContentBlock::Thought(thought) => {
+                LazyResolvedInputContentBlock::Thought(thought)
             }
-            ResolvedInputMessageContent::File(resolved) => {
-                LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage(*resolved)))
+            ResolvedInputContentBlock::File(resolved) => {
+                LazyResolvedInputContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
-            ResolvedInputMessageContent::Unknown(unknown) => {
-                LazyResolvedInputMessageContent::Unknown(unknown)
+            ResolvedInputContentBlock::Unknown(unknown) => {
+                LazyResolvedInputContentBlock::Unknown(unknown)
             }
         }
     }

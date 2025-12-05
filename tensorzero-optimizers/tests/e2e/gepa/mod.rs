@@ -14,8 +14,8 @@ use tensorzero_core::endpoints::datasets::v1::delete_dataset;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedContentBlock,
-    ResolvedRequestMessage, Role, StoredInput, StoredInputMessage, StoredInputMessageContent,
-    System, Template, Text,
+    ResolvedRequestMessage, Role, StoredInput, StoredInputContentBlock, StoredInputMessage, System,
+    Template, Text,
 };
 use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
@@ -77,7 +77,7 @@ pub fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSa
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: input.to_string(),
                 })],
             }],
@@ -125,7 +125,7 @@ pub fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSa
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Template(Template {
+                content: vec![StoredInputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter(vec![(
                         "country".to_string(),

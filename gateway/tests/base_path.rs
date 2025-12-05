@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
 use reqwest::Url;
-use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
+use tensorzero::{ClientInferenceParams, Input, InputContentBlock, InputMessage, Role};
 use tensorzero_core::inference::types::Text;
 
 use crate::common::{start_gateway_on_random_port, ChildData};
@@ -98,7 +98,7 @@ async fn test_base_path(child_data: ChildData) {
             input: Input {
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -123,7 +123,7 @@ async fn test_base_path(child_data: ChildData) {
             input: Input {
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],

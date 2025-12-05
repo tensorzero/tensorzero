@@ -70,7 +70,7 @@ model = "dummy::good"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "This is a great product!".to_string(),
                     })],
                 }],
@@ -120,7 +120,7 @@ model = "dummy::good"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "This is a great product!".to_string(),
                     })],
                 }],
@@ -195,7 +195,7 @@ parameters = "{}"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "What's the temperature?".to_string(),
                     })],
                 }],
@@ -261,7 +261,7 @@ model = "dummy::good"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "Test message".to_string(),
                     })],
                 }],
@@ -306,7 +306,7 @@ async fn test_model_name_with_output_schema_succeeds() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "This is a great product!".to_string(),
                     })],
                 }],
@@ -343,7 +343,7 @@ async fn test_model_name_without_output_schema_fails() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "This is a great product!".to_string(),
                     })],
                 }],
@@ -394,7 +394,7 @@ model = "dummy::good_tool"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "Analyze sentiment".to_string(),
                     })],
                 }],
@@ -495,7 +495,7 @@ model = "dummy::good_tool"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "Analyze sentiment".to_string(),
                     })],
                 }],
@@ -629,7 +629,7 @@ json_mode = "tool"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "Extract: John Doe, john@example.com".to_string(),
                     })],
                 }],
@@ -697,7 +697,7 @@ json_mode = "tool"
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: "Analyze sentiment".to_string(),
                     })],
                 }],
@@ -786,7 +786,7 @@ Text: \"My name is Megumin. I love my job as an archmage.\""#;
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::InputMessageContent::Text(Text {
+                    content: vec![tensorzero::InputContentBlock::Text(Text {
                         text: conflicting_prompt.to_string(),
                     })],
                 }],

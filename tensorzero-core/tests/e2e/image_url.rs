@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
-    InputMessage, InputMessageContent, Role,
+    InputContentBlock, InputMessage, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -161,10 +161,10 @@ async fn test_image_url_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        InputMessageContent::File(File::Url(UrlFile {
+                        InputContentBlock::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -239,10 +239,10 @@ async fn test_image_url_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        InputMessageContent::File(File::Url(UrlFile {
+                        InputContentBlock::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: Some(mime::IMAGE_PNG),
                             detail: None,
@@ -293,10 +293,10 @@ async fn test_base64_image_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        InputMessageContent::File(File::Base64(
+                        InputContentBlock::File(File::Base64(
                             Base64File::new(
                                 None,
                                 Some(mime::IMAGE_PNG),
@@ -373,10 +373,10 @@ async fn test_base64_image_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        InputMessageContent::File(File::Base64(
+                        InputContentBlock::File(File::Base64(
                             Base64File::new(
                                 None,
                                 Some(mime::IMAGE_PNG),
@@ -455,10 +455,10 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        InputMessageContent::File(File::Url(UrlFile {
+                        InputContentBlock::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -533,10 +533,10 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        InputMessageContent::File(File::Url(UrlFile {
+                        InputContentBlock::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
@@ -613,10 +613,10 @@ async fn test_image_url_403_error() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        InputMessageContent::File(File::Url(UrlFile {
+                        InputContentBlock::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,

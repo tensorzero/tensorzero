@@ -15,7 +15,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
 use crate::inference::types::resolved_input::{
-    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+    LazyResolvedInput, LazyResolvedInputContentBlock, LazyResolvedInputMessage,
 };
 use crate::utils::retries::RetryConfig;
 
@@ -482,7 +482,7 @@ pub async fn prepare_request_message(
     let mut content = Vec::new();
     for block in &message.content {
         match block {
-            LazyResolvedInputMessageContent::Text(text) => {
+            LazyResolvedInputContentBlock::Text(text) => {
                 let template = chat_templates.get_implicit_template(message.role);
                 let text_content = match template {
                     Some(template) if template.legacy_definition => {
@@ -498,7 +498,7 @@ pub async fn prepare_request_message(
                 };
                 content.push(text_content.into());
             }
-            LazyResolvedInputMessageContent::Template(template_input) => {
+            LazyResolvedInputContentBlock::Template(template_input) => {
                 let template = chat_templates
                     .get_named_template(&template_input.name)
                     .ok_or_else(|| {
@@ -521,26 +521,26 @@ pub async fn prepare_request_message(
                 )?;
                 content.push(text_content.into());
             }
-            LazyResolvedInputMessageContent::RawText(raw_text) => {
+            LazyResolvedInputContentBlock::RawText(raw_text) => {
                 content.push(ContentBlock::Text(Text {
                     text: raw_text.value.clone(),
                 }));
             }
             // The following two clones are probably removable.
             // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
-            LazyResolvedInputMessageContent::ToolCall(tool_call) => {
+            LazyResolvedInputContentBlock::ToolCall(tool_call) => {
                 content.push(ContentBlock::ToolCall(tool_call.clone()));
             }
-            LazyResolvedInputMessageContent::ToolResult(tool_result) => {
+            LazyResolvedInputContentBlock::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            LazyResolvedInputMessageContent::File(file) => {
+            LazyResolvedInputContentBlock::File(file) => {
                 content.push(ContentBlock::File(file.clone()));
             }
-            LazyResolvedInputMessageContent::Thought(thought) => {
+            LazyResolvedInputContentBlock::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
             }
-            LazyResolvedInputMessageContent::Unknown(unknown) => {
+            LazyResolvedInputContentBlock::Unknown(unknown) => {
                 content.push(ContentBlock::Unknown(Unknown {
                     data: unknown.data.clone(),
                     model_name: unknown.model_name.clone(),
@@ -962,7 +962,7 @@ mod tests {
         // Test case 3: Invalid JSON input
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "invalid".to_string(),
@@ -1017,7 +1017,7 @@ mod tests {
         // Test case 4: Assistant message with template
         let input_message = LazyResolvedInputMessage {
             role: Role::Assistant,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "assistant".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "reason".to_string(),
@@ -1045,7 +1045,7 @@ mod tests {
         // Test case 5: User message with template
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([
                     ("name".to_string(), "John".into()),
@@ -1073,7 +1073,7 @@ mod tests {
         // Test case 6: User message with bad input (missing required field)
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "name".to_string(),
@@ -1896,7 +1896,7 @@ mod tests {
         }
         let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     json!({"name": "Luke", "age": 20})
@@ -2367,7 +2367,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(Template {
+            content: vec![LazyResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(
                     json!({"name": "Luke", "age": 20})

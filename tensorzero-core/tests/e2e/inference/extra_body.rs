@@ -2,7 +2,7 @@ use serde_json::json;
 use tempfile::NamedTempFile;
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
-    InferenceResponse, Input, InputMessage, InputMessageContent,
+    InferenceResponse, Input, InputMessage, InputContentBlock,
 };
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Role, Text};
@@ -30,7 +30,7 @@ pub fn create_test_input() -> Input {
     Input {
         messages: vec![InputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(Text {
+            content: vec![InputContentBlock::Text(Text {
                 text: "test".to_string(),
             })],
         }],

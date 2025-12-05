@@ -724,21 +724,21 @@ impl File {
                 ..base64_file
             }),
             File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
-                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // This path gets called from `InputContentBlock::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!(
                     "File::ObjectStoragePointer::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
             })),
             File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
-                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // This path gets called from `InputContentBlock::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!(
                     "File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
             })),
             File::ObjectStorageError(_) => Err(Error::new(ErrorDetails::InternalError {
-                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // This path gets called from `InputContentBlock::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!(
                     "File::ObjectStorageError::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"

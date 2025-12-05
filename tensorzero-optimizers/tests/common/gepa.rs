@@ -9,8 +9,8 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedContentBlock,
-        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Template, Text,
+        ResolvedRequestMessage, StoredInput, StoredInputContentBlock, StoredInputMessage, Template,
+        Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{gepa::GEPAConfig, OptimizationJobInfo, OptimizerOutput},
@@ -345,7 +345,7 @@ fn create_chat_example(
                 .map(|s| System::Template(Arguments(s.as_object().unwrap().to_owned()))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: question.to_string(),
                 })],
             }],
@@ -435,7 +435,7 @@ fn create_json_example(
                 .map(|s| System::Template(Arguments(s.as_object().unwrap().to_owned()))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Template(Template {
+                content: vec![StoredInputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(user_input.as_object().unwrap().clone()),
                 })],

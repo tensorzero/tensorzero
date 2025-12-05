@@ -10,7 +10,7 @@ use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredInput, StoredInputContentBlock, StoredInputMessage,
 };
 use tensorzero_core::inference::types::{
     Arguments, ResolvedContentBlock, ResolvedRequestMessage, System,
@@ -50,7 +50,7 @@ pub async fn test_render_samples_no_function() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -86,7 +86,7 @@ pub async fn test_render_samples_no_variant() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -135,7 +135,7 @@ pub async fn test_render_samples_missing_variable() {
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -176,7 +176,7 @@ pub async fn test_render_samples_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -199,7 +199,7 @@ pub async fn test_render_samples_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(Template {
+                    content: vec![StoredInputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter(vec![(
                             "country".to_string(),
@@ -232,7 +232,7 @@ pub async fn test_render_samples_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -280,29 +280,27 @@ pub async fn test_render_samples_normal() {
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile(
-                            ObjectStoragePointer {
-                                source_url: None,
-                                detail: None,
-                                mime_type: mime::IMAGE_PNG,
-                                storage_path: StoragePath {
-                                    kind: StorageKind::S3Compatible {
-                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                        region: Some("us-east-1".to_string()),
-                                        prefix: String::new(),
-                                        endpoint: None,
-                                        allow_http: None,
-                                    },
-                                    path: Path::from(
-                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-                                    ),
+                        StoredInputContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                            source_url: None,
+                            detail: None,
+                            mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::S3Compatible {
+                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                    region: Some("us-east-1".to_string()),
+                                    prefix: String::new(),
+                                    endpoint: None,
+                                    allow_http: None,
                                 },
-                                filename: None,
+                                path: Path::from(
+                                    "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                ),
                             },
-                        ))),
+                            filename: None,
+                        }))),
                     ],
                 }],
             },
@@ -479,10 +477,10 @@ pub async fn test_render_samples_template_no_schema() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "First user message".to_string(),
                         }),
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Second user message".to_string(),
                         }),
                     ],
@@ -490,10 +488,10 @@ pub async fn test_render_samples_template_no_schema() {
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "First assistant message".to_string(),
                         }),
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Second assistant message".to_string(),
                         }),
                     ],
@@ -598,7 +596,7 @@ pub async fn test_render_datapoints_no_function() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -639,7 +637,7 @@ pub async fn test_render_datapoints_no_variant() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -693,7 +691,7 @@ pub async fn test_render_datapoints_missing_variable() {
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -739,7 +737,7 @@ pub async fn test_render_datapoints_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -767,7 +765,7 @@ pub async fn test_render_datapoints_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(Template {
+                    content: vec![StoredInputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter(vec![(
                             "country".to_string(),
@@ -802,7 +800,7 @@ pub async fn test_render_datapoints_normal() {
                 )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -853,29 +851,27 @@ pub async fn test_render_datapoints_normal() {
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile(
-                            ObjectStoragePointer {
-                                source_url: None,
-                                detail: None,
-                                mime_type: mime::IMAGE_PNG,
-                                storage_path: StoragePath {
-                                    kind: StorageKind::S3Compatible {
-                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                        region: Some("us-east-1".to_string()),
-                                        prefix: String::new(),
-                                        endpoint: None,
-                                        allow_http: None,
-                                    },
-                                    path: Path::from(
-                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-                                    ),
+                        StoredInputContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                            source_url: None,
+                            detail: None,
+                            mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::S3Compatible {
+                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                    region: Some("us-east-1".to_string()),
+                                    prefix: String::new(),
+                                    endpoint: None,
+                                    allow_http: None,
                                 },
-                                filename: None,
+                                path: Path::from(
+                                    "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                ),
                             },
-                        ))),
+                            filename: None,
+                        }))),
                     ],
                 }],
             },
@@ -1042,10 +1038,10 @@ pub async fn test_render_datapoints_template_no_schema() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "First user message".to_string(),
                         }),
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Second user message".to_string(),
                         }),
                     ],
@@ -1053,10 +1049,10 @@ pub async fn test_render_datapoints_template_no_schema() {
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "First assistant message".to_string(),
                         }),
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Second assistant message".to_string(),
                         }),
                     ],

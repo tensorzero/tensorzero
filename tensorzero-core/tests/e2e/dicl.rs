@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{
-    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
-    InputMessageContent,
+    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputContentBlock,
+    InputMessage,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
@@ -25,7 +25,7 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, Role, StoredContentBlock,
+        ResolvedInputContentBlock, ResolvedInputMessage, Role, StoredContentBlock,
         StoredRequestMessage, System, Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
@@ -416,7 +416,7 @@ pub async fn test_dicl_inference_request_simple() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is the boiling point of water?".to_string(),
             })],
         }],
@@ -437,7 +437,7 @@ pub async fn test_dicl_inference_request_simple() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What the capital city of India?".to_string(),
             })],
         }],
@@ -459,7 +459,7 @@ pub async fn test_dicl_inference_request_simple() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is an example of a computationally hard problem?".to_string(),
             })],
         }],
@@ -484,7 +484,7 @@ pub async fn test_dicl_inference_request_simple() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "Who wrote Lord of the Rings?".to_string(),
             })],
         }],
@@ -953,7 +953,7 @@ async fn test_dicl_json_request() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(Template {
+            content: vec![ResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
@@ -981,7 +981,7 @@ async fn test_dicl_json_request() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(Template {
+            content: vec![ResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
@@ -1009,7 +1009,7 @@ async fn test_dicl_json_request() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(Template {
+            content: vec![ResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
@@ -1037,7 +1037,7 @@ async fn test_dicl_json_request() {
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(Template {
+            content: vec![ResolvedInputContentBlock::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
@@ -1292,7 +1292,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is the capital of France?".to_string(),
             })],
         }],
@@ -1310,7 +1310,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is the capital of Germany?".to_string(),
             })],
         }],
@@ -1328,7 +1328,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is the capital of Italy?".to_string(),
             })],
         }],
@@ -1356,7 +1356,7 @@ max_tokens = 100
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "What programming language is used for web development?".to_string(),
                 })],
             }],
@@ -1443,7 +1443,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What the capital city of India?".to_string(),
             })],
         }],
@@ -1462,7 +1462,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "What is an example of a computationally hard problem?".to_string(),
             })],
         }],
@@ -1484,7 +1484,7 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text(Text {
+            content: vec![ResolvedInputContentBlock::Text(Text {
                 text: "Who wrote Lord of the Rings?".to_string(),
             })],
         }],
@@ -1513,7 +1513,7 @@ max_tokens = 100
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Who was the author of the Harry Potter series?".to_string(),
                 })],
             }],

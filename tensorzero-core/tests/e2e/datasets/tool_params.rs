@@ -18,7 +18,7 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Role, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, System, Text,
+    StoredInputContentBlock, System, Text,
 };
 use tensorzero_core::tool::{
     AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
@@ -105,7 +105,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "What's the weather in Brooklyn?".to_string(),
                 })],
             }],
@@ -232,7 +232,7 @@ async fn test_datapoint_update_tool_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Original message".to_string(),
                 })],
             }],
@@ -400,7 +400,7 @@ async fn test_list_datapoints_with_tool_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 1".to_string(),
                 })],
             }],
@@ -434,7 +434,7 @@ async fn test_list_datapoints_with_tool_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 2".to_string(),
                 })],
             }],
@@ -468,7 +468,7 @@ async fn test_list_datapoints_with_tool_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 3".to_string(),
                 })],
             }],
@@ -588,7 +588,7 @@ async fn test_datapoint_only_static_tools() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -689,7 +689,7 @@ async fn test_datapoint_only_dynamic_tools() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -783,7 +783,7 @@ async fn test_datapoint_tool_params_three_states() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Original".to_string(),
                 })],
             }],
@@ -1008,7 +1008,7 @@ async fn test_datapoint_no_tool_params() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],

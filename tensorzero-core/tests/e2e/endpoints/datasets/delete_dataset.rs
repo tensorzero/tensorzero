@@ -14,7 +14,7 @@ use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, Text,
+    StoredInputContentBlock, Text,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -37,7 +37,7 @@ async fn test_delete_dataset_with_single_datapoint() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Hello!".to_string(),
                 })],
             }],
@@ -160,7 +160,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: format!("Message {i}"),
                     })],
                 }],
@@ -188,7 +188,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: format!("Query {i}"),
                     })],
                 }],
@@ -340,7 +340,7 @@ async fn test_delete_dataset_twice() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -409,7 +409,7 @@ async fn test_delete_dataset_with_different_function_names() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 1".to_string(),
                 })],
             }],
@@ -435,7 +435,7 @@ async fn test_delete_dataset_with_different_function_names() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 2".to_string(),
                 })],
             }],

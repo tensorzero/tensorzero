@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
-    InputMessage, InputMessageContent,
+    InputMessage, InputContentBlock,
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -114,10 +114,10 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(Text {
+                            InputContentBlock::Text(Text {
                                 text: "What's going on in this audio?".to_string(),
                             }),
-                            InputMessageContent::File(File::Base64(
+                            InputContentBlock::File(File::Base64(
                                 Base64File::new(
                                     None,
                                     Some("audio/mpeg".parse().unwrap()),

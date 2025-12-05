@@ -16,7 +16,7 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, System, Template, Text,
+    StoredInputContentBlock, System, Template, Text,
 };
 use tensorzero_core::tool::{
     AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
@@ -51,7 +51,7 @@ async fn test_update_chat_datapoint_output() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Original message".to_string(),
                 })],
             }],
@@ -183,7 +183,7 @@ async fn test_update_json_datapoint_output() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: json!({"country": "US"}).to_string(),
                 })],
             }],
@@ -279,7 +279,7 @@ async fn test_update_multiple_datapoints() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Message 1".to_string(),
                 })],
             }],
@@ -310,7 +310,7 @@ async fn test_update_multiple_datapoints() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Message 2".to_string(),
                 })],
             }],
@@ -446,7 +446,7 @@ async fn test_update_datapoint_type_mismatch() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -513,7 +513,7 @@ async fn test_update_datapoint_with_metadata() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -647,7 +647,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -733,7 +733,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -844,7 +844,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -930,7 +930,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -1022,7 +1022,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: json!({"question": "test"}).to_string(),
                 })],
             }],
@@ -1119,7 +1119,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: json!({"question": "test"}).to_string(),
                 })],
             }],
@@ -1204,7 +1204,7 @@ async fn test_update_metadata_chat_datapoint() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test message".to_string(),
                 })],
             }],
@@ -1303,7 +1303,7 @@ async fn test_update_metadata_json_datapoint() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: json!({"query": "test"}).to_string(),
                 })],
             }],
@@ -1389,7 +1389,7 @@ async fn test_update_metadata_set_name_to_null() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test".to_string(),
                 })],
             }],
@@ -1467,7 +1467,7 @@ async fn test_update_metadata_batch() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 1".to_string(),
                 })],
             }],
@@ -1491,7 +1491,7 @@ async fn test_update_metadata_batch() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Test 2".to_string(),
                 })],
             }],
@@ -1650,7 +1650,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Original message".to_string(),
                 })],
             }],
@@ -1795,7 +1795,7 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
             ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Template(Template {
+                content: vec![StoredInputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(json!({"country": "Japan"}).as_object().unwrap().clone()),
                 })],

@@ -5,7 +5,7 @@ use reqwest::Url;
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode, File,
-    InputMessageContent,
+    InputContentBlock,
 };
 use tensorzero_core::inference::types::StoredInput;
 
@@ -40,9 +40,9 @@ async fn test_conversion() {
     assert!(client_input.messages[0].content.len() == 2);
     assert!(matches!(
         client_input.messages[0].content[0],
-        InputMessageContent::Text(_)
+        InputContentBlock::Text(_)
     ));
-    let InputMessageContent::File(File::Base64(base64_file)) = &client_input.messages[0].content[1]
+    let InputContentBlock::File(File::Base64(base64_file)) = &client_input.messages[0].content[1]
     else {
         panic!("Expected file");
     };

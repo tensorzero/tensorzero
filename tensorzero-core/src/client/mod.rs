@@ -33,7 +33,7 @@ pub use crate::endpoints::object_storage::ObjectResponse;
 pub use crate::inference::types::storage::{StorageKind, StoragePath};
 pub use crate::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use crate::inference::types::{
-    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
+    ContentBlockChunk, Input, InputContentBlock, InputMessage, Role, System, Unknown,
 };
 pub use crate::tool::{DynamicToolParams, Tool};
 

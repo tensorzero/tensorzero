@@ -13,7 +13,7 @@ use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputContentBlock, InputMessage,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,
@@ -204,7 +204,7 @@ async fn analyze_inference(
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Template(Template {
+                content: vec![InputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments,
                 })],

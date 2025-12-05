@@ -192,10 +192,10 @@ mod tests {
     use crate::config::{Config, ConfigFileGlob};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
-        Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent,
+        Arguments, ContentBlockChatOutput, Input, InputContentBlock, InputMessage,
         JsonInferenceOutput, System, Template, Text,
     };
-    use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
+    use crate::inference::types::{Role, StoredInputContentBlock, StoredInputMessage};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolParams, InferenceResponseToolCall};
     use serde_json::json;
@@ -222,7 +222,7 @@ mod tests {
             system: Some(System::Text("You are a helpful AI assistant.".to_string())),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Template(Template {
+                content: vec![InputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(args_map),
                 })],
@@ -278,7 +278,7 @@ mod tests {
             insert.input.messages,
             vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Template(Template {
+                content: vec![StoredInputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "topic".to_string(),
@@ -421,7 +421,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Extract entities from this text".to_string(),
                 })],
             }],
@@ -473,7 +473,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Extract entities from this text".to_string(),
                 })],
             }],
@@ -546,7 +546,7 @@ mod tests {
             system: None,
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Extract entities from this text".to_string(),
                 })],
             }],

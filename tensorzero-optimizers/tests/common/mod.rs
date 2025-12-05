@@ -25,7 +25,7 @@ use tensorzero_core::{
         stored_input::StoredFile,
         ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
         ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
-        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+        ResolvedRequestMessage, StoredInput, StoredInputContentBlock, StoredInputMessage, System,
         Text,
     },
     model_table::ProviderTypeDefaultCredentials,
@@ -300,7 +300,7 @@ fn generate_text_example() -> RenderedSample {
             system: Some(System::Text(system_prompt.clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
             }],
@@ -394,17 +394,17 @@ fn generate_tool_call_example() -> RenderedSample {
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the weather in Paris?".to_string(),
                     })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text(Text {
+                        StoredInputContentBlock::Text(Text {
                             text: "Let me look that up for you.".to_string(),
                         }),
-                        StoredInputMessageContent::ToolCall(ToolCall {
+                        StoredInputContentBlock::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
                                 "location": "Paris"
@@ -416,7 +416,7 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::ToolResult(ToolResult {
+                    content: vec![StoredInputContentBlock::ToolResult(ToolResult {
                         name: "get_weather".to_string(),
                         result: serde_json::json!({
                             "weather": "sunny, 25 degrees Celsius",
@@ -427,13 +427,13 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
                     })],
                 },
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "What is the weather in London?".to_string(),
                     })],
                 },
@@ -511,10 +511,10 @@ fn generate_image_example() -> RenderedSample {
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![
-                    StoredInputMessageContent::Text(Text {
+                    StoredInputContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    StoredInputMessageContent::File(Box::new(StoredFile(
+                    StoredInputContentBlock::File(Box::new(StoredFile(
                         ObjectStoragePointer {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,

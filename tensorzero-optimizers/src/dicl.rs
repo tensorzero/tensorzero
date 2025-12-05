@@ -19,7 +19,7 @@ use tensorzero_core::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    inference::types::StoredInputMessageContent,
+    inference::types::StoredInputContentBlock,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
@@ -289,7 +289,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
         for message in &example.stored_input.messages {
             for content in &message.content {
                 match content {
-                    StoredInputMessageContent::ToolCall(_) => {
+                    StoredInputContentBlock::ToolCall(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
@@ -297,7 +297,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                             ),
                         }));
                     }
-                    StoredInputMessageContent::ToolResult(_) => {
+                    StoredInputContentBlock::ToolResult(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
@@ -628,7 +628,7 @@ mod tests {
         http::TensorzeroHttpClient,
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            StoredInput, StoredInputContentBlock, StoredInputMessage, System, Text,
         },
         jsonschema_util::StaticJSONSchema,
         model_table::ProviderTypeDefaultCredentials,
@@ -840,7 +840,7 @@ mod tests {
                 system: Some(System::Text("Test system".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test message".to_string(),
                     })],
                 }],
@@ -880,7 +880,7 @@ mod tests {
         // Add a message with tool call content
         sample.stored_input.messages.push(StoredInputMessage {
             role: Role::Assistant,
-            content: vec![StoredInputMessageContent::ToolCall(ToolCall {
+            content: vec![StoredInputContentBlock::ToolCall(ToolCall {
                 id: "test_call".to_string(),
                 name: "test_tool".to_string(),
                 arguments: serde_json::json!({"arg": "value"}).to_string(),
@@ -905,7 +905,7 @@ mod tests {
         // Add a message with tool result content
         sample.stored_input.messages.push(StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::ToolResult(ToolResult {
+            content: vec![StoredInputContentBlock::ToolResult(ToolResult {
                 id: "test_call".to_string(),
                 name: "test_tool".to_string(),
                 result: "Tool result".to_string(),

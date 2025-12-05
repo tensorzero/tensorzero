@@ -154,7 +154,7 @@ impl OpenAIResponsesResponse<'_> {
                     }
                     for block in message.content {
                         match block {
-                            OpenAIResponsesInputMessageContent::OutputText { text } => {
+                            OpenAIResponsesInputContentBlock::OutputText { text } => {
                                 output.push(ContentBlockOutput::Text(Text {
                                     text: text.to_string(),
                                 }));
@@ -632,7 +632,7 @@ impl OpenAIResponsesInput<'_> {
         match self {
             OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(msg)) => {
                 for block in &msg.content {
-                    if let OpenAIResponsesInputMessageContent::InputText { text } = block
+                    if let OpenAIResponsesInputContentBlock::InputText { text } = block
                         && text.to_lowercase().contains(value)
                     {
                         return true;
@@ -677,12 +677,12 @@ pub struct OpenAIResponsesCustomToolCall<'a> {
 pub struct OpenAIResponsesInputMessage<'a> {
     pub role: &'a str,
     pub id: Option<Cow<'a, str>>,
-    pub content: Vec<OpenAIResponsesInputMessageContent<'a>>,
+    pub content: Vec<OpenAIResponsesInputContentBlock<'a>>,
 }
 
 #[derive(Clone, Deserialize, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAIResponsesInputMessageContent<'a> {
+pub enum OpenAIResponsesInputContentBlock<'a> {
     InputText {
         text: Cow<'a, str>,
     },
@@ -706,7 +706,7 @@ pub struct OpenAIResponsesReasoning<'a> {
     summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
 }
 
-impl Serialize for OpenAIResponsesInputMessageContent<'_> {
+impl Serialize for OpenAIResponsesInputContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -731,20 +731,20 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             },
         }
         match self {
-            OpenAIResponsesInputMessageContent::InputText { text } => {
+            OpenAIResponsesInputContentBlock::InputText { text } => {
                 Helper::InputText { text }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::InputImage { image_url, detail } => {
+            OpenAIResponsesInputContentBlock::InputImage { image_url, detail } => {
                 Helper::InputImage {
                     image_url,
                     detail: detail.as_ref(),
                 }
                 .serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::InputFile { file } => {
+            OpenAIResponsesInputContentBlock::InputFile { file } => {
                 Helper::InputFile { file }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::OutputText { text } => {
+            OpenAIResponsesInputContentBlock::OutputText { text } => {
                 Helper::OutputText { text }.serialize(serializer)
             }
         }
@@ -817,7 +817,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                     OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
                         id: None,
                         role: "user",
-                        content: vec![OpenAIResponsesInputMessageContent::InputText {
+                        content: vec![OpenAIResponsesInputContentBlock::InputText {
                             text: Cow::Borrowed(text),
                         }],
                     }),
@@ -846,7 +846,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                             OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
                                 id: None,
                                 role: "user",
-                                content: vec![OpenAIResponsesInputMessageContent::InputImage {
+                                content: vec![OpenAIResponsesInputContentBlock::InputImage {
                                     image_url: Cow::Owned(image_url.url),
                                     detail: image_url.detail,
                                 }],
@@ -858,9 +858,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                             OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
                                 id: None,
                                 role: "user",
-                                content: vec![OpenAIResponsesInputMessageContent::InputFile {
-                                    file,
-                                }],
+                                content: vec![OpenAIResponsesInputContentBlock::InputFile { file }],
                             }),
                         ));
                     }
@@ -904,7 +902,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                     OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
                         id: None,
                         role: "assistant",
-                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                        content: vec![OpenAIResponsesInputContentBlock::OutputText {
                             text: Cow::Borrowed(text),
                         }],
                     }),
@@ -915,7 +913,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                     OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
                         id: None,
                         role: "assistant",
-                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                        content: vec![OpenAIResponsesInputContentBlock::OutputText {
                             text: Cow::Owned(text),
                         }],
                     }),
@@ -2667,7 +2665,7 @@ mod tests {
         use crate::inference::types::file::Detail;
 
         // Test serialization with detail: low
-        let input_low = OpenAIResponsesInputMessageContent::InputImage {
+        let input_low = OpenAIResponsesInputContentBlock::InputImage {
             image_url: Cow::Borrowed("https://example.com/image.png"),
             detail: Some(Detail::Low),
         };
@@ -2677,7 +2675,7 @@ mod tests {
         assert_eq!(json_low["detail"], "low");
 
         // Test serialization with detail: high
-        let input_high = OpenAIResponsesInputMessageContent::InputImage {
+        let input_high = OpenAIResponsesInputContentBlock::InputImage {
             image_url: Cow::Borrowed("https://example.com/image.png"),
             detail: Some(Detail::High),
         };
@@ -2685,7 +2683,7 @@ mod tests {
         assert_eq!(json_high["detail"], "high");
 
         // Test serialization with detail: auto
-        let input_auto = OpenAIResponsesInputMessageContent::InputImage {
+        let input_auto = OpenAIResponsesInputContentBlock::InputImage {
             image_url: Cow::Borrowed("https://example.com/image.png"),
             detail: Some(Detail::Auto),
         };
@@ -2693,7 +2691,7 @@ mod tests {
         assert_eq!(json_auto["detail"], "auto");
 
         // Test serialization with detail: None (should be omitted from JSON)
-        let input_none = OpenAIResponsesInputMessageContent::InputImage {
+        let input_none = OpenAIResponsesInputContentBlock::InputImage {
             image_url: Cow::Borrowed("https://example.com/image.png"),
             detail: None,
         };

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tensorzero::{ClientExt, Role, StoredDatapoint};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, Template, Text,
+    StoredInputContentBlock, Template, Text,
 };
 use uuid::Uuid;
 
@@ -109,7 +109,7 @@ async fn test_create_chat_datapoint_basic() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Template(Template {
+                content: vec![StoredInputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments: Arguments(json!({"topic": "coding"}).as_object().unwrap().clone()),
                 })]

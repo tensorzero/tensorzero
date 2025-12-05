@@ -8,7 +8,7 @@ use tensorzero::{
 };
 use tensorzero_core::endpoints::datasets::v1::types::DatapointMetadataUpdate;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Text,
+    ContentBlockChatOutput, Input, InputContentBlock, InputMessage, Text,
 };
 use tensorzero_core::tool::DynamicToolParams;
 use uuid::Uuid;
@@ -32,7 +32,7 @@ fn create_chat_input_with_system(
         }),
         messages: vec![InputMessage {
             role: tensorzero_core::inference::types::Role::User,
-            content: vec![InputMessageContent::Text(Text {
+            content: vec![InputContentBlock::Text(Text {
                 text: message.to_string(),
             })],
         }],

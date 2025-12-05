@@ -527,9 +527,9 @@ mod tests {
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
-        Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
-        JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
-        StoredInputMessageContent, Text,
+        Base64File, ContentBlockChatOutput, File, Input, InputContentBlock, InputMessage,
+        JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputContentBlock,
+        StoredInputMessage, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
@@ -570,7 +570,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::File(file.clone())],
+                    content: vec![InputContentBlock::File(file.clone())],
                 }],
             };
 
@@ -610,7 +610,7 @@ mod tests {
 
             // Verify that the File::ObjectStorage was passed through without fetching
             match &stored_input.messages[0].content[0] {
-                StoredInputMessageContent::File(stored_file) => {
+                StoredInputContentBlock::File(stored_file) => {
                     assert_eq!(stored_file.storage_path.path, storage_path.path);
                     assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     assert_eq!(
@@ -647,7 +647,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::File(file.clone())],
+                    content: vec![InputContentBlock::File(file.clone())],
                 }],
             };
 
@@ -690,7 +690,7 @@ mod tests {
 
             // Verify that the File::Base64 was converted to StoredFile
             match &stored_input.messages[0].content[0] {
-                StoredInputMessageContent::File(stored_file) => {
+                StoredInputContentBlock::File(stored_file) => {
                     // Should have been processed into a stored file
                     assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     // With disabled storage, path should still be generated
@@ -718,7 +718,7 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "original input".to_string(),
                         })],
                     }],
@@ -760,7 +760,7 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "original input".to_string(),
                         })],
                     }],
@@ -860,7 +860,7 @@ mod tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "original input".to_string(),
                         })],
                     }],
@@ -902,7 +902,7 @@ mod tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: "original input".to_string(),
                         })],
                     }],
@@ -1005,7 +1005,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "new input text".into(),
                     })],
                 }],
@@ -1042,7 +1042,7 @@ mod tests {
             // Input should be updated
             assert_eq!(updated.input.messages.len(), 1);
             match &updated.input.messages[0].content[0] {
-                StoredInputMessageContent::Text(text) => {
+                StoredInputContentBlock::Text(text) => {
                     assert_eq!(text.text, "new input text");
                 }
                 _ => panic!("Expected text content"),
@@ -1466,7 +1466,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "new input".into(),
                     })],
                 }],
@@ -1910,7 +1910,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "new json input".into(),
                     })],
                 }],

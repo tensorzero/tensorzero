@@ -494,7 +494,7 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentText:
+class InputContentBlockText:
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -511,14 +511,14 @@ class InputMessageContentText:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentTemplate:
+class InputContentBlockTemplate:
     arguments: dict[str, Any]
     name: str
     type: Literal["template"] = "template"
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolResult:
+class InputContentBlockToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -530,7 +530,7 @@ class InputMessageContentToolResult:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentRawText:
+class InputContentBlockRawText:
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
@@ -660,7 +660,7 @@ class StoragePath:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentText:
+class StoredInputContentBlockText:
     """
     InputMessages are validated against the input schema of the Function
     and then templated and transformed into RequestMessages for a particular Variant.
@@ -677,14 +677,14 @@ class StoredInputMessageContentText:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentTemplate:
+class StoredInputContentBlockTemplate:
     arguments: dict[str, Any]
     name: str
     type: Literal["template"] = "template"
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentToolResult:
+class StoredInputContentBlockToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
     """
@@ -696,7 +696,7 @@ class StoredInputMessageContentToolResult:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentRawText:
+class StoredInputContentBlockRawText:
     """
     Struct that represents raw text content that should be passed directly to the model
     without any template processing or validation
@@ -707,7 +707,7 @@ class StoredInputMessageContentRawText:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentFile:
+class StoredInputContentBlockFile:
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
@@ -1062,12 +1062,12 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolCall:
+class InputContentBlockToolCall:
     type: Literal["tool_call"] = "tool_call"
 
 
 @dataclass(kw_only=True)
-class InputMessageContentUnknown(Unknown):
+class InputContentBlockUnknown(Unknown):
     """
     An unknown content block type, used to allow passing provider-specific
     content blocks (e.g. Anthropic's `redacted_thinking`) in and out
@@ -1185,12 +1185,12 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentToolCall(ToolCall):
+class StoredInputContentBlockToolCall(ToolCall):
     type: Literal["tool_call"] = "tool_call"
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentUnknown(Unknown):
+class StoredInputContentBlockUnknown(Unknown):
     type: Literal["unknown"] = "unknown"
 
 
@@ -1263,25 +1263,37 @@ File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorage |
 
 
 @dataclass(kw_only=True)
-class InputMessageContentThought(Thought):
+class InputContentBlockThought(Thought):
     type: Literal["thought"] = "thought"
 
 
 @dataclass(kw_only=True)
-class InputMessageContentFile:
+class InputContentBlockFile:
     type: Literal["file"] = "file"
 
 
-InputMessageContent = (
-    InputMessageContentText
-    | InputMessageContentTemplate
-    | InputMessageContentToolCall
-    | InputMessageContentToolResult
-    | InputMessageContentRawText
-    | InputMessageContentThought
-    | InputMessageContentFile
-    | InputMessageContentUnknown
+InputContentBlock = (
+    InputContentBlockText
+    | InputContentBlockTemplate
+    | InputContentBlockToolCall
+    | InputContentBlockToolResult
+    | InputContentBlockRawText
+    | InputContentBlockThought
+    | InputContentBlockFile
+    | InputContentBlockUnknown
 )
+
+
+@dataclass(kw_only=True)
+class InputMessage:
+    """
+    InputMessage and Role are our representation of the input sent by the client
+    prior to any processing into LLM representations below.
+    `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
+    """
+
+    content: list[InputContentBlock]
+    role: Role
 
 
 @dataclass(kw_only=True)
@@ -1300,20 +1312,30 @@ class ProviderTool:
 
 
 @dataclass(kw_only=True)
-class StoredInputMessageContentThought(Thought):
+class StoredInputContentBlockThought(Thought):
     type: Literal["thought"] = "thought"
 
 
-StoredInputMessageContent = (
-    StoredInputMessageContentText
-    | StoredInputMessageContentTemplate
-    | StoredInputMessageContentToolCall
-    | StoredInputMessageContentToolResult
-    | StoredInputMessageContentRawText
-    | StoredInputMessageContentThought
-    | StoredInputMessageContentFile
-    | StoredInputMessageContentUnknown
+StoredInputContentBlock = (
+    StoredInputContentBlockText
+    | StoredInputContentBlockTemplate
+    | StoredInputContentBlockToolCall
+    | StoredInputContentBlockToolResult
+    | StoredInputContentBlockRawText
+    | StoredInputContentBlockThought
+    | StoredInputContentBlockFile
+    | StoredInputContentBlockUnknown
 )
+
+
+@dataclass(kw_only=True)
+class StoredInputMessage:
+    """
+    `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
+    """
+
+    content: list[StoredInputContentBlock]
+    role: Role
 
 
 @dataclass(kw_only=True)
@@ -1470,28 +1492,6 @@ class DynamicToolParams:
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
-
-
-@dataclass(kw_only=True)
-class InputMessage:
-    """
-    InputMessage and Role are our representation of the input sent by the client
-    prior to any processing into LLM representations below.
-    `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-    """
-
-    content: list[InputMessageContent]
-    role: Role
-
-
-@dataclass(kw_only=True)
-class StoredInputMessage:
-    """
-    `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
-    """
-
-    content: list[StoredInputMessageContent]
-    role: Role
 
 
 @dataclass(kw_only=True)

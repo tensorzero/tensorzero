@@ -13,7 +13,7 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::inference::types::{
     Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, System, Text,
+    StoredInputContentBlock, System, Text,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -48,7 +48,7 @@ mod get_datapoints_tests {
                 ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -130,7 +130,7 @@ mod get_datapoints_tests {
                 ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
@@ -218,7 +218,7 @@ mod get_datapoints_tests {
                 ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: json!({"query": "test"}).to_string(),
                     })],
                 }],
@@ -289,7 +289,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Message 1".to_string(),
                     })],
                 }],
@@ -317,7 +317,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Message 2".to_string(),
                     })],
                 }],
@@ -345,7 +345,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Query".to_string(),
                     })],
                 }],
@@ -421,7 +421,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -489,7 +489,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -562,7 +562,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -624,7 +624,7 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -688,7 +688,7 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: format!("Message {i}"),
                         })],
                     }],
@@ -798,7 +798,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 1".to_string(),
                     })],
                 }],
@@ -827,7 +827,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 2".to_string(),
                     })],
                 }],
@@ -912,7 +912,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 1".to_string(),
                     })],
                 }],
@@ -941,7 +941,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 2".to_string(),
                     })],
                 }],
@@ -1031,7 +1031,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -1130,7 +1130,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 1".to_string(),
                     })],
                 }],
@@ -1159,7 +1159,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 2".to_string(),
                     })],
                 }],
@@ -1188,7 +1188,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test 3".to_string(),
                     })],
                 }],
@@ -1321,7 +1321,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test".to_string(),
                     })],
                 }],
@@ -1400,7 +1400,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Chat test".to_string(),
                     })],
                 }],
@@ -1429,7 +1429,7 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "JSON test".to_string(),
                     })],
                 }],
@@ -1502,7 +1502,7 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
+                        content: vec![StoredInputContentBlock::Text(Text {
                             text: format!("Message {i}"),
                         })],
                     }],

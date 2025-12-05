@@ -1532,7 +1532,7 @@ async fn test_fast_inference_then_feedback() {
                         ])))),
                         messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::InputMessageContent::Text(Text {
+                            content: vec![tensorzero::InputContentBlock::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

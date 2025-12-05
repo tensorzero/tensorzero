@@ -18,7 +18,7 @@ use serde_json::{from_value, json, to_value, Map};
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputContentBlock, InputMessage,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,
@@ -172,7 +172,7 @@ pub async fn mutate_variant(
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Template(Template {
+                content: vec![InputContentBlock::Template(Template {
                     name: "user".to_string(),
                     arguments,
                 })],

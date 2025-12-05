@@ -7,7 +7,7 @@ use tensorzero::InferenceResponse;
 use tensorzero::InferenceResponseChunk;
 use tensorzero::Input;
 use tensorzero::InputMessage;
-use tensorzero::InputMessageContent;
+use tensorzero::InputContentBlock;
 use tensorzero::Role;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero_core::inference::types::Text;
@@ -185,7 +185,7 @@ async fn test_global_region_non_streaming() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -232,7 +232,7 @@ async fn test_global_region_streaming() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],

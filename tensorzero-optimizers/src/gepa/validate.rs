@@ -9,7 +9,7 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::FunctionConfig,
-    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputContentBlock},
     optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
     tool::StaticToolConfig,
@@ -226,13 +226,13 @@ fn validate_stored_input_messages(
         for (content_idx, content_block) in message.content.iter().enumerate() {
             match content_block {
                 // Check for unsupported media types (File includes images/files)
-                StoredInputMessageContent::File(_) => {
+                StoredInputContentBlock::File(_) => {
                     return Err(format!(
                         "stored_input.messages[{msg_idx}].content[{content_idx}] contains File (unsupported media type)"
                     ));
                 }
                 // Check Text block
-                StoredInputMessageContent::Text(text) => {
+                StoredInputContentBlock::Text(text) => {
                     if text.text.is_empty() {
                         return Err(format!(
                             "stored_input.messages[{msg_idx}].content[{content_idx}] Text block has empty text"
@@ -240,7 +240,7 @@ fn validate_stored_input_messages(
                     }
                 }
                 // Check ToolCall block
-                StoredInputMessageContent::ToolCall(tool_call) => {
+                StoredInputContentBlock::ToolCall(tool_call) => {
                     if tool_call.name.is_empty() {
                         return Err(format!(
                             "stored_input.messages[{msg_idx}].content[{content_idx}] ToolCall block has name as empty"
@@ -248,7 +248,7 @@ fn validate_stored_input_messages(
                     }
                 }
                 // Check Thought block
-                StoredInputMessageContent::Thought(thought) => {
+                StoredInputContentBlock::Thought(thought) => {
                     if thought.text.is_none() && thought.summary.is_none() {
                         return Err(format!(
                             "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has both text and summary as None"
@@ -256,10 +256,10 @@ fn validate_stored_input_messages(
                     }
                 }
                 // These are fine for GEPA
-                StoredInputMessageContent::ToolResult(_) => {}
-                StoredInputMessageContent::Template(_) => {}
-                StoredInputMessageContent::RawText(_) => {}
-                StoredInputMessageContent::Unknown(_) => {}
+                StoredInputContentBlock::ToolResult(_) => {}
+                StoredInputContentBlock::Template(_) => {}
+                StoredInputContentBlock::RawText(_) => {}
+                StoredInputContentBlock::Unknown(_) => {}
             }
         }
     }
@@ -274,7 +274,7 @@ fn validate_stored_input_messages(
 /// - stored_output is JsonInferenceOutput with parsed is None
 /// - stored_output is ChatInferenceOutput with length 0
 /// - Any message has no content blocks (empty content list)
-/// - Any message contains a File block (StoredInputMessageContent::File(_))
+/// - Any message contains a File block (StoredInputContentBlock::File(_))
 /// - Any Text block has empty text (text.is_empty())
 /// - Any ToolCall block has name as None/empty
 /// - Any Thought block has both text and summary as None
@@ -449,7 +449,7 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text, Unknown,
+            StoredInput, StoredInputContentBlock, StoredInputMessage, System, Text, Unknown,
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
@@ -486,7 +486,7 @@ mod tests {
                 system: Some(System::Text("Test system".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text(Text {
+                    content: vec![StoredInputContentBlock::Text(Text {
                         text: "Test message".to_string(),
                     })],
                 }],
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn test_validate_examples_message_empty_text() {
         let mut sample = create_valid_rendered_sample();
-        sample.stored_input.messages[0].content = vec![StoredInputMessageContent::Text(Text {
+        sample.stored_input.messages[0].content = vec![StoredInputContentBlock::Text(Text {
             text: String::new(),
         })];
 
@@ -816,7 +816,7 @@ mod tests {
     fn test_validate_stored_input_messages_text_empty() {
         let messages = vec![StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text(Text {
+            content: vec![StoredInputContentBlock::Text(Text {
                 text: String::new(),
             })],
         }];
@@ -832,7 +832,7 @@ mod tests {
 
         let messages = vec![StoredInputMessage {
             role: Role::Assistant,
-            content: vec![StoredInputMessageContent::ToolCall(ToolCall {
+            content: vec![StoredInputContentBlock::ToolCall(ToolCall {
                 name: String::new(),
                 arguments: "{}".to_string(),
                 id: "test".to_string(),
@@ -852,7 +852,7 @@ mod tests {
 
         let messages = vec![StoredInputMessage {
             role: Role::Assistant,
-            content: vec![StoredInputMessageContent::Thought(Thought {
+            content: vec![StoredInputContentBlock::Thought(Thought {
                 text: None,
                 summary: None,
                 provider_type: None,
@@ -871,7 +871,7 @@ mod tests {
     fn test_validate_stored_input_messages_valid() {
         let messages = vec![StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text(Text {
+            content: vec![StoredInputContentBlock::Text(Text {
                 text: "Valid message".to_string(),
             })],
         }];
@@ -886,7 +886,7 @@ mod tests {
 
         let messages = vec![StoredInputMessage {
             role: Role::User, // Tool role doesn't exist, use User
-            content: vec![StoredInputMessageContent::ToolResult(ToolResult {
+            content: vec![StoredInputContentBlock::ToolResult(ToolResult {
                 name: "test_tool".to_string(),
                 result: "success".to_string(),
                 id: "tool_id".to_string(),
@@ -903,13 +903,13 @@ mod tests {
         let messages = vec![
             StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "First message".to_string(),
                 })],
             },
             StoredInputMessage {
                 role: Role::Assistant,
-                content: vec![StoredInputMessageContent::Text(Text {
+                content: vec![StoredInputContentBlock::Text(Text {
                     text: "Second message".to_string(),
                 })],
             },

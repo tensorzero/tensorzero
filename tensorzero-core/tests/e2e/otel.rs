@@ -12,7 +12,7 @@ use opentelemetry_sdk::{
 };
 use tensorzero::{
     Client, ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
+    InferenceResponseChunk, Input, InputContentBlock, InputMessage, Role, Usage,
 };
 use tensorzero::{
     InferenceParams,
@@ -174,7 +174,7 @@ pub async fn test_reproduce_tracing_bug() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -202,7 +202,7 @@ pub async fn test_reproduce_tracing_bug() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -261,7 +261,7 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -313,7 +313,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
                 messages: vec![InputMessage {
                     role: Role::User,
 
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -408,7 +408,7 @@ async fn test_stream_fatal_error_usage() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -859,7 +859,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
                     system: None,
                     messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(Text {
+                        content: vec![InputContentBlock::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1085,7 +1085,7 @@ pub fn test_capture_rate_limit_error() {
                     system: None,
                     messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(Text {
+                        content: vec![InputContentBlock::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1251,7 +1251,7 @@ pub async fn test_suppress_otel_spans() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -1299,7 +1299,7 @@ pub async fn test_capture_feedback_spans() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],

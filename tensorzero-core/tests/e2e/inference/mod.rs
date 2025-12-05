@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
     ClientExt, ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
-    InputMessageContent,
+    InputContentBlock,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
@@ -34,7 +34,7 @@ use tensorzero_core::{
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
-        StoredInputMessageContent, StoredRequestMessage, Text, Unknown,
+        StoredInputContentBlock, StoredRequestMessage, Text, Unknown,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -1382,7 +1382,7 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
@@ -1429,7 +1429,7 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
+                    content: vec![InputContentBlock::Template(Template {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([
                             ("type".to_string(), "tacos".into()),
@@ -1781,7 +1781,7 @@ base_path = "{root}"
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1826,7 +1826,7 @@ model = "dummy::good"
             )])))),
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1895,7 +1895,7 @@ model_name = "json"
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1967,7 +1967,7 @@ model = "dummy::flaky_model"
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(Text {
+                content: vec![InputContentBlock::Text(Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -2608,7 +2608,7 @@ pub async fn test_raw_text(client: tensorzero::Client) {
                 )])))),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::RawText(RawText {
+                    content: vec![InputContentBlock::RawText(RawText {
                         value: "This is not the normal input".into(),
                     })],
                 }],
@@ -2924,7 +2924,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -2965,7 +2965,7 @@ async fn test_dummy_only_replicated_clickhouse() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
+                    content: vec![InputContentBlock::Text(Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -3242,10 +3242,10 @@ async fn test_image_inference_without_object_store() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        InputMessageContent::File(File::Base64(
+                        InputContentBlock::File(File::Base64(
                             Base64File::new(
                                 None,
                                 Some(mime::IMAGE_PNG),
@@ -3417,10 +3417,10 @@ async fn test_tool_call_input_no_warning() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(Text {
+                        InputContentBlock::Text(Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+                        InputContentBlock::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                             id: "0".to_string(),
                             name: "get_temperature".to_string(),
                             arguments: json!({
@@ -3854,11 +3854,11 @@ async fn test_multiple_text_blocks_in_message() {
     assert_eq!(input.messages[0].content.len(), 2);
     assert!(matches!(
         input.messages[0].content[0],
-        StoredInputMessageContent::Text(_)
+        StoredInputContentBlock::Text(_)
     ));
     assert!(matches!(
         input.messages[0].content[1],
-        StoredInputMessageContent::Text(_)
+        StoredInputContentBlock::Text(_)
     ));
 }
 
@@ -3942,7 +3942,7 @@ async fn test_clickhouse_bulk_insert() {
                         system: None,
                         messages: vec![InputMessage {
                             role: Role::User,
-                            content: vec![InputMessageContent::Text(Text {
+                            content: vec![InputContentBlock::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             })],
                         }],

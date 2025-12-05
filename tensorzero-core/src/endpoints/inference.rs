@@ -1547,7 +1547,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
+        Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputContentBlock,
         JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
         storage::{StorageKind, StoragePath},
     };
@@ -1789,7 +1789,7 @@ mod tests {
         assert_eq!(input_with_url.messages[0].content.len(), 1);
         assert_eq!(
             input_with_url.messages[0].content[0],
-            InputMessageContent::File(File::Url(UrlFile {
+            InputContentBlock::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
                 detail: None,
@@ -1822,7 +1822,7 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64(
+            InputContentBlock::File(File::Base64(
                 Base64File::new(
                     None,
                     Some(mime::IMAGE_PNG),
@@ -1888,7 +1888,7 @@ mod tests {
         assert_eq!(input_with_url.messages[0].content.len(), 1);
         assert_eq!(
             input_with_url.messages[0].content[0],
-            InputMessageContent::File(File::Url(UrlFile {
+            InputContentBlock::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
                 detail: None,
@@ -1921,7 +1921,7 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64(
+            InputContentBlock::File(File::Base64(
                 Base64File::new(
                     None,
                     Some(mime::IMAGE_PNG),
@@ -1969,7 +1969,7 @@ mod tests {
         assert_eq!(input_with_object_storage.messages[0].content.len(), 1);
         assert_eq!(
             input_with_object_storage.messages[0].content[0],
-            InputMessageContent::File(File::ObjectStoragePointer(ObjectStoragePointer {
+            InputContentBlock::File(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 storage_path: StoragePath {
