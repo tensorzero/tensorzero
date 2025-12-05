@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - "docs/**"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "tensorzero/pr-*"]
   workflow_dispatch:
 
 concurrency:
