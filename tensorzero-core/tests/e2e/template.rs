@@ -1,11 +1,11 @@
 use http::StatusCode;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::{InferenceOutput, InferenceResponse};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
-        CLICKHOUSE_URL,
+        CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
+        select_model_inferences_clickhouse,
     },
     inference::types::{Arguments, ContentBlockChatOutput, System, Text},
 };
@@ -297,7 +297,10 @@ async fn e2e_test_best_of_n_template_no_schema() {
         let model_name = result.get("model_name").unwrap().as_str().unwrap();
         if model_name == "dummy::best_of_n_0" {
             let system = &result["system"];
-            assert_eq!(system, "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nouter template system text: `My system message`\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response.");
+            assert_eq!(
+                system,
+                "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nouter template system text: `My system message`\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response."
+            );
             let input_messages = result["input_messages"].as_str().unwrap();
             let input_messages = serde_json::from_str::<Value>(input_messages).unwrap();
             assert_eq!(
@@ -562,7 +565,7 @@ async fn e2e_test_named_system_template_no_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
@@ -627,7 +630,7 @@ async fn e2e_test_named_system_template_with_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "AskJeeves".into(),
@@ -667,7 +670,7 @@ async fn e2e_test_named_system_template_with_schema() {
         .inference(tensorzero::ClientInferenceParams {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     123.into(),

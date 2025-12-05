@@ -3,6 +3,7 @@ import type {
   ContentBlockChatOutput,
   Input,
   JsonInferenceOutput,
+  JsonValue,
 } from "~/types/tensorzero";
 
 // Schema for the create datapoint form data
@@ -27,6 +28,10 @@ export const createDatapointFormSchema = z.object({
       str ? (JSON.parse(str) as Record<string, string>) : undefined,
     ),
   name: z.string().optional(),
+  output_schema: z
+    .string()
+    .optional()
+    .transform((str) => (str ? (JSON.parse(str) as JsonValue) : undefined)),
 });
 
 export type CreateDatapointFormData = z.infer<typeof createDatapointFormSchema>;
@@ -40,6 +45,7 @@ export interface CreateDatapointData {
   output?: ContentBlockChatOutput[] | JsonInferenceOutput;
   tags?: Record<string, string>;
   name?: string;
+  output_schema?: JsonValue;
 }
 
 /**
@@ -67,6 +73,10 @@ export function serializeCreateDatapointToFormData(
     formData.append("name", data.name);
   }
 
+  if (data.output_schema !== undefined) {
+    formData.append("output_schema", JSON.stringify(data.output_schema));
+  }
+
   return formData;
 }
 
@@ -85,6 +95,7 @@ export function parseCreateDatapointFormData(
     output: formData.get("output") || undefined,
     tags: formData.get("tags") || undefined,
     name: formData.get("name") || undefined,
+    output_schema: formData.get("output_schema") || undefined,
   };
 
   return createDatapointFormSchema.parse(rawData);

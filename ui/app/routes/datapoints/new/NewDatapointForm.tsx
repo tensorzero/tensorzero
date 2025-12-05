@@ -3,7 +3,8 @@ import { useFetcher } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { InputElement } from "~/components/input_output/InputElement";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
   SectionHeader,
   SectionLayout,
@@ -20,7 +21,9 @@ import type {
   ContentBlockChatOutput,
   Input as InputType,
   JsonInferenceOutput,
+  JsonValue,
 } from "~/types/tensorzero";
+import { validateJsonSchema } from "~/utils/jsonschema";
 import { serializeCreateDatapointToFormData } from "./formDataUtils";
 
 const DEFAULT_INPUT: InputType = {
@@ -48,20 +51,28 @@ export function NewDatapointForm() {
   >(undefined);
   const [tags, setTags] = useState<Record<string, string>>({});
   const [name, setName] = useState("");
+  const [outputSchema, setOutputSchema] = useState<JsonValue | undefined>(
+    undefined,
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const functionConfig = useFunctionConfig(selectedFunction);
   const functionType = functionConfig?.type;
 
-  // Reset output when function type changes
+  // Reset output and output schema when function config changes
   useEffect(() => {
-    if (functionType === "chat") {
+    if (functionConfig?.type === "chat") {
       setOutput(DEFAULT_CHAT_OUTPUT);
-    } else if (functionType === "json") {
+      setOutputSchema(undefined);
+    } else if (functionConfig?.type === "json") {
       setOutput(DEFAULT_JSON_OUTPUT);
+      setOutputSchema(functionConfig.output_schema);
     } else {
       setOutput(undefined);
+      setOutputSchema(undefined);
     }
-  }, [functionType]);
+    setValidationError(null);
+  }, [functionConfig]);
 
   // Handle form submission errors
   useEffect(() => {
@@ -84,6 +95,17 @@ export function NewDatapointForm() {
       return;
     }
 
+    // Validate output schema for JSON functions
+    if (functionType === "json" && outputSchema !== undefined) {
+      const schemaValidation = validateJsonSchema(outputSchema);
+      if (!schemaValidation.valid) {
+        setValidationError(schemaValidation.error);
+        return;
+      }
+    }
+
+    setValidationError(null);
+
     const formData = serializeCreateDatapointToFormData({
       dataset_name: selectedDataset,
       function_name: selectedFunction,
@@ -92,6 +114,7 @@ export function NewDatapointForm() {
       output,
       tags: Object.keys(tags).length > 0 ? tags : undefined,
       name: name.trim() || undefined,
+      output_schema: functionType === "json" ? outputSchema : undefined,
     });
 
     fetcher.submit(formData, { method: "post" });
@@ -110,17 +133,16 @@ export function NewDatapointForm() {
       <SectionLayout>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="dataset">Dataset *</Label>
+            <Label htmlFor="dataset">Dataset</Label>
             <DatasetSelector
               selected={selectedDataset ?? undefined}
               onSelect={(dataset) => setSelectedDataset(dataset)}
-              placeholder="Select dataset..."
               allowCreation
               disabled={isReadOnly}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="function">Function *</Label>
+            <Label htmlFor="function">Function</Label>
             <FunctionSelector
               selected={selectedFunction}
               onSelect={setSelectedFunction}
@@ -142,16 +164,32 @@ export function NewDatapointForm() {
               onMessagesChange={(messages) => setInput({ ...input, messages })}
             />
           </SectionLayout>
-
           <SectionLayout>
-            {/* TODO (DO NOT MERGE): Migrate to the new components + allow editing the output schema. */}
             <SectionHeader heading="Output" />
-            {output !== undefined && (
-              <Output
-                output={output}
-                isEditing={true}
-                onOutputChange={(newOutput) => setOutput(newOutput)}
-              />
+            {output !== undefined &&
+              (functionType === "json" ? (
+                <JsonOutputElement
+                  output={output as JsonInferenceOutput}
+                  outputSchema={outputSchema}
+                  isEditing={true}
+                  onOutputChange={(newOutput) => {
+                    setOutput(newOutput);
+                    setValidationError(null);
+                  }}
+                  onOutputSchemaChange={(schema) => {
+                    setOutputSchema(schema);
+                    setValidationError(null);
+                  }}
+                />
+              ) : (
+                <ChatOutputElement
+                  output={output as ContentBlockChatOutput[]}
+                  isEditing={true}
+                  onOutputChange={(newOutput) => setOutput(newOutput)}
+                />
+              ))}
+            {validationError && (
+              <div className="mt-2 text-sm text-red-600">{validationError}</div>
             )}
           </SectionLayout>
 

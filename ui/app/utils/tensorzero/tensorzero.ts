@@ -16,14 +16,16 @@ import type {
   CloneDatapointsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
+  Config,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  GetInferenceBoundsResponse,
-  InternalListInferencesByIdResponse,
+  GetInferencesResponse,
   ListDatapointsRequest,
+  ListDatasetsResponse,
+  ListInferencesRequest,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -497,6 +499,34 @@ export class TensorZeroClient {
     return body;
   }
 
+  async listDatasets(params: {
+    function_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListDatasetsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    if (params.offset !== undefined) {
+      searchParams.append("offset", params.offset.toString());
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return await response.json();
+  }
+
   async updateDatapointsMetadata(
     datasetName: string,
     datapoints: UpdateDatapointsMetadataRequest,
@@ -608,81 +638,38 @@ export class TensorZeroClient {
   }
 
   /**
-   * Gets inference table bounds (min/max IDs and count) with optional filters.
-   * @param params - Optional filters (function_name, variant_name, episode_id)
-   * @returns A promise that resolves with the inference bounds
+   * Lists inferences with optional filtering, pagination, and sorting.
+   * Uses the public v1 API endpoint.
+   * @param request - The list inferences request parameters
+   * @returns A promise that resolves with the inferences response
    * @throws Error if the request fails
    */
-  async getInferenceBounds(params?: {
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<GetInferenceBoundsResponse> {
-    const searchParams = new URLSearchParams();
-
-    if (params?.function_name) {
-      searchParams.append("function_name", params.function_name);
-    }
-    if (params?.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params?.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences/bounds${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
+  async listInferences(
+    request: ListInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/list_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as GetInferenceBoundsResponse;
+    return (await response.json()) as GetInferencesResponse;
   }
 
   /**
-   * Internal: List inferences by ID with pagination.
-   * @param params - Query parameters for listing inferences
-   * @returns A promise that resolves with the list of inferences
+   * Fetches the gateway configuration for the UI.
+   * @returns A promise that resolves with the Config object
    * @throws Error if the request fails
    */
-  async internalListInferencesById(params: {
-    limit: number;
-    before?: string;
-    after?: string;
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<InternalListInferencesByIdResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.append("limit", params.limit.toString());
-
-    if (params.before) {
-      searchParams.append("before", params.before);
-    }
-    if (params.after) {
-      searchParams.append("after", params.after);
-    }
-    if (params.function_name) {
-      searchParams.append("function_name", params.function_name);
-    }
-    if (params.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
+  async getUiConfig(): Promise<Config> {
+    const response = await this.fetch("/internal/ui-config", { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as InternalListInferencesByIdResponse;
+    return (await response.json()) as Config;
   }
 
   private async fetch(

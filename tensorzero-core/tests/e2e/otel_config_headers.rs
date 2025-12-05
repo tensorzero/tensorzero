@@ -2,19 +2,17 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use uuid::Uuid;
 
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
-use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
-};
-use tensorzero_core::inference::types::TextKind;
+use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
+use tensorzero_core::inference::types::Text;
 
 use crate::common::get_gateway_endpoint;
 use crate::otel::install_capturing_otel_exporter;
-use crate::otel_export::{get_tempo_spans, TempoSpans};
+use crate::otel_export::{TempoSpans, get_tempo_spans};
 
 /// Test that static headers from config are applied
 /// This verifies that the config parses correctly and the system works end-to-end
@@ -37,11 +35,11 @@ extra_headers."X-Static-Header-2" = "static-value-2"
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test static headers".to_string(),
                     })],
                 }],
@@ -81,11 +79,11 @@ extra_headers."X-Config-Header" = "config-value"
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test mixed headers".to_string(),
                     })],
                 }],
@@ -120,11 +118,11 @@ extra_headers."X-Empty-Header" = ""
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test empty header value".to_string(),
                     })],
                 }],
@@ -154,11 +152,11 @@ enabled = true
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test without config headers".to_string(),
                     })],
                 }],
@@ -194,11 +192,11 @@ extra_headers."X-Multi-Header" = "multi-value"
         client
             .inference(ClientInferenceParams {
                 model_name: Some("dummy::good".to_string()),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: format!("Request {i}"),
                         })],
                     }],
@@ -236,11 +234,11 @@ extra_headers."x-lowercase" = "lowercase-value"
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Test various header formats".to_string(),
                     })],
                 }],

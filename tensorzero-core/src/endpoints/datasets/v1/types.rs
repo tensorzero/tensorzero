@@ -177,12 +177,12 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
         if !tool_params_is_default {
             if !tool_params_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `tool_params` (deprecated) and flattened tool parameter fields. Use only the flattened fields."
+                    "Cannot specify both `tool_params` (deprecated) and flattened tool parameter fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+                "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)",
             );
             // Copy tool_params to tool_params_new
             if let Some(tool_params) = &helper.tool_params {
@@ -200,12 +200,12 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
         if !metadata_is_default {
             if !metadata_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields."
+                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)",
             );
             // Copy metadata to metadata_new
             if let Some(metadata) = &helper.metadata {
@@ -350,12 +350,12 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
         if !metadata_is_default {
             if !metadata_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields."
+                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)",
             );
             // Copy metadata to metadata_new
             if let Some(metadata) = &helper.metadata {
@@ -679,6 +679,26 @@ pub struct DeleteDatapointsResponse {
     pub num_deleted_datapoints: u64,
 }
 
+/// Metadata for a single dataset.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DatasetMetadata {
+    /// The name of the dataset.
+    pub dataset_name: String,
+    /// The total number of datapoints in the dataset.
+    pub datapoint_count: u32,
+    /// The timestamp of the last update (ISO 8601 format).
+    pub last_updated: String,
+}
+
+/// Response containing a list of datasets.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ListDatasetsResponse {
+    /// List of dataset metadata.
+    pub datasets: Vec<DatasetMetadata>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -702,7 +722,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
-        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -736,10 +758,12 @@ mod tests {
 
         let result: Result<UpdateChatDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -779,7 +803,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
-        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
@@ -816,10 +842,12 @@ mod tests {
 
         let result: Result<UpdateChatDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
@@ -856,7 +884,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
-        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -890,10 +920,12 @@ mod tests {
 
         let result: Result<UpdateJsonDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -971,6 +1003,8 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
-        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+        ));
     }
 }

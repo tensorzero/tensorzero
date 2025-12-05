@@ -6,13 +6,13 @@ use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::{
+    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
+};
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -26,8 +26,8 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper, get_chat_url,
+    handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 

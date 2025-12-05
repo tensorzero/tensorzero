@@ -13,7 +13,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::{check_duplicates_across_map, check_duplicates_within, VariantSampler};
+use super::{VariantSampler, check_duplicates_across_map, check_duplicates_within};
 
 /// Pure function for static weights sampling logic.
 /// Given a uniform sample in [0, 1), selects a variant from active_variants
@@ -240,12 +240,10 @@ mod tests {
     use std::io::Write;
 
     use super::*;
-    use crate::config::{
-        Config, ConfigFileGlob, ConfigLoadInfo, ErrorContext, SchemaData, TimeoutsConfig,
-    };
+    use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
     use tempfile::NamedTempFile;
     use tokio;
     use uuid::Uuid;
@@ -350,9 +348,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("no candidate variants with positive weight"));
+        assert!(
+            err.to_string()
+                .contains("no candidate variants with positive weight")
+        );
         assert!(err.to_string().contains("no fallback variants"));
     }
 
@@ -378,9 +377,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("no candidate variants with positive weight"));
+        assert!(
+            err.to_string()
+                .contains("no candidate variants with positive weight")
+        );
     }
 
     #[tokio::test]
@@ -462,7 +462,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(config_str.as_bytes()).unwrap();
 
-        let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+        let config = Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
             false,
         )
@@ -561,7 +561,7 @@ mod tests {
 
     fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
         names
             .iter()

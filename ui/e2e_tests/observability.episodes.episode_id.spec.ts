@@ -24,8 +24,8 @@ test("should be able to add comment feedback via the episode page", async ({
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
 
-  // Click "Select a metric"
-  await page.getByText("Select a metric").click();
+  // Open the metric combobox
+  await page.getByRole("combobox", { name: "Metric" }).click();
 
   // Explicitly wait for the item to be visible before clicking
   const metricItemLocator = page

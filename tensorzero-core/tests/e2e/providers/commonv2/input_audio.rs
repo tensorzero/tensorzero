@@ -1,17 +1,17 @@
 use crate::providers::common::E2ETestProvider;
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
+    InputMessage, InputMessageContent,
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
     db::clickhouse::test_helpers::{get_clickhouse, select_model_inference_clickhouse},
     inference::types::{
+        ContentBlockChatOutput, File, Role, Text,
         file::Base64File,
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, TextKind,
     },
 };
 use uuid::Uuid;
@@ -58,7 +58,7 @@ const AUDIO_FILE_HASH: &str = "4e497dd5ba1f3761a3d8bdf21da18632d4b919e66cba20af3
 
 pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
-    let (_client, _storage_path) = test_base64_audio_inference_with_provider_and_store(
+    let (_client, _storage_path) = Box::pin(test_base64_audio_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -74,7 +74,7 @@ pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that audio was stored in filesystem
@@ -109,18 +109,18 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                 function_name: Some("input_audio_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "What's going on in this audio?".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(
+                            InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    "audio/mpeg".parse().unwrap(),
+                                    Some("audio/mpeg".parse().unwrap()),
                                     audio_data.clone(),
                                     None,
                                     None,

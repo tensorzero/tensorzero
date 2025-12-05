@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{
-    escape_string_for_clickhouse_literal, ClickHouseConnectionInfo, ExternalDataInfo,
+    ClickHouseConnectionInfo, ExternalDataInfo, escape_string_for_clickhouse_literal,
 };
 use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
 use crate::endpoints::shared_types::OrderDirection;
@@ -17,7 +17,7 @@ use crate::db::datasets::{
     DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams, GetDatapointParams,
     GetDatapointsParams, GetDatasetMetadataParams, JsonInferenceDatapointInsert,
 };
-use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
+use crate::endpoints::datasets::{DatapointKind, StoredDatapoint, validate_dataset_name};
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -167,11 +167,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         let query = format!(
             r"
-            SELECT
-                dataset_name,
-                toUInt32(sum(count)) AS count,
-                formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-            FROM (
+            WITH unioned_datasets AS (
                 SELECT
                     dataset_name,
                     toUInt32(count()) AS count,
@@ -192,8 +188,13 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {function_where_clause}
                 GROUP BY dataset_name
             )
+            SELECT
+                dataset_name,
+                toUInt32(sum(count)) AS count,
+                formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+            FROM unioned_datasets
             GROUP BY dataset_name
-            ORDER BY last_updated DESC
+            ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
             {limit_clause}
             {offset_clause}
             FORMAT JSONEachRow
@@ -335,12 +336,12 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         }
 
         // If IDs are provided, they must not be empty.
-        if let Some(ids_vec) = ids {
-            if ids_vec.is_empty() {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: "ids must not be an empty list".to_string(),
-                }));
-            }
+        if let Some(ids_vec) = ids
+            && ids_vec.is_empty()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "ids must not be an empty list".to_string(),
+            }));
         }
 
         // Build params and where clauses.
@@ -954,10 +955,10 @@ allowed_tools,
     }
 
     // Append any extra WHERE clauses provided by the caller.
-    if let Some(extra_where) = &params.extra_where {
-        if !extra_where.is_empty() {
-            where_clauses.extend(extra_where.iter().cloned());
-        }
+    if let Some(extra_where) = &params.extra_where
+        && !extra_where.is_empty()
+    {
+        where_clauses.extend(extra_where.iter().cloned());
     }
 
     // If any WHERE conditions have been added, append them to the query.
@@ -987,6 +988,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::config::{MetricConfigLevel, MetricConfigType};
+    use crate::db::clickhouse::ClickHouseResponse;
+    use crate::db::clickhouse::ClickHouseResponseMetadata;
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::db::clickhouse::query_builder::test_util::{
         assert_query_contains, assert_query_does_not_contain,
@@ -994,8 +997,6 @@ mod tests {
     use crate::db::clickhouse::query_builder::{
         DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
     };
-    use crate::db::clickhouse::ClickHouseResponse;
-    use crate::db::clickhouse::ClickHouseResponseMetadata;
     use crate::db::datasets::{
         ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
     };
@@ -1736,33 +1737,30 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "
+                WITH unioned_datasets AS (
                     SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM ChatInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                    UNION ALL
+                    SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM JsonInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                )
+                SELECT
                     dataset_name,
                     toUInt32(sum(count)) AS count,
-                    formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-                    FROM (
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM ChatInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                        UNION ALL
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM JsonInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                )
+                    formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+                FROM unioned_datasets
                 GROUP BY dataset_name
-                ORDER BY last_updated DESC
+                ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
                 LIMIT {limit:UInt32}
                 OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");
@@ -1901,9 +1899,11 @@ mod tests {
                 // Verify the external data structure
                 assert_eq!(external_data.external_data_name, "new_data");
                 assert_eq!(external_data.format, "JSONEachRow");
-                assert!(external_data
-                    .structure
-                    .contains("dataset_name LowCardinality(String)"));
+                assert!(
+                    external_data
+                        .structure
+                        .contains("dataset_name LowCardinality(String)")
+                );
 
                 // Parse and verify the data
                 let actual_row_as_json: serde_json::Value =
@@ -2161,9 +2161,11 @@ mod tests {
                 // Verify the external data structure
                 assert_eq!(external_data.external_data_name, "new_data");
                 assert_eq!(external_data.format, "JSONEachRow");
-                assert!(external_data
-                    .structure
-                    .contains("dataset_name LowCardinality(String)"));
+                assert!(
+                    external_data
+                        .structure
+                        .contains("dataset_name LowCardinality(String)")
+                );
 
                 // Parse and verify the data
                 let actual_row_as_json: serde_json::Value =
@@ -2596,9 +2598,11 @@ mod tests {
                     // Verify JSON datapoints
                     assert_eq!(external_data.external_data_name, "new_data");
                     assert_eq!(external_data.format, "JSONEachRow");
-                    assert!(external_data
-                        .structure
-                        .contains("output_schema Nullable(String)"));
+                    assert!(
+                        external_data
+                            .structure
+                            .contains("output_schema Nullable(String)")
+                    );
 
                     let lines: Vec<&str> = external_data.data.lines().collect();
                     assert_eq!(lines.len(), 2, "Should have 2 JSON datapoints");

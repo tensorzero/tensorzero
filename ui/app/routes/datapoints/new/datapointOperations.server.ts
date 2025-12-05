@@ -4,6 +4,7 @@ import type {
   CreateDatapointRequest,
   Input,
   JsonInferenceOutput,
+  JsonValue,
 } from "~/types/tensorzero";
 
 export interface CreateDatapointParams {
@@ -14,6 +15,7 @@ export interface CreateDatapointParams {
   output?: ContentBlockChatOutput[] | JsonInferenceOutput;
   tags?: Record<string, string>;
   name?: string;
+  outputSchema?: JsonValue;
 }
 
 /**
@@ -25,8 +27,16 @@ export interface CreateDatapointParams {
 export async function createDatapoint(
   params: CreateDatapointParams,
 ): Promise<{ id: string }> {
-  const { datasetName, functionName, functionType, input, output, tags, name } =
-    params;
+  const {
+    datasetName,
+    functionName,
+    functionType,
+    input,
+    output,
+    tags,
+    name,
+    outputSchema,
+  } = params;
 
   let datapointRequest: CreateDatapointRequest;
 
@@ -52,6 +62,7 @@ export async function createDatapoint(
             raw: (output as JsonInferenceOutput).raw ?? null,
           }
         : undefined,
+      output_schema: outputSchema,
       tags,
       name,
     };

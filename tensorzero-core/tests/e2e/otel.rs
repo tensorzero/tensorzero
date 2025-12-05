@@ -5,25 +5,25 @@ use std::{
     time::{Duration, Instant},
 };
 
-use opentelemetry::{trace::Status, KeyValue, SpanId, Value};
+use opentelemetry::{KeyValue, SpanId, Value, trace::Status};
 use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
 use tensorzero::{
+    Client, ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse,
+    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
+};
+use tensorzero::{
+    InferenceParams,
     test_helpers::{
         make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
     },
-    InferenceParams,
-};
-use tensorzero::{
-    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role, Usage,
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
 };
-use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
+use tensorzero_core::{config::OtlpTracesFormat, inference::types::Text};
 use tensorzero_core::{
     endpoints::inference::ChatCompletionInferenceParams, observability::LogFormat,
 };
@@ -52,13 +52,11 @@ impl SpanExporter for CapturingOtelExporter {
 
 impl CapturingOtelExporter {
     pub fn take_spans(&self) -> Vec<SpanData> {
-        let spans = self
-            .spans
+        self.spans
             .lock()
             .expect("Failed to lock spans mutex")
             .replace(Vec::new())
-            .expect("CapturingExporter is already shut down");
-        spans
+            .expect("CapturingExporter is already shut down")
     }
 }
 
@@ -172,11 +170,11 @@ pub async fn test_reproduce_tracing_bug() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -200,11 +198,11 @@ pub async fn test_reproduce_tracing_bug() {
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -259,11 +257,11 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -310,12 +308,12 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
 
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -406,11 +404,11 @@ async fn test_stream_fatal_error_usage() {
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some(model_name.to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -857,11 +855,11 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
                 model_name: Some("openai::missing-model-name".to_string()),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1083,11 +1081,11 @@ pub fn test_capture_rate_limit_error() {
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
                 model_name: Some("dummy::good".to_string()),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is your name?".to_string(),
                         })],
                     }],
@@ -1249,11 +1247,11 @@ pub async fn test_suppress_otel_spans() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],
@@ -1297,11 +1295,11 @@ pub async fn test_capture_feedback_spans() {
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "What is your name?".to_string(),
                     })],
                 }],

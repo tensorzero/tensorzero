@@ -1,4 +1,3 @@
-import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { toDatasetUrl } from "~/utils/urls";
 import type {
@@ -29,6 +28,7 @@ function convertUpdateDatapointFormDataToUpdateDatapointRequest(
         id: formData.id,
         input: formData.input,
         output: formData.output as JsonInferenceOutput | undefined,
+        output_schema: formData.output_schema,
         tags: formData.tags,
       };
     }
@@ -57,12 +57,14 @@ export async function deleteDatapoint(params: {
 
   await getTensorZeroClient().deleteDatapoints(dataset_name, [id]);
 
-  const datasetCounts = await getDatasetMetadata({});
-  const datasetCount = datasetCounts.find(
-    (count) => count.dataset_name === dataset_name,
+  // TODO(shuyangli): this shouldn't really need to make another query; having the sequential calls
+  // may also get us into eventual consistency issues.
+  const datasetMetadata = await getTensorZeroClient().listDatasets({});
+  const dataset = datasetMetadata.datasets.find(
+    (dataset) => dataset.dataset_name === dataset_name,
   );
 
-  if (datasetCount === undefined) {
+  if (!dataset) {
     return { redirectTo: "/datasets" };
   }
   return { redirectTo: toDatasetUrl(dataset_name) };
@@ -76,8 +78,6 @@ export async function deleteDatapoint(params: {
  * - Creating a new datapoint with a new v7 UUID
  * - Marking the old datapoint as stale (setting staled_at timestamp)
  * - Returning the new datapoint ID
- *
- * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
  */
 export async function updateDatapoint(params: {
   parsedFormData: Omit<UpdateDatapointFormData, "action">;

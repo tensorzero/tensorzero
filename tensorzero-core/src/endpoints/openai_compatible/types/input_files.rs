@@ -89,8 +89,13 @@ pub fn convert_image_url_to_file(image_url: OpenAICompatibleImageUrl) -> Result<
     if image_url.url.scheme() == "data" {
         let image_url_str = image_url.url.to_string();
         let (mime_type, data) = parse_base64_file_data_url(&image_url_str)?;
-        let base64_file =
-            Base64File::new(None, mime_type, data.to_string(), image_url.detail, None)?;
+        let base64_file = Base64File::new(
+            None,
+            Some(mime_type),
+            data.to_string(),
+            image_url.detail,
+            None,
+        )?;
         Ok(File::Base64(base64_file))
     } else {
         Ok(File::Url(UrlFile {
@@ -107,7 +112,8 @@ pub fn convert_image_url_to_file(image_url: OpenAICompatibleImageUrl) -> Result<
 /// Parses the data URL and extracts MIME type and base64 data.
 pub fn convert_file_to_base64(file: OpenAICompatibleFile) -> Result<File, Error> {
     let (mime_type, data) = parse_base64_file_data_url(&file.file_data)?;
-    let base64_file = Base64File::new(None, mime_type, data.to_string(), None, file.filename)?;
+    let base64_file =
+        Base64File::new(None, Some(mime_type), data.to_string(), None, file.filename)?;
     Ok(File::Base64(base64_file))
 }
 
@@ -161,15 +167,15 @@ pub fn convert_input_audio_to_file(input_audio: OpenAICompatibleInputAudio) -> R
             _ => None,
         };
 
-        if let Some(expected) = expected_mime {
-            if inferred_mime.as_ref() != expected {
-                tracing::warn!(
-                    "Inferred audio MIME type `{}` differs from format field `{}` (expected `{}`). Using inferred type.",
-                    inferred_mime,
-                    input_audio.format,
-                    expected
-                );
-            }
+        if let Some(expected) = expected_mime
+            && inferred_mime.as_ref() != expected
+        {
+            tracing::warn!(
+                "Inferred audio MIME type `{}` differs from format field `{}` (expected `{}`). Using inferred type.",
+                inferred_mime,
+                input_audio.format,
+                expected
+            );
         }
 
         inferred_mime
@@ -183,7 +189,7 @@ pub fn convert_input_audio_to_file(input_audio: OpenAICompatibleInputAudio) -> R
     };
 
     // Create Base64File with the inferred MIME type and original base64 data
-    let base64_file = Base64File::new(None, mime_type, input_audio.data, None, None)?;
+    let base64_file = Base64File::new(None, Some(mime_type), input_audio.data, None, None)?;
     Ok(File::Base64(base64_file))
 }
 
@@ -193,8 +199,8 @@ mod tests {
     use serde_json::json;
 
     use crate::endpoints::openai_compatible::types::chat_completions::{
-        convert_openai_message_content, OpenAICompatibleContentBlock, OpenAICompatibleMessage,
-        OpenAICompatibleUserMessage,
+        OpenAICompatibleContentBlock, OpenAICompatibleMessage, OpenAICompatibleUserMessage,
+        convert_openai_message_content,
     };
     use crate::inference::types::{Input, InputMessageContent, Role};
     use crate::utils::testing::capture_logs;
@@ -422,18 +428,22 @@ mod tests {
         // Test error when prefix is missing
         let result = parse_base64_file_data_url("YWJjCg==");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("without the `data:` prefix"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("without the `data:` prefix")
+        );
 
         // Test error when base64 separator is missing
         let result = parse_base64_file_data_url("data:image/png,YWJjCg==");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("without the `;base64,` separator"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("without the `;base64,` separator")
+        );
     }
 
     #[test]

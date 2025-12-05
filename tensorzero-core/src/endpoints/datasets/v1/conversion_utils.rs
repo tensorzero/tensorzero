@@ -211,7 +211,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config
+        .into_config_without_writing_for_tests()
     }
 
     fn create_test_input() -> Input {
@@ -344,9 +344,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("not configured as a chat function"));
+        assert!(
+            err.to_string()
+                .contains("not configured as a chat function")
+        );
     }
 
     #[tokio::test]
@@ -610,9 +611,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("not configured as a JSON function"));
+        assert!(
+            err.to_string()
+                .contains("not configured as a JSON function")
+        );
     }
 
     #[tokio::test]

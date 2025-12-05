@@ -13,8 +13,7 @@ use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-        InferenceOutput,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,
@@ -202,10 +201,10 @@ async fn analyze_inference(
     // Create ClientInferenceParams for the analyze function
     let params = ClientInferenceParams {
         function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Template(Template {
+                content: vec![InputMessageContent::Template(Template {
                     name: "user".to_string(),
                     arguments,
                 })],
@@ -266,6 +265,8 @@ async fn analyze_inference(
             }))
         }
     };
+
+    tracing::debug!("Generated analysis: {}", analysis);
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {

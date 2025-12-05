@@ -20,14 +20,14 @@ use crate::inference::types::{
     ResolvedRequestMessage, Text,
 };
 use crate::tool::{
-    deserialize_tool_info, DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
+    DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
 };
-use crate::variant::{chat_completion::prepare_model_input, VariantConfig};
+use crate::variant::{VariantConfig, chat_completion::prepare_model_input};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, IntoPyObjectExt};
+use pyo3::{IntoPyObjectExt, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

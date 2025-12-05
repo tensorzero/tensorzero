@@ -53,8 +53,8 @@ pub use file::{
     Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
     PendingObjectStoreFile, UrlFile,
 };
-use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
+use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -87,19 +87,19 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
-    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent,
+    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent, write_file,
 };
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolCallWrapper, ToolResult, deserialize_optional_tool_info,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -125,10 +125,10 @@ pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
 pub use streams::{
-    collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
-    InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
+    ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
+    InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    UnknownChunk, collect_chunks,
 };
 pub use usage::Usage;
 
@@ -399,7 +399,7 @@ impl InputMessageContent {
                         let storage_kind = get_storage_kind(context)?;
                         let base64_file_for_path = Base64File::new(
                             source_url.clone(),
-                            mime_type.clone(),
+                            Some(mime_type.clone()),
                             data.to_string(),
                             // We explicitly set detail to None when computing the storage path.
                             // This is intentional for content-addressing: the detail parameter controls
@@ -627,7 +627,7 @@ impl LazyResolvedInputMessageContent {
                     let resolved_file = future.await?;
                     let base64_file = Base64File::new(
                         resolved_file.file.source_url.clone(),
-                        resolved_file.file.mime_type.clone(),
+                        Some(resolved_file.file.mime_type.clone()),
                         resolved_file.data.clone(),
                         resolved_file.file.detail.clone(),
                         resolved_file.file.filename.clone(),
@@ -648,7 +648,7 @@ impl LazyResolvedInputMessageContent {
                 LazyFile::Base64(pending) => {
                     let base64_file = Base64File::new(
                         pending.0.file.source_url.clone(),
-                        pending.0.file.mime_type.clone(),
+                        Some(pending.0.file.mime_type.clone()),
                         pending.0.data.clone(),
                         pending.0.file.detail.clone(),
                         pending.0.file.filename.clone(),
@@ -1008,7 +1008,7 @@ pub struct Thought {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub summary: Option<Vec<ThoughtSummaryBlock>>,
-    /// When set, this 'Thought' block will only be used for providers
+    /// When set, this `Thought` block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
     #[serde(
@@ -3366,14 +3366,16 @@ mod tests {
         assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
 
         // Invalid legacy FQN - errors
-        assert!(serde_json::from_value::<Unknown>(
-            json!({"data": {}, "model_provider_name": "bad"})
-        )
-        .is_err());
-        assert!(serde_json::from_value::<Unknown>(
-            json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
-        )
-        .is_err());
+        assert!(
+            serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "bad"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<Unknown>(
+                json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+            )
+            .is_err()
+        );
 
         // Conflict: both old and new fields
         assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());

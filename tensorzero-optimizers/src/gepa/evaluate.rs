@@ -10,7 +10,7 @@ use tensorzero_core::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::v1::{
         create_datapoints,
-        types::{CreateDatapointRequest, CreateDatapointsRequest},
+        types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse},
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
@@ -54,14 +54,14 @@ pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 /// * `dataset_name` - The name of the dataset to create
 ///
 /// # Returns
-/// * `()` - Returns success or error
+/// * `CreateDatapointsResponse` - The IDs of the created datapoints
 pub async fn create_evaluation_dataset(
     config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     samples: Vec<RenderedSample>,
     dataset_name: &str,
-) -> Result<(), Error> {
+) -> Result<CreateDatapointsResponse, Error> {
     // Convert RenderedSamples to CreateDatapointRequest using the helper method
     let datapoints: Result<Vec<CreateDatapointRequest>, Error> = samples
         .into_iter()
@@ -73,7 +73,7 @@ pub async fn create_evaluation_dataset(
     };
 
     // Call the datasets v1 create_datapoints function
-    create_datapoints(
+    let response = create_datapoints(
         config,
         http_client,
         clickhouse_connection_info,
@@ -82,7 +82,7 @@ pub async fn create_evaluation_dataset(
     )
     .await?;
 
-    Ok(())
+    Ok(response)
 }
 
 /// Holds the results of evaluating variants on a dataset

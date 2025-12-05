@@ -2,9 +2,9 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Extension, Json};
-use futures::stream::Stream;
+use axum::{Extension, Json, debug_handler};
 use futures::FutureExt;
+use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::counter;
@@ -28,7 +28,6 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::{FunctionConfig, FunctionConfigChat};
@@ -41,11 +40,12 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
     ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
+    collect_chunks,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -56,6 +56,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
@@ -1257,10 +1258,8 @@ impl InferenceResponseChunk {
                 InferenceResultChunk::Chat(result) => result.content.is_empty(),
                 InferenceResultChunk::Json(result) => result.raw.is_none(),
             };
-            if is_empty {
-                if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.sum_strict(&extra_usage);
-                }
+            if is_empty && let Some(extra_usage) = extra_usage.take() {
+                result_usage.sum_strict(&extra_usage);
             }
         }
         Some(match inference_result {
@@ -1532,7 +1531,7 @@ fn prepare_candidate_variants(
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
             }
-            .into())
+            .into());
         }
     };
     Ok(needs_sampling)
@@ -1548,9 +1547,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        storage::{StorageKind, StoragePath},
         Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
+        storage::{StorageKind, StoragePath},
     };
 
     #[tokio::test]
@@ -1826,7 +1825,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1853,7 +1852,7 @@ mod tests {
         let file_base64 = File::Base64(
             Base64File::new(
                 None,
-                mime::IMAGE_PNG,
+                Some(mime::IMAGE_PNG),
                 "fake_base64_data".to_string(),
                 None,
                 None,
@@ -1925,7 +1924,7 @@ mod tests {
             InputMessageContent::File(File::Base64(
                 Base64File::new(
                     None,
-                    mime::IMAGE_PNG,
+                    Some(mime::IMAGE_PNG),
                     "fake_base64_data".to_string(),
                     None,
                     None
@@ -1993,8 +1992,14 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                Some(mime::IMAGE_JPEG),
+                "abcdef".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
 
         let serialized = serde_json::to_string(&original).unwrap();

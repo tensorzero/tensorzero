@@ -13,41 +13,44 @@ use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
-use snapshot::prepare_table_for_snapshot;
+use snapshot::SnapshotHash;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tracing::instrument;
 use tracing::Span;
+use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use unwritten::UnwrittenConfig;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
-use crate::error::{Error, ErrorDetails};
+use crate::endpoints::status::TENSORZERO_VERSION;
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
-use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
-use crate::tool::{create_json_mode_tool_call_config, StaticToolConfig, ToolChoice};
+use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -61,10 +64,12 @@ pub mod gateway;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
-mod snapshot;
+pub mod snapshot;
 mod span_map;
+pub mod stored;
 #[cfg(test)]
 mod tests;
+pub mod unwritten;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -106,6 +111,8 @@ pub struct Config {
     pub rate_limiting: RateLimitingConfig,
     #[serde(skip)]
     pub http_client: TensorzeroHttpClient,
+    #[serde(skip)]
+    pub hash: SnapshotHash,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -147,19 +154,23 @@ impl TimeoutsConfig {
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
 
-        if let Some(total_ms) = total_ms {
-            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(total_ms) = total_ms
+            && Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
-        if let Some(ttft_ms) = ttft_ms {
-            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(ttft_ms) = ttft_ms
+            && Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
 
         Ok(())
@@ -202,7 +213,9 @@ impl ObjectStoreInfo {
                         #[expect(clippy::if_not_else)]
                         if !std::fs::exists(path).unwrap_or(false) {
                             if skip_credential_validation() {
-                                tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
+                                tracing::warn!(
+                                    "Filesystem object store path does not exist: {path}. Treating object store as unconfigured"
+                                );
                                 return Ok(None);
                             }
                             return Err(Error::new(ErrorDetails::Config {
@@ -252,22 +265,30 @@ impl ObjectStoreInfo {
                     builder = builder.with_endpoint(endpoint);
                 }
                 if std::env::var("AWS_ALLOW_HTTP").as_deref() == Ok("true") {
-                    tracing::warn!("`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                    tracing::warn!(
+                        "`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                    );
                     if allow_http.is_some() {
-                        tracing::info!("Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`");
+                        tracing::info!(
+                            "Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`"
+                        );
                     }
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                        tracing::warn!(
+                            "`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                        );
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
 
-                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
-                    if endpoint.ends_with(bucket_name) {
-                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
-                    }
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint)
+                    && endpoint.ends_with(bucket_name)
+                {
+                    tracing::warn!(
+                        "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
+                    );
                 }
 
                 // This is used to speed up our unit tests - in the future,
@@ -299,7 +320,9 @@ impl ObjectStoreInfo {
     /// Verifies that the object store is configured correctly by writing an empty file to it.
     pub async fn verify(&self) -> Result<(), Error> {
         if let Some(store) = &self.object_store {
-            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            tracing::info!(
+                "Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)"
+            );
             store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
                 .await
                 .map_err(|e| {
@@ -720,12 +743,6 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
-#[derive(Debug)]
-pub struct ConfigLoadInfo {
-    pub config: Config,
-    pub snapshot: ConfigSnapshot,
-}
-
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
@@ -733,7 +750,7 @@ impl Config {
     ///
     /// In test code, a `Default` impl is available, but the config it produces might
     /// be completely broken (e.g. no builtin functions will be available).
-    pub async fn new_empty() -> Result<ConfigLoadInfo, Error> {
+    pub async fn new_empty() -> Result<UnwrittenConfig, Error> {
         // Use an empty glob, and validate credentials
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             &ConfigFileGlob::new_empty(),
@@ -745,14 +762,14 @@ impl Config {
 
     pub async fn load_and_verify_from_path(
         config_glob: &ConfigFileGlob,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             config_glob,
             validate_credentials,
@@ -765,9 +782,9 @@ impl Config {
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
         allow_empty_glob: bool,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
-        let config_load_info = if cfg!(feature = "e2e_tests") || !validate_credentials {
+        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
                 .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
@@ -775,33 +792,76 @@ impl Config {
             Self::load_from_toml(globbed_config.table).await?
         };
 
-        if validate_credentials {
-            if let Some(object_store) = &config_load_info.config.object_store_info {
-                object_store.verify().await?;
-            }
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
-        Ok(config_load_info)
+        Ok(unwritten_config)
     }
 
-    async fn load_from_toml(table: toml::Table) -> Result<ConfigLoadInfo, Error> {
+    /// Loads and initializes a config from a parsed TOML table.
+    ///
+    /// This is the core config loading function that transforms a merged TOML table into
+    /// a fully validated and initialized `Config`, paired with a `ConfigSnapshot` for database storage.
+    ///
+    /// # Config Loading Flow
+    ///
+    /// This function performs the following steps:
+    ///
+    /// 1. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
+    ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
+    ///
+    /// 2. **Initialize Components**: Load and initialize all config components:
+    ///    - Object storage (S3, filesystem)
+    ///    - Gateway settings (timeouts, OTLP, etc.)
+    ///    - HTTP client
+    ///    - Built-in functions (tensorzero::*)
+    ///    - User-defined functions (with validation against tensorzero:: prefix)
+    ///    - Tools
+    ///    - Models (with async credential validation)
+    ///    - Embedding models
+    ///    - Optimizers
+    ///    - Templates (load from filesystem, compile with MiniJinja)
+    ///
+    /// 3. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
+    ///    for database storage. The snapshot includes a Blake3 hash for version tracking.
+    ///
+    /// 4. **Validate**: Run comprehensive validation checks:
+    ///    - Function validation (schemas, templates, tools exist)
+    ///    - Model validation (timeout settings)
+    ///    - Metric name restrictions
+    ///    - Name prefix restrictions (tensorzero:: reserved)
+    ///
+    /// 5. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
+    ///    This happens after validation since evaluations write tensorzero:: prefixed items.
+    ///
+    /// 6. **Return UnwrittenConfig**: Pair the config and snapshot in an `UnwrittenConfig`.
+    ///    The snapshot is written to the database later via `into_config()`.
+    ///
+    /// # Why UnwrittenConfig?
+    ///
+    /// This function returns `UnwrittenConfig` (not just `Config`) because:
+    /// - Config loading happens **before** database connection setup
+    /// - The database connection settings come from the config itself
+    /// - We need to write the config snapshot to ClickHouse, but can't do it yet
+    /// - `UnwrittenConfig` holds both the ready-to-use config and the snapshot for later DB write
+    ///
+    /// The caller pattern is:
+    /// ```ignore
+    /// let unwritten_config = Config::load_from_toml(table).await?;
+    /// let clickhouse = setup_clickhouse(&unwritten_config).await?;
+    /// let config = unwritten_config.into_config(&clickhouse).await?;
+    /// ```
+    async fn load_from_toml(table: toml::Table) -> Result<UnwrittenConfig, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
-        // Steps for getting a sort-stable hashable Table
-        // Recursively walk the TOML table, sort all tables in place
-        // Serialize to a string, use that for ConfigSnapshot
-        // Continue parsing the table afterwards.
-        let table = prepare_table_for_snapshot(table);
-        // Write the prepared table back to a string so that we can hash + store it in the snapshot
-        let serialized_table = toml::to_string(&table).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize TOML config for snapshot: {e}"),
-            })
-        })?;
-        let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let mut templates = TemplateConfig::new();
+        // Clone the table before consumption - we need it for ConfigSnapshot creation
+        let table_for_snapshot = table.clone();
+
+        // Deserialize the TOML table into UninitializedConfig
+        let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
@@ -810,9 +870,6 @@ impl Config {
             .load(object_store_info.as_ref())?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
-
-        // Load built-in functions first
-        let mut functions = built_in::get_all_built_in_functions()?;
 
         // Load user-defined functions and ensure they don't use tensorzero:: prefix
         let user_functions = uninitialized_config
@@ -832,9 +889,6 @@ impl Config {
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
-
-        // Merge user functions into the functions map
-        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -910,6 +964,35 @@ impl Config {
             })
         })?;
 
+        // Initialize the templates
+        let user_template_paths = Config::get_templates(&user_functions);
+        if gateway_config.template_filesystem_access.enabled {
+            deprecation_warning(
+                "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
+            );
+        }
+        let template_fs_path = gateway_config
+            .template_filesystem_access
+            .base_path
+            .as_ref()
+            .map(|x| x.get_real_path());
+        let mut templates = TemplateConfig::new();
+        // IMPORTANT: we grab the `extra_templates` only from user-configured functions so that
+        // we only depend on user configuration in the snapshot.
+        let extra_templates = templates
+            .initialize(user_template_paths, template_fs_path)
+            .await?;
+
+        // Add built in functions
+        // NOTE: for now these are not versioned (will fix #4922)
+        let built_in_functions = built_in::get_all_built_in_functions()?;
+        let built_in_templates = Config::get_templates(&built_in_functions);
+        templates.add_templates(built_in_templates)?;
+        let functions = built_in_functions
+            .into_iter()
+            .chain(user_functions.into_iter())
+            .collect::<HashMap<String, Arc<FunctionConfig>>>();
+        let snapshot = ConfigSnapshot::new(table_for_snapshot, extra_templates)?;
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),
@@ -918,30 +1001,15 @@ impl Config {
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates: Arc::new(TemplateConfig::new()), // Will be populated below
+            templates: Arc::new(templates),
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
             http_client,
+            hash: snapshot.hash.clone(),
         };
-
-        // Initialize the templates
-        let template_paths = config.get_templates();
-        if config.gateway.template_filesystem_access.enabled {
-            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
-        }
-        let template_fs_path = config
-            .gateway
-            .template_filesystem_access
-            .base_path
-            .as_ref()
-            .map(|x| x.get_real_path());
-        let extra_templates = templates
-            .initialize(template_paths, template_fs_path)
-            .await?;
-        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;
@@ -967,6 +1035,13 @@ impl Config {
                     }
                     .into());
                 }
+                // Get mutable access to templates - this is safe because we just created the Arc
+                // and haven't shared it yet
+                let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
+                                    Error::from(ErrorDetails::Config {
+                                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                    })
+                                })?;
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         templates.add_template(
@@ -980,7 +1055,7 @@ impl Config {
                         &config.tools,
                         &config.models,
                         &config.embedding_models,
-                        &templates,
+                        &config.templates,
                         &evaluation_function_name,
                         &config.gateway.global_outbound_http_timeout,
                     )
@@ -1002,15 +1077,8 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
-        config.templates = Arc::new(templates);
 
-        Ok(ConfigLoadInfo {
-            config,
-            snapshot: snapshot::ConfigSnapshot {
-                config: serialized_table,
-                extra_templates,
-            },
-        })
+        Ok(UnwrittenConfig::new(config, snapshot))
     }
 
     /// Validate the config
@@ -1172,10 +1240,12 @@ impl Config {
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
     /// The former path is used as the name of the template for retrieval by variants later.
-    pub fn get_templates(&self) -> HashMap<String, String> {
+    pub fn get_templates(
+        functions: &HashMap<String, Arc<FunctionConfig>>,
+    ) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
-        for function in self.functions.values() {
+        for function in functions.values() {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
@@ -1197,6 +1267,84 @@ impl Config {
             })?
             .clone())
     }
+}
+
+/// Writes the config snapshot to the `ConfigSnapshot` table.
+/// Takes special care to retain the created_at if there was already a row
+/// that had the same hash.
+///
+/// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
+/// If the env var is not set to "1", the write is skipped.
+pub async fn write_config_snapshot(
+    clickhouse: &ClickHouseConnectionInfo,
+    snapshot: ConfigSnapshot,
+) -> Result<(), Error> {
+    // Feature flag: only write if TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1
+    if std::env::var("TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT").unwrap_or_default() != "1" {
+        return Ok(());
+    }
+    // Define the row structure for serialization
+    #[derive(Serialize)]
+    struct ConfigSnapshotRow<'a> {
+        config: &'a str,
+        extra_templates: &'a HashMap<String, String>,
+        hash: SnapshotHash,
+        tensorzero_version: &'static str,
+    }
+
+    // Get the pre-computed hash
+    let version_hash = snapshot.hash.clone();
+
+    // Serialize StoredConfig to TOML for storage
+    let config_string = toml::to_string(&snapshot.config).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize config snapshot: {e}"),
+        })
+    })?;
+
+    // Create the row
+    let row = ConfigSnapshotRow {
+        config: &config_string,
+        extra_templates: &snapshot.extra_templates,
+        hash: version_hash.clone(),
+        tensorzero_version: TENSORZERO_VERSION,
+    };
+
+    // Serialize to JSON
+    let json_data = serde_json::to_string(&row).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize config snapshot: {e}"),
+        })
+    })?;
+
+    // Create the external data info
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: json_data,
+    };
+
+    // Create the query with subquery to preserve created_at
+    let query = format!(
+        r"INSERT INTO ConfigSnapshot
+(config, extra_templates, hash, tensorzero_version, created_at, last_used)
+SELECT
+    new_data.config,
+    new_data.extra_templates,
+    toUInt256(new_data.hash) as hash,
+    new_data.tensorzero_version,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}') LIMIT 1), now64()) as created_at,
+    now64() as last_used
+FROM new_data"
+    );
+
+    // Execute the query
+    clickhouse
+        .run_query_with_external_data(external_data, query)
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(feature = "pyo3")]
@@ -1278,7 +1426,6 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_storage: Option<StorageKind>,
-
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
@@ -1333,7 +1480,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -1342,20 +1489,20 @@ pub enum UninitializedFunctionConfig {
     Json(UninitializedFunctionConfigJson),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
     path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(transparent)]
 pub struct UninitializedSchemas {
     inner: HashMap<String, UninitializedSchema>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -1375,7 +1522,7 @@ pub struct UninitializedFunctionConfigChat {
     experimentation: Option<UninitializedExperimentationConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -1515,15 +1662,15 @@ impl UninitializedFunctionConfig {
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
-                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode().is_some() {
-                            return Err(ErrorDetails::Config {
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner
+                        && chat_config.json_mode().is_some()
+                    {
+                        return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
                                 ),
                             }
                             .into());
-                        }
                     }
                 }
                 let experimentation = params
@@ -1712,7 +1859,7 @@ impl UninitializedVariantInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,

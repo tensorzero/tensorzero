@@ -16,7 +16,7 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map,
 };
-use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
@@ -186,8 +186,9 @@ pub struct DatasetQueryParams {
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+
+/// Parameters to query for dataset metadata (by aggregating over the datapoint tables).
+#[derive(Deserialize)]
 pub struct GetDatasetMetadataParams {
     /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
@@ -199,8 +200,7 @@ pub struct GetDatasetMetadataParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DatasetMetadata {
     pub dataset_name: String,
     pub count: u32,

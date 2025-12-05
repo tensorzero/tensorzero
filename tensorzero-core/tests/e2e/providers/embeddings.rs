@@ -2,7 +2,7 @@
 use super::common::EmbeddingTestProvider;
 use crate::common::get_gateway_endpoint;
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
@@ -166,10 +166,12 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
         format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
-    assert!(!response_json["data"][0]["embedding"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 pub async fn test_embedding_invalid_model_error_with_provider(_provider: EmbeddingTestProvider) {
@@ -560,10 +562,12 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
     // Should still return valid embedding data
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
-    assert!(!response_json["data"][0]["embedding"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
@@ -599,10 +603,12 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
         response_dryrun_cache_json["data"].as_array().unwrap().len(),
         1
     );
-    assert!(!response_dryrun_cache_json["data"][0]["embedding"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !response_dryrun_cache_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvider) {

@@ -10,12 +10,13 @@ use crate::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
-    endpoints::{inference::InferenceClients, RequestApiKeyExtension},
+    endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
     rate_limiting::ScopeInfo,
 };
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 #[cfg(test)]
 use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;
@@ -58,12 +59,12 @@ pub async fn embeddings(
                 model_name: params.model_name.clone(),
             })
         })?;
-    if let EmbeddingInput::Batch(array) = &params.input {
-        if array.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "Input cannot be empty".to_string(),
-            }));
-        }
+    if let EmbeddingInput::Batch(array) = &params.input
+        && array.is_empty()
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Input cannot be empty".to_string(),
+        }));
     }
 
     let request = EmbeddingRequest {
@@ -108,8 +109,8 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;

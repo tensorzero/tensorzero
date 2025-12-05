@@ -30,6 +30,7 @@ export async function action({ request }: ActionFunctionArgs) {
       output: parsedData.output,
       tags: parsedData.tags,
       name: parsedData.name,
+      outputSchema: parsedData.output_schema,
     });
 
     return redirect(toDatapointUrl(parsedData.dataset_name, id));

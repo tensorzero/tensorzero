@@ -5,17 +5,17 @@
 //! parameter parsing, inference execution, and response formatting for both streaming
 //! and non-streaming requests.
 
+use axum::Json;
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::Sse;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
-use axum::{debug_handler, Extension};
+use axum::{Extension, debug_handler};
 
-use crate::endpoints::inference::{inference, InferenceOutput, Params};
-use crate::endpoints::RequestApiKeyExtension;
+use crate::endpoints::inference::{InferenceOutput, Params, inference};
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
 use super::types::streaming::prepare_serialized_openai_compatible_events;
@@ -35,12 +35,12 @@ pub async fn chat_completions_handler(
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     // Validate `n` parameter
-    if let Some(n) = openai_compatible_params.n {
-        if n != 1 {
-            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+    if let Some(n) = openai_compatible_params.n
+        && n != 1
+    {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "TensorZero does not support `n` other than 1. Please omit this parameter or set it to 1.".to_string(),
             }));
-        }
     }
 
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -55,7 +55,9 @@ pub async fn chat_completions_handler(
             let unknown_field_names = unknown_field_names.join(", ");
 
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: format!("`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]")
+                message: format!(
+                    "`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]"
+                ),
             }));
         }
         tracing::warn!(

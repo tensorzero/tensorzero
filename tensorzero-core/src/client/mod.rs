@@ -1,7 +1,8 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
-use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
+use crate::config::unwritten::UnwrittenConfig;
+use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     db::postgres::PostgresConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{setup_clickhouse, setup_postgres, GatewayHandle},
+    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres},
 };
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::Event;
@@ -20,7 +21,6 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
-pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 pub use input_handling::resolved_input_to_client_input;
 
 pub use crate::cache::CacheParamsOptions;
@@ -38,7 +38,6 @@ pub use crate::inference::types::{
 pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
-pub mod client_input;
 pub mod input_handling;
 
 pub enum ClientMode {
@@ -194,8 +193,7 @@ impl HTTPGateway {
             // Discard the stream if it has an error
             let res = event_source.next().await;
             #[expect(clippy::panic)]
-            let Some(Err(e)) = res
-            else {
+            let Some(Err(e)) = res else {
                 panic!("Peeked error but got non-err {res:?}");
             };
             let err_str = format!("Error in streaming response: {e:?}");
@@ -398,7 +396,11 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
-        /// Already-initialized ClickHouse connection
+        /// Use the settings from this `ClickHouseConnectionInfo` to create a *new* ClickHouseConnectionInfo
+        /// We do *not* re-use this directly,since we block when an embedded client `GatewayHandle` is dropped,
+        /// waiting on all outstanding `ClickHouseConnectionInfo` to get dropped.
+        /// This does not work if two different embedded clients can use the same `ClickHouseConnectionInfo`,
+        /// since one might be in use by Python code with the GIL held
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
         postgres_connection_info: PostgresConnectionInfo,
@@ -484,46 +486,46 @@ impl ClientBuilder {
                 verify_credentials,
                 allow_batch_writes,
             } => {
-                let config = if let Some(config_file) = config_file {
+                let unwritten_config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
                             ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                    Arc::new(
-                        Config::load_from_path_optional_verify_credentials(
-                            &glob,
-                            *verify_credentials,
-                        )
+                    Config::load_from_path_optional_verify_credentials(&glob, *verify_credentials)
                         .await
                         .map_err(|e| ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob,
                         })?
-                        .config,
-                    )
                 } else {
-                    tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(
-                        Config::new_empty()
-                            .await
-                            .map_err(|e| ClientBuilderError::ConfigParsing {
-                                error: TensorZeroError::Other { source: e.into() },
-                                glob: ConfigFileGlob::new_empty(),
-                            })?
-                            .config,
-                    )
+                    tracing::info!(
+                        "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+                    );
+                    Config::new_empty()
+                        .await
+                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                            error: TensorZeroError::Other { source: e.into() },
+                            glob: ConfigFileGlob::new_empty(),
+                        })?
                 };
-                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let clickhouse_connection_info =
-                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
+                let config = unwritten_config
+                    .into_config(&clickhouse_connection_info)
+                    .await
+                    .map_err(|e| {
+                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                    })?;
+                let config = Arc::new(config);
+                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
                     .await
                     .map_err(|e| {
@@ -562,8 +564,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
             ClientBuilderMode::FromComponents {
@@ -585,7 +585,14 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
-                                clickhouse_connection_info.clone(),
+                                // We create a new independent `ClickHouseConnectionInfo` here,
+                                // and do *not* directly use the existing `clickhouse_connection_info`
+                                // See `ClientBuilderMode::FromComponents` for more details
+                                clickhouse_connection_info.recreate().await.map_err(|e| {
+                                    ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                        source: e.into(),
+                                    })
+                                })?,
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
@@ -600,8 +607,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
         }
@@ -615,8 +620,6 @@ impl ClientBuilder {
                 timeout: None,
             }),
             verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 
@@ -732,8 +735,6 @@ impl ClientBuilder {
                 verbose_errors: self.verbose_errors,
             })),
             verbose_errors: self.verbose_errors,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 }
@@ -743,8 +744,6 @@ impl ClientBuilder {
 pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
-    #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -838,10 +837,6 @@ impl Client {
                     })
                     .into(),
                 })?;
-                #[cfg(feature = "e2e_tests")]
-                {
-                    *self.last_body.lock().await = Some(body.clone());
-                }
                 let mut builder = client
                     .http_client
                     .post(url)
@@ -961,7 +956,7 @@ pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroErr
 /// If the path is None, it returns the default config.
 pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
-) -> Result<Config, TensorZeroError> {
+) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
         Some(path) => Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
@@ -969,12 +964,10 @@ pub async fn get_config_no_verify_credentials(
             false,
         )
         .await
-        .map(|load_info| load_info.config)
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
         None => Ok(Config::new_empty()
             .await
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?
-            .config),
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
 }
 
@@ -1064,7 +1057,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .config,
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components
@@ -1115,7 +1108,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .config,
+            .into_config_without_writing_for_tests(),
         );
 
         // Create mock components
@@ -1168,7 +1161,9 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 
     #[tokio::test]
@@ -1188,7 +1183,11 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+        assert!(logs_contain(
+            "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
+        ));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+        ));
     }
 }

@@ -1,10 +1,10 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Extension, Json};
+use axum::{Extension, Json, debug_handler};
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,10 +22,10 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
@@ -33,14 +33,12 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::RequestMessage;
-use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
-    Usage,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
+use crate::inference::types::{Input, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
@@ -50,6 +48,7 @@ use crate::tool::{
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:

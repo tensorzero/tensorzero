@@ -113,7 +113,7 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
@@ -451,7 +451,7 @@ impl VariantSampler for AlwaysFailsConfig {
 mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
     use uuid::Uuid;
 
     #[test]
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn test_uniform_sampling_distribution() {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
         use std::collections::HashMap;
 
         // Create variants with no weights (should trigger uniform sampling)
@@ -534,7 +534,7 @@ mod tests {
     #[tokio::test]
     async fn test_always_fails_fallback_with_allowed_variants() {
         use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
         // Create 5 variants: A, B, C, D, E
         let variant_names = ["A", "B", "C", "D", "E"];
