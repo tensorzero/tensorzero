@@ -337,6 +337,88 @@ async fn test_otel_health_not_exported() {
 }
 
 #[tokio::test]
+async fn test_otel_export_outgoing_traceparent() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "loopback-dummy",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let start_time = Utc::now();
+    let tempo_semaphore = Arc::new(Semaphore::new(1));
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .header(
+            "tensorzero-otlp-traces-extra-attribute-function_name",
+            "\"my-overridden-function-name\"",
+        )
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let _response_json = response.json::<Value>().await.unwrap();
+    let TempoSpans {
+        target_span: _,
+        span_by_id,
+        resources: _,
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    // We should have a 'POST /openai/v1/chat/completions` span from the loopback inference
+    let (openai_span_id, _) = span_by_id
+        .iter()
+        .find(|(_, span)| span["name"] == "POST /openai/v1/chat/completions")
+        .expect("Missing `POST /openai/v1/chat/completions` span");
+
+    // Walk up the parent chain, and verify that the `POST /openai/v1/chat/completions` has the correct parent span.
+    // This tests both that we set the outgoing `traceparent` header, and that we processing incoming `traceparent` headers correctly.
+
+    let mut ancestors = Vec::new();
+    let mut parent_id = Some(openai_span_id.clone());
+    while let Some(parent) = parent_id {
+        let parent_span = span_by_id.get(&parent).unwrap();
+        ancestors.push(parent_span["name"].as_str().unwrap());
+        parent_id = parent_span
+            .get("parentSpanId")
+            .map(|id| id.as_str().unwrap().to_string());
+    }
+
+    assert_eq!(
+        ancestors,
+        [
+            "POST /openai/v1/chat/completions",
+            "model_provider_inference",
+            "model_inference",
+            "variant_inference",
+            "function_inference",
+            "POST /inference"
+        ]
+    );
+}
+
+#[tokio::test]
 async fn test_otel_export_custom_attribute_override() {
     let client = reqwest::Client::new();
     let episode_id = Uuid::now_v7();
