@@ -242,8 +242,8 @@ jobs:
 
       # This will skip images from the still-running containers, but will free up all of the temporary
       # images from the multi-stage builder (if we built any containers locally)
-      - name: Prune docker images to free to disk space
-        run: docker system prune -af
+      - name: Prune docker images to free up disk space
+        run: docker system prune -f
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
