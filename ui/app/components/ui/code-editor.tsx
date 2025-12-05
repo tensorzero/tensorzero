@@ -71,6 +71,8 @@ export interface CodeEditorProps {
   showLineNumbers?: boolean;
   placeholder?: string;
   className?: string;
+  /** We should generally set a maxHeight to improve performance for large documents. */
+  maxHeight?: string;
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -150,6 +152,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   showLineNumbers = true,
   placeholder,
   className,
+  maxHeight = "400px",
 }) => {
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
@@ -361,7 +364,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
 
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
-      <div className="overflow-clip rounded-sm transition focus-within:ring-2 focus-within:ring-blue-500">
+      <div className="overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500">
         <CodeMirror
           value={internalValue}
           onChange={handleChange}
@@ -370,6 +373,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           theme={theme}
           placeholder={placeholder}
           basicSetup={basicSetup}
+          maxHeight={maxHeight}
           className="min-h-9 overflow-auto"
         />
       </div>
