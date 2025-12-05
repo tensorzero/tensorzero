@@ -1200,8 +1200,8 @@ mod tests {
 
         // We want auto-detection to fail, so we clear this environment variable.
         // We use 'nextest' as our runner, so each test runs in its own process
-        env::remove_var("AWS_REGION").unwrap();
-        env::remove_var("AWS_DEFAULT_REGION").unwrap();
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
         let err = AWSBedrockProvider::new(
             "test".to_string(),
             None,

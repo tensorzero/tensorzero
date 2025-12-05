@@ -998,14 +998,14 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    env::remove_var(&original_env_var).unwrap();
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    env::set_var(&custom_env_var, &credential_value).unwrap();
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1114,14 +1114,14 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    env::remove_var(&original_env_var).unwrap();
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    env::set_var(&custom_env_var, &credential_value).unwrap();
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)

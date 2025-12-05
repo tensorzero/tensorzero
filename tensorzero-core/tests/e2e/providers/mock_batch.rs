@@ -845,7 +845,7 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
     // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(1000)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(

@@ -24,7 +24,7 @@ async fn test_setup_http_client() {
 /// Tests that the HTTP proxy is not used if the TENSORZERO_E2E_PROXY environment variable is not set.
 #[tokio::test]
 async fn test_setup_http_client_no_proxy() {
-    env::remove_var("TENSORZERO_E2E_PROXY").unwrap();
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("TENSORZERO_E2E_PROXY");
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let response = http_client
         .get("https://www.tensorzero.com")

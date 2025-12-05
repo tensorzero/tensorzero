@@ -1433,8 +1433,11 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    env::set_var("S3_ACCESS_KEY_ID", &r2_access_key_id).unwrap();
-    env::set_var("S3_SECRET_ACCESS_KEY", &r2_secret_access_key).unwrap();
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &r2_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &r2_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1625,8 +1628,11 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    env::set_var("S3_ACCESS_KEY_ID", &gcloud_access_key_id).unwrap();
-    env::set_var("S3_SECRET_ACCESS_KEY", &gcloud_secret_access_key).unwrap();
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &gcloud_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &gcloud_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1697,8 +1703,11 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    env::set_var("S3_ACCESS_KEY_ID", &minio_access_key_id).unwrap();
-    env::set_var("S3_SECRET_ACCESS_KEY", &minio_secret_access_key).unwrap();
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &minio_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &minio_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,

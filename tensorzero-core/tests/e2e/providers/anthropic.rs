@@ -256,6 +256,75 @@ async fn test_thinking_helper(client: &Client, payload: &serde_json::Value) -> s
 }
 
 #[tokio::test]
+async fn test_empty_chunks_success() {
+    let payload = json!({
+        "model_name": "anthropic::claude-sonnet-4-5",
+        "input":{
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "Can you clarify that?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "max_tokens": 256,
+            }
+        },
+        "stream": true,
+    });
+
+    let client = Client::new();
+
+    let mut event_source = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+
+    println!("Chunks: {chunks:?}");
+    let mut first_inference_id = None;
+
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+        let inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
+        let inference_id = Uuid::parse_str(inference_id).unwrap();
+        if first_inference_id.is_none() {
+            first_inference_id = Some(inference_id);
+        }
+        assert_eq!(chunk_json["content"].as_array().unwrap().len(), 0);
+    }
+
+    let clickhouse = get_clickhouse().await;
+    // Sleep for 500ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, first_inference_id.unwrap())
+        .await
+        .unwrap();
+    println!("Chat inference: {chat_inference:?}");
+    assert_eq!(chat_inference["output"], "[]");
+    let ttft_ms = chat_inference["ttft_ms"].as_u64().unwrap();
+    assert!(
+        ttft_ms > 0,
+        "ttft_ms should be greater than 0, but was {ttft_ms}"
+    );
+}
+
+#[tokio::test]
 async fn test_thinking_inference_extra_header_128k() {
     let client = Client::new();
 
