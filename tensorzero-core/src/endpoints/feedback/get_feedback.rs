@@ -20,7 +20,7 @@ pub struct GetFeedbackResponse {
 }
 
 /// Handler for the GET `/internal/feedback/{metric_name}` endpoint.
-/// Returns feedback for a specific metric, aggregated by target_id to get the latest value.
+/// Returns the latest feedback for a specific metric, grouped by target_id.
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "feedback.get_feedback", skip(app_state, params))]
 pub async fn get_feedback_handler(

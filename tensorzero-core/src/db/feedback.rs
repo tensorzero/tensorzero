@@ -86,7 +86,7 @@ pub trait FeedbackQueries {
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 
-    /// Queries feedback for a specific metric, aggregating by target_id to get the latest value
+    /// Queries feedback for a specific metric, returning the latest feedback per target_id
     async fn get_feedback_by_metric(
         &self,
         metric_name: &str,
@@ -225,7 +225,7 @@ pub struct FeedbackBoundsByType {
     pub demonstration: TableBounds,
 }
 
-/// A row representing aggregated feedback for a specific metric
+/// A row representing the latest feedback for a specific metric (per target_id)
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MetricFeedbackRow {

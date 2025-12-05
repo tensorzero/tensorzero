@@ -462,7 +462,7 @@ pub trait ClientExt {
     // ================================================================
     // Feedback operations
     // ================================================================
-    /// Gets feedback for a specific metric, aggregated by target_id to get the latest value.
+    /// Gets the latest feedback for a specific metric, grouped by target_id.
     ///
     /// # Arguments
     ///
