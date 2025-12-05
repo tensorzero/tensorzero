@@ -1015,9 +1015,18 @@ pub enum UninitializedProviderConfig {
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
         model_id: String,
-        region: Option<String>,
+        #[serde(default)]
+        region: Option<EndpointLocation>,
         #[serde(default)]
         allow_auto_detect_region: bool,
+        #[serde(default)]
+        endpoint: Option<EndpointLocation>,
+        #[serde(default)]
+        #[cfg_attr(test, ts(type = "string | null"))]
+        access_key: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        #[cfg_attr(test, ts(type = "string | null"))]
+        secret_key: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
@@ -1174,16 +1183,21 @@ impl UninitializedProviderConfig {
                 model_id,
                 region,
                 allow_auto_detect_region,
-            } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
-
-                ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                endpoint,
+                access_key,
+                secret_key,
+            } => ProviderConfig::AWSBedrock(
+                AWSBedrockProvider::new(
+                    model_id,
+                    region,
+                    allow_auto_detect_region,
+                    endpoint,
+                    access_key,
+                    secret_key,
+                    http_client,
                 )
-            }
+                .await?,
+            ),
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
                 region,

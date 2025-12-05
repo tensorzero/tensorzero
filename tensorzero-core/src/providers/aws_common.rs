@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use aws_config::{meta::region::RegionProviderChain, Region};
+use aws_credential_types::Credentials;
 use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
 use aws_smithy_runtime_api::client::interceptors::Intercept;
@@ -10,6 +11,7 @@ use aws_smithy_types::body::SdkBody;
 use aws_smithy_types::config_bag::ConfigBag;
 use aws_types::SdkConfig;
 use reqwest::StatusCode;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -25,6 +27,15 @@ use super::helpers::inject_extra_request_data;
 pub async fn config_with_region(
     provider_type: &str,
     region: Option<Region>,
+) -> Result<SdkConfig, Error> {
+    config_with_region_and_credentials(provider_type, region, None, None).await
+}
+
+pub async fn config_with_region_and_credentials(
+    provider_type: &str,
+    region: Option<Region>,
+    access_key_id: Option<String>,
+    secret_access_key: Option<SecretString>,
 ) -> Result<SdkConfig, Error> {
     // If no region is provided, we will use the default region.
     // Decide which AWS region to use. We try the following in order:
@@ -47,15 +58,27 @@ pub async fn config_with_region(
 
     tracing::trace!("Creating new AWS config for region: {region}",);
 
-    let config = aws_config::from_env()
+    let mut config_builder = aws_config::from_env()
         .region(region)
         // Using a custom HTTP client seems to break stalled stream protection, so disable it:
         // https://github.com/awslabs/aws-sdk-rust/issues/1287
         // We shouldn't actually need it, since we have user-configurable timeouts for
         // both streaming and non-streaming requests.
-        .stalled_stream_protection(StalledStreamProtectionConfig::disabled())
-        .load()
-        .await;
+        .stalled_stream_protection(StalledStreamProtectionConfig::disabled());
+
+    // Set credentials if provided
+    if let (Some(access_key), Some(secret_key)) = (access_key_id, secret_access_key) {
+        let credentials = Credentials::new(
+            access_key,
+            secret_key.expose_secret().to_string(),
+            None,
+            None,
+            "tensorzero",
+        );
+        config_builder = config_builder.credentials_provider(credentials);
+    }
+
+    let config = config_builder.load().await;
     Ok(config)
 }
 
