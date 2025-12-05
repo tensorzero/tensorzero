@@ -594,7 +594,7 @@ function resolvedInputMessageContentToInputMessageContent(
         type: "thought",
         text: content.text,
         signature: content.signature,
-        _internal_provider_type: undefined,
+        provider_type: content._internal_provider_type,
       };
     case "unknown":
       return {
