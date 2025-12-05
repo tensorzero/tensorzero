@@ -62,6 +62,12 @@ impl Debug for ClientMode {
     }
 }
 
+pub struct HttpResponse<T> {
+    pub response: T,
+    pub raw_request: String,
+    pub raw_response: Option<String>,
+}
+
 pub struct HTTPGateway {
     pub base_url: Url,
     pub http_client: TensorzeroHttpClient,
@@ -152,14 +158,35 @@ impl HTTPGateway {
     pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
-    ) -> Result<T, TensorZeroError> {
+    ) -> Result<(T, String), TensorZeroError> {
         let builder = self.customize_builder(builder);
-        let resp = builder.send().await;
-        self.check_http_response(resp)
-            .await?
-            .json()
-            .await
-            .map_err(|e| TensorZeroError::Other {
+        let resp = builder.send().await.map_err(|e| TensorZeroError::Other {
+            source: Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error sending request: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
+            })
+            .into(),
+        })?;
+        let raw_response = resp.text().await.map_err(|e| TensorZeroError::Other {
+            source: Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error deserializing response: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
+            })
+            .into(),
+        })?;
+
+        let response: T =
+            serde_json::from_str(&raw_response).map_err(|e| TensorZeroError::Other {
                 source: Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error deserializing response: {}",
@@ -170,7 +197,8 @@ impl HTTPGateway {
                     ),
                 })
                 .into(),
-            })
+            })?;
+        Ok((response, raw_response))
     }
 
     async fn http_inference_stream(
@@ -485,7 +513,7 @@ impl ClientBuilder {
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
-            } => {
+            } => Box::pin(async move {
                 let unwritten_config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
@@ -565,7 +593,7 @@ impl ClientBuilder {
                     }),
                     verbose_errors: self.verbose_errors,
                 })
-            }
+            }).await,
             ClientBuilderMode::FromComponents {
                 config,
                 clickhouse_connection_info,
@@ -786,7 +814,7 @@ impl Client {
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // We currently ban auth-enabled configs in embedded gateway mode,
@@ -805,12 +833,10 @@ impl Client {
         }
     }
 
-    // Runs a TensorZero inference.
-    // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
-    pub async fn inference(
+    pub async fn http_inference(
         &self,
         params: ClientInferenceParams,
-    ) -> Result<InferenceOutput, TensorZeroError> {
+    ) -> Result<HttpResponse<InferenceOutput>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url =
@@ -841,7 +867,7 @@ impl Client {
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body);
+                    .body(body.clone());
 
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
@@ -850,15 +876,40 @@ impl Client {
                 }
 
                 if params.stream.unwrap_or(false) {
-                    Ok(InferenceOutput::Streaming(
-                        client.http_inference_stream(builder).await?,
-                    ))
+                    Ok(HttpResponse {
+                        response: InferenceOutput::Streaming(
+                            client.http_inference_stream(builder).await?,
+                        ),
+                        raw_request: body,
+                        raw_response: None,
+                    })
                 } else {
-                    Ok(InferenceOutput::NonStreaming(
-                        client.send_and_parse_http_response(builder).await?,
-                    ))
+                    let (response, raw_response) =
+                        client.send_and_parse_http_response(builder).await?;
+                    Ok(HttpResponse {
+                        response: InferenceOutput::NonStreaming(response),
+                        raw_request: body,
+                        raw_response: Some(raw_response),
+                    })
                 }
             }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "HTTP inference is not supported in embedded gateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    // Runs a TensorZero inference.
+    // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
+    pub async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = Box::pin(crate::endpoints::inference::inference(
@@ -918,7 +969,7 @@ impl Client {
                     .http_client
                     .get(url)
                     .query(&[("storage_path", storage_path_json)]);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {

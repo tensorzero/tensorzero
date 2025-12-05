@@ -360,6 +360,7 @@ impl InputMessageContent {
                         let detail_clone = detail.clone();
                         let detail_for_future = detail.clone();
                         let filename_for_future = filename.clone();
+                        let filename_clone = filename.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -379,6 +380,7 @@ impl InputMessageContent {
                                 url,
                                 mime_type,
                                 detail: detail_clone,
+                                filename: filename_clone,
                             },
                             future: delayed_file_future.boxed().shared(),
                         }))
@@ -446,6 +448,7 @@ impl InputMessageContent {
                         let mime_type_for_closure = file.mime_type.clone();
                         let detail_for_future = file.detail.clone();
                         let filename_for_future = file.filename.clone();
+                        let filename_clone = file.filename.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -470,7 +473,7 @@ impl InputMessageContent {
                                     source_url: file.source_url.clone(),
                                     mime_type: file.mime_type.clone(),
                                     detail: file.detail.clone(),
-                                    filename: file.filename.clone(),
+                                    filename: filename_clone,
                                 },
                                 storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),

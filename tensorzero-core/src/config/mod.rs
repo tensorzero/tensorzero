@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -29,6 +30,7 @@ use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
+use url::Url;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -113,6 +115,8 @@ pub struct Config {
     pub http_client: TensorzeroHttpClient,
     #[serde(skip)]
     pub hash: SnapshotHash,
+    #[serde(skip)]
+    pub relay: Option<TensorzeroRelay>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -783,20 +787,25 @@ impl Config {
         validate_credentials: bool,
         allow_empty_glob: bool,
     ) -> Result<UnwrittenConfig, Error> {
-        let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
-        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
-            SKIP_CREDENTIAL_VALIDATION
-                .scope((), Self::load_from_toml(globbed_config.table))
-                .await?
-        } else {
-            Self::load_from_toml(globbed_config.table).await?
-        };
+        Box::pin(async move {
+            let globbed_config =
+                UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
+            let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+                SKIP_CREDENTIAL_VALIDATION
+                    .scope((), Self::load_from_toml(globbed_config.table))
+                    .await?
+            } else {
+                Self::load_from_toml(globbed_config.table).await?
+            };
 
-        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
-            object_store.verify().await?;
-        }
+            if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info
+            {
+                object_store.verify().await?;
+            }
 
-        Ok(unwritten_config)
+            Ok(unwritten_config)
+        })
+        .await
     }
 
     /// Loads and initializes a config from a parsed TOML table.
@@ -983,6 +992,16 @@ impl Config {
             .initialize(user_template_paths, template_fs_path)
             .await?;
 
+        let relay = if let Some(relay_config) = uninitialized_config.relay {
+            if let Some(gateway_url) = relay_config.gateway_url {
+                Some(TensorzeroRelay::new(gateway_url)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Add built in functions
         // NOTE: for now these are not versioned (will fix #4922)
         let built_in_functions = built_in::get_all_built_in_functions()?;
@@ -1009,6 +1028,7 @@ impl Config {
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
             http_client,
             hash: snapshot.hash.clone(),
+            relay,
         };
 
         // Validate the config
@@ -1442,6 +1462,13 @@ pub struct UninitializedConfig {
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    pub relay: Option<UninitializedRelayConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UninitializedRelayConfig {
+    pub gateway_url: Option<Url>,
 }
 
 /// The result of parsing all of the globbed config files,
