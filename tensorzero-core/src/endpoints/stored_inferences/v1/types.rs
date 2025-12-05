@@ -5,7 +5,7 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
-    InferenceOutputSource, ListInferencesParams, PaginationParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, ListInferencesParams, PaginationParams,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
@@ -239,7 +239,7 @@ impl ListInferencesRequest {
             (Some(_), Some(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both 'before' and 'after' parameters".to_string(),
-                }))
+                }));
             }
             (Some(before), None) => Some(PaginationParams::Before { id: before }),
             (None, Some(after)) => Some(PaginationParams::After { id: after }),

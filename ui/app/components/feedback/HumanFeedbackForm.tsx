@@ -5,7 +5,8 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
-import { Output } from "../inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import {
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
+import { isJsonOutput } from "~/utils/clickhouse/inference";
 
 export interface HumanFeedbackFormSharedProps {
   inferenceOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
@@ -111,18 +113,33 @@ export function HumanFeedbackForm({
         selectedMetricType === "demonstration" &&
         (demonstrationValue ? (
           <div className="mt-4">
-            <Output
-              output={demonstrationValue}
-              isEditing={true}
-              onOutputChange={(updatedOutput) => {
-                if (updatedOutput === null) {
-                  setDemonstrationIsValid(false);
-                } else {
-                  setDemonstrationValue(updatedOutput);
-                  setDemonstrationIsValid(true);
-                }
-              }}
-            />
+            {isJsonOutput(demonstrationValue) ? (
+              <JsonOutputElement
+                output={demonstrationValue}
+                isEditing={true}
+                onOutputChange={(updatedOutput) => {
+                  if (updatedOutput === undefined) {
+                    setDemonstrationIsValid(false);
+                  } else {
+                    setDemonstrationValue(updatedOutput);
+                    setDemonstrationIsValid(true);
+                  }
+                }}
+              />
+            ) : (
+              <ChatOutputElement
+                output={demonstrationValue}
+                isEditing={true}
+                onOutputChange={(updatedOutput) => {
+                  if (updatedOutput === undefined) {
+                    setDemonstrationIsValid(false);
+                  } else {
+                    setDemonstrationValue(updatedOutput);
+                    setDemonstrationIsValid(true);
+                  }
+                }}
+              />
+            )}
 
             <input
               type="hidden"
@@ -181,8 +198,9 @@ export function HumanFeedbackForm({
 function getDemonstrationValueToSubmit(
   demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
 ) {
-  if (Array.isArray(demonstrationValue)) {
+  if (isJsonOutput(demonstrationValue)) {
+    return demonstrationValue.parsed;
+  } else {
     return demonstrationValue;
   }
-  return demonstrationValue.parsed;
 }

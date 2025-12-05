@@ -7,15 +7,15 @@ use reqwest::Client;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use tensorzero::Role;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
-use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::inference::types::ContentBlockOutput;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
@@ -596,13 +596,15 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -1028,10 +1030,12 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         StoredContentBlock::Thought(thought) => thought,
         _ => panic!("Expected a thought block"),
     };
-    assert!(thought
-        .text
-        .as_ref()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        thought
+            .text
+            .as_ref()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
 }

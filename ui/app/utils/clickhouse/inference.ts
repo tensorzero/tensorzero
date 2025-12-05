@@ -217,3 +217,11 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
+
+/// Hacky helper to determine if the output is JSON
+// We should continue to refactor our types to avoid stuff like this...
+export function isJsonOutput(
+  output: ReturnType<typeof parseInferenceOutput>,
+): output is JsonInferenceOutput {
+  return !Array.isArray(output) && "raw" in output;
+}

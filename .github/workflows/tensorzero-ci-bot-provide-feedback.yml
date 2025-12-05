@@ -14,41 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     name: Create PR Feedback
     steps:
-      - name: Checkout TensorZero config file
-        uses: actions/checkout@v5
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
         with:
-          repository: tensorzero/experimental-ci-bot
-          ref: "v0.1-pre-agent"
-          sparse-checkout: |
-            tensorzero
-
-      - name: Start TensorZero gateway
-        run: |
-          docker pull tensorzero/gateway:latest
-          docker run -d --rm \
-            --name tensorzero-gateway \
-            -e TENSORZERO_CLICKHOUSE_URL=${{ secrets.CI_BOT_CLICKHOUSE_URL }} \
-            -e OPENAI_API_KEY=${{ secrets.CI_BOT_OPENAI_API_KEY }} \
-            -p 3000:3000 \
-            --volume ./tensorzero:/action-config \
-            tensorzero/gateway:latest --config-file /action-config/tensorzero.toml
-
-          for _i in {1..100}; do
-            curl -fsS http://localhost:3000/health && exit 0
-            sleep 3
-          done
-          echo "Gateway never became ready" >&2
-          exit 1
+          oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
 
       - name: Send PR Feedback
-        uses: "tensorzero/experimental-ci-bot/create-pr-feedback@v0.1-pre-agent"
+        uses: tensorzero/experimental-ci-bot/create-pr-feedback@6075c5483e949af3acec76c40b755dcccd99e6b0
         with:
-          tensorzero-base-url: http://localhost:3000
-          tensorzero-pr-merged-metric-name: tensorzero_github_ci_bot_pr_merged
+          tensorzero-base-url: http://ci-bot-gateway:3000
+          tensorzero-pr-merged-metric-name: ci_fix_pr_merged_agent
           clickhouse-url: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
           clickhouse-table: GitHubBotPullRequestToInferenceMap
-
-      - name: Stop TensorZero gateway
-        if: always()
-        run: docker stop tensorzero-gateway
-        continue-on-error: true

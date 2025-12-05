@@ -2771,9 +2771,15 @@ FORMAT JSONEachRow";
         let (sql, _) = generate_list_inferences_sql(&config, &opts).unwrap();
 
         // SQL should order by total_term_frequency DESC for both tables
-        assert_query_contains(&sql, "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         assert_query_contains(&sql, "UNION ALL");
-        assert_query_contains(&sql, "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         // Should also order by total_term_frequency DESC for the combined result
         assert_query_contains(&sql, "AS combined ORDER BY total_term_frequency DESC");
     }

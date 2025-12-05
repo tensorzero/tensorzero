@@ -123,7 +123,9 @@ impl Migration for Migration0034<'_> {
                 .response;
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
             if !create_table.contains(&view_timestamp_nanos_string) {
-                tracing::warn!("Materialized view `CumulativeUsageView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `CumulativeUsageView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
                 return Ok(());
             }
 

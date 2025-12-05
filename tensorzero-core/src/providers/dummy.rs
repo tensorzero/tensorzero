@@ -6,7 +6,7 @@ use std::time::Duration;
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -23,12 +23,13 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlockChunk,
-    ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
-};
 use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
+use crate::inference::types::{
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    current_timestamp,
+};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
@@ -352,19 +353,18 @@ impl InferenceProvider for DummyProvider {
             .credentials
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
-        if self.model_name == "test_key" {
-            if let Some(api_key) = api_key {
-                if api_key.expose_secret() != "good_key" {
-                    return Err(ErrorDetails::InferenceClient {
-                        message: "Invalid API key for Dummy provider".to_string(),
-                        raw_request: Some("raw request".to_string()),
-                        raw_response: None,
-                        status_code: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }
-                    .into());
-                }
+        if self.model_name == "test_key"
+            && let Some(api_key) = api_key
+            && api_key.expose_secret() != "good_key"
+        {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Invalid API key for Dummy provider".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
+                status_code: None,
+                provider_type: PROVIDER_TYPE.to_string(),
             }
+            .into());
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();

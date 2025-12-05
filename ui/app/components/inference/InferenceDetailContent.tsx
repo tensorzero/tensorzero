@@ -8,7 +8,8 @@ import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import BasicInfo from "~/routes/observability/inferences/$inference_id/InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
 import { TagsTable } from "~/components/tags/TagsTable";
@@ -334,13 +335,14 @@ export function InferenceDetailContent({
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <Output
-            output={
-              inference.function_type === "json"
-                ? { ...inference.output, schema: inference.output_schema }
-                : inference.output
-            }
-          />
+          {inference.function_type === "json" ? (
+            <JsonOutputElement
+              output={inference.output}
+              outputSchema={inference.output_schema}
+            />
+          ) : (
+            <ChatOutputElement output={inference.output} />
+          )}
         </SectionLayout>
 
         <SectionLayout>

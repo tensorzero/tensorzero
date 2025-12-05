@@ -12,7 +12,8 @@ import {
 } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
   PageHeader,
@@ -38,6 +39,7 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { loadFileDataForInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { validateJsonSchema } from "~/utils/jsonschema";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
@@ -46,7 +48,29 @@ import type {
   ContentBlockChatOutput,
   Input,
   Datapoint,
+  JsonValue,
 } from "~/types/tensorzero";
+
+// Discriminated union for type-safe output state
+type OutputState =
+  | { type: "chat"; value?: ContentBlockChatOutput[] }
+  | { type: "json"; value?: JsonInferenceOutput; outputSchema: JsonValue };
+
+function createOutputState(datapoint: Datapoint): OutputState {
+  switch (datapoint.type) {
+    case "chat":
+      return {
+        type: "chat",
+        value: datapoint.output as ContentBlockChatOutput[] | undefined,
+      };
+    case "json":
+      return {
+        type: "json",
+        value: datapoint.output as JsonInferenceOutput | undefined,
+        outputSchema: datapoint.output_schema,
+      };
+  }
+}
 import {
   cloneDatapoint,
   deleteDatapoint,
@@ -96,6 +120,8 @@ export function hasDatapointChanged(params: {
   originalInput: Input;
   currentOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
   originalOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
+  currentOutputSchema?: JsonValue;
+  originalOutputSchema?: JsonValue;
   currentTags: Record<string, string>;
   originalTags: Record<string, string>;
 }): boolean {
@@ -104,6 +130,8 @@ export function hasDatapointChanged(params: {
     originalInput,
     currentOutput,
     originalOutput,
+    currentOutputSchema,
+    originalOutputSchema,
     currentTags,
     originalTags,
   } = params;
@@ -123,10 +151,18 @@ export function hasDatapointChanged(params: {
 
   const hasOutputChanged =
     JSON.stringify(currentOutput) !== JSON.stringify(originalOutput);
+  const hasOutputSchemaChanged =
+    JSON.stringify(currentOutputSchema) !==
+    JSON.stringify(originalOutputSchema);
   const hasTagsChanged =
     JSON.stringify(currentTags) !== JSON.stringify(originalTags);
 
-  return hasInputChanged || hasOutputChanged || hasTagsChanged;
+  return (
+    hasInputChanged ||
+    hasOutputChanged ||
+    hasOutputSchemaChanged ||
+    hasTagsChanged
+  );
 }
 
 async function handleDeleteAction(
@@ -206,6 +242,7 @@ async function handleUpdateAction(
         episode_id: actionData.episode_id,
         input: actionData.input,
         output: actionData.output,
+        output_schema: actionData.output_schema,
         tags: actionData.tags,
       },
       functionType,
@@ -353,11 +390,20 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
+  // State Management for Editing
+  //
+  // We keep track of the original values and current values in the form (when editing).
+  // This allows us to detect if there were any changes (to enable/disable the save button) or discard changes if the user cancels the edits
+  // When you save, we check `XXX` (`input`, `output`, `tags`) against `originalXXX` and submit `XXX` to the update datapoint endpoint.
   const [originalInput, setOriginalInput] = useState(resolvedInput);
   const [input, setInput] = useState<Input>(resolvedInput);
 
-  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
-  const [output, setOutput] = useState(datapoint.output);
+  const [originalOutput, setOriginalOutput] = useState<OutputState>(() =>
+    createOutputState(datapoint),
+  );
+  const [output, setOutput] = useState<OutputState>(() =>
+    createOutputState(datapoint),
+  );
 
   const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
   const [tags, setTags] = useState(datapoint.tags || {});
@@ -369,8 +415,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setInput(resolvedInput);
     setOriginalInput(resolvedInput);
-    setOutput(datapoint.output);
-    setOriginalOutput(datapoint.output);
+    const newOutputState = createOutputState(datapoint);
+    setOutput(newOutputState);
+    setOriginalOutput(newOutputState);
     setTags(datapoint.tags || {});
     setOriginalTags(datapoint.tags || {});
     setIsEditing(false);
@@ -378,13 +425,20 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   }, [resolvedInput, datapoint]);
 
   const canSave = useMemo(() => {
+    const currentOutputSchema =
+      output.type === "json" ? output.outputSchema : undefined;
+    const origOutputSchema =
+      originalOutput.type === "json" ? originalOutput.outputSchema : undefined;
+
     return (
       isEditing &&
       hasDatapointChanged({
         currentInput: input,
         originalInput,
-        currentOutput: output,
-        originalOutput,
+        currentOutput: output.value,
+        originalOutput: originalOutput.value,
+        currentOutputSchema,
+        originalOutputSchema: origOutputSchema,
         currentTags: tags,
         originalTags,
       })
@@ -403,7 +457,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(resolvedInput);
-    setOutput(datapoint.output);
+    setOutput(createOutputState(datapoint));
     setTags(datapoint.tags || {});
   };
 
@@ -434,7 +488,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleUpdate = () => {
     setValidationError(null);
 
-    const outputValidation = validateJsonOutput(output);
+    const outputValidation = validateJsonOutput(output.value);
     if (!outputValidation.valid) {
       setValidationError(outputValidation.error);
       return;
@@ -446,6 +500,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       return;
     }
 
+    // Validate schema for JSON output
+    if (output.type === "json") {
+      const schemaValidation = validateJsonSchema(output.outputSchema);
+      if (!schemaValidation.valid) {
+        setValidationError(schemaValidation.error);
+        return;
+      }
+    }
+
     try {
       const formData = serializeUpdateDatapointToFormData({
         dataset_name: datapoint.dataset_name,
@@ -453,7 +516,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         id: datapoint.id,
         episode_id: datapoint.episode_id,
         input,
-        output,
+        output: output.value,
+        output_schema: output.type === "json" ? output.outputSchema : undefined,
         tags,
       });
       fetcher.submit(formData, { method: "post", action: "." });
@@ -643,20 +707,48 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
 
-        {output && (
-          <SectionLayout>
-            <SectionHeader heading="Output" />
-            <Output
-              output={output}
-              isEditing={isEditing}
-              onOutputChange={(output) => {
-                setOutput(output);
-                // Clear validation error when output changes
-                setValidationError(null);
-              }}
-            />
-          </SectionLayout>
-        )}
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          {(() => {
+            switch (output.type) {
+              case "chat":
+                return (
+                  <ChatOutputElement
+                    output={output.value}
+                    isEditing={isEditing}
+                    onOutputChange={(value) => {
+                      setOutput({ type: "chat", value });
+                      setValidationError(null);
+                    }}
+                  />
+                );
+              case "json":
+                return (
+                  <JsonOutputElement
+                    output={output.value}
+                    outputSchema={output.outputSchema}
+                    isEditing={isEditing}
+                    onOutputChange={(value) => {
+                      setOutput({
+                        type: "json",
+                        value,
+                        outputSchema: output.outputSchema,
+                      });
+                      setValidationError(null);
+                    }}
+                    onOutputSchemaChange={(outputSchema) => {
+                      setOutput({
+                        type: "json",
+                        value: output.value,
+                        outputSchema,
+                      });
+                      setValidationError(null);
+                    }}
+                  />
+                );
+            }
+          })()}
+        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Tags" />

@@ -305,10 +305,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + Always
 
         // Verify Always is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::Always { .. }))
+        );
     }
 
     #[test]
@@ -344,15 +346,19 @@ mod tests {
 
         #[expect(deprecated)]
         {
-            assert!(filtered
+            assert!(
+                filtered
+                    .data
+                    .iter()
+                    .any(|item| matches!(item, DynamicExtraHeader::Provider { .. }))
+            );
+        }
+        assert!(
+            filtered
                 .data
                 .iter()
-                .any(|item| matches!(item, DynamicExtraHeader::Provider { .. })));
-        }
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
+                .any(|item| matches!(item, DynamicExtraHeader::Always { .. }))
+        );
         assert!(filtered.data.iter().any(|item| match item {
             DynamicExtraHeader::Variant { variant_name, .. } => variant_name == "variant1",
             _ => false,
@@ -451,10 +457,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + ModelProvider
 
         // Verify ModelProvider is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. }))
+        );
     }
 
     #[test]
