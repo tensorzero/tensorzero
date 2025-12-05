@@ -40,28 +40,31 @@ def test_sync_get_datapoints_by_ids(sync_client: TensorZeroGateway):
     # Insert test datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="First message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="First message")])],
             ),
-            output=[ContentBlockChatOutputText(text="First response")],
+            output=[ContentBlockChatOutputText(type="text", text="First response")],
         ),
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Second message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="Second message")])],
             ),
-            output=[ContentBlockChatOutputText(text="Second response")],
+            output=[ContentBlockChatOutputText(type="text", text="Second response")],
         ),
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Canada"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "Canada"})]
                     )
                 ],
             ),
@@ -102,19 +105,21 @@ async def test_async_get_datapoints_by_ids(async_client: AsyncTensorZeroGateway)
     # Insert test datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "AsyncBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Async message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="Async message")])],
             ),
         ),
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "AsyncJson"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Mexico"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "Mexico"})]
                     )
                 ],
             ),
@@ -143,28 +148,31 @@ def test_sync_get_datapoints_by_ids_with_dataset_name(sync_client: TensorZeroGat
     # Insert test datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="First message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="First message")])],
             ),
-            output=[ContentBlockChatOutputText(text="First response")],
+            output=[ContentBlockChatOutputText(type="text", text="First response")],
         ),
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "TestBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Second message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="Second message")])],
             ),
-            output=[ContentBlockChatOutputText(text="Second response")],
+            output=[ContentBlockChatOutputText(type="text", text="Second response")],
         ),
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Canada"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "Canada"})]
                     )
                 ],
             ),
@@ -205,19 +213,21 @@ async def test_async_get_datapoints_by_ids_with_dataset_name(async_client: Async
     # Insert test datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "AsyncBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="Async message")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="Async message")])],
             ),
         ),
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "AsyncJson"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Mexico"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "Mexico"})]
                     )
                 ],
             ),
@@ -246,26 +256,29 @@ def test_sync_list_datapoints_with_filters(sync_client: TensorZeroGateway):
     # Insert multiple datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Bot1"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="msg1")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="msg1")])],
             ),
         ),
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Bot2"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="msg2")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="msg2")])],
             ),
         ),
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "JsonBot"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "Brazil"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "Brazil"})]
                     )
                 ],
             ),
@@ -305,17 +318,19 @@ async def test_async_list_datapoints_with_filters(async_client: AsyncTensorZeroG
     # Insert datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Filter1"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="test1")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="test1")])],
             ),
         ),
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "Filter2"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="test2")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="test2")])],
             ),
         ),
     ]
@@ -342,10 +357,11 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     # Insert datapoint with initial name
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "MetaBot"},
-                messages=[InputMessage(role="user", content=[InputMessageContentText(text="original")])],
+                messages=[InputMessage(role="user", content=[InputMessageContentText(type="text", text="original")])],
             ),
             name="original_name",
         ),
@@ -404,12 +420,13 @@ async def test_async_update_datapoints_metadata(async_client: AsyncTensorZeroGat
     # Insert datapoint
     requests = [
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "AsyncMeta"},
                 messages=[
                     InputMessage(
-                        role="user", content=[InputMessageContentTemplate(name="user", arguments={"country": "France"})]
+                        role="user", content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": "France"})]
                     )
                 ],
             ),
@@ -446,6 +463,7 @@ def test_sync_delete_multiple_datapoints(sync_client: TensorZeroGateway):
     # Insert multiple datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "DeleteBot"},
@@ -488,13 +506,14 @@ async def test_async_delete_multiple_datapoints(async_client: AsyncTensorZeroGat
     # Insert datapoints
     requests = [
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "DeleteJson"},
                 messages=[
                     InputMessage(
                         role="user",
-                        content=[InputMessageContentTemplate(name="user", arguments={"country": f"Country{i}"})],
+                        content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": f"Country{i}"})],
                     )
                 ],
             ),
@@ -526,6 +545,7 @@ def test_sync_delete_entire_dataset(sync_client: TensorZeroGateway):
     # Create dataset with datapoints
     requests = [
         CreateDatapointRequestChat(
+            type="chat",
             function_name="basic_test",
             input=Input(
                 system={"assistant_name": "ToDelete"},
@@ -567,13 +587,14 @@ async def test_async_delete_entire_dataset(async_client: AsyncTensorZeroGateway)
     # Create dataset
     requests = [
         CreateDatapointRequestJson(
+            type="json",
             function_name="json_success",
             input=Input(
                 system={"assistant_name": "AsyncDelete"},
                 messages=[
                     InputMessage(
                         role="user",
-                        content=[InputMessageContentTemplate(name="user", arguments={"country": f"Country{i}"})],
+                        content=[InputMessageContentTemplate(type="template", name="user", arguments={"country": f"Country{i}"})],
                     )
                 ],
             ),

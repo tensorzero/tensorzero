@@ -105,6 +105,7 @@ def mixed_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
     chat_inference = StoredInferenceChat(
+        type="chat",
         function_name="basic_test",
         variant_name="default",
         input=StoredInput(
@@ -119,12 +120,13 @@ def mixed_rendered_samples(
                 )
             ],
         ),
-        output=[ContentBlockChatOutputText(text="Hello world")],
+        output=[ContentBlockChatOutputText(type="text", text="Hello world")],
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         additional_tools=[
             FunctionTool(
+                type="function",
                 name="test",
                 description="test",
                 parameters={
@@ -141,6 +143,7 @@ def mixed_rendered_samples(
         tags={"test_key": "test_value"},
     )
     json_inference = StoredInferenceJson(
+        type="json",
         function_name="json_success",
         variant_name="dummy",
         input=StoredInput(
@@ -176,6 +179,7 @@ def chat_function_rendered_samples(
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - chat function samples without tools."""
     chat_inference = StoredInferenceChat(
+        type="chat",
         function_name="basic_test",
         variant_name="default",
         input=StoredInput(
@@ -187,7 +191,7 @@ def chat_function_rendered_samples(
                 )
             ],
         ),
-        output=[ContentBlockChatOutputText(text="The capital of France is Paris.")],
+        output=[ContentBlockChatOutputText(type="text", text="The capital of France is Paris.")],
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -210,6 +214,7 @@ def json_function_rendered_samples(
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - JSON function samples."""
     json_inference = StoredInferenceJson(
+        type="json",
         function_name="json_success",
         variant_name="dummy",
         input=StoredInput(

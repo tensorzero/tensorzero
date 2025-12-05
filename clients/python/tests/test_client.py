@@ -2520,6 +2520,7 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 value=2,
             ),
             ModelProviderExtraBodyDelete(
+                delete=True,
                 model_name="gpt-4o-mini-2024-07-18",
                 provider_name="openai",
                 pointer="/should_be_deleted_provider",
@@ -2530,6 +2531,7 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 value=2,
             ),
             VariantExtraBodyDelete(
+                delete=True,
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
             ),
@@ -2589,6 +2591,7 @@ def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
                 value=2,
             ),
             AlwaysExtraBodyDelete(
+                delete=True,
                 pointer="/should_be_deleted_all",
             ),
             AlwaysExtraBody(

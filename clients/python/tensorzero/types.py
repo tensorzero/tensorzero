@@ -10,6 +10,7 @@ import httpx
 import uuid_utils
 from typing_extensions import NotRequired, TypedDict, deprecated
 
+from tensorzero.unset_type import UnsetType
 from tensorzero.generated_types import (
     InferenceFilter,
     InferenceFilterAnd,
@@ -19,7 +20,6 @@ from tensorzero.generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
-    UnsetType,
 )
 
 
