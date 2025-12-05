@@ -5,6 +5,7 @@ use reqwest::Client;
 use serde_json::json;
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use tokio::sync::OnceCell;
 
 use crate::common::get_gateway_endpoint;
@@ -51,95 +52,65 @@ fn fix_yaml_parse_issues(raw: &str) -> Cow<'_, str> {
 // Also removes `$recursiveAnchor` (Draft 2019-09 keyword not recognized in Draft 2020-12).
 // Removes duplicate entries in `required` arrays which violate uniqueItems constraint.
 // TODO: These are temporary fixes; ideally we'd contact the OpenAI spec maintainers to have these issues corrected.
-// Theseb were corrected for now to enable schema validation.
+// These were corrected for now to enable schema validation.
 fn sanitize_openapi_spec(value: &mut serde_yml::Value) {
     use serde_yml::Value::*;
 
     match value {
         Mapping(map) => {
-            // Convert Draft 4 boolean exclusiveMinimum/exclusiveMaximum to Draft 2020-12 numeric form
-            let mut exclusive_min_value = None;
-            let mut exclusive_max_value = None;
-
-            // First pass: detect Draft 4 boolean pattern and get the min/max values
-            if let Some(true) = map
-                .get(&String("exclusiveMinimum".into()))
-                .and_then(|v| match v {
-                    Bool(b) => Some(*b),
-                    _ => None,
-                })
-            {
-                if let Some(min_val) = map.get(&String("minimum".into())).cloned() {
-                    if matches!(min_val, Number(_)) {
-                        exclusive_min_value = Some(min_val);
-                    }
-                }
-            }
-
-            if let Some(true) = map
-                .get(&String("exclusiveMaximum".into()))
-                .and_then(|v| match v {
-                    Bool(b) => Some(*b),
-                    _ => None,
-                })
-            {
-                if let Some(max_val) = map.get(&String("maximum".into())).cloned() {
-                    if matches!(max_val, Number(_)) {
-                        exclusive_max_value = Some(max_val);
-                    }
-                }
-            }
-
-            // Second pass: apply conversions
-            if let Some(val) = exclusive_min_value {
-                map.remove(&String("minimum".into()));
-                map.insert(String("exclusiveMinimum".into()), val);
-            }
-
-            if let Some(val) = exclusive_max_value {
-                map.remove(&String("maximum".into()));
-                map.insert(String("exclusiveMaximum".into()), val);
-            }
-
-            // Remove $recursiveAnchor (Draft 2019-09 keyword, not recognized in Draft 2020-12)
-            let keys_to_remove: Vec<_> = map
-                .iter()
-                .filter_map(|(key, _val)| {
-                    if matches!(key, String(s) if s == "$recursiveAnchor") {
-                        Some(key.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            for key in keys_to_remove {
-                map.remove(&key);
-            }
-
-            for (key, val) in map.iter_mut() {
-                // Todo: Make a PR to OpenAI OpenAPI spec to fix duplicate in required for ContainerResource
-                if matches!(key, String(s) if s == "required") {
-                    if let Sequence(items) = val {
-                        let mut seen = std::collections::HashSet::new();
-                        items.retain(|item| {
-                            if let String(s) = item {
-                                seen.insert(s.clone())
-                            } else {
-                                true
-                            }
-                        });
-                    }
-                }
-                sanitize_openapi_spec(val);
-            }
+            convert_boolean_bounds(map, "exclusiveMinimum", "minimum");
+            convert_boolean_bounds(map, "exclusiveMaximum", "maximum");
+            remove_recursive_anchor(map);
+            dedupe_required_entries(map);
+            map.iter_mut()
+                .for_each(|(_, value)| sanitize_openapi_spec(value));
         }
-        Sequence(seq) => {
-            for item in seq {
-                sanitize_openapi_spec(item);
-            }
-        }
+        Sequence(seq) => seq.iter_mut().for_each(sanitize_openapi_spec),
         _ => {}
+    }
+}
+
+fn convert_boolean_bounds(map: &mut serde_yml::Mapping, exclusive_key: &str, bound_key: &str) {
+    use serde_yml::Value::{Bool, Number, String as YamlString};
+
+    let flag_key = YamlString(exclusive_key.to_owned());
+    let bound_key_value = YamlString(bound_key.to_owned());
+
+    let Some(Bool(true)) = map.get(&flag_key) else {
+        return;
+    };
+
+    let Some(bound_value) = map.get(&bound_key_value).cloned() else {
+        return;
+    };
+
+    if !matches!(bound_value, Number(_)) {
+        return;
+    }
+
+    map.remove(&bound_key_value);
+    map.insert(flag_key, bound_value);
+}
+
+fn remove_recursive_anchor(map: &mut serde_yml::Mapping) {
+    use serde_yml::Value::String as YamlString;
+
+    let key = YamlString("$recursiveAnchor".into());
+    while map.remove(&key).is_some() {}
+}
+
+fn dedupe_required_entries(map: &mut serde_yml::Mapping) {
+    use serde_yml::Value::Sequence;
+
+    for (key, value) in map.iter_mut() {
+        if let (Some("required"), Sequence(items)) = (key.as_str(), value) {
+            let mut seen = HashSet::new();
+            items.retain(|item| {
+                item.as_str()
+                    .map(|s| seen.insert(s.to_owned()))
+                    .unwrap_or(true)
+            });
+        }
     }
 }
 
@@ -149,16 +120,23 @@ async fn get_component_schema(component_name: &str) -> Option<Value> {
         .pointer("/components/schemas")
         .unwrap_or_else(|| panic!("No /components/schemas in OpenAPI spec"));
 
-    if components.get(component_name).is_none() {
-        return None;
-    }
+    components.get(component_name)?;
 
-    let components = components.clone();
-    Some(json!({
-        "$defs": components,
-        "components": { "schemas": components },
+    // Build schema with components referenced once to avoid unnecessary clones
+    let mut schema = json!({
         "$ref": format!("#/components/schemas/{}", component_name)
-    }))
+    });
+    
+    schema.as_object_mut().unwrap().insert(
+        "$defs".to_string(),
+        components.clone(),
+    );
+    schema.as_object_mut().unwrap().insert(
+        "components".to_string(),
+        json!({ "schemas": components }),
+    );
+    
+    Some(schema)
 }
 
 /// Try multiple possible component names (handles schema variations)
@@ -177,24 +155,38 @@ fn compile_schema(schema: &Value) -> Validator {
         .expect("Failed to compile JSON schema")
 }
 
-/// Validate instance against schema and panic with detailed error on failure
 fn assert_valid_schema(schema: &Validator, instance: &Value, context: &str) {
-    if schema.validate(instance).is_err() {
-        let error_msgs: Vec<String> = schema
-            .iter_errors(instance)
-            .map(|e| e.to_string())
-            .collect();
-        panic!(
-            "\n❌ OpenAPI Spec Validation Failed: {}\n\nErrors:\n{}\n\nResponse JSON:\n{}\n",
-            context,
-            error_msgs
-                .iter()
-                .map(|e| format!("  - {}", e))
-                .collect::<Vec<_>>()
-                .join("\n"),
-            serde_json::to_string_pretty(instance).unwrap()
-        );
+    if schema.validate(instance).is_ok() {
+        return;
     }
+
+    let error_msgs: Vec<String> = schema
+        .iter_errors(instance)
+        .map(|e| e.to_string())
+        .collect();
+    panic!(
+        "\nOpenAPI Spec Validation Failed: {}\n\nErrors:\n{}\n\nResponse JSON:\n{}\n",
+        context,
+        error_msgs
+            .iter()
+            .map(|e| format!("  - {e}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        serde_json::to_string_pretty(instance).unwrap()
+    );
+}
+
+fn warn_schema_missing(schema_name: &str) {
+    println!("{schema_name} schema not found in spec, skipping validation");
+}
+
+fn extend_json_object(target: &mut Value, additions: &Value) {
+    let (Some(target_map), Some(additions_map)) = (target.as_object_mut(), additions.as_object())
+    else {
+        return;
+    };
+
+    target_map.extend(additions_map.clone());
 }
 
 async fn get_error_schema() -> Validator {
@@ -222,6 +214,20 @@ async fn get_embeddings_response_schema() -> Option<Validator> {
     ])
     .await
     .map(|s| compile_schema(&s))
+}
+
+async fn validate_chat_completion_response(instance: &Value, context: &str) {
+    get_chat_completion_response_schema().await.map_or_else(
+        || warn_schema_missing("ChatCompletion response"),
+        |schema| assert_valid_schema(&schema, instance, context),
+    );
+}
+
+async fn validate_embeddings_response(instance: &Value, context: &str) {
+    get_embeddings_response_schema().await.map_or_else(
+        || warn_schema_missing("Embeddings response"),
+        |schema| assert_valid_schema(&schema, instance, context),
+    );
 }
 
 #[tokio::test]
@@ -302,17 +308,8 @@ async fn test_spec_chat_completion_request() {
 
     let response_json: Value = response.json().await.unwrap();
     println!("Chat completion response: {response_json:?}");
-    if let Some(schema) = get_chat_completion_response_schema().await {
-        assert_valid_schema(
-            &schema,
-            &response_json,
-            "Chat completion minimal request response",
-        );
-    } else {
-        eprintln!(
-            "⚠️  Warning: ChatCompletion response schema not found in spec, skipping validation"
-        );
-    }
+    validate_chat_completion_response(&response_json, "Chat completion minimal request response")
+        .await;
 }
 
 #[tokio::test]
@@ -348,13 +345,8 @@ async fn test_spec_chat_completion_with_tool_calls() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    if let Some(schema) = get_chat_completion_response_schema().await {
-        assert_valid_schema(
-            &schema,
-            &response_json,
-            "Chat completion with tool calls response",
-        );
-    }
+    validate_chat_completion_response(&response_json, "Chat completion with tool calls response")
+        .await;
 }
 
 #[tokio::test]
@@ -374,12 +366,7 @@ async fn test_spec_chat_completion_finish_reasons() {
             "messages": [{"role": "user", "content": "Say hello"}]
         });
 
-        // Merge additional params
-        if let Some(obj) = request.as_object_mut() {
-            if let Some(params_obj) = params.as_object() {
-                obj.extend(params_obj.clone());
-            }
-        }
+        extend_json_object(&mut request, &params);
 
         let response = client
             .post(get_gateway_endpoint("/openai/v1/chat/completions"))
@@ -389,13 +376,8 @@ async fn test_spec_chat_completion_finish_reasons() {
             .unwrap();
 
         let response_json: Value = response.json().await.unwrap();
-        if let Some(schema) = get_chat_completion_response_schema().await {
-            assert_valid_schema(
-                &schema,
-                &response_json,
-                &format!("Chat completion with finish_reason={}", finish_type),
-            );
-        }
+        let context = format!("Chat completion with finish_reason={finish_type}");
+        validate_chat_completion_response(&response_json, &context).await;
     }
 }
 
@@ -418,15 +400,7 @@ async fn test_spec_embeddings_request() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    if let Some(schema) = get_embeddings_response_schema().await {
-        assert_valid_schema(
-            &schema,
-            &response_json,
-            "Embeddings minimal request response",
-        );
-    } else {
-        eprintln!("⚠️  Warning: Embeddings response schema not found in spec, skipping validation");
-    }
+    validate_embeddings_response(&response_json, "Embeddings minimal request response").await;
 }
 
 #[tokio::test]
@@ -448,9 +422,7 @@ async fn test_spec_embeddings_array_input() {
 
     let response_json: Value = response.json().await.unwrap();
 
-    if let Some(schema) = get_embeddings_response_schema().await {
-        assert_valid_schema(&schema, &response_json, "Embeddings array input response");
-    }
+    validate_embeddings_response(&response_json, "Embeddings array input response").await;
 }
 
 // // ============================================================================
