@@ -132,7 +132,7 @@ export function NewDatapointForm() {
     <SectionsGroup>
       <SectionLayout>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="dataset-selector">
             <Label htmlFor="dataset">Dataset</Label>
             <DatasetSelector
               selected={selectedDataset ?? undefined}
@@ -141,7 +141,7 @@ export function NewDatapointForm() {
               disabled={isReadOnly}
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="function-selector">
             <Label htmlFor="function">Function</Label>
             <FunctionSelector
               selected={selectedFunction}
@@ -166,28 +166,27 @@ export function NewDatapointForm() {
           </SectionLayout>
           <SectionLayout>
             <SectionHeader heading="Output" />
-            {output !== undefined &&
-              (functionType === "json" ? (
-                <JsonOutputElement
-                  output={output as JsonInferenceOutput}
-                  outputSchema={outputSchema}
-                  isEditing={true}
-                  onOutputChange={(newOutput) => {
-                    setOutput(newOutput);
-                    setValidationError(null);
-                  }}
-                  onOutputSchemaChange={(schema) => {
-                    setOutputSchema(schema);
-                    setValidationError(null);
-                  }}
-                />
-              ) : (
-                <ChatOutputElement
-                  output={output as ContentBlockChatOutput[]}
-                  isEditing={true}
-                  onOutputChange={(newOutput) => setOutput(newOutput)}
-                />
-              ))}
+            {functionType === "json" ? (
+              <JsonOutputElement
+                output={output as JsonInferenceOutput | undefined}
+                outputSchema={outputSchema}
+                isEditing={true}
+                onOutputChange={(newOutput) => {
+                  setOutput(newOutput);
+                  setValidationError(null);
+                }}
+                onOutputSchemaChange={(schema) => {
+                  setOutputSchema(schema);
+                  setValidationError(null);
+                }}
+              />
+            ) : (
+              <ChatOutputElement
+                output={output as ContentBlockChatOutput[] | undefined}
+                isEditing={true}
+                onOutputChange={(newOutput) => setOutput(newOutput)}
+              />
+            )}
             {validationError && (
               <div className="mt-2 text-sm text-red-600">{validationError}</div>
             )}
