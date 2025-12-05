@@ -352,7 +352,7 @@ impl TensorzeroRelay {
             internal_dynamic_variant_config: None,
             episode_id: None,
             dryrun: None,
-            tags: HashMap::new(),
+            tags: (*clients.tags).clone(),
             otlp_traces_extra_headers: HashMap::new(),
             include_original_response: false,
         };
