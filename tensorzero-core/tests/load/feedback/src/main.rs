@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{Arc, atomic::AtomicU64};
 
 use anyhow::Result;
 use benchmark::RateLimitBenchmark;
@@ -6,7 +6,7 @@ use clap::Parser;
 use serde::Deserialize;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 mod benchmark;

@@ -5,8 +5,8 @@
 //! requires specific review for route changes.
 
 use axum::{
-    routing::{delete, get, patch, post},
     Router,
+    routing::{delete, get, patch, post},
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use tensorzero_core::endpoints::openai_compatible::build_openai_compatible_routes;

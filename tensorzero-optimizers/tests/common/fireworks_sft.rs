@@ -1,7 +1,7 @@
 use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
-    fireworks_sft::UninitializedFireworksSFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
+    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    fireworks_sft::UninitializedFireworksSFTConfig,
 };
 
 use super::mock_inference_provider_base;

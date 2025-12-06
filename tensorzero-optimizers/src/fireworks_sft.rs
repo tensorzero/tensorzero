@@ -34,8 +34,8 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{FireworksKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
-        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
         fireworks::prepare_fireworks_messages,
@@ -513,7 +513,7 @@ fn convert_to_optimizer_status(
                 message: format!(
                     "JobStateCompleted should have been handled in poll. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
-            }))
+            }));
         }
     })
 }

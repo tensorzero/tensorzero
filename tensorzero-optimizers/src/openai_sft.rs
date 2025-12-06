@@ -15,21 +15,21 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
-        openai_sft::{OpenAISFTConfig, OpenAISFTJobHandle},
         OptimizationJobInfo,
+        openai_sft::{OpenAISFTConfig, OpenAISFTJobHandle},
     },
     providers::openai::{
-        upload_openai_file, OpenAICredentials, OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
+        OPENAI_DEFAULT_BASE_URL, OpenAICredentials, PROVIDER_TYPE, upload_openai_file,
     },
     stored_inference::RenderedSample,
 };
 
 use crate::{
-    openai::{
-        convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
-        OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
-    },
     JobHandle, Optimizer,
+    openai::{
+        OpenAIFineTuningJob, OpenAIFineTuningMethod, OpenAIFineTuningRequest, OpenAISupervisedRow,
+        Supervised, SupervisedHyperparameters, convert_to_optimizer_status,
+    },
 };
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";

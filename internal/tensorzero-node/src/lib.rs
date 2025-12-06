@@ -5,7 +5,7 @@ use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
+use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
@@ -267,20 +267,20 @@ pub async fn run_evaluation_streaming(
     let join_handle = clickhouse_client.batcher_join_handle();
     drop(clickhouse_client);
 
-    if let Some(handle) = join_handle {
-        if let Err(error) = handle.await {
-            let fatal_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
-                evaluation_run_id: Some(evaluation_run_id),
-                message: format!(
-                    "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
-                ),
-            });
-            let _ = send_event(&callback, &fatal_event);
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
+    if let Some(handle) = join_handle
+        && let Err(error) = handle.await
+    {
+        let fatal_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+            evaluation_run_id: Some(evaluation_run_id),
+            message: format!(
                 "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
-            )));
-        }
+            ),
+        });
+        let _ = send_event(&callback, &fatal_event);
+        let _ = callback.abort();
+        return Err(napi::Error::from_reason(format!(
+            "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
+        )));
     }
 
     let complete_event =
@@ -396,7 +396,9 @@ impl TensorZeroClient {
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let InferenceOutput::NonStreaming(result) = result else {
-            return Err(napi::Error::from_reason("Streaming inference is not supported. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"));
+            return Err(napi::Error::from_reason(
+                "Streaming inference is not supported. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+            ));
         };
         let result_str = serde_json::to_string(&result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize inference result: {e}"))

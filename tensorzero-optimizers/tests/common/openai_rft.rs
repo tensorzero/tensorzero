@@ -1,8 +1,8 @@
 use crate::common::OptimizationTestCase;
 use std::collections::HashMap;
 use tensorzero_core::optimization::{
-    openai_rft::UninitializedOpenAIRFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
+    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    openai_rft::UninitializedOpenAIRFTConfig,
 };
 use tensorzero_core::providers::openai::grader::{
     OpenAIGrader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,

@@ -3,7 +3,7 @@ name = "tensorzero-node"
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true
-edition = "2021"
+edition.workspace = true
 
 [lib]
 crate-type = ["cdylib"]

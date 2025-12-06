@@ -241,11 +241,7 @@ impl<'tree, L: Eq> Tree<'tree, L> {
 
     #[inline]
     fn label_cost(a: &TreeNode<L>, b: &TreeNode<L>, relabel_cost: u64) -> u64 {
-        if a.label == b.label {
-            0
-        } else {
-            relabel_cost
-        }
+        if a.label == b.label { 0 } else { relabel_cost }
     }
 
     /// Internal DP over *forests* needed for Zhang‑Shasha.

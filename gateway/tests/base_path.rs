@@ -3,7 +3,7 @@ use reqwest::Url;
 use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 
-use crate::common::{start_gateway_on_random_port, ChildData};
+use crate::common::{ChildData, start_gateway_on_random_port};
 
 mod common;
 

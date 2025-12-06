@@ -10,7 +10,7 @@ use tensorzero_core::{
     config::{Config, UninitializedVariantConfig},
     db::{
         clickhouse::{
-            clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,
+            ClickHouseConnectionInfo, ExternalDataInfo, clickhouse_client::ClickHouseClientType,
         },
         postgres::PostgresConnectionInfo,
     },
@@ -22,8 +22,8 @@ use tensorzero_core::{
     inference::types::StoredInputMessageContent,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
-        dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
     },
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
@@ -277,12 +277,12 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                 .map(std::vec::Vec::len)
                 .unwrap_or(0);
             return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
-                        i + 1,
-                        num_tools
-                    ),
-                }));
+                message: format!(
+                    "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
+                    i + 1,
+                    num_tools
+                ),
+            }));
         }
 
         // Check stored_input messages for ToolCall or ToolResult content
@@ -617,7 +617,7 @@ mod tests {
     use uuid::Uuid;
 
     use tensorzero_core::{
-        config::{provider_types::ProviderTypesConfig, Config, SchemaData},
+        config::{Config, SchemaData, provider_types::ProviderTypesConfig},
         embeddings::{
             EmbeddingModelConfig, EmbeddingModelTable, EmbeddingProviderConfig,
             EmbeddingProviderInfo,
@@ -635,8 +635,8 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            create_json_mode_tool_call_config, DynamicToolParams, FunctionTool, ToolCall,
-            ToolCallConfig, ToolChoice, ToolResult,
+            DynamicToolParams, FunctionTool, ToolCall, ToolCallConfig, ToolChoice, ToolResult,
+            create_json_mode_tool_call_config,
         },
     };
 
@@ -930,9 +930,11 @@ mod tests {
         assert!(result.is_err());
 
         let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("requires at least one training example"));
+        assert!(
+            error
+                .to_string()
+                .contains("requires at least one training example")
+        );
     }
 
     #[test]
@@ -975,9 +977,11 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("does not support tool calls"));
-        assert!(error
-            .to_string()
-            .contains("contains a tool call in message content"));
+        assert!(
+            error
+                .to_string()
+                .contains("contains a tool call in message content")
+        );
     }
 
     #[test]
@@ -988,9 +992,11 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("does not support tool calls"));
-        assert!(error
-            .to_string()
-            .contains("contains a tool result in message content"));
+        assert!(
+            error
+                .to_string()
+                .contains("contains a tool result in message content")
+        );
     }
 
     #[test]
@@ -1126,9 +1132,11 @@ mod tests {
         assert!(result.is_err());
 
         let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("does not support functions with tools"));
+        assert!(
+            error
+                .to_string()
+                .contains("does not support functions with tools")
+        );
         assert!(error.to_string().contains("test_function"));
         assert!(error.to_string().contains("1 tools configured"));
     }

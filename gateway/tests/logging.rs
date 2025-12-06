@@ -91,10 +91,10 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
         while let Some(event) = stream.next().await {
             let event = event.unwrap();
             println!("Event: {event:?}");
-            if let Event::Message(event) = event {
-                if event.data == "[DONE]" {
-                    break;
-                }
+            if let Event::Message(event) = event
+                && event.data == "[DONE]"
+            {
+                break;
             }
         }
     })

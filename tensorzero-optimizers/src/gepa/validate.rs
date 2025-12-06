@@ -13,7 +13,7 @@ use tensorzero_core::{
     optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
     tool::StaticToolConfig,
-    variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig, VariantInfo},
+    variant::{VariantConfig, VariantInfo, chat_completion::UninitializedChatCompletionConfig},
 };
 
 /// Minimum number of valid examples required for GEPA optimization
@@ -159,10 +159,10 @@ fn validate_stored_output(stored_output: &Option<StoredOutput>) -> Result<(), St
     }
 
     // Check if stored_output is JsonInferenceOutput with parsed is None
-    if let Some(StoredOutput::Json(json_output)) = stored_output {
-        if json_output.parsed.is_none() {
-            return Err("JsonInferenceOutput.parsed is None".to_string());
-        }
+    if let Some(StoredOutput::Json(json_output)) = stored_output
+        && json_output.parsed.is_none()
+    {
+        return Err("JsonInferenceOutput.parsed is None".to_string());
     }
 
     // Check if stored_output is a Chat output
@@ -443,7 +443,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
     use tensorzero_core::{
-        config::{path::ResolvedTomlPathData, Config, ErrorContext, SchemaData, TimeoutsConfig},
+        config::{Config, ErrorContext, SchemaData, TimeoutsConfig, path::ResolvedTomlPathData},
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         experimentation::ExperimentationConfig,
         function::{FunctionConfig, FunctionConfigChat},
@@ -456,10 +456,10 @@ mod tests {
         tool::{DynamicToolParams, ToolChoice},
         utils::retries::RetryConfig,
         variant::{
+            VariantConfig, VariantInfo,
             chat_completion::{
                 ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplates,
             },
-            VariantConfig, VariantInfo,
         },
     };
     use uuid::Uuid;
@@ -514,9 +514,10 @@ mod tests {
         let result = validate_examples(examples);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Cannot run GEPA optimization with zero examples"));
+        assert!(
+            err.to_string()
+                .contains("Cannot run GEPA optimization with zero examples")
+        );
     }
 
     #[test]
@@ -635,9 +636,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Function 'nonexistent_function' not found"));
+        assert!(
+            err.to_string()
+                .contains("Function 'nonexistent_function' not found")
+        );
     }
 
     #[test]
@@ -741,9 +743,11 @@ mod tests {
 
         let result = validate_stored_output(&output);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("ToolCall block has name as None"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("ToolCall block has name as None")
+        );
     }
 
     #[test]
@@ -761,9 +765,11 @@ mod tests {
 
         let result = validate_stored_output(&output);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Thought block has both text and summary as None"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Thought block has both text and summary as None")
+        );
     }
 
     #[test]
@@ -841,9 +847,11 @@ mod tests {
 
         let result = validate_stored_input_messages(&messages);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("ToolCall block has name as empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("ToolCall block has name as empty")
+        );
     }
 
     #[test]
@@ -862,9 +870,11 @@ mod tests {
 
         let result = validate_stored_input_messages(&messages);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Thought block has both text and summary as None"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Thought block has both text and summary as None")
+        );
     }
 
     #[test]

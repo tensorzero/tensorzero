@@ -1,4 +1,4 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use std::collections::HashSet;
@@ -72,12 +72,11 @@ fn extract_last_user_message_text(request: &serde_json::Value) -> Option<String>
             .rev()
             .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"));
 
-        if let Some(msg) = user_msg {
-            if let Some(content) = msg.get("content") {
-                if let Some(text) = extract_text_from_openai_content(content) {
-                    return Some(text);
-                }
-            }
+        if let Some(msg) = user_msg
+            && let Some(content) = msg.get("content")
+            && let Some(text) = extract_text_from_openai_content(content)
+        {
+            return Some(text);
         }
         return None;
     }
@@ -142,16 +141,16 @@ fn collect_text_from_gcp_parts(parts: &[Value]) -> Option<Vec<String>> {
 }
 
 fn extract_tool_results(request: &Value) -> Option<ToolResults> {
-    if let Some(messages) = request.get("messages").and_then(|m| m.as_array()) {
-        if let Some(result) = extract_tool_results_from_openai(messages) {
-            return Some(result);
-        }
+    if let Some(messages) = request.get("messages").and_then(|m| m.as_array())
+        && let Some(result) = extract_tool_results_from_openai(messages)
+    {
+        return Some(result);
     }
 
-    if let Some(contents) = request.get("contents").and_then(|c| c.as_array()) {
-        if let Some(result) = extract_tool_results_from_gcp(contents) {
-            return Some(result);
-        }
+    if let Some(contents) = request.get("contents").and_then(|c| c.as_array())
+        && let Some(result) = extract_tool_results_from_gcp(contents)
+    {
+        return Some(result);
     }
 
     None
@@ -191,12 +190,11 @@ fn find_tool_name_by_id(messages: &[Value], tool_call_id: Option<&str>) -> Optio
 
         if let Some(tool_calls) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
             for call in tool_calls {
-                if call.get("id").and_then(|id| id.as_str()) == Some(tool_call_id) {
-                    if let Some(function) = call.get("function") {
-                        if let Some(name) = function.get("name").and_then(|n| n.as_str()) {
-                            return Some(name.to_string());
-                        }
-                    }
+                if call.get("id").and_then(|id| id.as_str()) == Some(tool_call_id)
+                    && let Some(function) = call.get("function")
+                    && let Some(name) = function.get("name").and_then(|n| n.as_str())
+                {
+                    return Some(name.to_string());
                 }
             }
         }
@@ -213,22 +211,21 @@ fn extract_location_from_openai_messages(messages: &[Value]) -> Option<String> {
 
         if let Some(content_array) = message.get("content").and_then(|c| c.as_array()) {
             for block in content_array {
-                if block.get("type").and_then(|t| t.as_str()) == Some("tool_call") {
-                    if let Some(location) = extract_location_from_tool_call_block(block) {
-                        return Some(location);
-                    }
+                if block.get("type").and_then(|t| t.as_str()) == Some("tool_call")
+                    && let Some(location) = extract_location_from_tool_call_block(block)
+                {
+                    return Some(location);
                 }
             }
         }
 
         if let Some(tool_calls) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
             for tool_call in tool_calls {
-                if let Some(function) = tool_call.get("function") {
-                    if let Some(arguments) = function.get("arguments") {
-                        if let Some(location) = extract_location_from_arguments(arguments) {
-                            return Some(location);
-                        }
-                    }
+                if let Some(function) = tool_call.get("function")
+                    && let Some(arguments) = function.get("arguments")
+                    && let Some(location) = extract_location_from_arguments(arguments)
+                {
+                    return Some(location);
                 }
             }
         }
@@ -277,12 +274,11 @@ fn extract_location_from_gcp_contents(contents: &[Value]) -> Option<String> {
 
         if let Some(parts) = message.get("parts").and_then(|p| p.as_array()) {
             for part in parts {
-                if let Some(function_call) = part.get("functionCall") {
-                    if let Some(args) = function_call.get("args") {
-                        if let Some(location) = args.get("location").and_then(|l| l.as_str()) {
-                            return Some(location.to_string());
-                        }
-                    }
+                if let Some(function_call) = part.get("functionCall")
+                    && let Some(args) = function_call.get("args")
+                    && let Some(location) = args.get("location").and_then(|l| l.as_str())
+                {
+                    return Some(location.to_string());
                 }
             }
         }
@@ -291,36 +287,34 @@ fn extract_location_from_gcp_contents(contents: &[Value]) -> Option<String> {
 }
 
 fn extract_location_from_tool_call_block(block: &Value) -> Option<String> {
-    if let Some(arguments) = block.get("arguments") {
-        if let Some(location) = arguments.get("location").and_then(|l| l.as_str()) {
-            return Some(location.to_string());
-        }
+    if let Some(arguments) = block.get("arguments")
+        && let Some(location) = arguments.get("location").and_then(|l| l.as_str())
+    {
+        return Some(location.to_string());
     }
 
-    if let Some(raw_arguments) = block.get("raw_arguments").and_then(|r| r.as_str()) {
-        if let Ok(parsed) = serde_json::from_str::<Value>(raw_arguments) {
-            if let Some(location) = parsed.get("location").and_then(|l| l.as_str()) {
-                return Some(location.to_string());
-            }
-        }
+    if let Some(raw_arguments) = block.get("raw_arguments").and_then(|r| r.as_str())
+        && let Ok(parsed) = serde_json::from_str::<Value>(raw_arguments)
+        && let Some(location) = parsed.get("location").and_then(|l| l.as_str())
+    {
+        return Some(location.to_string());
     }
 
     None
 }
 
 fn extract_location_from_arguments(arguments: &Value) -> Option<String> {
-    if let Some(obj) = arguments.as_object() {
-        if let Some(location) = obj.get("location").and_then(|l| l.as_str()) {
-            return Some(location.to_string());
-        }
+    if let Some(obj) = arguments.as_object()
+        && let Some(location) = obj.get("location").and_then(|l| l.as_str())
+    {
+        return Some(location.to_string());
     }
 
-    if let Some(text) = arguments.as_str() {
-        if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-            if let Some(location) = parsed.get("location").and_then(|l| l.as_str()) {
-                return Some(location.to_string());
-            }
-        }
+    if let Some(text) = arguments.as_str()
+        && let Ok(parsed) = serde_json::from_str::<Value>(text)
+        && let Some(location) = parsed.get("location").and_then(|l| l.as_str())
+    {
+        return Some(location.to_string());
     }
 
     None

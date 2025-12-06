@@ -1,9 +1,9 @@
-use crate::common::{mock_inference_provider_base, OptimizationTestCase};
+use crate::common::{OptimizationTestCase, mock_inference_provider_base};
 use tensorzero_core::{
     model::{CredentialLocation, CredentialLocationWithFallback},
     optimization::{
-        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
-        UninitializedOptimizerInfo,
+        UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
     },
 };
 

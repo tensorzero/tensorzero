@@ -138,24 +138,21 @@ impl StoppingManager {
 
         // Check each evaluator's stopping condition
         for (evaluator_name, evaluator_stats) in &self.evaluator_stats {
-            if let Some(precision_target) = self.precision_targets.get(evaluator_name) {
-                if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
-                    if ci_half_width <= *precision_target {
-                        if let Some(token) = tokens.get(evaluator_name) {
-                            if !token.is_cancelled() {
-                                info!(
-                                    evaluator_name = %evaluator_name,
-                                    ci_half_width = ci_half_width,
-                                    precision_target = precision_target,
-                                    count = evaluator_stats.count(),
-                                    mean = ?evaluator_stats.mean(),
-                                    "Stopping evaluator: CI half-width <= precision_target"
-                                );
-                                token.cancel();
-                            }
-                        }
-                    }
-                }
+            if let Some(precision_target) = self.precision_targets.get(evaluator_name)
+                && let Some(ci_half_width) = evaluator_stats.ci_half_width()
+                && ci_half_width <= *precision_target
+                && let Some(token) = tokens.get(evaluator_name)
+                && !token.is_cancelled()
+            {
+                info!(
+                    evaluator_name = %evaluator_name,
+                    ci_half_width = ci_half_width,
+                    precision_target = precision_target,
+                    count = evaluator_stats.count(),
+                    mean = ?evaluator_stats.mean(),
+                    "Stopping evaluator: CI half-width <= precision_target"
+                );
+                token.cancel();
             }
         }
     }

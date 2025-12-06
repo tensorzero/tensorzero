@@ -57,10 +57,10 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
     let lock = LANGUAGES.get_or_init(|| RwLock::new(HashMap::new()));
 
     // Fast path: shared read-lock
-    if let Ok(guard) = lock.read() {
-        if let Some(lang) = guard.get(ext) {
-            return Ok(lang.clone());
-        }
+    if let Ok(guard) = lock.read()
+        && let Some(lang) = guard.get(ext)
+    {
+        return Ok(lang.clone());
     }
 
     // Slow path: upgrade to exclusive write-lock
@@ -195,37 +195,36 @@ mod tests {
         assert!(!tree.root_node().is_error());
         assert_eq!(tree.root_node().kind(), "source_file");
 
-        let expected = ExpectedNode::new("source_file").with_children(vec![ExpectedNode::new(
-            "function_item",
-        )
-        .with_children(vec![
-            ExpectedNode::new("fn").with_text("fn"),
-            ExpectedNode::new("identifier").with_text("hello_world"),
-            ExpectedNode::new("parameters").with_children(vec![
-                ExpectedNode::new("(").with_text("("),
-                ExpectedNode::new(")").with_text(")"),
-            ]),
-            ExpectedNode::new("block").with_children(vec![
-                ExpectedNode::new("{").with_text("{"),
-                ExpectedNode::new("expression_statement").with_children(vec![
-                    ExpectedNode::new("macro_invocation").with_children(vec![
-                        ExpectedNode::new("identifier").with_text("println"),
-                        ExpectedNode::new("!").with_text("!"),
-                        ExpectedNode::new("token_tree").with_children(vec![
-                            ExpectedNode::new("(").with_text("("),
-                            ExpectedNode::new("string_literal").with_children(vec![
-                                ExpectedNode::new("\"").with_text("\""),
-                                ExpectedNode::new("string_content").with_text("Hello, world!"),
-                                ExpectedNode::new("\"").with_text("\""),
-                            ]),
-                            ExpectedNode::new(")").with_text(")"),
-                        ]),
-                    ]),
-                    ExpectedNode::new(";").with_text(";"),
+        let expected = ExpectedNode::new("source_file").with_children(vec![
+            ExpectedNode::new("function_item").with_children(vec![
+                ExpectedNode::new("fn").with_text("fn"),
+                ExpectedNode::new("identifier").with_text("hello_world"),
+                ExpectedNode::new("parameters").with_children(vec![
+                    ExpectedNode::new("(").with_text("("),
+                    ExpectedNode::new(")").with_text(")"),
                 ]),
-                ExpectedNode::new("}").with_text("}"),
+                ExpectedNode::new("block").with_children(vec![
+                    ExpectedNode::new("{").with_text("{"),
+                    ExpectedNode::new("expression_statement").with_children(vec![
+                        ExpectedNode::new("macro_invocation").with_children(vec![
+                            ExpectedNode::new("identifier").with_text("println"),
+                            ExpectedNode::new("!").with_text("!"),
+                            ExpectedNode::new("token_tree").with_children(vec![
+                                ExpectedNode::new("(").with_text("("),
+                                ExpectedNode::new("string_literal").with_children(vec![
+                                    ExpectedNode::new("\"").with_text("\""),
+                                    ExpectedNode::new("string_content").with_text("Hello, world!"),
+                                    ExpectedNode::new("\"").with_text("\""),
+                                ]),
+                                ExpectedNode::new(")").with_text(")"),
+                            ]),
+                        ]),
+                        ExpectedNode::new(";").with_text(";"),
+                    ]),
+                    ExpectedNode::new("}").with_text("}"),
+                ]),
             ]),
-        ])]);
+        ]);
 
         assert_tree_structure(tree.root_node(), &expected, rust_code);
     }
@@ -337,16 +336,16 @@ impl Point {
                                             .with_children(vec![
                                                 ExpectedNode::new("{"),
                                                 ExpectedNode::new("shorthand_field_initializer")
-                                                    .with_children(vec![ExpectedNode::new(
-                                                        "identifier",
-                                                    )
-                                                    .with_text("x")]),
+                                                    .with_children(vec![
+                                                        ExpectedNode::new("identifier")
+                                                            .with_text("x"),
+                                                    ]),
                                                 ExpectedNode::new(","),
                                                 ExpectedNode::new("shorthand_field_initializer")
-                                                    .with_children(vec![ExpectedNode::new(
-                                                        "identifier",
-                                                    )
-                                                    .with_text("y")]),
+                                                    .with_children(vec![
+                                                        ExpectedNode::new("identifier")
+                                                            .with_text("y"),
+                                                    ]),
                                                 ExpectedNode::new("}"),
                                             ]),
                                     ]),
@@ -373,49 +372,49 @@ impl Point {
         assert!(!tree.root_node().is_error());
         assert_eq!(tree.root_node().kind(), "program");
 
-        let expected = ExpectedNode::new("program").with_children(vec![ExpectedNode::new(
-            "function_declaration",
-        )
-        .with_children(vec![
-            ExpectedNode::new("function").with_text("function"),
-            ExpectedNode::new("identifier").with_text("greet"),
-            ExpectedNode::new("formal_parameters").with_children(vec![
-                ExpectedNode::new("(").with_text("("),
-                ExpectedNode::new("required_parameter").with_children(vec![
-                    ExpectedNode::new("identifier").with_text("name"),
-                    ExpectedNode::new("type_annotation").with_children(vec![
-                        ExpectedNode::new(":").with_text(":"),
-                        ExpectedNode::new("predefined_type")
-                            .with_children(vec![ExpectedNode::new("string").with_text("string")]),
-                    ]),
-                ]),
-                ExpectedNode::new(")").with_text(")"),
-            ]),
-            ExpectedNode::new("type_annotation").with_children(vec![
-                ExpectedNode::new(":").with_text(":"),
-                ExpectedNode::new("predefined_type")
-                    .with_children(vec![ExpectedNode::new("string").with_text("string")]),
-            ]),
-            ExpectedNode::new("statement_block").with_children(vec![
-                ExpectedNode::new("{").with_text("{"),
-                ExpectedNode::new("return_statement").with_children(vec![
-                    ExpectedNode::new("return").with_text("return"),
-                    ExpectedNode::new("template_string").with_children(vec![
-                        ExpectedNode::new("`").with_text("`"),
-                        ExpectedNode::new("string_fragment").with_text("Hello, "),
-                        ExpectedNode::new("template_substitution").with_children(vec![
-                            ExpectedNode::new("${").with_text("${"),
-                            ExpectedNode::new("identifier").with_text("name"),
-                            ExpectedNode::new("}").with_text("}"),
+        let expected = ExpectedNode::new("program").with_children(vec![
+            ExpectedNode::new("function_declaration").with_children(vec![
+                ExpectedNode::new("function").with_text("function"),
+                ExpectedNode::new("identifier").with_text("greet"),
+                ExpectedNode::new("formal_parameters").with_children(vec![
+                    ExpectedNode::new("(").with_text("("),
+                    ExpectedNode::new("required_parameter").with_children(vec![
+                        ExpectedNode::new("identifier").with_text("name"),
+                        ExpectedNode::new("type_annotation").with_children(vec![
+                            ExpectedNode::new(":").with_text(":"),
+                            ExpectedNode::new("predefined_type").with_children(vec![
+                                ExpectedNode::new("string").with_text("string"),
+                            ]),
                         ]),
-                        ExpectedNode::new("string_fragment").with_text("!"),
-                        ExpectedNode::new("`").with_text("`"),
                     ]),
-                    ExpectedNode::new(";").with_text(";"),
+                    ExpectedNode::new(")").with_text(")"),
                 ]),
-                ExpectedNode::new("}").with_text("}"),
+                ExpectedNode::new("type_annotation").with_children(vec![
+                    ExpectedNode::new(":").with_text(":"),
+                    ExpectedNode::new("predefined_type")
+                        .with_children(vec![ExpectedNode::new("string").with_text("string")]),
+                ]),
+                ExpectedNode::new("statement_block").with_children(vec![
+                    ExpectedNode::new("{").with_text("{"),
+                    ExpectedNode::new("return_statement").with_children(vec![
+                        ExpectedNode::new("return").with_text("return"),
+                        ExpectedNode::new("template_string").with_children(vec![
+                            ExpectedNode::new("`").with_text("`"),
+                            ExpectedNode::new("string_fragment").with_text("Hello, "),
+                            ExpectedNode::new("template_substitution").with_children(vec![
+                                ExpectedNode::new("${").with_text("${"),
+                                ExpectedNode::new("identifier").with_text("name"),
+                                ExpectedNode::new("}").with_text("}"),
+                            ]),
+                            ExpectedNode::new("string_fragment").with_text("!"),
+                            ExpectedNode::new("`").with_text("`"),
+                        ]),
+                        ExpectedNode::new(";").with_text(";"),
+                    ]),
+                    ExpectedNode::new("}").with_text("}"),
+                ]),
             ]),
-        ])]);
+        ]);
 
         assert_tree_structure(tree.root_node(), &expected, ts_code);
     }
@@ -440,114 +439,113 @@ impl Point {
         let tree = result.unwrap();
         assert!(!tree.root_node().is_error());
 
-        let expected = ExpectedNode::new("program").with_children(vec![ExpectedNode::new(
-            "class_declaration",
-        )
-        .with_children(vec![
-            ExpectedNode::new("class"),
-            ExpectedNode::new("type_identifier").with_text("Calculator"),
-            ExpectedNode::new("class_body").with_children(vec![
-                ExpectedNode::new("{"),
-                ExpectedNode::new("public_field_definition").with_children(vec![
-                    ExpectedNode::new("accessibility_modifier")
-                        .with_children(vec![ExpectedNode::new("private").with_text("private")]),
-                    ExpectedNode::new("property_identifier").with_text("value"),
-                    ExpectedNode::new("type_annotation").with_children(vec![
-                        ExpectedNode::new(":").with_text(":"),
-                        ExpectedNode::new("predefined_type")
-                            .with_children(vec![ExpectedNode::new("number").with_text("number")]),
+        let expected = ExpectedNode::new("program").with_children(vec![
+            ExpectedNode::new("class_declaration").with_children(vec![
+                ExpectedNode::new("class"),
+                ExpectedNode::new("type_identifier").with_text("Calculator"),
+                ExpectedNode::new("class_body").with_children(vec![
+                    ExpectedNode::new("{"),
+                    ExpectedNode::new("public_field_definition").with_children(vec![
+                        ExpectedNode::new("accessibility_modifier")
+                            .with_children(vec![ExpectedNode::new("private").with_text("private")]),
+                        ExpectedNode::new("property_identifier").with_text("value"),
+                        ExpectedNode::new("type_annotation").with_children(vec![
+                            ExpectedNode::new(":").with_text(":"),
+                            ExpectedNode::new("predefined_type").with_children(vec![
+                                ExpectedNode::new("number").with_text("number"),
+                            ]),
+                        ]),
+                        ExpectedNode::new("=").with_text("="),
+                        ExpectedNode::new("number").with_text("0"),
                     ]),
-                    ExpectedNode::new("=").with_text("="),
-                    ExpectedNode::new("number").with_text("0"),
-                ]),
-                ExpectedNode::new(";").with_text(";"),
-                ExpectedNode::new("method_definition").with_children(vec![
-                    ExpectedNode::new("property_identifier").with_text("add"),
-                    ExpectedNode::new("formal_parameters").with_children(vec![
-                        ExpectedNode::new("("),
-                        ExpectedNode::new("required_parameter").with_children(vec![
-                            ExpectedNode::new("identifier").with_text("n"),
-                            ExpectedNode::new("type_annotation")
-                                .with_field("type")
-                                .with_children(vec![
-                                    ExpectedNode::new(":"),
-                                    ExpectedNode::new("predefined_type").with_text("number"),
-                                ]),
+                    ExpectedNode::new(";").with_text(";"),
+                    ExpectedNode::new("method_definition").with_children(vec![
+                        ExpectedNode::new("property_identifier").with_text("add"),
+                        ExpectedNode::new("formal_parameters").with_children(vec![
+                            ExpectedNode::new("("),
+                            ExpectedNode::new("required_parameter").with_children(vec![
+                                ExpectedNode::new("identifier").with_text("n"),
+                                ExpectedNode::new("type_annotation")
+                                    .with_field("type")
+                                    .with_children(vec![
+                                        ExpectedNode::new(":"),
+                                        ExpectedNode::new("predefined_type").with_text("number"),
+                                    ]),
+                            ]),
+                            ExpectedNode::new(")"),
                         ]),
-                        ExpectedNode::new(")"),
+                        ExpectedNode::new("type_annotation")
+                            .with_field("return_type")
+                            .with_children(vec![
+                                ExpectedNode::new(":"),
+                                ExpectedNode::new("type_identifier").with_text("Calculator"),
+                            ]),
+                        ExpectedNode::new("statement_block")
+                            .with_field("body")
+                            .with_children(vec![
+                                ExpectedNode::new("{"),
+                                ExpectedNode::new("expression_statement").with_children(vec![
+                                    ExpectedNode::new("augmented_assignment_expression")
+                                        .with_children(vec![
+                                            ExpectedNode::new("member_expression")
+                                                .with_field("left")
+                                                .with_children(vec![
+                                                    ExpectedNode::new("this").with_field("object"),
+                                                    ExpectedNode::new(".").with_field("."),
+                                                    ExpectedNode::new("property_identifier")
+                                                        .with_field("property")
+                                                        .with_text("value"),
+                                                ]),
+                                            ExpectedNode::new("+=").with_field("operator"),
+                                            ExpectedNode::new("identifier")
+                                                .with_field("right")
+                                                .with_text("n"),
+                                        ]),
+                                    ExpectedNode::new(";"),
+                                ]),
+                                ExpectedNode::new("return_statement").with_children(vec![
+                                    ExpectedNode::new("return"),
+                                    ExpectedNode::new("this"),
+                                    ExpectedNode::new(";"),
+                                ]),
+                                ExpectedNode::new("}"),
+                            ]),
                     ]),
-                    ExpectedNode::new("type_annotation")
-                        .with_field("return_type")
-                        .with_children(vec![
-                            ExpectedNode::new(":"),
-                            ExpectedNode::new("type_identifier").with_text("Calculator"),
-                        ]),
-                    ExpectedNode::new("statement_block")
-                        .with_field("body")
-                        .with_children(vec![
-                            ExpectedNode::new("{"),
-                            ExpectedNode::new("expression_statement").with_children(vec![
-                                ExpectedNode::new("augmented_assignment_expression").with_children(
-                                    vec![
-                                        ExpectedNode::new("member_expression")
-                                            .with_field("left")
-                                            .with_children(vec![
-                                                ExpectedNode::new("this").with_field("object"),
-                                                ExpectedNode::new(".").with_field("."),
-                                                ExpectedNode::new("property_identifier")
-                                                    .with_field("property")
-                                                    .with_text("value"),
-                                            ]),
-                                        ExpectedNode::new("+=").with_field("operator"),
-                                        ExpectedNode::new("identifier")
-                                            .with_field("right")
-                                            .with_text("n"),
-                                    ],
-                                ),
-                                ExpectedNode::new(";"),
+                    ExpectedNode::new("method_definition").with_children(vec![
+                        ExpectedNode::new("property_identifier")
+                            .with_field("name")
+                            .with_text("getResult"),
+                        ExpectedNode::new("formal_parameters")
+                            .with_field("parameters")
+                            .with_children(vec![ExpectedNode::new("("), ExpectedNode::new(")")]),
+                        ExpectedNode::new("type_annotation")
+                            .with_field("return_type")
+                            .with_children(vec![
+                                ExpectedNode::new(":"),
+                                ExpectedNode::new("predefined_type").with_text("number"),
                             ]),
-                            ExpectedNode::new("return_statement").with_children(vec![
-                                ExpectedNode::new("return"),
-                                ExpectedNode::new("this"),
-                                ExpectedNode::new(";"),
-                            ]),
-                            ExpectedNode::new("}"),
-                        ]),
-                ]),
-                ExpectedNode::new("method_definition").with_children(vec![
-                    ExpectedNode::new("property_identifier")
-                        .with_field("name")
-                        .with_text("getResult"),
-                    ExpectedNode::new("formal_parameters")
-                        .with_field("parameters")
-                        .with_children(vec![ExpectedNode::new("("), ExpectedNode::new(")")]),
-                    ExpectedNode::new("type_annotation")
-                        .with_field("return_type")
-                        .with_children(vec![
-                            ExpectedNode::new(":"),
-                            ExpectedNode::new("predefined_type").with_text("number"),
-                        ]),
-                    ExpectedNode::new("statement_block")
-                        .with_field("body")
-                        .with_children(vec![
-                            ExpectedNode::new("{"),
-                            ExpectedNode::new("return_statement").with_children(vec![
-                                ExpectedNode::new("return"),
-                                ExpectedNode::new("member_expression").with_children(vec![
-                                    ExpectedNode::new("this").with_field("object"),
-                                    ExpectedNode::new(".").with_field("."),
-                                    ExpectedNode::new("property_identifier")
-                                        .with_field("property")
-                                        .with_text("value"),
+                        ExpectedNode::new("statement_block")
+                            .with_field("body")
+                            .with_children(vec![
+                                ExpectedNode::new("{"),
+                                ExpectedNode::new("return_statement").with_children(vec![
+                                    ExpectedNode::new("return"),
+                                    ExpectedNode::new("member_expression").with_children(vec![
+                                        ExpectedNode::new("this").with_field("object"),
+                                        ExpectedNode::new(".").with_field("."),
+                                        ExpectedNode::new("property_identifier")
+                                            .with_field("property")
+                                            .with_text("value"),
+                                    ]),
+                                    ExpectedNode::new(";"),
                                 ]),
-                                ExpectedNode::new(";"),
+                                ExpectedNode::new("}"),
                             ]),
-                            ExpectedNode::new("}"),
-                        ]),
+                    ]),
+                    ExpectedNode::new("}"),
                 ]),
-                ExpectedNode::new("}"),
             ]),
-        ])]);
+        ]);
 
         assert_tree_structure(tree.root_node(), &expected, ts_code);
     }
@@ -563,28 +561,26 @@ impl Point {
         assert!(!tree.root_node().is_error());
         assert_eq!(tree.root_node().kind(), "module");
 
-        let expected = ExpectedNode::new("module").with_children(vec![ExpectedNode::new(
-            "function_definition",
-        )
-        .with_children(vec![
-            ExpectedNode::new("def").with_field("def"),
-            ExpectedNode::new("identifier")
-                .with_field("name")
-                .with_text("calculate_area"),
-            ExpectedNode::new("parameters")
-                .with_field("parameters")
-                .with_children(vec![
-                    ExpectedNode::new("("),
-                    ExpectedNode::new("identifier").with_text("radius"),
-                    ExpectedNode::new(")"),
-                ]),
-            ExpectedNode::new(":").with_field(":"),
-            ExpectedNode::new("block")
-                .with_field("body")
-                .with_children(vec![ExpectedNode::new("return_statement").with_children(
-                    vec![
-                        ExpectedNode::new("return"),
-                        ExpectedNode::new("binary_operator").with_children(vec![
+        let expected = ExpectedNode::new("module").with_children(vec![
+            ExpectedNode::new("function_definition").with_children(vec![
+                ExpectedNode::new("def").with_field("def"),
+                ExpectedNode::new("identifier")
+                    .with_field("name")
+                    .with_text("calculate_area"),
+                ExpectedNode::new("parameters")
+                    .with_field("parameters")
+                    .with_children(vec![
+                        ExpectedNode::new("("),
+                        ExpectedNode::new("identifier").with_text("radius"),
+                        ExpectedNode::new(")"),
+                    ]),
+                ExpectedNode::new(":").with_field(":"),
+                ExpectedNode::new("block")
+                    .with_field("body")
+                    .with_children(vec![ExpectedNode::new("return_statement").with_children(
+                        vec![
+                            ExpectedNode::new("return"),
+                            ExpectedNode::new("binary_operator").with_children(vec![
                             ExpectedNode::new("binary_operator")
                                 .with_field("left")
                                 .with_children(vec![
@@ -601,9 +597,10 @@ impl Point {
                                 .with_field("right")
                                 .with_text("radius"),
                         ]),
-                    ],
-                )]),
-        ])]);
+                        ],
+                    )]),
+            ]),
+        ]);
 
         assert_tree_structure(tree.root_node(), &expected, py_code);
     }
@@ -627,165 +624,140 @@ impl Point {
         let tree = result.unwrap();
         assert!(!tree.root_node().is_error());
 
-        let expected =
-            ExpectedNode::new("module").with_children(vec![ExpectedNode::new("class_definition")
-                .with_children(vec![
-                    ExpectedNode::new("class").with_field("class"),
-                    ExpectedNode::new("identifier")
-                        .with_field("name")
-                        .with_text("Person"),
-                    ExpectedNode::new(":").with_field(":"),
-                    ExpectedNode::new("block")
-                        .with_field("body")
-                        .with_children(vec![
-                            ExpectedNode::new("function_definition").with_children(vec![
-                                ExpectedNode::new("def").with_field("def"),
-                                ExpectedNode::new("identifier")
-                                    .with_field("name")
-                                    .with_text("__init__"),
-                                ExpectedNode::new("parameters")
-                                    .with_field("parameters")
-                                    .with_children(vec![
-                                        ExpectedNode::new("("),
-                                        ExpectedNode::new("identifier").with_text("self"),
-                                        ExpectedNode::new(","),
-                                        ExpectedNode::new("identifier").with_text("name"),
-                                        ExpectedNode::new(","),
-                                        ExpectedNode::new("identifier").with_text("age"),
-                                        ExpectedNode::new(")"),
-                                    ]),
-                                ExpectedNode::new(":").with_field(":"),
-                                ExpectedNode::new("block")
-                                    .with_field("body")
-                                    .with_children(vec![
-                                        ExpectedNode::new("expression_statement").with_children(
-                                            vec![ExpectedNode::new("assignment").with_children(
-                                                vec![
-                                                    ExpectedNode::new("attribute").with_children(
-                                                        vec![
-                                                            ExpectedNode::new("identifier")
-                                                                .with_text("self"),
-                                                            ExpectedNode::new(".").with_text("."),
-                                                            ExpectedNode::new("identifier")
-                                                                .with_text("name"),
-                                                        ],
-                                                    ),
-                                                    ExpectedNode::new("=").with_text("="),
-                                                    ExpectedNode::new("identifier")
-                                                        .with_text("name"),
-                                                ],
-                                            )],
-                                        ),
-                                        ExpectedNode::new("expression_statement").with_children(
-                                            vec![ExpectedNode::new("assignment").with_children(
-                                                vec![
-                                                    ExpectedNode::new("attribute").with_children(
-                                                        vec![
-                                                            ExpectedNode::new("identifier")
-                                                                .with_text("self"),
-                                                            ExpectedNode::new(".").with_text("."),
-                                                            ExpectedNode::new("identifier")
-                                                                .with_text("age"),
-                                                        ],
-                                                    ),
-                                                    ExpectedNode::new("=").with_text("="),
-                                                    ExpectedNode::new("identifier")
-                                                        .with_text("age"),
-                                                ],
-                                            )],
-                                        ),
-                                    ]),
-                            ]),
-                            ExpectedNode::new("function_definition").with_children(vec![
-                                ExpectedNode::new("def").with_field("def"),
-                                ExpectedNode::new("identifier")
-                                    .with_field("name")
-                                    .with_text("introduce"),
-                                ExpectedNode::new("parameters")
-                                    .with_field("parameters")
-                                    .with_children(vec![
-                                        ExpectedNode::new("("),
-                                        ExpectedNode::new("identifier").with_text("self"),
-                                        ExpectedNode::new(")"),
-                                    ]),
-                                ExpectedNode::new(":").with_field(":"),
-                                ExpectedNode::new("block")
-                                    .with_field("body")
-                                    .with_children(vec![ExpectedNode::new("return_statement")
-                                        .with_children(vec![
-                                            ExpectedNode::new("return"),
-                                            ExpectedNode::new("string").with_children(vec![
-                                                ExpectedNode::new("string_start").with_text("f\""),
-                                                ExpectedNode::new("string_content")
-                                                    .with_text("Hi, I'm "),
-                                                ExpectedNode::new("interpolation").with_children(
-                                                    vec![
-                                                        ExpectedNode::new("{"),
-                                                        ExpectedNode::new("attribute")
-                                                            .with_children(vec![
-                                                                ExpectedNode::new("identifier")
-                                                                    .with_field("object")
-                                                                    .with_text("self"),
-                                                                ExpectedNode::new(".")
-                                                                    .with_field("."),
-                                                                ExpectedNode::new("identifier")
-                                                                    .with_field("attribute")
-                                                                    .with_text("name"),
-                                                            ]),
-                                                        ExpectedNode::new("}"),
-                                                    ],
-                                                ),
-                                                ExpectedNode::new("string_content")
-                                                    .with_text(" and I'm "),
-                                                ExpectedNode::new("interpolation").with_children(
-                                                    vec![
-                                                        ExpectedNode::new("{"),
-                                                        ExpectedNode::new("attribute")
-                                                            .with_children(vec![
-                                                                ExpectedNode::new("identifier")
-                                                                    .with_field("object")
-                                                                    .with_text("self"),
-                                                                ExpectedNode::new(".")
-                                                                    .with_field("."),
-                                                                ExpectedNode::new("identifier")
-                                                                    .with_field("attribute")
-                                                                    .with_text("age"),
-                                                            ]),
-                                                        ExpectedNode::new("}"),
-                                                    ],
-                                                ),
-                                                ExpectedNode::new("string_content")
-                                                    .with_text(" years old"),
-                                                ExpectedNode::new("string_end").with_text("\""),
-                                            ]),
-                                        ])]),
-                            ]),
-                            ExpectedNode::new("decorated_definition").with_children(vec![
-                                ExpectedNode::new("decorator").with_children(vec![
-                                    ExpectedNode::new("@"),
-                                    ExpectedNode::new("identifier").with_text("property"),
+        let expected = ExpectedNode::new("module").with_children(vec![
+            ExpectedNode::new("class_definition").with_children(vec![
+                ExpectedNode::new("class").with_field("class"),
+                ExpectedNode::new("identifier")
+                    .with_field("name")
+                    .with_text("Person"),
+                ExpectedNode::new(":").with_field(":"),
+                ExpectedNode::new("block")
+                    .with_field("body")
+                    .with_children(vec![
+                        ExpectedNode::new("function_definition").with_children(vec![
+                            ExpectedNode::new("def").with_field("def"),
+                            ExpectedNode::new("identifier")
+                                .with_field("name")
+                                .with_text("__init__"),
+                            ExpectedNode::new("parameters")
+                                .with_field("parameters")
+                                .with_children(vec![
+                                    ExpectedNode::new("("),
+                                    ExpectedNode::new("identifier").with_text("self"),
+                                    ExpectedNode::new(","),
+                                    ExpectedNode::new("identifier").with_text("name"),
+                                    ExpectedNode::new(","),
+                                    ExpectedNode::new("identifier").with_text("age"),
+                                    ExpectedNode::new(")"),
                                 ]),
-                                ExpectedNode::new("function_definition")
-                                    .with_field("definition")
-                                    .with_children(vec![
-                                        ExpectedNode::new("def").with_field("def"),
-                                        ExpectedNode::new("identifier")
-                                            .with_field("name")
-                                            .with_text("is_adult"),
-                                        ExpectedNode::new("parameters")
-                                            .with_field("parameters")
-                                            .with_children(vec![
-                                                ExpectedNode::new("("),
+                            ExpectedNode::new(":").with_field(":"),
+                            ExpectedNode::new("block")
+                                .with_field("body")
+                                .with_children(vec![
+                                    ExpectedNode::new("expression_statement").with_children(vec![
+                                        ExpectedNode::new("assignment").with_children(vec![
+                                            ExpectedNode::new("attribute").with_children(vec![
                                                 ExpectedNode::new("identifier").with_text("self"),
-                                                ExpectedNode::new(")"),
+                                                ExpectedNode::new(".").with_text("."),
+                                                ExpectedNode::new("identifier").with_text("name"),
                                             ]),
-                                        ExpectedNode::new(":").with_field(":"),
-                                        ExpectedNode::new("block")
-                                            .with_field("body")
-                                            .with_children(vec![ExpectedNode::new(
-                                                "return_statement",
-                                            )
-                                            .with_children(vec![
+                                            ExpectedNode::new("=").with_text("="),
+                                            ExpectedNode::new("identifier").with_text("name"),
+                                        ]),
+                                    ]),
+                                    ExpectedNode::new("expression_statement").with_children(vec![
+                                        ExpectedNode::new("assignment").with_children(vec![
+                                            ExpectedNode::new("attribute").with_children(vec![
+                                                ExpectedNode::new("identifier").with_text("self"),
+                                                ExpectedNode::new(".").with_text("."),
+                                                ExpectedNode::new("identifier").with_text("age"),
+                                            ]),
+                                            ExpectedNode::new("=").with_text("="),
+                                            ExpectedNode::new("identifier").with_text("age"),
+                                        ]),
+                                    ]),
+                                ]),
+                        ]),
+                        ExpectedNode::new("function_definition").with_children(vec![
+                            ExpectedNode::new("def").with_field("def"),
+                            ExpectedNode::new("identifier")
+                                .with_field("name")
+                                .with_text("introduce"),
+                            ExpectedNode::new("parameters")
+                                .with_field("parameters")
+                                .with_children(vec![
+                                    ExpectedNode::new("("),
+                                    ExpectedNode::new("identifier").with_text("self"),
+                                    ExpectedNode::new(")"),
+                                ]),
+                            ExpectedNode::new(":").with_field(":"),
+                            ExpectedNode::new("block")
+                                .with_field("body")
+                                .with_children(vec![
+                                    ExpectedNode::new("return_statement").with_children(vec![
+                                        ExpectedNode::new("return"),
+                                        ExpectedNode::new("string").with_children(vec![
+                                            ExpectedNode::new("string_start").with_text("f\""),
+                                            ExpectedNode::new("string_content")
+                                                .with_text("Hi, I'm "),
+                                            ExpectedNode::new("interpolation").with_children(vec![
+                                                ExpectedNode::new("{"),
+                                                ExpectedNode::new("attribute").with_children(vec![
+                                                    ExpectedNode::new("identifier")
+                                                        .with_field("object")
+                                                        .with_text("self"),
+                                                    ExpectedNode::new(".").with_field("."),
+                                                    ExpectedNode::new("identifier")
+                                                        .with_field("attribute")
+                                                        .with_text("name"),
+                                                ]),
+                                                ExpectedNode::new("}"),
+                                            ]),
+                                            ExpectedNode::new("string_content")
+                                                .with_text(" and I'm "),
+                                            ExpectedNode::new("interpolation").with_children(vec![
+                                                ExpectedNode::new("{"),
+                                                ExpectedNode::new("attribute").with_children(vec![
+                                                    ExpectedNode::new("identifier")
+                                                        .with_field("object")
+                                                        .with_text("self"),
+                                                    ExpectedNode::new(".").with_field("."),
+                                                    ExpectedNode::new("identifier")
+                                                        .with_field("attribute")
+                                                        .with_text("age"),
+                                                ]),
+                                                ExpectedNode::new("}"),
+                                            ]),
+                                            ExpectedNode::new("string_content")
+                                                .with_text(" years old"),
+                                            ExpectedNode::new("string_end").with_text("\""),
+                                        ]),
+                                    ]),
+                                ]),
+                        ]),
+                        ExpectedNode::new("decorated_definition").with_children(vec![
+                            ExpectedNode::new("decorator").with_children(vec![
+                                ExpectedNode::new("@"),
+                                ExpectedNode::new("identifier").with_text("property"),
+                            ]),
+                            ExpectedNode::new("function_definition")
+                                .with_field("definition")
+                                .with_children(vec![
+                                    ExpectedNode::new("def").with_field("def"),
+                                    ExpectedNode::new("identifier")
+                                        .with_field("name")
+                                        .with_text("is_adult"),
+                                    ExpectedNode::new("parameters")
+                                        .with_field("parameters")
+                                        .with_children(vec![
+                                            ExpectedNode::new("("),
+                                            ExpectedNode::new("identifier").with_text("self"),
+                                            ExpectedNode::new(")"),
+                                        ]),
+                                    ExpectedNode::new(":").with_field(":"),
+                                    ExpectedNode::new("block").with_field("body").with_children(
+                                        vec![ExpectedNode::new("return_statement").with_children(
+                                            vec![
                                                 ExpectedNode::new("return"),
                                                 ExpectedNode::new("comparison_operator")
                                                     .with_children(vec![
@@ -807,11 +779,14 @@ impl Point {
                                                             .with_field("right")
                                                             .with_text("18"),
                                                     ]),
-                                            ])]),
-                                    ]),
-                            ]),
+                                            ],
+                                        )],
+                                    ),
+                                ]),
                         ]),
-                ])]);
+                    ]),
+            ]),
+        ]);
 
         assert_tree_structure(tree.root_node(), &expected, py_code);
     }
@@ -822,7 +797,7 @@ impl Point {
 [package]
 name = "my-app"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 serde = "1.0"
@@ -946,10 +921,12 @@ fn main() {
         let code = "some code";
         let result = parse_hunk(code, "xyz");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unsupported file extension"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported file extension")
+        );
     }
 
     #[test]

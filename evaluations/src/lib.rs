@@ -3,22 +3,23 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Result};
-use evaluators::{evaluate_inference, EvaluateInferenceParams};
+use anyhow::{Result, anyhow, bail};
+use evaluators::{EvaluateInferenceParams, evaluate_inference};
 use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
 
 // Public re-exports for external consumers
 pub use cli::{Args, OutputFormat};
 pub use stats::{
-    mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
-    EvaluatorStats, PerEvaluatorStats,
+    EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
+    PerEvaluatorStats, mean, std_deviation,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
-    input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
+    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams,
+    InferenceOutput, InferenceParams, InferenceResponse,
+    input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::endpoints::datasets::v1::{
@@ -32,7 +33,7 @@ use tensorzero_core::{
     function::FunctionConfig,
 };
 use tokio::{
-    sync::{mpsc, Semaphore},
+    sync::{Semaphore, mpsc},
     task::JoinSet,
 };
 use tracing::{debug, error, info, instrument};
@@ -159,7 +160,9 @@ pub async fn run_evaluation(
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && args.max_datapoints.is_some() {
-        bail!("Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.");
+        bail!(
+            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+        );
     }
 
     info!("Initializing evaluation environment");
@@ -409,7 +412,9 @@ pub async fn run_evaluation_core_streaming(
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && max_datapoints.is_some() {
-        bail!("Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.");
+        bail!(
+            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+        );
     }
 
     info!("Loading datapoints");
@@ -598,11 +603,11 @@ pub async fn run_evaluation_core_streaming(
             };
 
             // Check if update is Some; if so, unwrap and send inner value
-            if let Some(update_value) = update {
-                if sender_clone.send(update_value).await.is_err() {
-                    // Receiver dropped, stop sending
-                    break;
-                }
+            if let Some(update_value) = update
+                && sender_clone.send(update_value).await.is_err()
+            {
+                // Receiver dropped, stop sending
+                break;
             }
         }
     });

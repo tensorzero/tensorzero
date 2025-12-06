@@ -4,10 +4,10 @@
 //! and defines authentication and version header middlewares.
 
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, Request},
     middleware::{self, Next},
     response::Response,
-    Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tower_http::metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer};
+use tower_http::metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter};
 
 use crate::routes::build_api_routes;
 
