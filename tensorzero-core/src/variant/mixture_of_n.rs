@@ -44,7 +44,7 @@ use super::{
     infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
@@ -103,7 +103,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FuserConfig {
     #[serde(flatten)]

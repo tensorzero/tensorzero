@@ -140,7 +140,7 @@ impl StaticJSONSchema {
 /// Wraps a schema with metadata indicating whether it was defined using legacy syntax
 /// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
 /// This is used to determine whether to show a "Legacy" badge in the UI.
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SchemaWithMetadata {
     pub schema: StaticJSONSchema,
@@ -156,12 +156,16 @@ pub struct SchemaWithMetadata {
 /// There are just `new` and `validate` methods.
 ///
 /// TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, Clone, ts_rs::TS)]
 #[ts(export)]
 pub struct DynamicJSONSchema {
     pub value: Value,
-    #[serde(skip)]
+    #[serde(skip, default = "default_compiled_schema")]
     compiled_schema: Arc<OnceCell<Validator>>,
+}
+
+fn default_compiled_schema() -> Arc<OnceCell<Validator>> {
+    Arc::new(OnceCell::new())
 }
 
 impl PartialEq for DynamicJSONSchema {

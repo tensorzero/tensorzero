@@ -16,7 +16,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyKeyError, PyValueError};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -42,7 +42,7 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
@@ -247,7 +247,7 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
@@ -274,7 +274,7 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config

@@ -53,7 +53,7 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct VariantInfo {
     pub inner: VariantConfig,
@@ -66,7 +66,7 @@ impl VariantInfo {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {

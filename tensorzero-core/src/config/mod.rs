@@ -1517,7 +1517,7 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SchemaData {
     #[serde(flatten)]

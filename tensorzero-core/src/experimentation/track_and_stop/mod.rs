@@ -78,7 +78,7 @@ mod check_stopping;
 mod error;
 pub mod estimate_optimal_probabilities;
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TrackAndStopConfig {
     metric: String,
@@ -90,12 +90,22 @@ pub struct TrackAndStopConfig {
     #[ts(skip)]
     update_period: Duration,
     min_prob: Option<f64>,
-    #[serde(skip)]
+    #[serde(skip, default = "default_metric_optimize")]
     metric_optimize: MetricConfigOptimize,
-    #[serde(skip)]
+    #[serde(skip, default = "default_track_and_stop_state")]
     state: Arc<ArcSwap<TrackAndStopState>>,
-    #[serde(skip)]
+    #[serde(skip, default)]
     task_spawned: AtomicBool,
+}
+
+fn default_metric_optimize() -> MetricConfigOptimize {
+    MetricConfigOptimize::Max
+}
+
+fn default_track_and_stop_state() -> Arc<ArcSwap<TrackAndStopState>> {
+    Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
+        Nursery::new(vec![]),
+    ))))
 }
 
 /// Computes the Track-and-Stop state from configuration and feedback data.

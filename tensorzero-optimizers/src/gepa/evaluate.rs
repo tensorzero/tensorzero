@@ -14,7 +14,7 @@ use tensorzero_core::{
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
-    function::{get_function, FunctionConfig},
+    function::{FunctionConfig, get_function},
     http::TensorzeroHttpClient,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,

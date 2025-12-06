@@ -24,7 +24,7 @@ use super::params::DynamicToolParams;
 
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ToolConfig {
     Function(FunctionToolConfig),
     OpenAICustom(OpenAICustomTool),
@@ -32,7 +32,7 @@ pub enum ToolConfig {
 
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum FunctionToolConfig {
     Static(Arc<StaticToolConfig>),
     Dynamic(DynamicToolConfig),
@@ -43,7 +43,7 @@ pub enum FunctionToolConfig {
 /// Contains the configuration information for a specific tool
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
     pub parameters: StaticJSONSchema,
@@ -54,7 +54,7 @@ pub struct StaticToolConfig {
 /// Contains the configuration information for a tool defined at runtime
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
@@ -66,7 +66,7 @@ pub struct DynamicToolConfig {
 /// JSON schema enforcement
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: StaticJSONSchema,
 }
@@ -75,7 +75,7 @@ pub struct ImplicitToolConfig {
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
 }
@@ -139,7 +139,7 @@ pub enum ToolConfigRef<'a> {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<FunctionToolConfig>,

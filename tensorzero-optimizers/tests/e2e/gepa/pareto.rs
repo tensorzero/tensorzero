@@ -108,7 +108,7 @@ async fn test_pareto_frontier_update_with_initial_variants() {
         let evaluation_params = EvaluateVariantParams {
             gateway_client: gateway_client.clone(),
             clickhouse_connection_info: clickhouse.clone(),
-            tensorzero_config: config.clone(),
+            functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
             evaluation_name: gepa_config.evaluation_name.clone(),
             variant_name: variant_name.to_string(),
@@ -226,7 +226,7 @@ async fn test_pareto_frontier_sample_by_frequency() {
         let evaluation_params = EvaluateVariantParams {
             gateway_client: gateway_client.clone(),
             clickhouse_connection_info: clickhouse.clone(),
-            tensorzero_config: config.clone(),
+            functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
             evaluation_name: gepa_config.evaluation_name.clone(),
             variant_name: variant_name.to_string(),
@@ -341,7 +341,7 @@ async fn test_pareto_frontier_maintains_valid_state() {
         let evaluation_params = EvaluateVariantParams {
             gateway_client: gateway_client.clone(),
             clickhouse_connection_info: clickhouse.clone(),
-            tensorzero_config: config.clone(),
+            functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
             evaluation_name: gepa_config.evaluation_name.clone(),
             variant_name: variant_name.to_string(),

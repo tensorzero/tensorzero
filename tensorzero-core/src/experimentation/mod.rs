@@ -92,7 +92,7 @@ fn check_duplicates_across_map(
     Ok(())
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
@@ -378,7 +378,7 @@ pub(crate) fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 /// Test-only config that always fails during sampling to test fallback logic
 #[cfg(test)]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AlwaysFailsConfig {
     allowed_variants: Vec<String>,
 }
