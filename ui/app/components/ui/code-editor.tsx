@@ -71,6 +71,8 @@ export interface CodeEditorProps {
   showLineNumbers?: boolean;
   placeholder?: string;
   className?: string;
+  /** We should generally set a maxHeight to improve performance for large documents. */
+  maxHeight?: string;
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -79,6 +81,76 @@ const LANGUAGE_EXTENSIONS = {
   jinja2: [StreamLanguage.define(jinja2)],
   text: [],
 } as const;
+
+// Shared theme for focus and gutter styles (created once, shared across all instances)
+const CUSTOM_EDITOR_THEME = EditorView.theme({
+  "&.cm-focused": {
+    outline: "none !important",
+  },
+  ".cm-gutters": {
+    fontFamily: "var(--font-mono) !important",
+  },
+});
+
+// Pre-computed theme variants (only 2 needed: mono vs sans font)
+const THEME_MONO = githubLightInit({
+  settings: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    gutterBorder: "transparent",
+    background: "transparent",
+  },
+});
+const THEME_SANS = githubLightInit({
+  settings: {
+    fontFamily: "var(--font-sans)",
+    fontSize: "var(--text-xs)",
+    gutterBorder: "transparent",
+    background: "transparent",
+  },
+});
+
+// Cache for extension combinations (max 16 combinations: 4 languages × 2 wordWrap × 2 readOnly)
+const extensionCache = new Map<string, Extension[]>();
+
+function getExtensions(
+  language: Language,
+  wordWrap: boolean,
+  readOnly: boolean,
+): Extension[] {
+  const key = `${language}-${wordWrap}-${readOnly}`;
+  let exts = extensionCache.get(key);
+  if (!exts) {
+    exts = [...LANGUAGE_EXTENSIONS[language], CUSTOM_EDITOR_THEME];
+    if (wordWrap) exts.push(EditorView.lineWrapping);
+    if (readOnly) exts.push(EditorView.editable.of(false));
+    extensionCache.set(key, exts);
+  }
+  return exts;
+}
+
+// Cache for basicSetup combinations (max 4 combinations: 2 showLineNumbers × 2 readOnly)
+const basicSetupCache = new Map<string, object>();
+
+function getBasicSetup(showLineNumbers: boolean, readOnly: boolean) {
+  const key = `${showLineNumbers}-${readOnly}`;
+  let setup = basicSetupCache.get(key);
+  if (!setup) {
+    setup = {
+      lineNumbers: showLineNumbers,
+      foldGutter: showLineNumbers,
+      autocompletion: !readOnly,
+      searchKeymap: !readOnly,
+      closeBrackets: !readOnly,
+      dropCursor: !readOnly,
+      allowMultipleSelections: !readOnly,
+      highlightActiveLine: !readOnly,
+      highlightActiveLineGutter: !readOnly,
+    };
+    basicSetupCache.set(key, setup);
+  }
+  return setup;
+}
 
 const LANGUAGE_LABELS = {
   json: "JSON",
@@ -150,6 +222,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   showLineNumbers = true,
   placeholder,
   className,
+  maxHeight = "400px",
 }) => {
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
@@ -235,66 +308,17 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Custom theme to remove dotted border and add focus styles
-  const extensions = useMemo(() => {
-    const customTheme = EditorView.theme({
-      "&.cm-focused": {
-        outline: "none !important",
-      },
-      ".cm-gutters": {
-        fontFamily: "var(--font-mono) !important",
-      },
-    });
-
-    const exts: Extension[] = [...LANGUAGE_EXTENSIONS[language], customTheme];
-
-    // Add line wrapping extension
-    if (wordWrap) {
-      exts.push(EditorView.lineWrapping);
-    }
-
-    // Add read-only extension
-    if (readOnly) {
-      exts.push(EditorView.editable.of(false));
-    }
-
-    return exts;
-  }, [language, wordWrap, readOnly]);
+  // Use cached extensions (shared across all CodeEditor instances)
+  const extensions = getExtensions(language, wordWrap, readOnly);
 
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
-  const theme = useMemo(
-    () =>
-      githubLightInit({
-        settings: {
-          fontFamily:
-            language === "text" ? "var(--font-sans)" : "var(--font-mono)",
-          fontSize: "var(--text-xs)",
-          gutterBorder: "transparent",
-          background: "transparent",
-        },
-      }),
-    [language],
-  );
+  // Use pre-computed theme (only 2 variants exist)
+  const theme = language === "text" ? THEME_SANS : THEME_MONO;
 
-  const basicSetup = useMemo(
-    () => ({
-      // Line numbers
-      lineNumbers: showLineNumbers,
-      foldGutter: showLineNumbers,
-
-      // Read-only mode
-      autocompletion: !readOnly,
-      searchKeymap: !readOnly,
-      closeBrackets: !readOnly,
-      dropCursor: !readOnly,
-      allowMultipleSelections: !readOnly,
-      highlightActiveLine: !readOnly,
-      highlightActiveLineGutter: !readOnly,
-    }),
-    [showLineNumbers, readOnly],
-  );
+  // Use cached basicSetup (shared across all CodeEditor instances)
+  const basicSetup = getBasicSetup(showLineNumbers, readOnly);
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
@@ -361,7 +385,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
 
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
-      <div className="overflow-clip rounded-sm transition focus-within:ring-2 focus-within:ring-blue-500">
+      <div className="overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500">
         <CodeMirror
           value={internalValue}
           onChange={handleChange}
@@ -370,6 +394,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           theme={theme}
           placeholder={placeholder}
           basicSetup={basicSetup}
+          maxHeight={maxHeight}
           className="min-h-9 overflow-auto"
         />
       </div>

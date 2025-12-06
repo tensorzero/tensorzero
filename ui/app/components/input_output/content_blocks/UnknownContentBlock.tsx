@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { HelpCircle } from "lucide-react";
-import { CodeEditor } from "~/components/ui/code-editor";
+import { VirtualizedCodeEditor } from "~/components/ui/virtualized-code-editor";
 import { type ReactNode } from "react";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import type { JsonValue } from "~/types/tensorzero";
@@ -61,7 +61,7 @@ export function UnknownContentBlock({
       >
         Unknown
       </ContentBlockLabel>
-      <CodeEditor
+      <VirtualizedCodeEditor
         value={displayValue}
         readOnly={!isEditing}
         onChange={isEditing ? handleChange : undefined}
