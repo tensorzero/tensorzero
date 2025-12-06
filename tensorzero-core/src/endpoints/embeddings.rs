@@ -47,6 +47,11 @@ pub async fn embeddings(
     params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
+    if config.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Embeddings endpoint is not supported in relay mode".to_string(),
+        }));
+    }
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
     span.record("num_inputs", params.input.num_inputs());
@@ -88,6 +93,7 @@ pub async fn embeddings(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: None,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

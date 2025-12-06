@@ -1199,6 +1199,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1288,6 +1289,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1363,6 +1365,7 @@ async fn test_embedding_sanity_check() {
             tags: Arc::new(HashMap::new()),
             api_key_public_id: None,
         },
+        relay: None,
     };
 
     // Compute all 3 embeddings concurrently

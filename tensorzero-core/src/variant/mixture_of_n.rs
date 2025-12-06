@@ -1437,6 +1437,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1463,6 +1464,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1557,6 +1559,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1638,6 +1641,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();

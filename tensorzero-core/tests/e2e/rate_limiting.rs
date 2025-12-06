@@ -458,12 +458,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_tokens_non_streaming() {
-    test_rate_limiting_tokens_helper(false).await;
+    Box::pin(test_rate_limiting_tokens_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_tokens_streaming() {
-    test_rate_limiting_tokens_helper(true).await;
+    Box::pin(test_rate_limiting_tokens_helper(true)).await;
 }
 
 async fn test_rate_limiting_tokens_helper(stream: bool) {

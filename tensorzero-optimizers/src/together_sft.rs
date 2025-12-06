@@ -333,6 +333,7 @@ impl JobHandle for TogetherSFTJobHandle {
                         routing: vec![model_name.clone().into()],
                         providers: HashMap::from([(model_name.into(), model_provider)]),
                         timeouts: TimeoutsConfig::default(),
+                        skip_relay: None,
                     }),
                 })
             }

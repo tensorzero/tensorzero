@@ -363,7 +363,9 @@ async fn embed_insert_example(
             tags: Arc::new(HashMap::new()),
             api_key_public_id: None,
         },
+        relay: None,
     };
+
     let response = provider_config
         .embed(&request, &clients, &(&provider_config).into())
         .await
