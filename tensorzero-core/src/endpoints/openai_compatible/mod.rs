@@ -11,8 +11,8 @@ pub mod types;
 use chat_completions::chat_completions_handler;
 use embeddings::embeddings_handler;
 
-use axum::routing::post;
 use axum::Router;
+use axum::routing::post;
 
 use crate::endpoints::RouteHandlers;
 use crate::utils::gateway::AppStateData;

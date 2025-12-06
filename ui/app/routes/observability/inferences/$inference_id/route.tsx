@@ -19,7 +19,8 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
@@ -411,7 +412,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     // models successfully used with default function
     ...usedVariants,
     // all configured models in config
-    ...Object.keys(config.models),
+    ...config.model_names,
     // TODO(bret): list of popular/common model choices
     // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
   ]);
@@ -484,13 +485,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <Output
-            output={
-              inference.function_type === "json"
-                ? { ...inference.output, schema: inference.output_schema }
-                : inference.output
-            }
-          />
+          {inference.function_type === "json" ? (
+            <JsonOutputElement
+              output={inference.output}
+              outputSchema={inference.output_schema}
+            />
+          ) : (
+            <ChatOutputElement output={inference.output} />
+          )}
         </SectionLayout>
 
         <SectionLayout>

@@ -10,8 +10,8 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
     JsonInferenceDatapointInsert,
 };
-use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
 use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,

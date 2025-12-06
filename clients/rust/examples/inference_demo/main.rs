@@ -55,10 +55,13 @@ async fn main() {
             allow_batch_writes: false,
         }),
         (Some(_), Some(_)) => {
+            tracing::error!("Cannot specify both gateway URL and config path");
+            #[expect(clippy::disallowed_methods)]
             std::process::exit(1);
         }
         (None, None) => {
             tracing::error!("Gateway URL or config path is required");
+            #[expect(clippy::disallowed_methods)]
             std::process::exit(1);
         }
     }

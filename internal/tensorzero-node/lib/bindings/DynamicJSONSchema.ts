@@ -9,5 +9,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  *
  * The public API of this struct should look very normal except validation is `async`
  * There are just `new` and `validate` methods.
+ *
+ * TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
  */
 export type DynamicJSONSchema = { value: JsonValue };

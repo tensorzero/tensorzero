@@ -26,18 +26,21 @@ use url::Url;
 
 use super::helpers::convert_stream_error;
 use super::openai::{
-    get_chat_url, prepare_openai_messages, OpenAIRequestMessage, OpenAIToolType, StreamOptions,
-    SystemOrDeveloper,
+    OpenAIRequestMessage, OpenAIToolType, StreamOptions, SystemOrDeveloper, get_chat_url,
+    prepare_openai_messages,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{DelayedError, Error, ErrorDetails};
+use crate::inference::InferenceProvider;
+use crate::inference::TensorZeroEventError;
+use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
@@ -45,16 +48,13 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
-use crate::inference::InferenceProvider;
-use crate::inference::TensorZeroEventError;
-use crate::inference::WrappedProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
+use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -496,7 +496,9 @@ impl<'a> TGIRequest<'a> {
         // So we log a warning and ignore the JSON mode
         // You can get JSON mode through `tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"tool\"` instead.");
+            tracing::warn!(
+                "TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"tool\"` instead."
+            );
         }
 
         let stream_options = if request.stream {

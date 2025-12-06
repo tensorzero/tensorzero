@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use http::{HeaderMap, HeaderValue};
+use reqwest::Client;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
-use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -11,9 +11,6 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::db::clickhouse::batching::BatchSender;
-use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseClient;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -24,6 +21,9 @@ use crate::db::clickhouse::GetMaybeReplicatedTableEngineNameArgs;
 use crate::db::clickhouse::HealthCheckable;
 use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
+use crate::db::clickhouse::batching::BatchSender;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::error::DelayedError;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::Error;
@@ -38,6 +38,7 @@ pub struct ProductionClickHouseClient {
     database: String,
     client: Client,
     batch_sender: Option<Arc<BatchSender>>,
+    batch_config: BatchWritesConfig,
 }
 
 impl ProductionClickHouseClient {
@@ -104,6 +105,7 @@ impl ProductionClickHouseClient {
             database,
             client: make_clickhouse_http_client(username, password)?,
             batch_sender: None,
+            batch_config: batch_config.clone(),
         };
 
         // Create the batch sender if enabled
@@ -167,6 +169,18 @@ fn make_clickhouse_http_client(
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
 impl ClickHouseClient for ProductionClickHouseClient {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+        Ok(Arc::new(
+            ProductionClickHouseClient::new(
+                self.database_url.clone(),
+                self.cluster_name.clone(),
+                self.database.clone(),
+                self.batch_config.clone(),
+            )
+            .await?,
+        ))
+    }
+
     fn database_url(&self) -> &SecretString {
         &self.database_url
     }
@@ -480,7 +494,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
             _ => {
                 return Err(Error::new(ErrorDetails::ClickHouseQuery {
                     message: response_body,
-                }))
+                }));
             }
         }
 

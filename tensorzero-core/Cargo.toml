@@ -2,7 +2,7 @@
 name = "tensorzero-core"
 version.workspace = true
 rust-version.workspace = true
-edition = "2021"
+edition = "2024"
 license.workspace = true
 exclude = ["tests/", "fixtures/"]
 
@@ -146,6 +146,7 @@ image = "0.25.6"
 gag = "1.0.0"
 log = "0.4.28"
 mockall = "0.14"
+tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }
