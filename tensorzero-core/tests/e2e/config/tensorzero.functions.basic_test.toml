@@ -259,6 +259,13 @@ model = "gemini-wrong-field"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+# A 'loopback' variant that connects to the gateway itself (through the openai-compatible endpoint)
+[functions.basic_test.variants.loopback-dummy]
+type = "chat_completion"
+model = "loopback-dummy"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
 model = "gemini-2.0-flash-lite"

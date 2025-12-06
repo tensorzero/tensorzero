@@ -760,6 +760,15 @@ provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
 type = "dummy"
 model_name = "reasoner"
 
+[models.loopback-dummy]
+routing = ["loopback"]
+
+[models.loopback-dummy.providers.loopback]
+type = "openai"
+api_base = "http://localhost:3000/openai/v1/"
+api_key_location = "none"
+model_name = "tensorzero::model_name::dummy::good"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
