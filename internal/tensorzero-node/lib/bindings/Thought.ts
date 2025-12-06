@@ -17,5 +17,5 @@ export type Thought = {
    * matching this type (e.g. `anthropic`). Other providers will emit
    * a warning and discard the block.
    */
-  _internal_provider_type?: string;
+  provider_type?: string;
 };
