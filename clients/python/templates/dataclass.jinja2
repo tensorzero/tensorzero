@@ -27,7 +27,7 @@ class {{ class_name }}:
     {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
     {%- else %}
     {%- if field.extras and field.extras.get('x_double_option') %}
-    {{ field.name }}: {{ field.type_hint }} | UnsetType = UNSET
+    {{ field.name }}: {{ field.type_hint }} | OmitType = OMIT
     {%- else %}
     {{ field.name }}: {{ field.type_hint }}
     {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none))

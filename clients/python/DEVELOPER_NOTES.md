@@ -133,5 +133,5 @@ The generated python is:
 ```python
 @dataclass
 class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
 ```

@@ -18,7 +18,7 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "Chat datapoint output.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
 Otherwise, it will overwrite the existing output (and can be an empty list).")]
     pub output: Option<Option<Vec<ContentBlockChatOutput>>>,
 
@@ -38,5 +38,5 @@ The 3 semantics of this field are represented as follows in each language:
   - Rust: the field is set to `Some(None)`.
 - Semantic: leave as-is, do not update the field.
   - JSON: the key is omitted in the object.
-  - Python: the field is not set (and takes the default value `UNSET`). We have serialization logic that removes fields with the default value `UNSET`.
+  - Python: the field is not set (and takes the default value `OMIT`). We have serialization logic that removes fields with the default value `OMIT`.
   - Rust: the field is set to `None`, or use `..Default::default()` if supported.
