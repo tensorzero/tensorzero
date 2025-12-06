@@ -261,6 +261,7 @@ export * from "./StaleDatasetResponse";
 export * from "./StaticJSONSchema";
 export * from "./StaticToolConfig";
 export * from "./StaticWeightsConfig";
+export * from "./StatusResponse";
 export * from "./StorageKind";
 export * from "./StoragePath";
 export * from "./StoredChatInference";
