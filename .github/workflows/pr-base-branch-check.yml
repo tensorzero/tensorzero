@@ -1,10 +1,15 @@
 name: PR Base Branch Check
 permissions:
   contents: read
+  pull-requests: write  # Required for adding/removing labels
+  statuses: write       # Required for creating commit statuses
 
 on:
-  pull_request:
-    types: [opened, edited, synchronize, reopened]
+  # Using pull_request_target instead of pull_request so that we have write access
+  # to labels and commit statuses for PRs from forks.
+  # This is safe because we only read PR metadata - we don't checkout or execute PR code.
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, unlabeled]
 
 jobs:
   check-base-branch:
@@ -16,20 +21,95 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const baseBranch = pr.base.ref;
-            const prBody = pr.body || '';
+            const sha = pr.head.sha;
+            const blockingLabel = 'stacked-pr-blocked-on-base-pr';
+            const ignoreLabel = 'stacked-pr-ignore-base-branch';
 
-            // Check if the override is present in the PR body
-            if (prBody.includes('DISABLE_PR_BASE_BRANCH_CHECK')) {
-              core.notice('PR base branch check disabled by user');
+            // Check which labels exist on the PR
+            const hasBlockingLabel = pr.labels.some(label => label.name === blockingLabel);
+            const hasIgnoreLabel = pr.labels.some(label => label.name === ignoreLabel);
+
+            // Check if this run was triggered by removing the blocking label
+            const wasBlockingLabelRemoved = context.payload.action === 'unlabeled'
+              && context.payload.label?.name === blockingLabel;
+
+            // If ignore label is present, skip this check entirely
+            if (hasIgnoreLabel) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: sha,
+                state: 'success',
+                context: 'Stacked PR',
+                description: 'Check skipped (ignore label present)'
+              });
+              core.notice('Stacked PR check skipped due to stacked-pr-ignore-base-branch label');
               return;
             }
 
-            // Check if base branch is main
-            if (baseBranch !== 'main') {
-              core.setFailed(
-                `PR base branch is '${baseBranch}' but should be 'main'. ` +
-                `If this is intentional, add 'DISABLE_PR_BASE_BRANCH_CHECK' to the PR description.`
-              );
-            } else {
+            if (baseBranch === 'main') {
+              // Base is main - remove blocking label if present and set success
+              if (hasBlockingLabel) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    name: blockingLabel
+                  });
+                  core.info('Removed stacked PR label - base branch is now main');
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+              }
+
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: sha,
+                state: 'success',
+                context: 'Stacked PR',
+                description: 'Base branch is main'
+              });
               core.info('PR base branch is correctly set to main');
+
+            } else if (wasBlockingLabelRemoved) {
+              // Blocking label was manually removed - add ignore label and allow merge
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [ignoreLabel]
+              });
+
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: sha,
+                state: 'success',
+                context: 'Stacked PR',
+                description: `Merge into '${baseBranch}' allowed (override)`
+              });
+              core.notice('Blocking label removed - added ignore label and allowing merge into non-main base branch');
+
+            } else {
+              // Base is not main - add blocking label and block merge
+              if (!hasBlockingLabel) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  labels: [blockingLabel]
+                });
+              }
+
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: sha,
+                state: 'pending',
+                context: 'Stacked PR',
+                description: `Base is '${baseBranch}'. Merge parent PR first, or remove `stacked-pr-blocked-on-base-pr` label to override.`
+                });
+              core.notice(`Stacked PR detected (base: '${baseBranch}'). Remove `stacked-pr-blocked-on-base-pr` label to allow merging.`);
             }
