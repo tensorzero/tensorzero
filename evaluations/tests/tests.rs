@@ -17,9 +17,7 @@ use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     v1::{list_datapoints, types::ListDatapointsRequest},
 };
-use tensorzero_core::evaluations::{
-    EvaluationConfig, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
-};
+use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::inference::types::Text;
 use tokio::time::sleep;
 use url::Url;
@@ -27,8 +25,8 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
-    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat, run_evaluation,
-    run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
+    EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
@@ -464,19 +462,20 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         .expect("evaluation 'entity_extraction' not found")
         .clone();
 
-    // Get function name and look up function config
-    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
-        .get_function(&inference_eval_config.function_name)
-        .expect("Failed to get function config")
-        .into_owned();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse,
         evaluation_config,
-        function_config,
+        function_configs,
         evaluation_name,
         evaluation_run_id,
         dataset_name: None,
@@ -2684,17 +2683,19 @@ async fn test_evaluation_with_dynamic_variant() {
         .get(&evaluation_name)
         .expect("evaluation config should exist")
         .clone();
-    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
-        .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse,
         evaluation_config,
-        function_config,
+        function_configs,
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
@@ -2743,18 +2744,20 @@ async fn test_max_datapoints_parameter() {
         .get(&evaluation_name)
         .expect("evaluation config should exist")
         .clone();
-    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
-        .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
-        function_config,
+        function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
@@ -2814,17 +2817,19 @@ async fn test_precision_targets_parameter() {
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
 
-    // Extract evaluation config and function config
+    // Extract evaluation config and function configs table
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
         .expect("evaluation config should exist")
         .clone();
-    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
-        .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
@@ -2837,7 +2842,7 @@ async fn test_precision_targets_parameter() {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
-        function_config,
+        function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),

@@ -11,7 +11,10 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use futures::StreamExt;
 use pyo3::{
     IntoPyObjectExt,
@@ -57,7 +60,6 @@ use tensorzero_core::{
         datasets::InsertDatapointParams,
         workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     },
-    evaluations::EvaluationConfig,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
@@ -1444,23 +1446,20 @@ impl TensorZeroGateway {
             })?
             .clone();
 
-        // Get function name and look up function config
-        let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-        let function_config = app_state
+        // Build function configs table from all functions in the config
+        let function_configs: EvaluationFunctionConfigTable = app_state
             .config
-            .get_function(&inference_eval_config.function_name)
-            .map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!(
-                    "Failed to get function config: {e}"
-                ))
-            })?
-            .into_owned();
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+        let function_configs = Arc::new(function_configs);
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             evaluation_config,
-            function_config,
+            function_configs,
             evaluation_name,
             evaluation_run_id,
             dataset_name,
@@ -2684,23 +2683,20 @@ impl AsyncTensorZeroGateway {
                 })?
                 .clone();
 
-            // Get function name and look up function config
-            let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-            let function_config = app_state
+            // Build function configs table from all functions in the config
+            let function_configs: EvaluationFunctionConfigTable = app_state
                 .config
-                .get_function(&inference_eval_config.function_name)
-                .map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!(
-                        "Failed to get function config: {e}"
-                    ))
-                })?
-                .into_owned();
+                .functions
+                .iter()
+                .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+                .collect();
+            let function_configs = Arc::new(function_configs);
 
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 evaluation_config,
-                function_config,
+                function_configs,
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,

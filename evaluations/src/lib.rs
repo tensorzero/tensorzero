@@ -6,7 +6,6 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow, bail};
 use evaluators::{EvaluateInferenceParams, evaluate_inference};
 use helpers::get_cache_options;
-use serde::{Deserialize, Serialize};
 
 // Public re-exports for external consumers
 pub use cli::{Args, OutputFormat};
@@ -14,6 +13,9 @@ pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
     PerEvaluatorStats, mean, std_deviation,
 };
+pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+pub use types::*;
+
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
@@ -21,7 +23,7 @@ use tensorzero_core::client::{
     InferenceOutput, InferenceParams, InferenceResponse,
     input_handling::resolved_input_to_client_input,
 };
-use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},
@@ -30,7 +32,6 @@ use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
-    function::FunctionConfig,
 };
 use tokio::{
     sync::{Semaphore, mpsc},
@@ -44,6 +45,7 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
+pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
@@ -52,56 +54,6 @@ const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
 pub struct Clients {
     pub tensorzero_client: Client,
     pub clickhouse_client: ClickHouseConnectionInfo,
-}
-
-/// Specifies which variant to use for evaluation.
-/// Either a variant name from the config, or a dynamic variant configuration.
-#[derive(Clone, Debug)]
-pub enum EvaluationVariant {
-    /// Use a variant by name from the config file
-    Name(String),
-    /// Use a dynamically provided variant configuration
-    Info(Box<UninitializedVariantInfo>),
-}
-
-/// Parameters for running an evaluation using run_evaluation_core
-/// This struct encapsulates all the necessary components for evaluation execution
-pub struct EvaluationCoreArgs {
-    /// TensorZero client for making inference requests
-    pub tensorzero_client: Client,
-
-    /// ClickHouse client for database operations
-    pub clickhouse_client: ClickHouseConnectionInfo,
-
-    /// The evaluation configuration (pre-resolved by caller)
-    pub evaluation_config: Arc<EvaluationConfig>,
-
-    /// The function configuration for output schema validation (pre-resolved by caller)
-    pub function_config: Arc<FunctionConfig>,
-
-    /// Name of the evaluation (for tagging/logging purposes)
-    pub evaluation_name: String,
-
-    /// Unique identifier for this evaluation run
-    pub evaluation_run_id: Uuid,
-
-    /// Name of the dataset to run on.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    pub dataset_name: Option<String>,
-
-    /// Specific datapoint IDs to evaluate.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    pub datapoint_ids: Option<Vec<Uuid>>,
-
-    /// Variant to use for evaluation.
-    /// Either a variant name from the config file, or a dynamic variant configuration.
-    pub variant: EvaluationVariant,
-
-    /// Number of concurrent requests to make.
-    pub concurrency: usize,
-
-    /// Cache configuration for inference requests
-    pub inference_cache: CacheEnabledMode,
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -203,12 +155,13 @@ pub async fn run_evaluation(
         .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
         .clone();
 
-    // Get function name and look up function config
-    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
-        .get_function(&inference_eval_config.function_name)
-        .map_err(|e| anyhow!("Failed to get function config: {e}"))?
-        .into_owned();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -231,7 +184,7 @@ pub async fn run_evaluation(
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
         evaluation_config,
-        function_config,
+        function_configs,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
         variant: EvaluationVariant::Name(args.variant_name),
@@ -494,7 +447,7 @@ pub async fn run_evaluation_core_streaming(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
-        let function_config = args.function_config.clone();
+        let function_configs = args.function_configs.clone();
         let variant = variant.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
@@ -513,6 +466,11 @@ pub async fn run_evaluation_core_streaming(
         let abort_handle = join_set.spawn(async move {
             // Acquire semaphore permit for the entire task (inference + evaluation)
             let _permit = semaphore_clone.acquire().await?;
+
+            // Look up function config from table
+            let function_config = function_configs
+                .get(&function_name)
+                .ok_or_else(|| anyhow!("Function '{function_name}' not found in function configs table"))?;
 
             // Convert Input back to StoredInput, then use reresolve() which delegates
             // to the TensorZero client. This currently requires us to configure `tensorzero_client` in
@@ -533,7 +491,7 @@ pub async fn run_evaluation_core_streaming(
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
-                    function_config: &function_config,
+                    function_config,
                     input: &input,
                     inference_cache,
                 })
@@ -684,7 +642,7 @@ struct InferDatapointParams<'a> {
     datapoint: &'a Datapoint,
     input: &'a Input,
     evaluation_name: &'a str,
-    function_config: &'a FunctionConfig,
+    function_config: &'a EvaluationFunctionConfig,
     inference_cache: CacheEnabledMode,
 }
 
@@ -728,8 +686,13 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     debug!("Processing output schema");
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
-        (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
-            if output_schema == &json_function_config.output_schema.value {
+        (
+            Some(output_schema),
+            EvaluationFunctionConfig::Json {
+                output_schema: fn_schema,
+            },
+        ) => {
+            if output_schema == &fn_schema.value {
                 debug!("Output schema matches function schema, using function default");
                 None
             } else {
@@ -737,7 +700,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
                 Some(output_schema)
             }
         }
-        (Some(_), FunctionConfig::Chat(_)) => {
+        (Some(_), EvaluationFunctionConfig::Chat) => {
             return Err(anyhow!("Chat function does not support output schema"));
         }
         (None, _) => {
@@ -812,19 +775,6 @@ fn write_run_info(
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunInfo {
-    pub evaluation_run_id: Uuid,
-    pub num_datapoints: usize,
-}
-
-/// Result from running an evaluation that supports streaming
-pub struct EvaluationStreamResult {
-    pub receiver: mpsc::Receiver<EvaluationUpdate>,
-    pub run_info: RunInfo,
-    pub evaluation_config: Arc<EvaluationConfig>,
 }
 
 #[cfg(test)]

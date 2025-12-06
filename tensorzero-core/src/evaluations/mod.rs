@@ -70,6 +70,33 @@ pub enum EvaluatorConfig {
     LLMJudge(LLMJudgeConfig),
 }
 
+/// Minimal function configuration for evaluation purposes.
+/// Contains only the information needed to validate output schemas during evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum EvaluationFunctionConfig {
+    /// Chat function - no output schema validation needed
+    Chat,
+    /// JSON function - contains output schema for validation
+    Json { output_schema: StaticJSONSchema },
+}
+
+impl From<&FunctionConfig> for EvaluationFunctionConfig {
+    fn from(config: &FunctionConfig) -> Self {
+        match config {
+            FunctionConfig::Chat(_) => EvaluationFunctionConfig::Chat,
+            FunctionConfig::Json(json_config) => EvaluationFunctionConfig::Json {
+                output_schema: json_config.output_schema.clone(),
+            },
+        }
+    }
+}
+
+/// A map of function names to their evaluation configurations.
+/// Used to look up output schemas when running evaluations.
+pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfig>;
+
 impl EvaluatorConfig {
     pub fn cutoff(&self) -> Option<f32> {
         match self {
