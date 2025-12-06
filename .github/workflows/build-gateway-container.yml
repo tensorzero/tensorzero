@@ -50,6 +50,8 @@ jobs:
 
       - name: Login to Namespace registry
         run: nsc docker login
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Push `gateway` container to Namespace registry
         run: docker push nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}

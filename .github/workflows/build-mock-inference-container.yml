@@ -48,6 +48,8 @@ jobs:
 
       - name: Login to Namespace registry
         run: nsc docker login
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Push `mock-inference` container to Namespace registry
         run: docker push nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
