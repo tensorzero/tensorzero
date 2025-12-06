@@ -724,7 +724,7 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-16x32' }}
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -869,7 +869,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-clickhouse
+        run: cargo test-clickhouse ${{ matrix.replicated && '' || '-j 2' }}
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
