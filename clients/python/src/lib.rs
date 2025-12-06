@@ -11,7 +11,9 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, run_evaluation_core_streaming,
+};
 use futures::StreamExt;
 use pyo3::{
     IntoPyObjectExt,
@@ -1446,15 +1448,17 @@ impl TensorZeroGateway {
 
         // Get function name and look up function config
         let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-        let function_config = app_state
+        let function_config_arc = app_state
             .config
             .get_function(&inference_eval_config.function_name)
             .map_err(|e| {
                 pyo3::exceptions::PyValueError::new_err(format!(
                     "Failed to get function config: {e}"
                 ))
-            })?
-            .into_owned();
+            })?;
+        let function_config = Arc::new(EvaluationFunctionConfig::from(
+            function_config_arc.as_ref().as_ref(),
+        ));
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
@@ -2686,15 +2690,17 @@ impl AsyncTensorZeroGateway {
 
             // Get function name and look up function config
             let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-            let function_config = app_state
+            let function_config_arc = app_state
                 .config
                 .get_function(&inference_eval_config.function_name)
                 .map_err(|e| {
                     pyo3::exceptions::PyValueError::new_err(format!(
                         "Failed to get function config: {e}"
                     ))
-                })?
-                .into_owned();
+                })?;
+            let function_config = Arc::new(EvaluationFunctionConfig::from(
+                function_config_arc.as_ref().as_ref(),
+            ));
 
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),

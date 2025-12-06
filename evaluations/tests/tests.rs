@@ -27,8 +27,8 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
-    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat, run_evaluation,
-    run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, OutputFormat,
+    run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
@@ -466,10 +466,12 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
 
     // Get function name and look up function config
     let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
+    let function_config_arc = config
         .get_function(&inference_eval_config.function_name)
-        .expect("Failed to get function config")
-        .into_owned();
+        .expect("Failed to get function config");
+    let function_config = Arc::new(EvaluationFunctionConfig::from(
+        function_config_arc.as_ref().as_ref(),
+    ));
 
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
@@ -2685,10 +2687,12 @@ async fn test_evaluation_with_dynamic_variant() {
         .expect("evaluation config should exist")
         .clone();
     let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
+    let function_config_arc = config
         .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+        .expect("function config should exist");
+    let function_config = Arc::new(EvaluationFunctionConfig::from(
+        function_config_arc.as_ref().as_ref(),
+    ));
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
@@ -2744,10 +2748,12 @@ async fn test_max_datapoints_parameter() {
         .expect("evaluation config should exist")
         .clone();
     let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
+    let function_config_arc = config
         .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+        .expect("function config should exist");
+    let function_config = Arc::new(EvaluationFunctionConfig::from(
+        function_config_arc.as_ref().as_ref(),
+    ));
 
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
@@ -2821,10 +2827,12 @@ async fn test_precision_targets_parameter() {
         .expect("evaluation config should exist")
         .clone();
     let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
+    let function_config_arc = config
         .get_function(&inference_eval_config.function_name)
-        .expect("function config should exist")
-        .into_owned();
+        .expect("function config should exist");
+    let function_config = Arc::new(EvaluationFunctionConfig::from(
+        function_config_arc.as_ref().as_ref(),
+    ));
 
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10

@@ -30,7 +30,7 @@ use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
-    function::FunctionConfig,
+    function::FunctionConfig, jsonschema_util::StaticJSONSchema,
 };
 use tokio::{
     sync::{Semaphore, mpsc},
@@ -48,6 +48,28 @@ pub mod stopping;
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
 const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
+
+/// Minimal function configuration for evaluation purposes.
+/// Contains only the information needed to validate output schemas during evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EvaluationFunctionConfig {
+    /// Chat function - no output schema validation needed
+    Chat,
+    /// JSON function - contains output schema for validation
+    Json { output_schema: StaticJSONSchema },
+}
+
+impl From<&FunctionConfig> for EvaluationFunctionConfig {
+    fn from(config: &FunctionConfig) -> Self {
+        match config {
+            FunctionConfig::Chat(_) => EvaluationFunctionConfig::Chat,
+            FunctionConfig::Json(json_config) => EvaluationFunctionConfig::Json {
+                output_schema: json_config.output_schema.clone(),
+            },
+        }
+    }
+}
 
 pub struct Clients {
     pub tensorzero_client: Client,
@@ -77,7 +99,7 @@ pub struct EvaluationCoreArgs {
     pub evaluation_config: Arc<EvaluationConfig>,
 
     /// The function configuration for output schema validation (pre-resolved by caller)
-    pub function_config: Arc<FunctionConfig>,
+    pub function_config: Arc<EvaluationFunctionConfig>,
 
     /// Name of the evaluation (for tagging/logging purposes)
     pub evaluation_name: String,
@@ -205,10 +227,12 @@ pub async fn run_evaluation(
 
     // Get function name and look up function config
     let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-    let function_config = config
+    let function_config_arc = config
         .get_function(&inference_eval_config.function_name)
-        .map_err(|e| anyhow!("Failed to get function config: {e}"))?
-        .into_owned();
+        .map_err(|e| anyhow!("Failed to get function config: {e}"))?;
+    let function_config = Arc::new(EvaluationFunctionConfig::from(
+        function_config_arc.as_ref().as_ref(),
+    ));
 
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -684,7 +708,7 @@ struct InferDatapointParams<'a> {
     datapoint: &'a Datapoint,
     input: &'a Input,
     evaluation_name: &'a str,
-    function_config: &'a FunctionConfig,
+    function_config: &'a EvaluationFunctionConfig,
     inference_cache: CacheEnabledMode,
 }
 
@@ -728,8 +752,13 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     debug!("Processing output schema");
     let output_schema = match (datapoint.output_schema(), function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
-        (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
-            if output_schema == &json_function_config.output_schema.value {
+        (
+            Some(output_schema),
+            EvaluationFunctionConfig::Json {
+                output_schema: fn_schema,
+            },
+        ) => {
+            if output_schema == &fn_schema.value {
                 debug!("Output schema matches function schema, using function default");
                 None
             } else {
@@ -737,7 +766,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
                 Some(output_schema)
             }
         }
-        (Some(_), FunctionConfig::Chat(_)) => {
+        (Some(_), EvaluationFunctionConfig::Chat) => {
             return Err(anyhow!("Chat function does not support output schema"));
         }
         (None, _) => {
