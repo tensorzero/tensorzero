@@ -146,6 +146,7 @@ image = "0.25.6"
 gag = "1.0.0"
 log = "0.4.28"
 mockall = "0.14"
+serde_yml = "0.0.12"
 tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
 
 [build-dependencies]
