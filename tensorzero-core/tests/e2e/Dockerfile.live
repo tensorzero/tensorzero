@@ -57,11 +57,6 @@ RUN rm -rf target
 # Copy only the test archive instead of entire target directory
 COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst
 
-# Copy the populated Cargo caches from the builder stage.
-# This is necessary for dependencies required at test *runtime*, like with trybuild.
-COPY --from=builder /usr/local/cargo/registry /usr/local/cargo/registry
-COPY --from=builder /usr/local/cargo/git /usr/local/cargo/git
-
 # Set CI environment variable
 ENV CI=true
 
