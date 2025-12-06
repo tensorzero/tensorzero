@@ -135,6 +135,27 @@ pub async fn disable_key(
     Ok(now)
 }
 
+/// Updates the description for the API key with the given public_id
+pub async fn update_key_description(
+    public_id: &str,
+    description: Option<&str>,
+    pool: &PgPool,
+) -> Result<KeyInfo, TensorZeroAuthError> {
+    let key = sqlx::query_as!(
+        KeyInfo,
+        "UPDATE tensorzero_auth_api_key
+           SET description = $1, updated_at = NOW()
+           WHERE public_id = $2
+           RETURNING public_id, organization, workspace, description, created_at, disabled_at",
+        description,
+        public_id,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(key)
+}
+
 /// Lists all API keys in the database, optionally filtered by organization,
 /// with an optional limit and offset.
 pub async fn list_key_info(
