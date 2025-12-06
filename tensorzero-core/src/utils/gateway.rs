@@ -551,6 +551,7 @@ mod tests {
     use super::*;
     use crate::config::{
         ObservabilityConfig, PostgresConfig, gateway::GatewayConfig, snapshot::ConfigSnapshot,
+        unwritten::UnwrittenConfig,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {

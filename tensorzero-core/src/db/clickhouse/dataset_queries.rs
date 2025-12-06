@@ -722,7 +722,8 @@ impl ClickHouseConnectionInfo {
             is_custom,
             source_inference_id,
             updated_at,
-            staled_at
+            staled_at,
+            snapshot_hash
         )
         SELECT
             new_data.dataset_name,
@@ -744,13 +745,14 @@ impl ClickHouseConnectionInfo {
             new_data.is_custom,
             new_data.source_inference_id,
             now64() as updated_at,
-            new_data.staled_at
+            new_data.staled_at,
+            new_data.snapshot_hash
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), snapshot_hash Nullable(UInt256)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -793,7 +795,8 @@ impl ClickHouseConnectionInfo {
             staled_at,
             source_inference_id,
             is_custom,
-            name
+            name,
+            snapshot_hash
         )
         SELECT
             new_data.dataset_name,
@@ -810,13 +813,14 @@ impl ClickHouseConnectionInfo {
             new_data.staled_at,
             new_data.source_inference_id,
             new_data.is_custom,
-            new_data.name
+            new_data.name,
+            new_data.snapshot_hash
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String), snapshot_hash Nullable(UInt256)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -1925,6 +1929,7 @@ mod tests {
                     "source_inference_id": null,
                     "is_custom": true,
                     "staled_at": null,
+                    "snapshot_hash": null,
                 });
                 assert_eq!(
                     actual_row_as_json, expected_row_as_json,
@@ -1966,6 +1971,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2056,6 +2062,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2140,6 +2147,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2186,6 +2194,7 @@ mod tests {
                     "source_inference_id": null,
                     "is_custom": true,
                     "staled_at": null,
+                    "snapshot_hash": null,
                 });
 
                 assert_eq!(
@@ -2229,6 +2238,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
@@ -2269,7 +2279,8 @@ mod tests {
                     is_custom,
                     source_inference_id,
                     updated_at,
-                    staled_at
+                    staled_at,
+                    snapshot_hash
                 )"
                 );
                 assert_query_contains(query,
@@ -2293,7 +2304,8 @@ mod tests {
                     new_data.is_custom,
                     new_data.source_inference_id,
                     now64() as updated_at,
-                    new_data.staled_at
+                    new_data.staled_at,
+                    new_data.snapshot_hash
                 FROM new_data"
                 );
 
@@ -2302,7 +2314,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), snapshot_hash Nullable(UInt256)"));
                 assert!(!external_data.structure.contains("updated_at"));
 
                 // Parse the data - should contain 3 datapoints separated by newlines
@@ -2370,6 +2382,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2390,6 +2403,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2410,6 +2424,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
         ];
 
@@ -2446,7 +2461,8 @@ mod tests {
                         staled_at,
                         source_inference_id,
                         is_custom,
-                        name
+                        name,
+                        snapshot_hash
                     )",
                 );
                 assert_query_contains(
@@ -2466,7 +2482,8 @@ mod tests {
                         new_data.staled_at,
                         new_data.source_inference_id,
                         new_data.is_custom,
-                        new_data.name
+                        new_data.name,
+                        new_data.snapshot_hash
                     FROM new_data",
                 );
 
@@ -2475,7 +2492,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String), snapshot_hash Nullable(UInt256)"));
 
                 // Parse the data - should contain 2 datapoints separated by newlines
                 let lines: Vec<&str> = external_data.data.lines().collect();
@@ -2536,6 +2553,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2557,6 +2575,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
         ];
 
@@ -2653,6 +2672,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2674,6 +2694,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2694,6 +2715,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2715,6 +2737,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
         ];
 
@@ -2781,6 +2804,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: false,
+            snapshot_hash: None,
         })];
 
         let result = conn.insert_datapoints(&datapoints_with_builder).await;
@@ -2813,6 +2837,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             })];
 
         let result = conn

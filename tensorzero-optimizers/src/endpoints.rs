@@ -16,8 +16,10 @@ use rand::seq::SliceRandom;
 use tensorzero_core::{
     config::Config,
     db::{
-        clickhouse::query_builder::{InferenceFilter, OrderBy},
-        clickhouse::ClickHouseConnectionInfo,
+        clickhouse::{
+            query_builder::{InferenceFilter, OrderBy},
+            ClickHouseConnectionInfo,
+        },
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
