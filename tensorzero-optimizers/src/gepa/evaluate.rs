@@ -14,6 +14,7 @@ use tensorzero_core::{
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
+    function::{get_function, FunctionConfig},
     http::TensorzeroHttpClient,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
@@ -131,7 +132,7 @@ impl EvaluationResults {
 pub struct EvaluateVariantParams {
     pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
-    pub tensorzero_config: Arc<Config>,
+    pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: String,
     pub variant_name: String,
@@ -160,11 +161,22 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         timeouts: None,
     };
 
+    // Get function name from evaluation config and look up function
+    let EvaluationConfig::Inference(ref inference_eval_config) = *params.evaluation_config;
+    let function_config = get_function(&params.functions, &inference_eval_config.function_name)
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to get function config: {e}"),
+            })
+        })?
+        .into_owned();
+
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
         tensorzero_client: params.gateway_client.clone(),
         clickhouse_client: params.clickhouse_connection_info.clone(),
-        config: params.tensorzero_config,
+        evaluation_config: params.evaluation_config.clone(),
+        function_config,
         evaluation_name: params.evaluation_name,
         evaluation_run_id,
         dataset_name: Some(params.dataset_name),
