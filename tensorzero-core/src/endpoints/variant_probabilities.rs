@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use axum::extract::{Path, Query, State};
-use axum::{debug_handler, Json};
+use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

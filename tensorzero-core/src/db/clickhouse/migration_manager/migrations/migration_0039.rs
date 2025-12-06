@@ -177,7 +177,9 @@ impl Migration for Migration0039<'_> {
         let statistics_view_timestamp_where_clause = if clean_start {
             "1=1".to_string()
         } else {
-            format!("UUIDv7ToDateTime(uint_to_uuid(id_uint)) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+            format!(
+                "UUIDv7ToDateTime(uint_to_uuid(id_uint)) >= fromUnixTimestamp64Nano({view_timestamp_nanos})"
+            )
         };
 
         // Build MV for FloatMetricFeedbackByVariant table
@@ -417,7 +419,9 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `FloatMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `FloatMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
 
             let create_boolean_feedback_by_variant_view = self
@@ -485,7 +489,9 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `BooleanMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `BooleanMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
             let create_float_feedback_by_variant_statistics_view = self
                 .clickhouse
@@ -518,7 +524,9 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `FloatMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `FloatMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
             let create_boolean_feedback_by_variant_statistics_view = self
                 .clickhouse
@@ -551,7 +559,9 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `BooleanMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `BooleanMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
         }
 

@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use futures::join;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 

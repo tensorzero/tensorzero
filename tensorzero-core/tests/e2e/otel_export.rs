@@ -10,7 +10,7 @@ use opentelemetry::SpanId;
 use opentelemetry::TraceId;
 use opentelemetry_sdk::trace::IdGenerator;
 use opentelemetry_sdk::trace::RandomIdGenerator;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use url::Url;
@@ -277,7 +277,9 @@ pub async fn get_tempo_spans(
                                 attr["value"]["stringValue"].as_str().unwrap();
                             if tag_value == inference_id_jaeger {
                                 if target_span.is_some() {
-                                    panic!("Found multiple function_inference spans with `{tag_key}`: {tag_value}");
+                                    panic!(
+                                        "Found multiple function_inference spans with `{tag_key}`: {tag_value}"
+                                    );
                                 } else {
                                     target_span = Some(span.clone());
                                 }

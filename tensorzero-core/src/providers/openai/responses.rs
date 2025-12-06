@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use crate::{
     inference::types::{
-        chat_completion_inference_params::{
-            warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
-        },
         ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+        chat_completion_inference_params::{
+            ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
+        },
     },
     tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
 };
@@ -15,24 +15,24 @@ const PROVIDER_NAME: &str = "OpenAI Responses";
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
-use futures::{future::try_join_all, Stream};
+use futures::{Stream, future::try_join_all};
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::{
-    error::{warn_discarded_thought_block, Error, ErrorDetails},
+    error::{Error, ErrorDetails, warn_discarded_thought_block},
     inference::types::{
-        file::Detail, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason,
-        FlattenUnknown, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage,
+        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
+        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
     providers::openai::{
-        prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
-        OpenAIFile, OpenAIMessagesConfig, OpenAITool, SystemOrDeveloper, PROVIDER_TYPE,
+        OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
+        SystemOrDeveloper, prepare_file_message, prepare_system_or_developer_message_helper,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -632,10 +632,10 @@ impl OpenAIResponsesInput<'_> {
         match self {
             OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(msg)) => {
                 for block in &msg.content {
-                    if let OpenAIResponsesInputMessageContent::InputText { text } = block {
-                        if text.to_lowercase().contains(value) {
-                            return true;
-                        }
+                    if let OpenAIResponsesInputMessageContent::InputText { text } = block
+                        && text.to_lowercase().contains(value)
+                    {
+                        return true;
                     }
                 }
                 false
@@ -950,8 +950,7 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                     message: "Files are not supported in assistant messages".to_string(),
                 }));
             }
-            Cow::Borrowed(ContentBlock::Thought(ref thought))
-            | Cow::Owned(ContentBlock::Thought(ref thought)) => {
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
                 if let Some(encrypted_content) = &thought.signature {
                     output.push(OpenAIResponsesInput::Known(
                         OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
@@ -966,6 +965,30 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                                             ThoughtSummaryBlock::SummaryText { text } => {
                                                 OpenAIResponsesReasoningSummary::SummaryText {
                                                     text: Cow::Owned(text.to_string()),
+                                                }
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        }),
+                    ));
+                }
+            }
+            Cow::Owned(ContentBlock::Thought(thought)) => {
+                if let Some(encrypted_content) = thought.signature {
+                    output.push(OpenAIResponsesInput::Known(
+                        OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
+                            encrypted_content: Cow::Owned(encrypted_content),
+                            summary: thought
+                                .summary
+                                .map(|summary| {
+                                    summary
+                                        .into_iter()
+                                        .map(|block| match block {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                OpenAIResponsesReasoningSummary::SummaryText {
+                                                    text: Cow::Owned(text),
                                                 }
                                             }
                                         })

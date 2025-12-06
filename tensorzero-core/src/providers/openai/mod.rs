@@ -2,14 +2,14 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
-use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
+use reqwest::multipart::{Form, Part};
 use reqwest_eventsource::Event;
 use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::io::Write;
 use std::pin::Pin;
@@ -27,36 +27,36 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
-    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext, Detail};
+use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
-use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
-    batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Unknown, Usage,
+    batch::{BatchStatus, StartBatchProviderInferenceResponse},
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::responses::{
-    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputInner,
-    OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
-    OpenAIResponsesResponse,
+    OpenAIResponsesInput, OpenAIResponsesInputInner, OpenAIResponsesInputMessage,
+    OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
+    get_responses_url,
 };
 use crate::tool::{
     FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
@@ -68,7 +68,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
-use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
+use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
@@ -1923,12 +1923,16 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            Cow::Borrowed(ContentBlock::File(ref file))
-            | Cow::Owned(ContentBlock::File(ref file)) => {
+            Cow::Borrowed(ContentBlock::File(file)) => {
                 assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
-            Cow::Borrowed(ContentBlock::Thought(ref thought))
-            | Cow::Owned(ContentBlock::Thought(ref thought)) => {
+            Cow::Owned(ContentBlock::File(ref file)) => {
+                assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
+            }
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
+                warn_discarded_thought_block(messages_config.provider_type, thought);
+            }
+            Cow::Owned(ContentBlock::Thought(ref thought)) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
             Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
@@ -2289,17 +2293,16 @@ impl<'a> OpenAIRequest<'a> {
             parallel_tool_calls = None;
         }
 
-        if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
-                if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: vec![OpenAIContentBlock::Text {
-                            text: system_msg.content,
-                        }],
-                    });
-                    messages.insert(0, user_msg);
-                }
-            }
+        if model.to_lowercase().starts_with("o1-mini")
+            && let Some(OpenAIRequestMessage::System(_)) = messages.first()
+            && let OpenAIRequestMessage::System(system_msg) = messages.remove(0)
+        {
+            let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                content: vec![OpenAIContentBlock::Text {
+                    text: system_msg.content,
+                }],
+            });
+            messages.insert(0, user_msg);
         }
 
         let mut openai_request = OpenAIRequest {
@@ -2942,8 +2945,8 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
-    use base64::prelude::*;
     use base64::Engine;
+    use base64::prelude::*;
     use futures::FutureExt;
     use serde_json::json;
     use std::borrow::Cow;

@@ -3,8 +3,8 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
+use futures::future::{join_all, try_join_all};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -18,12 +18,12 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
-    System,
-};
-use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+};
+use crate::inference::types::{
+    ModelInferenceRequest, RequestMessage, Role, System,
+    batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -40,8 +40,8 @@ use crate::{
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 use super::{
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant, infer_model_request,
+    infer_model_request_stream, prepare_model_inference_request,
 };
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -936,7 +936,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
+        config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         experimentation::ExperimentationConfig,
@@ -1268,9 +1268,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),

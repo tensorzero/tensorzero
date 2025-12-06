@@ -2,7 +2,7 @@
 /// the HTTP endpoint to perform updates to validate that updates are implemented
 /// correctly.
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{FunctionTool, GetDatapointParams, StoredDatapoint};
