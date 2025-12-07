@@ -1,7 +1,7 @@
 [package]
 name = "evaluations"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
