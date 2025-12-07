@@ -66,7 +66,7 @@ export function NewDatapointForm() {
       setOutputSchema(undefined);
     } else if (functionConfig?.type === "json") {
       setOutput(DEFAULT_JSON_OUTPUT);
-      setOutputSchema(functionConfig.output_schema);
+      setOutputSchema(functionConfig.output_schema.value);
     } else {
       setOutput(undefined);
       setOutputSchema(undefined);
@@ -106,6 +106,15 @@ export function NewDatapointForm() {
 
     setValidationError(null);
 
+    // Only include output_schema if it differs from the function's default
+    const defaultSchema =
+      functionConfig?.type === "json"
+        ? functionConfig.output_schema.value
+        : undefined;
+    const schemaModified =
+      functionType === "json" &&
+      JSON.stringify(outputSchema) !== JSON.stringify(defaultSchema);
+
     const formData = serializeCreateDatapointToFormData({
       dataset_name: selectedDataset,
       function_name: selectedFunction,
@@ -114,7 +123,7 @@ export function NewDatapointForm() {
       output,
       tags: Object.keys(tags).length > 0 ? tags : undefined,
       name: name.trim() || undefined,
-      output_schema: functionType === "json" ? outputSchema : undefined,
+      output_schema: schemaModified ? outputSchema : undefined,
     });
 
     fetcher.submit(formData, { method: "post" });
