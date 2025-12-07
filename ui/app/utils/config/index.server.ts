@@ -1,4 +1,4 @@
-import type { Config, FunctionConfig } from "~/types/tensorzero";
+import type { Config, FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
@@ -27,7 +27,21 @@ after a new variant is used.
 We will likely address this with some form of query library down the line.
 */
 
-export async function loadConfig(): Promise<Config> {
+/**
+ * Converts a full Config (from disk) to a UiConfig (for the UI context).
+ */
+function configToUiConfig(config: Config): UiConfig {
+  return {
+    // eslint-disable-next-line no-restricted-syntax
+    functions: config.functions,
+    metrics: config.metrics,
+    tools: config.tools,
+    evaluations: config.evaluations,
+    model_names: Object.keys(config.models.table),
+  };
+}
+
+export async function loadConfig(): Promise<UiConfig> {
   const env = getEnv();
 
   // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
@@ -38,10 +52,13 @@ export async function loadConfig(): Promise<Config> {
 
   // Otherwise use disk loading via tensorzero-node (legacy behavior)
   const { getConfig: getConfigNative } = await import("tensorzero-node");
+  let fullConfig: Config;
   if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    return await getConfigNative(null);
+    fullConfig = await getConfigNative(null);
+  } else {
+    fullConfig = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   }
-  return await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
+  return configToUiConfig(fullConfig);
 }
 
 /**
@@ -58,7 +75,7 @@ export function getConfigPath(): string | null {
   return env.TENSORZERO_UI_CONFIG_PATH;
 }
 
-let configCache: Config | undefined = undefined;
+let configCache: UiConfig | undefined = undefined;
 
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
@@ -72,7 +89,7 @@ const defaultFunctionConfig: FunctionConfig = {
   experimentation: { type: "uniform" },
 };
 
-export async function getConfig() {
+export async function getConfig(): Promise<UiConfig> {
   if (configCache) {
     return configCache;
   }
@@ -92,7 +109,10 @@ export async function getConfig() {
  * @param config - The config object (optional, will fetch if not provided)
  * @returns The function configuration object or null if not found
  */
-export async function getFunctionConfig(functionName: string, config?: Config) {
+export async function getFunctionConfig(
+  functionName: string,
+  config?: UiConfig,
+) {
   const cfg = config || (await getConfig());
   // eslint-disable-next-line no-restricted-syntax
   return cfg.functions[functionName] || null;
@@ -103,7 +123,7 @@ export async function getFunctionConfig(functionName: string, config?: Config) {
  * @param config - The config object (optional, will fetch if not provided)
  * @returns The function configuration object or null if not found
  */
-export async function getAllFunctionConfigs(config?: Config) {
+export async function getAllFunctionConfigs(config?: UiConfig) {
   const cfg = config || (await getConfig());
 
   return cfg.functions;
