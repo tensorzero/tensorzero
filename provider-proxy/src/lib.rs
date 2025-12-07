@@ -22,7 +22,7 @@ use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::{Parser, ValueEnum};
 use http::{HeaderName, HeaderValue, Version};
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
@@ -70,16 +70,15 @@ fn save_cache_body(
 
     // None of our providers produce image/pdf responses, so this is good enough to exclude
     // things like file fetching (which happen to use the proxied HTTP client in the gateway)
-    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE) {
-        if content_type.to_str().unwrap().starts_with("image/")
+    if let Some(content_type) = parts.headers.get(http::header::CONTENT_TYPE)
+        && (content_type.to_str().unwrap().starts_with("image/")
             || content_type
                 .to_str()
                 .unwrap()
-                .starts_with("application/pdf")
-        {
-            tracing::info!("Skipping caching of response with content type {content_type:?}");
-            return Ok(());
-        }
+                .starts_with("application/pdf"))
+    {
+        tracing::info!("Skipping caching of response with content type {content_type:?}");
+        return Ok(());
     }
 
     #[derive(Serialize)]
@@ -140,16 +139,15 @@ async fn check_cache<
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
     request.extensions_mut().clear();
     let mut sanitized_header = false;
-    if args.sanitize_bearer_auth {
-        if let Some(auth_header) = request.headers().get("Authorization") {
-            if auth_header.to_str().unwrap().starts_with("Bearer ") {
-                request.headers_mut().insert(
-                    "Authorization",
-                    HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
-                );
-                sanitized_header = true;
-            }
-        }
+    if args.sanitize_bearer_auth
+        && let Some(auth_header) = request.headers().get("Authorization")
+        && auth_header.to_str().unwrap().starts_with("Bearer ")
+    {
+        request.headers_mut().insert(
+            "Authorization",
+            HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
+        );
+        sanitized_header = true;
     }
     if args.sanitize_aws_sigv4 {
         let header_names = [

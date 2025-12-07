@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde_json::Value;
 use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::endpoints::datasets::Datapoint;

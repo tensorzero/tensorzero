@@ -12,7 +12,7 @@ use std::{
 };
 
 use evaluations::EvaluatorStats;
-use rand::{prelude::IndexedRandom, rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, prelude::IndexedRandom, rngs::StdRng};
 use tensorzero_core::{
     config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
@@ -21,8 +21,8 @@ use tensorzero_core::{
 };
 
 use crate::gepa::{
-    evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores},
     GEPAVariant,
+    evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores},
 };
 
 /// Threshold for warning about high missing score rates
@@ -296,7 +296,7 @@ impl ParetoFrontier {
 
         let mut rng = self.rng.borrow_mut();
         let sampled_name = items
-            .choose_weighted(&mut *rng, |(_, &count)| count)
+            .choose_weighted(&mut *rng, |&(_, &count)| count)
             .map(|(name, _)| (*name).clone())
             .map_err(|e| {
                 Error::new(ErrorDetails::InternalError {
@@ -1209,10 +1209,12 @@ mod tests {
 
         let result = frontier.sample_by_frequency();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("frequencies are zero"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("frequencies are zero")
+        );
     }
 
     #[test]
@@ -2088,9 +2090,11 @@ mod tests {
         // Should return error when all evaluations failed
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("No validation scores provided for any variant"));
+        assert!(
+            error
+                .to_string()
+                .contains("No validation scores provided for any variant")
+        );
     }
 
     #[test]
@@ -2124,9 +2128,11 @@ mod tests {
         // Should return error when all scores are None
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("All new variants failed to produce valid scores"));
+        assert!(
+            error
+                .to_string()
+                .contains("All new variants failed to produce valid scores")
+        );
     }
 
     #[test]
