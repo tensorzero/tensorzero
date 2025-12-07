@@ -1,9 +1,7 @@
-import type { Config, FunctionConfig } from "~/types/tensorzero";
-import { getConfig as getConfigNative } from "tensorzero-node";
+import type { Config, FunctionConfig, UiConfig } from "~/types/tensorzero";
+import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
-
-const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
 /*
 Config Context provider:
@@ -29,18 +27,45 @@ after a new variant is used.
 We will likely address this with some form of query library down the line.
 */
 
-export async function loadConfig(): Promise<Config> {
+/**
+ * Converts a full Config (from disk) to a UiConfig (for the UI context).
+ */
+function configToUiConfig(config: Config): UiConfig {
+  return {
+    // eslint-disable-next-line no-restricted-syntax
+    functions: config.functions,
+    metrics: config.metrics,
+    tools: config.tools,
+    evaluations: config.evaluations,
+    model_names: Object.keys(config.models.table),
+  };
+}
+
+export async function loadConfig(): Promise<UiConfig> {
   const env = getEnv();
-  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    return await getConfigNative(null);
+
+  // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
+  if (env.TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY) {
+    const client = getTensorZeroClient();
+    return await client.getUiConfig();
   }
-  const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
-  return config;
+
+  // Otherwise use disk loading via tensorzero-node (legacy behavior)
+  const { getConfig: getConfigNative } = await import("tensorzero-node");
+  let fullConfig: Config;
+  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
+    fullConfig = await getConfigNative(null);
+  } else {
+    fullConfig = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
+  }
+  return configToUiConfig(fullConfig);
 }
 
 /**
  * Helper function to get the config path used by the UI.
  * Returns null if using default config, otherwise returns the config path.
+ * @deprecated This function is deprecated and will be removed in a future version.
+ * Config is now loaded from the gateway, not from disk.
  */
 export function getConfigPath(): string | null {
   const env = getEnv();
@@ -50,12 +75,7 @@ export function getConfigPath(): string | null {
   return env.TENSORZERO_UI_CONFIG_PATH;
 }
 
-interface ConfigCache {
-  data: Config;
-  timestamp: number;
-}
-
-let configCache: ConfigCache | null = null;
+let configCache: UiConfig | undefined = undefined;
 
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
@@ -69,48 +89,18 @@ const defaultFunctionConfig: FunctionConfig = {
   experimentation: { type: "uniform" },
 };
 
-export function getDefaultFunctionConfigWithVariant(
-  model_name: string,
-): FunctionConfig {
-  const functionConfig = defaultFunctionConfig;
-  functionConfig.variants[model_name] = {
-    inner: {
-      type: "chat_completion",
-      model: model_name,
-      weight: null,
-      templates: {},
-      temperature: null,
-      top_p: null,
-      max_tokens: null,
-      presence_penalty: null,
-      frequency_penalty: null,
-      seed: null,
-      stop_sequences: null,
-      json_mode: null,
-      retries: { num_retries: 0, max_delay_s: 0 },
-    },
-    timeouts: {
-      non_streaming: { total_ms: null },
-      streaming: { ttft_ms: null },
-    },
-  };
-  return functionConfig;
-}
-
-export async function getConfig() {
-  const now = Date.now();
-
-  if (configCache && now - configCache.timestamp < CACHE_TTL_MS) {
-    return configCache.data;
+export async function getConfig(): Promise<UiConfig> {
+  if (configCache) {
+    return configCache;
   }
 
-  // Cache is invalid or doesn't exist, reload it
+  // Cache doesn't exist, load it.
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
   freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
-  configCache = { data: freshConfig, timestamp: now };
-  return freshConfig;
+  configCache = freshConfig;
+  return configCache;
 }
 
 /**
@@ -119,7 +109,10 @@ export async function getConfig() {
  * @param config - The config object (optional, will fetch if not provided)
  * @returns The function configuration object or null if not found
  */
-export async function getFunctionConfig(functionName: string, config?: Config) {
+export async function getFunctionConfig(
+  functionName: string,
+  config?: UiConfig,
+) {
   const cfg = config || (await getConfig());
   // eslint-disable-next-line no-restricted-syntax
   return cfg.functions[functionName] || null;
@@ -130,7 +123,7 @@ export async function getFunctionConfig(functionName: string, config?: Config) {
  * @param config - The config object (optional, will fetch if not provided)
  * @returns The function configuration object or null if not found
  */
-export async function getAllFunctionConfigs(config?: Config) {
+export async function getAllFunctionConfigs(config?: UiConfig) {
   const cfg = config || (await getConfig());
 
   return cfg.functions;

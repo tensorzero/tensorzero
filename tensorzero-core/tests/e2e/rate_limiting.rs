@@ -506,12 +506,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_resources_non_streaming() {
-    test_rate_limiting_multiple_resources_helper(false).await;
+    Box::pin(test_rate_limiting_multiple_resources_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_resources_streaming() {
-    test_rate_limiting_multiple_resources_helper(true).await;
+    Box::pin(test_rate_limiting_multiple_resources_helper(true)).await;
 }
 
 async fn test_rate_limiting_multiple_resources_helper(stream: bool) {
@@ -707,12 +707,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_scopes_non_streaming() {
-    test_rate_limiting_multiple_scopes_helper(false).await;
+    Box::pin(test_rate_limiting_multiple_scopes_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_multiple_scopes_streaming() {
-    test_rate_limiting_multiple_scopes_helper(true).await;
+    Box::pin(test_rate_limiting_multiple_scopes_helper(true)).await;
 }
 
 async fn test_rate_limiting_multiple_scopes_helper(stream: bool) {
@@ -998,12 +998,12 @@ scope = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_time_intervals_non_streaming() {
-    test_rate_limiting_time_intervals_helper(false).await;
+    Box::pin(test_rate_limiting_time_intervals_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_time_intervals_streaming() {
-    test_rate_limiting_time_intervals_helper(true).await;
+    Box::pin(test_rate_limiting_time_intervals_helper(true)).await;
 }
 
 async fn test_rate_limiting_time_intervals_helper(stream: bool) {
@@ -1205,12 +1205,12 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_override_with_each_non_streaming() {
-    test_rate_limiting_priority_override_with_each_helper(false).await;
+    Box::pin(test_rate_limiting_priority_override_with_each_helper(false)).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting_priority_override_with_each_streaming() {
-    test_rate_limiting_priority_override_with_each_helper(true).await;
+    Box::pin(test_rate_limiting_priority_override_with_each_helper(true)).await;
 }
 
 async fn test_rate_limiting_priority_override_with_each_helper(stream: bool) {

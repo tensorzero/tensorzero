@@ -1,5 +1,5 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
@@ -10,14 +10,14 @@ use tensorzero_core::{
         },
         postgres::PostgresConnectionInfo,
     },
-    endpoints::feedback::{feedback, Params},
+    endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
     utils::gateway::GatewayHandle,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;

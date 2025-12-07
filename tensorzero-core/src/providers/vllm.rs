@@ -9,30 +9,30 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, StreamOptions,
+    OpenAITool, OpenAIToolChoice, StreamOptions, get_chat_url, handle_openai_error, stream_openai,
+    tensorzero_to_openai_messages,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::Thought;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::Thought;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
+use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
 
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";

@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -16,37 +16,37 @@ use crate::config::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, FunctionType, Latency,
-    ModelInferenceRequestJsonMode,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
 };
-use crate::inference::InferenceProvider;
+use crate::inference::types::{
+    FunctionType, Latency, ModelInferenceRequestJsonMode,
+    batch::StartBatchProviderInferenceResponse,
+};
 use crate::model::CredentialLocationWithFallback;
 use crate::model::ModelProvider;
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::providers::anthropic::{
-    anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
-    AnthropicToolChoice,
+    AnthropicStreamMessage, AnthropicToolChoice, anthropic_to_tensorzero_stream_message,
+    handle_anthropic_error,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolChoice};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent,
-    AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason, AnthropicSystemBlock,
-    AnthropicTool,
+    AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
+    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, prefill_json_chunk_response,
+    prefill_json_response,
 };
-use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
+use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
 use super::helpers::{convert_stream_error, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -163,8 +163,12 @@ impl GCPVertexAnthropicProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
-        let request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
-        let streaming_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
+        let request_url = format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict"
+        );
+        let streaming_request_url = format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict"
+        );
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
@@ -605,7 +609,9 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
-            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."),
+            message: format!(
+                "The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."
+            ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
             raw_request: None,
@@ -789,7 +795,7 @@ mod tests {
 
     use super::*;
 
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::time::Duration;
     use uuid::Uuid;
 

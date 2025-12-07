@@ -7,14 +7,14 @@ use tensorzero::{
     InputMessageContent, Role,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, write_config_snapshot};
+use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
+    CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
 };
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
-use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::Text;
@@ -194,10 +194,12 @@ optimize = "max"
         stored_config.contains(&format!("test_metric_{random_id}")),
         "Config should contain our test metric"
     );
-    assert!(!snapshot_row["tensorzero_version"]
-        .as_str()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !snapshot_row["tensorzero_version"]
+            .as_str()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         snapshot_row["hash"].as_str().unwrap().to_lowercase(),
         hash_number

@@ -7,8 +7,8 @@ use std::env;
 use std::time::{Duration, Instant};
 
 use crate::config::BatchWritesConfig;
-use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::db::HealthCheckable;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::delayed_error::DelayedError;
 use crate::error::{Error, ErrorDetails};
@@ -58,7 +58,9 @@ use serde::{Deserialize, Serialize};
 pub const NUM_MIGRATIONS: usize = 37;
 pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations")
+    format!(
+        "docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations"
+    )
 }
 
 /// Constructs (but does not run) a vector of all our database migrations.
@@ -204,15 +206,21 @@ fn compare_migration_tables(
         tracing::debug!("ClickHouse has every required migration and no extra migrations.");
         MigrationTableState::JustRight
     } else if actual.is_superset(&expected) {
-        tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
+        tracing::warn!(
+            "ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero."
+        );
         tracing::warn!("Actual   migration IDs: {actual:?}");
         tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::TooMany
     } else if expected.is_superset(&actual) {
-        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them automatically unless `disable_automatic_migrations` is true.");
+        tracing::debug!(
+            "ClickHouse is missing required migrations. The gateway will run them automatically unless `disable_automatic_migrations` is true."
+        );
         MigrationTableState::TooFew
     } else {
-        tracing::warn!("ClickHouse is in an inconsistent state. It is missing required migrations but previously applied migrations that are not known to the gateway. The gateway will run the missing migrations automatically unless `disable_automatic_migrations` is true.");
+        tracing::warn!(
+            "ClickHouse is in an inconsistent state. It is missing required migrations but previously applied migrations that are not known to the gateway. The gateway will run the missing migrations automatically unless `disable_automatic_migrations` is true."
+        );
         tracing::warn!("Actual   migration IDs: {actual:?}");
         tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::Inconsistent
@@ -242,7 +250,9 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
             Ok(())
         }
         MigrationTableState::TooMany => {
-            tracing::warn!("Extra migrations were detected: this likely means a later version of TensorZero has run migrations against your ClickHouse instance");
+            tracing::warn!(
+                "Extra migrations were detected: this likely means a later version of TensorZero has run migrations against your ClickHouse instance"
+            );
             Ok(())
         }
         // If there are fewer migrations than expected, or if we couldn't parse the migrations that were run, proceed
@@ -670,29 +680,39 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: false,
-            manual_run: false,
-        })
-        .await
-        .is_ok());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: false,
+                manual_run: false,
+            })
+            .await
+            .is_ok()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -700,29 +720,39 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: true,
-            manual_run: false,
-        })
-        .await
-        .is_err());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: true,
+                manual_run: false,
+            })
+            .await
+            .is_err()
+        );
 
         // Check that we called can / should but not apply or has_succeeded
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -730,29 +760,39 @@ mod tests {
         let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: true,
-            manual_run: true,
-        })
-        .await
-        .is_ok());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: true,
+                manual_run: true,
+            })
+            .await
+            .is_ok()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -763,29 +803,39 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: false,
-            manual_run: false,
-        })
-        .await
-        .is_err());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: false,
+                manual_run: false,
+            })
+            .await
+            .is_err()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -796,29 +846,39 @@ mod tests {
         };
 
         // First check that the method succeeds
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: false,
-            manual_run: false,
-        })
-        .await
-        .is_ok());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: false,
+                manual_run: false,
+            })
+            .await
+            .is_ok()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -829,29 +889,39 @@ mod tests {
         };
 
         // First check that the method succeeds
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: true,
-            manual_run: false,
-        })
-        .await
-        .is_ok());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: true,
+                manual_run: false,
+            })
+            .await
+            .is_ok()
+        );
 
         // Check that we called can / should but not apply or has_succeeded
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -862,29 +932,39 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: false,
-            manual_run: false,
-        })
-        .await
-        .is_err());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: false,
+                manual_run: false,
+            })
+            .await
+            .is_err()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            !mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 
     #[tokio::test]
@@ -895,28 +975,38 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
-            migration: &mock_migration,
-            clean_start: false,
-            is_replicated: false,
-            manual_run: false,
-        })
-        .await
-        .is_err());
+        assert!(
+            run_migration(RunMigrationArgs {
+                clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+                migration: &mock_migration,
+                clean_start: false,
+                is_replicated: false,
+                manual_run: false,
+            })
+            .await
+            .is_err()
+        );
 
         // Check that we called every method
-        assert!(mock_migration
-            .called_can_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_should_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_apply
-            .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(mock_migration
-            .called_has_succeeded
-            .load(std::sync::atomic::Ordering::Relaxed));
+        assert!(
+            mock_migration
+                .called_can_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_should_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_apply
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert!(
+            mock_migration
+                .called_has_succeeded
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
     }
 }

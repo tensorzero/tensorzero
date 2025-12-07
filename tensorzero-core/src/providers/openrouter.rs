@@ -6,7 +6,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
@@ -24,26 +24,26 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
-    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
+use crate::inference::InferenceProvider;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
-use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
-    resolved_input::{FileUrl, LazyFile},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Unknown, Usage,
+    resolved_input::{FileUrl, LazyFile},
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
@@ -64,8 +64,8 @@ use super::openai::{
     SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
-use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::TensorZeroEventError;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::providers::openai::OpenAIEmbeddingUsage;
 
 lazy_static! {
@@ -1474,17 +1474,16 @@ impl<'a> OpenRouterRequest<'a> {
             parallel_tool_calls = None;
         }
 
-        if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(OpenRouterRequestMessage::System(_)) = messages.first() {
-                if let OpenRouterRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
-                        content: vec![OpenRouterContentBlock::Text {
-                            text: system_msg.content,
-                        }],
-                    });
-                    messages.insert(0, user_msg);
-                }
-            }
+        if model.to_lowercase().starts_with("o1-mini")
+            && let Some(OpenRouterRequestMessage::System(_)) = messages.first()
+            && let OpenRouterRequestMessage::System(system_msg) = messages.remove(0)
+        {
+            let user_msg = OpenRouterRequestMessage::User(OpenRouterUserRequestMessage {
+                content: vec![OpenRouterContentBlock::Text {
+                    text: system_msg.content,
+                }],
+            });
+            messages.insert(0, user_msg);
         }
 
         let mut openrouter_request = OpenRouterRequest {

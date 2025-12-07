@@ -17,7 +17,7 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map,
 };
-use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.

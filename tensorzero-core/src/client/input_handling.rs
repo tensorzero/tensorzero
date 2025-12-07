@@ -63,8 +63,8 @@ mod tests {
     use object_store::path::Path;
 
     use crate::inference::types::{
-        storage::{StorageKind, StoragePath},
         ObjectStorageFile, ObjectStoragePointer,
+        storage::{StorageKind, StoragePath},
     };
     use url::Url;
 

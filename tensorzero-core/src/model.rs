@@ -1,5 +1,5 @@
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
@@ -11,18 +11,18 @@ use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tracing::{span, Level, Span};
+use tracing::{Level, Span, span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 
 use crate::cache::{
-    cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
-    StreamingCacheData,
+    StreamingCacheData, cache_lookup, cache_lookup_streaming, start_cache_write,
+    start_cache_write_streaming,
 };
 use crate::config::{
-    provider_types::ProviderTypesConfig, OtlpConfig, OtlpTracesFormat, TimeoutsConfig,
+    OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -32,6 +32,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -39,11 +40,10 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
-    current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Thought,
-    Unknown, Usage,
+    ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
+    current_timestamp,
 };
-use crate::inference::WrappedProvider;
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
     GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
@@ -60,8 +60,8 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::{
-        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
         InferenceProvider,
+        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -212,16 +212,16 @@ impl ModelConfig {
         target_provider_name: &str,
     ) -> bool {
         // If model_name is specified and doesn't match, filter it out
-        if let Some(ref m) = block_model_name {
-            if m != target_model_name {
-                return true;
-            }
+        if let Some(m) = block_model_name
+            && m != target_model_name
+        {
+            return true;
         }
         // If provider_name is specified and doesn't match, filter it out
-        if let Some(ref p) = block_provider_name {
-            if p != target_provider_name {
-                return true;
-            }
+        if let Some(p) = block_provider_name
+            && p != target_provider_name
+        {
+            return true;
         }
         // Keep the block if both match (or are None)
         false
@@ -678,8 +678,8 @@ async fn wrap_provider_stream(
         // `total_usage` is `None` until we receive a chunk with usage information
         let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref() {
-                if let Some(chunk_usage) = &chunk.usage {
+            if let Ok(chunk) = chunk.as_ref()
+                && let Some(chunk_usage) = &chunk.usage {
                     // `total_usage` will be `None` if this is the first chunk with usage information....
                     if total_usage.is_none() {
                         // ... so initialize it to zero ...
@@ -688,7 +688,6 @@ async fn wrap_provider_stream(
                     // ...and then add the chunk usage to it (handling `None` fields)
                     if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
-            }
             // We can skip cloning the chunk if we know we're not going to write to the cache
             if write_to_cache && !errored {
                 match chunk.as_ref() {
@@ -2496,8 +2495,8 @@ mod tests {
         model_table::RESERVED_MODEL_PREFIXES,
         providers::anthropic::AnthropicCredentials,
         providers::dummy::{
-            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_STREAMING_RESPONSE,
+            DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
+            DummyCredentials,
         },
         rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
     };
@@ -3606,10 +3605,12 @@ mod tests {
         let json = r#"{"fallback":"env::FALLBACK_KEY"}"#;
         let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `default`"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing field `default`")
+        );
     }
 
     #[test]
@@ -3618,10 +3619,12 @@ mod tests {
         let json = r#"{"default":"env::DEFAULT_KEY"}"#;
         let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `fallback`"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing field `fallback`")
+        );
     }
 
     #[test]

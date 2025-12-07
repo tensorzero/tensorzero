@@ -11,8 +11,12 @@ import {
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
-import { parseInferenceOutput } from "~/utils/clickhouse/inference";
-import { Output } from "~/components/inference/Output";
+import {
+  parseInferenceOutput,
+  isJsonOutput,
+} from "~/utils/clickhouse/inference";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 interface FeedbackTableModalProps {
   feedback: FeedbackRow;
@@ -56,7 +60,11 @@ export function DemonstrationModal({ feedback }: FeedbackTableModalProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <Output output={parsedOutput} />
+          {isJsonOutput(parsedOutput) ? (
+            <JsonOutputElement output={parsedOutput} />
+          ) : (
+            <ChatOutputElement output={parsedOutput} />
+          )}
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
