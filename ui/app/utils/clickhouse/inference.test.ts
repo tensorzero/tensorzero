@@ -389,7 +389,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
       { text: "Summary of the thought", type: "summary_text" },
       { text: "Another summary point", type: "summary_text" },
     ],
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
@@ -407,7 +407,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
     type: "thought",
     text: "Another thinking step",
     signature: "abcdef",
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result2 = displayModelInferenceInputMessageContentSchema.safeParse(

@@ -51,97 +51,21 @@ pub struct TextChunk {
     pub text: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThoughtChunk {
     pub id: String,
     pub text: Option<String>,
     pub signature: Option<String>,
     pub summary_id: Option<String>,
     pub summary_text: Option<String>,
+
     /// See `Thought.provider_type`
+    #[serde(
+        // This alias is written to the database, so we cannot remove it.
+        alias = "_internal_provider_type",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub provider_type: Option<String>,
-}
-
-// Custom deserializer to handle both `provider_type` and legacy `_internal_provider_type` fields,
-// allowing round-tripping of our own serialized output which includes both fields.
-// TODO(#5001): The old field is deprecated in 2025.12; we can remove the deserializer in 2026.2+.
-impl<'de> Deserialize<'de> for ThoughtChunk {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct ThoughtChunkHelper {
-            id: String,
-            text: Option<String>,
-            signature: Option<String>,
-            summary_id: Option<String>,
-            summary_text: Option<String>,
-            provider_type: Option<String>,
-            _internal_provider_type: Option<String>,
-        }
-
-        let helper = ThoughtChunkHelper::deserialize(deserializer)?;
-        Ok(ThoughtChunk {
-            id: helper.id,
-            text: helper.text,
-            signature: helper.signature,
-            summary_id: helper.summary_id,
-            summary_text: helper.summary_text,
-            // Prefer provider_type if present, fall back to legacy field
-            provider_type: helper.provider_type.or(helper._internal_provider_type),
-        })
-    }
-}
-
-// Custom serializer to also serialize the deprecated `_internal_provider_type` field for backcompat.
-// TODO(#5001): The old field is deprecated in 2025.12; we can remove the serializer in 2026.2+.
-impl Serialize for ThoughtChunk {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-
-        // Count fields: id is always present, others are optional
-        let mut field_count = 1; // id
-        if self.text.is_some() {
-            field_count += 1;
-        }
-        if self.signature.is_some() {
-            field_count += 1;
-        }
-        if self.summary_id.is_some() {
-            field_count += 1;
-        }
-        if self.summary_text.is_some() {
-            field_count += 1;
-        }
-        if self.provider_type.is_some() {
-            field_count += 2; // provider_type + _internal_provider_type (backcompat)
-        }
-
-        let mut state = serializer.serialize_struct("ThoughtChunk", field_count)?;
-        state.serialize_field("id", &self.id)?;
-        if let Some(ref text) = self.text {
-            state.serialize_field("text", text)?;
-        }
-        if let Some(ref signature) = self.signature {
-            state.serialize_field("signature", signature)?;
-        }
-        if let Some(ref summary_id) = self.summary_id {
-            state.serialize_field("summary_id", summary_id)?;
-        }
-        if let Some(ref summary_text) = self.summary_text {
-            state.serialize_field("summary_text", summary_text)?;
-        }
-        if let Some(ref provider_type) = self.provider_type {
-            state.serialize_field("provider_type", provider_type)?;
-            // Backcompat: also emit legacy field name
-            state.serialize_field("_internal_provider_type", provider_type)?;
-        }
-        state.end()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2363,98 +2287,5 @@ mod tests {
         assert_eq!(result.raw, None);
         assert_eq!(result.thought, None);
         assert_eq!(result.finish_reason, None);
-    }
-
-    #[test]
-    fn test_thought_chunk_provider_type_serde_backcompat() {
-        use serde_json::json;
-
-        // Test deserialization from new field name
-        let chunk: ThoughtChunk = serde_json::from_value(
-            json!({"id": "1", "text": "thinking", "provider_type": "anthropic"}),
-        )
-        .unwrap();
-        assert_eq!(chunk.id, "1");
-        assert_eq!(chunk.text, Some("thinking".to_string()));
-        assert_eq!(chunk.provider_type, Some("anthropic".to_string()));
-
-        // Test deserialization from legacy field name
-        let chunk: ThoughtChunk = serde_json::from_value(
-            json!({"id": "1", "text": "thinking", "_internal_provider_type": "anthropic"}),
-        )
-        .unwrap();
-        assert_eq!(chunk.provider_type, Some("anthropic".to_string()));
-
-        // Test deserialization without provider_type
-        let chunk: ThoughtChunk =
-            serde_json::from_value(json!({"id": "1", "text": "thinking"})).unwrap();
-        assert_eq!(chunk.provider_type, None);
-
-        // Test serialization emits both field names for backcompat
-        let chunk = ThoughtChunk {
-            id: "1".to_string(),
-            text: Some("thinking".to_string()),
-            signature: None,
-            summary_id: None,
-            summary_text: None,
-            provider_type: Some("anthropic".to_string()),
-        };
-        let serialized = serde_json::to_value(&chunk).unwrap();
-        assert_eq!(serialized["id"], "1");
-        assert_eq!(serialized["text"], "thinking");
-        assert_eq!(
-            serialized["provider_type"], "anthropic",
-            "provider_type should be serialized"
-        );
-        assert_eq!(
-            serialized["_internal_provider_type"], "anthropic",
-            "_internal_provider_type should be serialized"
-        );
-
-        // Test serialization omits both fields when provider_type is None
-        let chunk = ThoughtChunk {
-            id: "1".to_string(),
-            text: Some("thinking".to_string()),
-            signature: None,
-            summary_id: None,
-            summary_text: None,
-            provider_type: None,
-        };
-        let serialized = serde_json::to_value(&chunk).unwrap();
-        assert!(
-            serialized.get("provider_type").is_none(),
-            "provider_type should be omitted"
-        );
-        assert!(
-            serialized.get("_internal_provider_type").is_none(),
-            "_internal_provider_type should be omitted"
-        );
-
-        // Test round-trip: serialize then deserialize (both fields present)
-        let chunk = ThoughtChunk {
-            id: "1".to_string(),
-            text: Some("thinking".to_string()),
-            signature: None,
-            summary_id: None,
-            summary_text: None,
-            provider_type: Some("anthropic".to_string()),
-        };
-        let serialized = serde_json::to_string(&chunk).unwrap();
-        let deserialized: ThoughtChunk = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(
-            chunk, deserialized,
-            "Serializing and then deserializing a ThoughtChunk should match the original"
-        );
-
-        // Test deserialization when both fields present (prefers provider_type)
-        let chunk: ThoughtChunk = serde_json::from_value(
-            json!({"id": "1", "text": "thinking", "provider_type": "anthropic", "_internal_provider_type": "openai"}),
-        )
-        .unwrap();
-        assert_eq!(
-            chunk.provider_type,
-            Some("anthropic".to_string()),
-            "provider_type should take precedence over _internal_provider_type when deserializing"
-        );
     }
 }

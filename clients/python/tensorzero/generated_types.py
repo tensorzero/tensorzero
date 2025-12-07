@@ -1200,17 +1200,11 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
-    _internal_provider_type: str | None = None
-    """
-    Deprecated name for `provider_type` field, will be removed in 2026.2+.
-    """
     provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
-
-    If `provider_type` is present, `_internal_provider_type` will be ignored.
     """
     signature: str | None = None
     """
