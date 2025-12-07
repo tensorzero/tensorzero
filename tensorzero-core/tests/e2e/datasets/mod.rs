@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::{
     ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, StoredDatapoint, System,
 };
@@ -15,7 +15,7 @@ use tensorzero_core::{
         },
         datasets::{DatasetQueries, GetDatapointsParams},
     },
-    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
+    endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, DatapointKind},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
     tool::Tool,
 };
@@ -281,11 +281,13 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -296,11 +298,13 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1056,11 +1060,13 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1074,11 +1080,13 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1525,9 +1533,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    assert!(select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .is_none());
+    assert!(
+        select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -1927,9 +1937,11 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    assert!(select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .is_none());
+    assert!(
+        select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]

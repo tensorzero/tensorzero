@@ -1,4 +1,4 @@
-use crate::clickhouse::{get_clean_clickhouse, DeleteDbOnDrop};
+use crate::clickhouse::{DeleteDbOnDrop, get_clean_clickhouse};
 use futures::future::join_all;
 use rand::{Rng, SeedableRng};
 use rand_distr::Distribution;
@@ -11,9 +11,9 @@ use tensorzero::{
     ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse, Input, InputMessage,
     InputMessageContent, Role,
 };
-use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
-use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
+use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
 use tensorzero_core::inference::types::Text;
 use tokio::time::Duration;
 use url::Url;
@@ -718,7 +718,8 @@ async fn test_min_pulls() {
     // Verify each variant was sampled min_samples times plus or minus 1
     for variant in ["variant_a", "variant_b", "variant_c"] {
         let count = variant_counts.get(variant).copied().unwrap_or(0);
-        assert!(count.abs_diff(min_samples as usize) <= 1,
+        assert!(
+            count.abs_diff(min_samples as usize) <= 1,
             "Expected variant {variant} to be sampled {min_samples} times (+/-) in nursery phase, got {count}"
         );
     }
@@ -1239,7 +1240,7 @@ async fn test_cold_start_with_stopped_experiment() {
     }
     let winner_variant = variant_counts
         .iter()
-        .max_by_key(|(_, &count)| count)
+        .max_by_key(|&(_, &count)| count)
         .map(|(name, _)| name.clone())
         .expect("Expected at least one variant in last batch");
 
@@ -1604,7 +1605,8 @@ async fn test_remove_winner_variant_after_stopping() {
     let variant_c_fraction = variant_c_count as f64 / total as f64;
 
     // After removing the original winner, variant_b should now be the winner or at least get most of the pulls
-    assert!(variant_b_fraction >= 0.80,
+    assert!(
+        variant_b_fraction >= 0.80,
         "Expected variant_b to receive at least 80% of pulls after removing variant_a, but variant_b got {variant_b_fraction}% of pulls"
     );
     assert!(

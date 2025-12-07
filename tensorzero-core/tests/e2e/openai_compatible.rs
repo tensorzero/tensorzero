@@ -6,7 +6,7 @@ use tensorzero::ClientExt;
 use axum::extract::State;
 use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -73,7 +73,10 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
@@ -516,7 +519,10 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
     assert_eq!(
         response_model,
@@ -651,7 +657,10 @@ async fn test_openai_compatible_route_with_json_schema() {
     let message = choice.get("message").unwrap();
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    assert_eq!(
+        content,
+        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    );
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
@@ -854,9 +863,11 @@ async fn test_openai_compatible_streaming_tool_call() {
         }
         if i == chunks.len() - 2 {
             assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
-            assert!(parsed_chunk["choices"][0]["delta"]
-                .get("tool_calls")
-                .is_none());
+            assert!(
+                parsed_chunk["choices"][0]["delta"]
+                    .get("tool_calls")
+                    .is_none()
+            );
         }
         if i == chunks.len() - 1 {
             let usage = parsed_chunk["usage"].as_object().unwrap();
@@ -973,14 +984,18 @@ async fn test_openai_compatible_streaming() {
     let _content = parsed_chunk["choices"][0]["delta"]["content"]
         .as_str()
         .unwrap();
-    assert!(parsed_chunk["choices"][0]["delta"]
-        .get("tool_calls")
-        .is_none());
+    assert!(
+        parsed_chunk["choices"][0]["delta"]
+            .get("tool_calls")
+            .is_none()
+    );
     for (i, chunk) in chunks.iter().enumerate() {
         let parsed_chunk: Value = serde_json::from_str(chunk).unwrap();
-        assert!(parsed_chunk["choices"][0]["delta"]
-            .get("tool_calls")
-            .is_none());
+        assert!(
+            parsed_chunk["choices"][0]["delta"]
+                .get("tool_calls")
+                .is_none()
+        );
         if i < chunks.len() - 2 {
             let _content = parsed_chunk["choices"][0]["delta"]["content"]
                 .as_str()

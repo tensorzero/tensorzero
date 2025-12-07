@@ -55,23 +55,23 @@ use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::{middleware, Router};
+use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
-use metrics::{describe_counter, Unit};
+use metrics::{Unit, describe_counter};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
-use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::WithTonicConfig;
+use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
+use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
-use opentelemetry_sdk::Resource;
 use std::str::FromStr;
-use tokio_util::task::task_tracker::TaskTrackerToken;
 use tokio_util::task::TaskTracker;
+use tokio_util::task::task_tracker::TaskTrackerToken;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
 use tracing::level_filters::LevelFilter;
@@ -82,8 +82,8 @@ use tracing_opentelemetry_instrumentation_sdk::http::{
     http_flavor, http_host, url_scheme, user_agent,
 };
 use tracing_subscriber::layer::Filter;
-use tracing_subscriber::{filter, EnvFilter, Registry};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{EnvFilter, Registry, filter};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails};
@@ -852,22 +852,22 @@ async fn tensorzero_otel_tracing_middleware(
 
     // If this is an OpenTelemetry-enabled route, then wrap the route handling in a new span
     // See the docstring on this method for why we need this check
-    if let Some(route) = route {
-        if otel_enabled_routes.routes.contains(&route) {
-            // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
-            // As a result, if we reject a request due to a failure to parse custom OTLP headers,
-            // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
-            // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
-            let span = match make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper) {
-                Ok(span) => span,
-                Err(e) => {
-                    return e.into_response();
-                }
-            };
-            let response = next.run(req).instrument(span.clone()).await;
-            handle_response(&response, &span);
-            return response;
-        }
+    if let Some(route) = route
+        && otel_enabled_routes.routes.contains(&route)
+    {
+        // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
+        // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+        // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+        // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
+        let span = match make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper) {
+            Ok(span) => span,
+            Err(e) => {
+                return e.into_response();
+            }
+        };
+        let response = next.run(req).instrument(span.clone()).await;
+        handle_response(&response, &span);
+        return response;
     }
 
     // Otherwise, just process the request without creating a span.

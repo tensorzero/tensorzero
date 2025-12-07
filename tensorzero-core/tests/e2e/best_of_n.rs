@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
@@ -370,7 +370,10 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             });
             assert_eq!(raw_request, expected_request);
             let system = result.get("system").unwrap().as_str().unwrap();
-            assert_eq!(system, "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response.");
+            assert_eq!(
+                system,
+                "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response."
+            );
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
             let input_messages: Vec<StoredRequestMessage> =
                 serde_json::from_str(input_messages).unwrap();
@@ -481,7 +484,10 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             assert_eq!(output.len(), 1);
             match &output[0] {
                 StoredContentBlock::Text(text) => {
-                    assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+                    assert_eq!(
+                        text.text,
+                        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+                    );
                 }
                 _ => {
                     panic!("Expected a text block, got {:?}", output[0]);
@@ -677,7 +683,10 @@ async fn e2e_test_best_of_n_json_real_judge() {
             assert_eq!(output.len(), 1);
             match &output[0] {
                 StoredContentBlock::Text(text) => {
-                    assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+                    assert_eq!(
+                        text.text,
+                        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+                    );
                 }
                 _ => {
                     panic!("Expected a text block, got {:?}", output[0]);
@@ -946,7 +955,10 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             assert_eq!(output.len(), 1);
             match &output[0] {
                 StoredContentBlock::Text(text) => {
-                    assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+                    assert_eq!(
+                        text.text,
+                        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+                    );
                 }
                 _ => {
                     panic!("Expected a text block, got {:?}", output[0]);

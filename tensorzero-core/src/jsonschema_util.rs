@@ -1,5 +1,6 @@
 use jsonschema::Validator;
-use serde::Serialize;
+use once_cell::sync::OnceCell as SyncOnceCell;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
@@ -31,11 +32,18 @@ impl<'a> JsonSchemaRef<'a> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+/// A JSON schema with a lazily-compiled validator.
+///
+/// The validator is compiled when constructed from a config from disk, or on first access (via
+/// `validate()` or `compiled()`) if not compiled. If it's deserialized from JSON, it's not compiled.
+///
+/// TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct StaticJSONSchema {
+    /// Lazily-compiled validator. Use `compiled()` method to access.
     #[serde(skip)]
-    pub compiled: Arc<Validator>,
+    compiled: SyncOnceCell<Arc<Validator>>,
     pub value: serde_json::Value,
 }
 
@@ -47,24 +55,16 @@ impl PartialEq for StaticJSONSchema {
 
 impl Default for StaticJSONSchema {
     fn default() -> Self {
-        // Create an empty JSON object
-        let empty_schema: serde_json::Value = serde_json::json!({});
-
-        // Compile the schema
-        #[expect(clippy::expect_used)]
-        let compiled_schema =
-            jsonschema::validator_for(&empty_schema).expect("Failed to compile empty schema");
-
         Self {
-            compiled: Arc::new(compiled_schema),
-            value: empty_schema,
+            compiled: SyncOnceCell::new(),
+            value: serde_json::json!({}),
         }
     }
 }
 
 impl StaticJSONSchema {
-    /// Just instantiates the struct, does not load the schema
-    /// You should call `load` to load the schema
+    /// Creates a StaticJSONSchema from a file path, eagerly compiling the schema.
+    /// Returns an error if the JSON is invalid or the schema fails to compile.
     pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
         let content = path.data();
 
@@ -86,27 +86,48 @@ impl StaticJSONSchema {
                 ),
             })
         })?;
-        let compiled = Arc::new(compiled_schema);
+        let compiled = SyncOnceCell::new();
+        // Eagerly initialize since we just compiled it
+        let _ = compiled.set(Arc::new(compiled_schema));
         Ok(Self {
             compiled,
             value: schema,
         })
     }
 
+    /// Creates a StaticJSONSchema from a JSON value, eagerly compiling the schema.
+    /// Returns an error if the schema fails to compile.
     pub fn from_value(value: serde_json::Value) -> Result<Self, Error> {
         let compiled_schema = jsonschema::validator_for(&value).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to compile JSON Schema: {e}"),
             })
         })?;
-        Ok(Self {
-            compiled: Arc::new(compiled_schema),
-            value,
-        })
+        let compiled = SyncOnceCell::new();
+        // Eagerly initialize since we just compiled it
+        let _ = compiled.set(Arc::new(compiled_schema));
+        Ok(Self { compiled, value })
     }
 
+    /// Gets the compiled validator, compiling lazily if needed.
+    /// Returns an error if the schema is invalid.
+    fn compiled(&self) -> Result<&Validator, Error> {
+        self.compiled
+            .get_or_try_init(|| {
+                let validator = jsonschema::validator_for(&self.value).map_err(|e| {
+                    Error::new(ErrorDetails::JsonSchema {
+                        message: format!("Failed to compile JSON Schema: {e}"),
+                    })
+                })?;
+                Ok(Arc::new(validator))
+            })
+            .map(|arc| arc.as_ref())
+    }
+
+    /// Validates an instance against this schema.
+    /// The schema is compiled lazily on first validation if it hasn't been compiled yet.
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
-        self.compiled.validate(instance).map_err(|e| {
+        self.compiled()?.validate(instance).map_err(|e| {
             Error::new(ErrorDetails::JsonSchemaValidation {
                 messages: vec![e.to_string()],
                 data: Box::new(instance.clone()),
@@ -133,6 +154,8 @@ pub struct SchemaWithMetadata {
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
+///
+/// TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
 #[derive(Debug, Serialize, Clone, ts_rs::TS)]
 #[ts(export)]
 pub struct DynamicJSONSchema {

@@ -9,8 +9,8 @@ use tensorzero_core::inference::types::{
 use uuid::Uuid;
 
 use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
 use tensorzero_core::endpoints::datasets::v1::types::CreateDatapointsResponse;
 

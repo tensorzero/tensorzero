@@ -21,6 +21,7 @@ pub struct ExtraBodyReplacement {
 #[export_schema]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
+    #[schemars(title = "ExtraBodyReplacementKindValue")]
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
     #[serde(
@@ -312,10 +313,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + All
 
         // Verify All is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraBody::Always { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraBody::Always { .. }))
+        );
     }
 
     #[test]
@@ -351,15 +354,19 @@ mod tests {
 
         #[expect(deprecated)]
         {
-            assert!(filtered
+            assert!(
+                filtered
+                    .data
+                    .iter()
+                    .any(|item| matches!(item, DynamicExtraBody::Provider { .. }))
+            );
+        }
+        assert!(
+            filtered
                 .data
                 .iter()
-                .any(|item| matches!(item, DynamicExtraBody::Provider { .. })));
-        }
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraBody::Always { .. })));
+                .any(|item| matches!(item, DynamicExtraBody::Always { .. }))
+        );
         assert!(filtered.data.iter().any(|item| match item {
             DynamicExtraBody::Variant { variant_name, .. } => variant_name == "variant1",
             _ => false,
@@ -458,10 +465,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + ModelProvider
 
         // Verify ModelProvider is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraBody::ModelProvider { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraBody::ModelProvider { .. }))
+        );
     }
 
     #[test]

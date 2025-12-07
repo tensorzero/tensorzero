@@ -14,8 +14,8 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
-use futures::stream::Peekable;
 use futures::Stream;
+use futures::stream::Peekable;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -392,10 +392,16 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 );
                             }
                             if summary_id.is_some() && summary_text.is_none() {
-                                tracing::error!("Summary id is present but summary text is missing for thought {}", id);
+                                tracing::error!(
+                                    "Summary id is present but summary text is missing for thought {}",
+                                    id
+                                );
                             }
                             if summary_id.is_none() && summary_text.is_some() {
-                                tracing::error!("Summary text is present but summary id is missing for thought {}", id);
+                                tracing::error!(
+                                    "Summary text is present but summary id is missing for thought {}",
+                                    id
+                                );
                             }
                             if let (Some(summary_id), Some(summary_text)) =
                                 (summary_id, summary_text)
@@ -680,8 +686,8 @@ mod tests {
         experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            current_timestamp, ContentBlockChatOutput, ContentBlockOutputType, InferenceResult,
-            Text, Thought,
+            ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
+            current_timestamp,
         },
         jsonschema_util::StaticJSONSchema,
         tool::InferenceResponseToolCall,

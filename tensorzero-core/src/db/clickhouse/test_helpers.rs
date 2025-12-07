@@ -10,9 +10,9 @@ use crate::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
 };
 
+use super::ClickHouseConnectionInfo;
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
-use super::ClickHouseConnectionInfo;
 #[cfg(feature = "e2e_tests")]
 use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
@@ -531,8 +531,8 @@ pub async fn select_feedback_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-            "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
-        );
+        "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
+    );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)
@@ -553,8 +553,8 @@ pub async fn select_feedback_tags_clickhouse_with_feedback_id(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-            "SELECT * FROM FeedbackTag WHERE feedback_id = '{feedback_id}' AND metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
-        );
+        "SELECT * FROM FeedbackTag WHERE feedback_id = '{feedback_id}' AND metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
+    );
 
     let text = clickhouse_connection_info
         .run_query_synchronous_no_params(query)

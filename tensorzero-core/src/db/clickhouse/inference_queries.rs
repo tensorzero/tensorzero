@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use itertools::Itertools;
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
-    generate_order_by_sql, ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection,
-    QueryParameter,
+    ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
+    generate_order_by_sql,
 };
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource, InferenceQueries,
     ListInferencesParams, PaginationParams,
@@ -220,10 +220,10 @@ pub(crate) fn generate_list_inferences_sql(
                         OrderByTerm::Timestamp => "timestamp",
                         OrderByTerm::Metric { name } => {
                             return Err(Error::new(ErrorDetails::InvalidRequest {
-                                    message: format!(
+                                message: format!(
                                     "ORDER BY metric '{name}' is not supported when querying without function_name"
                                 ),
-                                }));
+                            }));
                         }
                         OrderByTerm::SearchRelevance => {
                             if opts.search_query_experimental.is_none() {

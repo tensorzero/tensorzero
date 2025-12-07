@@ -2,7 +2,7 @@
 name = "tensorzero-core"
 version.workspace = true
 rust-version.workspace = true
-edition = "2021"
+edition = "2024"
 license.workspace = true
 exclude = ["tests/", "fixtures/"]
 

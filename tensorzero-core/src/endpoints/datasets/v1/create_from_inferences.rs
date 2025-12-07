@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use tracing::instrument;
 
 use crate::config::Config;
@@ -139,8 +139,8 @@ pub async fn create_from_inferences(
 mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
-    use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::datasets::DatapointInsert;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};

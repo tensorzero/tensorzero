@@ -5,21 +5,20 @@ use uuid::Uuid;
 
 use crate::{
     db::{
+        FeedbackQueries, TableBounds, TimeWindow,
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
             FeedbackRow, FloatMetricFeedbackRow,
         },
-        FeedbackQueries, TableBounds, TimeWindow,
     },
     error::{Error, ErrorDetails},
     experimentation::asymptotic_confidence_sequences::asymp_cs,
 };
 
 use super::{
-    escape_string_for_clickhouse_literal,
+    ClickHouseConnectionInfo, escape_string_for_clickhouse_literal,
     select_queries::{build_pagination_clause, parse_count, parse_json_rows},
-    ClickHouseConnectionInfo,
 };
 
 // Configuration for feedback table queries
@@ -464,7 +463,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cumulative time window is not supported for feedback timeseries"
                         .to_string(),
-                }))
+                }));
             }
         };
 
@@ -833,8 +832,8 @@ fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use Uuid;
+    use std::sync::Arc;
 
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
@@ -932,8 +931,18 @@ mod tests {
         let id = Uuid::now_v7();
         let (query, params) = build_bounds_query(table_name, id_column, id);
 
-        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id"));
-        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id"));
+        assert_query_contains(
+            &query,
+            &format!(
+                "(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id"
+            ),
+        );
+        assert_query_contains(
+            &query,
+            &format!(
+                "(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id"
+            ),
+        );
         assert_query_contains(&query, "FORMAT JSONEachRow");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
     }
@@ -1578,9 +1587,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Cannot specify both before and after"));
+        assert!(
+            err.to_string()
+                .contains("Cannot specify both before and after")
+        );
     }
 
     #[tokio::test]
