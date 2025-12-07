@@ -154,30 +154,30 @@ impl TimeoutsConfig {
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
 
-        if let Some(total_ms) = total_ms
-            && Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout
-        {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
-                ),
-            }));
+        if let Some(total_ms) = total_ms {
+            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                    ),
+                }));
+            }
         }
-        if let Some(ttft_ms) = ttft_ms
-            && Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout
-        {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
-                ),
-            }));
+        if let Some(ttft_ms) = ttft_ms {
+            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                    ),
+                }));
+            }
         }
 
         Ok(())
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -283,12 +283,12 @@ impl ObjectStoreInfo {
                     builder = builder.with_allow_http(allow_http);
                 }
 
-                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint)
-                    && endpoint.ends_with(bucket_name)
-                {
-                    tracing::warn!(
-                        "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
-                    );
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
+                    if endpoint.ends_with(bucket_name) {
+                        tracing::warn!(
+                            "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
+                        );
+                    }
                 }
 
                 // This is used to speed up our unit tests - in the future,
@@ -347,7 +347,7 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -396,7 +396,7 @@ impl Default for BatchWritesConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -528,7 +528,7 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
@@ -743,6 +743,271 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
+/// Runtime configuration values to overlay onto snapshot config.
+/// These reflect the current runtime environment rather than historical snapshot values.
+///
+/// When loading a config from a historical snapshot, infrastructure settings should
+/// come from the current runtime environment, not the snapshot. This struct captures
+/// those runtime values that need to be overlaid.
+pub struct RuntimeOverlay {
+    pub gateway: UninitializedGatewayConfig,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub object_store_info: Option<ObjectStoreInfo>,
+}
+
+impl RuntimeOverlay {
+    /// Create a RuntimeOverlay from a live Config.
+    /// Uses destructuring to ensure compile-time errors if fields are added/removed.
+    pub fn from_config(config: &Config) -> Self {
+        // Destructure GatewayConfig to ensure all fields are handled
+        let GatewayConfig {
+            bind_address,
+            observability,
+            debug,
+            template_filesystem_access,
+            export,
+            base_path,
+            unstable_error_json,
+            unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference,
+            auth,
+            global_outbound_http_timeout,
+        } = &config.gateway;
+
+        Self {
+            gateway: UninitializedGatewayConfig {
+                bind_address: *bind_address,
+                observability: observability.clone(),
+                debug: *debug,
+                template_filesystem_access: Some(template_filesystem_access.clone()),
+                export: export.clone(),
+                base_path: base_path.clone(),
+                unstable_disable_feedback_target_validation:
+                    *unstable_disable_feedback_target_validation,
+                unstable_error_json: *unstable_error_json,
+                disable_pseudonymous_usage_analytics: *disable_pseudonymous_usage_analytics,
+                fetch_and_encode_input_files_before_inference: Some(
+                    *fetch_and_encode_input_files_before_inference,
+                ),
+                auth: auth.clone(),
+                global_outbound_http_timeout_ms: Some(
+                    global_outbound_http_timeout.num_milliseconds() as u64,
+                ),
+            },
+            postgres: config.postgres.clone(),
+            rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
+            object_store_info: config.object_store_info.clone(),
+        }
+    }
+}
+
+/// Result of processing the initial config input (Fresh table or Snapshot).
+/// Contains the fields needed from UninitializedConfig after the branch-specific
+/// processing (functions, gateway, object_storage) has been done.
+struct ProcessedConfigInput {
+    // Remaining UninitializedConfig fields (not consumed in branching)
+    tools: HashMap<String, UninitializedToolConfig>,
+    models: HashMap<Arc<str>, UninitializedModelConfig>,
+    embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
+    metrics: HashMap<String, MetricConfig>,
+    evaluations: HashMap<String, UninitializedEvaluationConfig>,
+    provider_types: ProviderTypesConfig,
+    optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    postgres: PostgresConfig,
+    rate_limiting: UninitializedRateLimitingConfig,
+
+    // Results from branch-specific processing
+    extra_templates: HashMap<String, String>,
+    snapshot: ConfigSnapshot,
+    /// All functions (user-defined + built-in), loaded and ready to use
+    functions: HashMap<String, Arc<FunctionConfig>>,
+    gateway_config: GatewayConfig,
+    object_store_info: Option<ObjectStoreInfo>,
+}
+
+/// Processes the config input (fresh TOML or snapshot) and returns all the fields
+/// needed by load_from_toml, avoiding partial moves of UninitializedConfig.
+async fn process_config_input(
+    input: ConfigInput,
+    templates: &mut TemplateConfig<'_>,
+) -> Result<ProcessedConfigInput, Error> {
+    match input {
+        ConfigInput::Fresh(table) => {
+            if table.is_empty() {
+                tracing::info!(
+                    "Config file is empty, so only default functions will be available."
+                );
+            }
+
+            // Deserialize the TOML table into UninitializedConfig
+            let mut config = UninitializedConfig::try_from(table)?;
+
+            // Validate that user functions don't use tensorzero:: prefix
+            for name in config.functions.keys() {
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
+            }
+
+            // Inject built-in functions into the config (SINGLE INJECTION POINT)
+            let built_in_functions = built_in::get_all_built_in_functions()?;
+            config.functions.extend(built_in_functions);
+
+            // Destructure the config now that we've added built-in functions
+            let UninitializedConfig {
+                gateway,
+                postgres,
+                rate_limiting,
+                object_storage,
+                models,
+                embedding_models,
+                functions,
+                metrics,
+                tools,
+                evaluations,
+                provider_types,
+                optimizers,
+            } = config.clone();
+
+            // Load ALL functions (user + built-in)
+            let all_functions = functions
+                .into_iter()
+                .map(|(name, func_config)| {
+                    func_config
+                        .load(&name, &metrics)
+                        .map(|c| (name, Arc::new(c)))
+                })
+                .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+            let object_store_info = ObjectStoreInfo::new(object_storage)?;
+            let gateway_config = gateway.load(object_store_info.as_ref())?;
+
+            // Initialize templates from ALL functions (including built-in)
+            let all_template_paths = Config::get_templates(&all_functions);
+            if gateway_config.template_filesystem_access.enabled {
+                deprecation_warning(
+                    "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
+                );
+            }
+            let template_fs_path = gateway_config
+                .template_filesystem_access
+                .base_path
+                .as_ref()
+                .map(|x| x.get_real_path());
+            let extra_templates = templates
+                .initialize(all_template_paths, template_fs_path)
+                .await?;
+
+            // Create snapshot from the config (which now includes built-in functions)
+            let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
+
+            Ok(ProcessedConfigInput {
+                tools,
+                models,
+                embedding_models,
+                metrics,
+                evaluations,
+                provider_types,
+                optimizers,
+                postgres,
+                rate_limiting,
+                extra_templates,
+                snapshot,
+                functions: all_functions,
+                gateway_config,
+                object_store_info,
+            })
+        }
+        ConfigInput::Snapshot {
+            snapshot,
+            runtime_overlay,
+        } => {
+            let original_snapshot = *snapshot;
+
+            // Destructure overlay to ensure all fields are handled (compile error if field added/removed)
+            let RuntimeOverlay {
+                gateway: overlay_gateway,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
+                object_store_info: overlay_object_store_info,
+            } = *runtime_overlay;
+
+            // Destructure uninit_config to overlay specific fields
+            let UninitializedConfig {
+                gateway: _,        // replaced by overlay
+                postgres: _,       // replaced by overlay
+                rate_limiting: _,  // replaced by overlay
+                object_storage: _, // replaced by overlay (via object_store_info)
+                models,
+                embedding_models,
+                functions,
+                metrics,
+                tools,
+                evaluations,
+                provider_types,
+                optimizers,
+            } = original_snapshot.config.clone().into();
+
+            // Reconstruct with overlaid values for snapshot hash computation
+            let overlaid_config = UninitializedConfig {
+                gateway: overlay_gateway.clone(),
+                postgres: overlay_postgres.clone(),
+                rate_limiting: overlay_rate_limiting.clone(),
+                object_storage: overlay_object_store_info
+                    .as_ref()
+                    .map(|info| info.kind.clone()),
+                models: models.clone(),
+                embedding_models: embedding_models.clone(),
+                functions: functions.clone(),
+                metrics: metrics.clone(),
+                tools: tools.clone(),
+                evaluations: evaluations.clone(),
+                provider_types: provider_types.clone(),
+                optimizers: optimizers.clone(),
+            };
+
+            let extra_templates = original_snapshot.extra_templates.clone();
+            let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
+
+            // Load all functions from the snapshot (built-in functions are already included)
+            let all_functions = functions
+                .into_iter()
+                .map(|(name, func_config)| {
+                    func_config
+                        .load(&name, &metrics)
+                        .map(|c| (name, Arc::new(c)))
+                })
+                .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+            // Use the overlay object store info directly instead of creating a new one
+            let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
+
+            Ok(ProcessedConfigInput {
+                tools,
+                models,
+                embedding_models,
+                metrics,
+                evaluations,
+                provider_types,
+                optimizers,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
+                extra_templates,
+                snapshot,
+                functions: all_functions,
+                gateway_config,
+                object_store_info: overlay_object_store_info,
+            })
+        }
+    }
+}
+
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
@@ -752,10 +1017,12 @@ impl Config {
     /// be completely broken (e.g. no builtin functions will be available).
     pub async fn new_empty() -> Result<UnwrittenConfig, Error> {
         // Use an empty glob, and validate credentials
-        Self::load_from_path_optional_verify_credentials_allow_empty_glob(
-            &ConfigFileGlob::new_empty(),
-            true,
-            true,
+        Box::pin(
+            Self::load_from_path_optional_verify_credentials_allow_empty_glob(
+                &ConfigFileGlob::new_empty(),
+                true,
+                true,
+            ),
         )
         .await
     }
@@ -763,7 +1030,11 @@ impl Config {
     pub async fn load_and_verify_from_path(
         config_glob: &ConfigFileGlob,
     ) -> Result<UnwrittenConfig, Error> {
-        Self::load_from_path_optional_verify_credentials(config_glob, true).await
+        Box::pin(Self::load_from_path_optional_verify_credentials(
+            config_glob,
+            true,
+        ))
+        .await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
@@ -778,6 +1049,43 @@ impl Config {
         .await
     }
 
+    /// Load config from a ConfigSnapshot (historical config stored in ClickHouse)
+    /// with runtime configuration overlaid from the provided RuntimeOverlay.
+    ///
+    /// The runtime overlay ensures that infrastructure settings (gateway, postgres,
+    /// rate limiting, object storage) come from the current runtime environment
+    /// rather than the historical snapshot.
+    pub async fn load_from_snapshot(
+        snapshot: ConfigSnapshot,
+        runtime_overlay: RuntimeOverlay,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Error> {
+        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+            Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
+                (),
+                Self::load_from_toml(ConfigInput::Snapshot {
+                    snapshot: Box::new(snapshot),
+                    runtime_overlay: Box::new(runtime_overlay),
+                }),
+            ))
+            .await?
+        } else {
+            Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            }))
+            .await?
+        };
+
+        if validate_credentials {
+            if let Some(object_store) = &unwritten_config.object_store_info {
+                object_store.verify().await?;
+            }
+        }
+
+        Ok(unwritten_config)
+    }
+
     pub async fn load_from_path_optional_verify_credentials_allow_empty_glob(
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
@@ -785,15 +1093,22 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
-            SKIP_CREDENTIAL_VALIDATION
-                .scope((), Self::load_from_toml(globbed_config.table))
-                .await?
+            Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
+                (),
+                Self::load_from_toml(ConfigInput::Fresh(globbed_config.table)),
+            ))
+            .await?
         } else {
-            Self::load_from_toml(globbed_config.table).await?
+            Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+                globbed_config.table,
+            )))
+            .await?
         };
 
-        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
-            object_store.verify().await?;
+        if validate_credentials {
+            if let Some(object_store) = &unwritten_config.object_store_info {
+                object_store.verify().await?;
+            }
         }
 
         Ok(unwritten_config)
@@ -852,87 +1167,65 @@ impl Config {
     /// let clickhouse = setup_clickhouse(&unwritten_config).await?;
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
-    async fn load_from_toml(table: toml::Table) -> Result<UnwrittenConfig, Error> {
-        if table.is_empty() {
-            tracing::info!("Config file is empty, so only default functions will be available.");
-        }
-
-        // Clone the table before consumption - we need it for ConfigSnapshot creation
-        let table_for_snapshot = table.clone();
-
-        // Deserialize the TOML table into UninitializedConfig
-        let uninitialized_config = UninitializedConfig::try_from(table)?;
-
-        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-
-        let gateway_config = uninitialized_config
-            .gateway
-            .load(object_store_info.as_ref())?;
+    async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+        let mut templates = TemplateConfig::new();
+        let ProcessedConfigInput {
+            tools,
+            models,
+            embedding_models,
+            metrics,
+            evaluations: uninitialized_evaluations,
+            provider_types,
+            optimizers: uninitialized_optimizers,
+            postgres,
+            rate_limiting,
+            extra_templates: _extra_templates,
+            snapshot,
+            functions,
+            gateway_config,
+            object_store_info,
+        } = process_config_input(input, &mut templates).await?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
 
-        // Load user-defined functions and ensure they don't use tensorzero:: prefix
-        let user_functions = uninitialized_config
-            .functions
-            .into_iter()
-            .map(|(name, config)| {
-                // Prevent user functions from using tensorzero:: prefix
-                if name.starts_with("tensorzero::") {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "User-defined function name cannot start with 'tensorzero::': {name}"
-                        ),
-                    }));
-                }
-                config
-                    .load(&name, &uninitialized_config.metrics)
-                    .map(|c| (name, Arc::new(c)))
-            })
-            .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
-
-        let tools = uninitialized_config
-            .tools
+        let tools = tools
             .into_iter()
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
-        let provider_type_default_credentials = Arc::new(ProviderTypeDefaultCredentials::new(
-            &uninitialized_config.provider_types,
-        ));
+        let provider_type_default_credentials =
+            Arc::new(ProviderTypeDefaultCredentials::new(&provider_types));
 
-        let models = try_join_all(uninitialized_config.models.into_iter().map(
-            |(name, config)| async {
+        let loaded_models = try_join_all(models.into_iter().map(|(name, config)| async {
+            config
+                .load(
+                    &name,
+                    &provider_types,
+                    &provider_type_default_credentials,
+                    http_client.clone(),
+                )
+                .await
+                .map(|c| (name, c))
+        }))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        let loaded_embedding_models =
+            try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
                     .load(
-                        &name,
-                        &uninitialized_config.provider_types,
+                        &provider_types,
                         &provider_type_default_credentials,
                         http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
-            },
-        ))
-        .await?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+            }))
+            .await?
+            .into_iter()
+            .collect::<HashMap<_, _>>();
 
-        let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
-            |(name, config)| async {
-                config
-                    .load(
-                        &uninitialized_config.provider_types,
-                        &provider_type_default_credentials,
-                        http_client.clone(),
-                    )
-                    .await
-                    .map(|c| (name, c))
-            },
-        ))
-        .await?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
-
-        let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
+        let optimizers = try_join_all(uninitialized_optimizers.into_iter().map(
             |(name, config)| async {
                 config
                     .load(&provider_type_default_credentials)
@@ -944,7 +1237,7 @@ impl Config {
         .into_iter()
         .collect::<HashMap<_, _>>();
         let models = ModelTable::new(
-            models,
+            loaded_models,
             provider_type_default_credentials.clone(),
             gateway_config.global_outbound_http_timeout,
         )
@@ -954,7 +1247,7 @@ impl Config {
             })
         })?;
         let embedding_models = EmbeddingModelTable::new(
-            embedding_models,
+            loaded_embedding_models,
             provider_type_default_credentials,
             gateway_config.global_outbound_http_timeout,
         )
@@ -964,49 +1257,20 @@ impl Config {
             })
         })?;
 
-        // Initialize the templates
-        let user_template_paths = Config::get_templates(&user_functions);
-        if gateway_config.template_filesystem_access.enabled {
-            deprecation_warning(
-                "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
-            );
-        }
-        let template_fs_path = gateway_config
-            .template_filesystem_access
-            .base_path
-            .as_ref()
-            .map(|x| x.get_real_path());
-        let mut templates = TemplateConfig::new();
-        // IMPORTANT: we grab the `extra_templates` only from user-configured functions so that
-        // we only depend on user configuration in the snapshot.
-        let extra_templates = templates
-            .initialize(user_template_paths, template_fs_path)
-            .await?;
-
-        // Add built in functions
-        // NOTE: for now these are not versioned (will fix #4922)
-        let built_in_functions = built_in::get_all_built_in_functions()?;
-        let built_in_templates = Config::get_templates(&built_in_functions);
-        templates.add_templates(built_in_templates)?;
-        let functions = built_in_functions
-            .into_iter()
-            .chain(user_functions.into_iter())
-            .collect::<HashMap<String, Arc<FunctionConfig>>>();
-        let snapshot = ConfigSnapshot::new(table_for_snapshot, extra_templates)?;
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,
-            metrics: uninitialized_config.metrics,
+            metrics,
             tools,
             evaluations: HashMap::new(),
             templates: Arc::new(templates),
             object_store_info,
-            provider_types: uninitialized_config.provider_types,
+            provider_types,
             optimizers,
-            postgres: uninitialized_config.postgres,
-            rate_limiting: uninitialized_config.rate_limiting.try_into()?,
+            postgres,
+            rate_limiting: rate_limiting.try_into()?,
             http_client,
             hash: snapshot.hash.clone(),
         };
@@ -1017,7 +1281,7 @@ impl Config {
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
         let mut evaluations = HashMap::new();
-        for (name, evaluation_config) in uninitialized_config.evaluations {
+        for (name, evaluation_config) in uninitialized_evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
                 evaluation_config.load(&config.functions, &name)?;
             evaluations.insert(
@@ -1269,6 +1533,14 @@ impl Config {
     }
 }
 
+pub enum ConfigInput {
+    Fresh(toml::Table),
+    Snapshot {
+        snapshot: Box<ConfigSnapshot>,
+        runtime_overlay: Box<RuntimeOverlay>,
+    },
+}
+
 /// Writes the config snapshot to the `ConfigSnapshot` table.
 /// Takes special care to retain the created_at if there was already a row
 /// that had the same hash.
@@ -1412,7 +1684,7 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]
@@ -1476,7 +1748,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -1485,52 +1757,52 @@ pub enum UninitializedFunctionConfig {
     Json(UninitializedFunctionConfigJson),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
     path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(transparent)]
 pub struct UninitializedSchemas {
     inner: HashMap<String, UninitializedSchema>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPathData>,
-    user_schema: Option<ResolvedTomlPathData>,
-    assistant_schema: Option<ResolvedTomlPathData>,
+    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub(super) system_schema: Option<ResolvedTomlPathData>,
+    pub(super) user_schema: Option<ResolvedTomlPathData>,
+    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    schemas: UninitializedSchemas,
+    pub(super) schemas: UninitializedSchemas,
     #[serde(default)]
-    tools: Vec<String>, // tool names
+    pub(super) tools: Vec<String>, // tool names
     #[serde(default)]
-    tool_choice: ToolChoice,
+    pub(super) tool_choice: ToolChoice,
     #[serde(default)]
-    parallel_tool_calls: Option<bool>,
+    pub(super) parallel_tool_calls: Option<bool>,
     #[serde(default)]
-    description: Option<String>,
-    experimentation: Option<UninitializedExperimentationConfig>,
+    pub(super) description: Option<String>,
+    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPathData>,
-    user_schema: Option<ResolvedTomlPathData>,
-    assistant_schema: Option<ResolvedTomlPathData>,
+    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub(super) system_schema: Option<ResolvedTomlPathData>,
+    pub(super) user_schema: Option<ResolvedTomlPathData>,
+    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    schemas: UninitializedSchemas,
-    output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
+    pub(super) schemas: UninitializedSchemas,
+    pub(super) output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
-    description: Option<String>,
-    experimentation: Option<UninitializedExperimentationConfig>,
+    pub(super) description: Option<String>,
+    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1658,15 +1930,15 @@ impl UninitializedFunctionConfig {
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
-                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner
-                        && chat_config.json_mode().is_some()
-                    {
-                        return Err(ErrorDetails::Config {
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
+                        if chat_config.json_mode().is_some() {
+                            return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
                                 ),
                             }
                             .into());
+                        }
                     }
                 }
                 let experimentation = params
@@ -1855,7 +2127,7 @@ impl UninitializedVariantInfo {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
@@ -1892,7 +2164,7 @@ impl PathWithContents {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[serde(default)]
 #[ts(export, optional_fields)]
 pub struct PostgresConfig {
