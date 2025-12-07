@@ -1,8 +1,8 @@
 import type {
-  Config,
   MetricConfig,
   MetricConfigLevel,
   MetricConfigOptimize,
+  UiConfig,
 } from "~/types/tensorzero";
 import { z } from "zod";
 
@@ -21,7 +21,7 @@ export type FeedbackConfig =
 
 export function getFeedbackConfig(
   metricName: string,
-  config: Config,
+  config: UiConfig,
 ): FeedbackConfig | undefined {
   if (metricName === "comment") {
     return { type: "comment" };

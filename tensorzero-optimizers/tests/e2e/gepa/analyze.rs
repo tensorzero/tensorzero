@@ -7,7 +7,7 @@ use evaluations::EvaluationInfo;
 use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
-    config::{path::ResolvedTomlPathData, SchemaData},
+    config::{SchemaData, path::ResolvedTomlPathData},
     endpoints::{
         datasets::{Datapoint, StoredChatInferenceDatapoint},
         inference::{ChatInferenceResponse, InferenceResponse},

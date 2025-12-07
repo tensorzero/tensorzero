@@ -9,7 +9,7 @@ use url::Url;
 use crate::{
     error::Error,
     model::CredentialLocationWithFallback,
-    providers::together::{TogetherCredentials, TOGETHER_API_BASE},
+    providers::together::{TOGETHER_API_BASE, TogetherCredentials},
 };
 
 // Default functions for hyperparameters

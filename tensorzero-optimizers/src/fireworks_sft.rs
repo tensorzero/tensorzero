@@ -34,16 +34,16 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{FireworksKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
-        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
         fireworks::{
-            prepare_fireworks_messages, FireworksCredentials, FireworksTool, PROVIDER_TYPE,
+            FireworksCredentials, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages,
         },
         helpers::UrlParseErrExt,
         openai::{
-            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
+            OpenAIMessagesConfig, OpenAIRequestMessage, tensorzero_to_openai_assistant_message,
         },
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
@@ -515,7 +515,7 @@ fn convert_to_optimizer_status(
                 message: format!(
                     "JobStateCompleted should have been handled in poll. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
-            }))
+            }));
         }
     })
 }

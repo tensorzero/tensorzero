@@ -88,7 +88,9 @@ impl DatapointFilter {
                     param_idx_counter,
                 );
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
-                format!("{table_prefix}tags[{key_placeholder}] {comparison_operator} {value_placeholder}")
+                format!(
+                    "{table_prefix}tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                )
             }
             DatapointFilter::Time(TimeFilter {
                 time,
@@ -544,7 +546,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "(((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}) OR tags[{p4:String}] = {p5:String}) AND updated_at >= parseDateTimeBestEffort({p6:String}))");
+        assert_eq!(
+            sql,
+            "(((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}) OR tags[{p4:String}] = {p5:String}) AND updated_at >= parseDateTimeBestEffort({p6:String}))"
+        );
         assert_eq!(params.len(), 7);
     }
 

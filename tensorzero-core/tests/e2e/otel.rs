@@ -5,20 +5,20 @@ use std::{
     time::{Duration, Instant},
 };
 
-use opentelemetry::{trace::Status, KeyValue, SpanId, Value};
+use opentelemetry::{KeyValue, SpanId, Value, trace::Status};
 use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
 use tensorzero::{
+    Client, ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse,
+    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
+};
+use tensorzero::{
+    InferenceParams,
     test_helpers::{
         make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
     },
-    InferenceParams,
-};
-use tensorzero::{
-    Client, ClientInferenceParams, FeedbackParams, InferenceOutput, InferenceResponse,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
@@ -52,13 +52,11 @@ impl SpanExporter for CapturingOtelExporter {
 
 impl CapturingOtelExporter {
     pub fn take_spans(&self) -> Vec<SpanData> {
-        let spans = self
-            .spans
+        self.spans
             .lock()
             .expect("Failed to lock spans mutex")
             .replace(Vec::new())
-            .expect("CapturingExporter is already shut down");
-        spans
+            .expect("CapturingExporter is already shut down")
     }
 }
 

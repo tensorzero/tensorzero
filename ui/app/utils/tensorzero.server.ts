@@ -1,27 +1,15 @@
 import { getConfig } from "./config/index.server";
+import { getTensorZeroClient } from "./get-tensorzero-client.server";
 import {
   FeedbackRequestSchema,
-  TensorZeroClient,
   TensorZeroServerError,
   type FeedbackResponse,
 } from "~/utils/tensorzero";
 import type { JsonValue } from "~/types/tensorzero";
-import { getEnv } from "./env.server";
 import { getFeedbackConfig } from "./config/feedback";
 
-let _tensorZeroClient: TensorZeroClient | undefined;
-
-export function getTensorZeroClient() {
-  if (_tensorZeroClient) {
-    return _tensorZeroClient;
-  }
-
-  _tensorZeroClient = new TensorZeroClient(
-    getEnv().TENSORZERO_GATEWAY_URL,
-    getEnv().TENSORZERO_API_KEY,
-  );
-  return _tensorZeroClient;
-}
+// Re-export for backcompat.
+export { getTensorZeroClient };
 
 export async function addHumanFeedback(formData: FormData) {
   const metricName = formData.get("metricName")?.toString();

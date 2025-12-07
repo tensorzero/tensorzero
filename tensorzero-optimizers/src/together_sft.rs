@@ -21,19 +21,18 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind},
     optimization::{
+        OptimizationJobInfo, OptimizerOutput,
         together_sft::{
             TogetherBatchSize, TogetherLRScheduler, TogetherSFTConfig, TogetherSFTJobHandle,
             TogetherTrainingMethod, TogetherTrainingType,
         },
-        OptimizationJobInfo, OptimizerOutput,
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::{
-            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
-            OpenAITool,
-        },
-        together::{prepare_together_messages, TogetherCredentials, PROVIDER_TYPE},
+        openai::tensorzero_to_openai_assistant_message,
+        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
+        together::prepare_together_messages,
+        together::{PROVIDER_TYPE, TogetherCredentials},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };

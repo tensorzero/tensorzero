@@ -2,8 +2,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::Config;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
     CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
     DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,

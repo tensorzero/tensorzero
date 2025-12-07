@@ -2,7 +2,7 @@
 /// Tests both the dataset-scoped POST /v1/datasets/{dataset_name}/get_datapoints and the deprecated
 /// POST /v1/datasets/get_datapoints endpoints alongside POST /v1/datasets/{dataset_name}/list_datapoints.
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;

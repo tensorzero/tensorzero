@@ -6,8 +6,8 @@ use reqwest::Client;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use std::time::Duration;
 use tensorzero::CacheParamsOptions;
 use tensorzero::ClientInferenceParams;
@@ -20,12 +20,12 @@ use tensorzero::Input;
 use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Tool;
-use tensorzero_core::cache::cache_lookup_streaming;
-use tensorzero_core::cache::start_cache_write_streaming;
 use tensorzero_core::cache::CacheData;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::cache::CacheValidationInfo;
 use tensorzero_core::cache::NonStreamingCacheData;
+use tensorzero_core::cache::cache_lookup_streaming;
+use tensorzero_core::cache::start_cache_write_streaming;
 use tensorzero_core::inference::types::ContentBlock;
 use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tensorzero_core::inference::types::ContentBlockOutput;
@@ -36,9 +36,9 @@ use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::tool::InferenceResponseToolCall;
 use uuid::Uuid;
 
+use tensorzero_core::cache::ModelProviderRequest;
 use tensorzero_core::cache::cache_lookup;
 use tensorzero_core::cache::start_cache_write;
-use tensorzero_core::cache::ModelProviderRequest;
 use tensorzero_core::inference::types::Latency;
 use tensorzero_core::inference::types::Role;
 use tensorzero_core::inference::types::Usage;
@@ -490,7 +490,7 @@ pub async fn test_streaming_cache_without_err() {
     // for the second call)
     let original_content =
         check_test_streaming_cache_with_err(episode_id, seed, false, false).await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     let cached_content = check_test_streaming_cache_with_err(episode_id, seed, false, true).await;
     assert_eq!(original_content, cached_content);
 }

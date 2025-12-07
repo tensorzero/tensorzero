@@ -8,9 +8,9 @@ use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
 use tensorzero_core::endpoints::batch_inference::{
-    get_batch_inferences, get_batch_request, get_completed_batch_inference_response,
-    write_batch_request_row, write_completed_batch_inference, write_poll_batch_inference,
-    PollInferenceResponse, PollPathParams,
+    PollInferenceResponse, PollPathParams, get_batch_inferences, get_batch_request,
+    get_completed_batch_inference_response, write_batch_request_row,
+    write_completed_batch_inference, write_poll_batch_inference,
 };
 use tensorzero_core::endpoints::inference::{InferenceParams, InferenceResponse};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -22,7 +22,7 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
 };
 use tensorzero_core::jsonschema_util::StaticJSONSchema;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{

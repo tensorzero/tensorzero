@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use chrono::Utc;
 use serde::Deserialize;
 use tracing::instrument;
@@ -12,8 +12,8 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, StoredChatInferenceDatapoint, StoredDatapoint,
-    StoredJsonInferenceDatapoint, CLICKHOUSE_DATETIME_FORMAT,
+    CLICKHOUSE_DATETIME_FORMAT, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredJsonInferenceDatapoint, validate_dataset_name,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -518,10 +518,10 @@ mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
     };
-    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;

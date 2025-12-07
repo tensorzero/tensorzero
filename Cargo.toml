@@ -13,6 +13,7 @@ members = [
     "tensorzero-optimizers",
     "internal/tensorzero-derive",
     "internal/tensorzero-auth",
+    "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
 ]
@@ -22,6 +23,7 @@ resolver = "2"
 version = "2025.11.6"
 rust-version = "1.88.0"
 license = "Apache-2.0"
+edition = "2024"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.24", features = [

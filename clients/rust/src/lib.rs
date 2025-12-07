@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
-use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
+use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
@@ -18,14 +18,14 @@ use uuid::Uuid;
 
 // Client core types
 pub use tensorzero_core::client::{
-    get_config_no_verify_credentials, Client, ClientBuilder, ClientBuilderMode, ClientMode,
-    EmbeddedGateway, HTTPGateway,
+    Client, ClientBuilder, ClientBuilderMode, ClientMode, EmbeddedGateway, HTTPGateway,
+    get_config_no_verify_credentials,
 };
 
 // Client error types
 pub use tensorzero_core::client::{
-    err_to_http, with_embedded_timeout, ClientBuilderError, TensorZeroError,
-    TensorZeroInternalError,
+    ClientBuilderError, TensorZeroError, TensorZeroInternalError, err_to_http,
+    with_embedded_timeout,
 };
 
 // Client input types
@@ -658,7 +658,9 @@ impl ClientExt for Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        tracing::warn!(
+            "`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead."
+        );
         create_datapoints_internal(self, dataset_name, params, "datapoints/bulk").await
     }
 

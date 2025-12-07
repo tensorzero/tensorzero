@@ -1,12 +1,12 @@
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use chrono::Utc;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    types::{PyDict, PyModule},
     IntoPyObjectExt,
+    types::{PyDict, PyModule},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,7 @@ use crate::endpoints::datasets::v1::types::{
     CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
 };
 use crate::endpoints::feedback::{
-    validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
+    DemonstrationOutput, DynamicDemonstrationInfo, validate_parse_demonstration,
 };
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::http::TensorzeroHttpClient;
@@ -40,12 +40,12 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
-    config::{snapshot::SnapshotHash, Config},
+    config::{Config, snapshot::SnapshotHash},
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{
-        deserialize_optional_tool_info, DynamicToolParams, StaticToolConfig,
-        ToolCallConfigDatabaseInsert,
+        DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
+        deserialize_optional_tool_info,
     },
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
@@ -611,9 +611,10 @@ pub async fn create_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    crate::utils::deprecation_warning(
-        &format!("The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
-    );
+    crate::utils::deprecation_warning(&format!(
+        "The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
+        path_params.dataset_name, path_params.dataset_name
+    ));
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
@@ -636,9 +637,10 @@ pub async fn bulk_insert_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    crate::utils::deprecation_warning(
-        &format!("The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
-    );
+    crate::utils::deprecation_warning(&format!(
+        "The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
+        path_params.dataset_name, path_params.dataset_name
+    ));
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
@@ -804,7 +806,7 @@ pub async fn insert_datapoint(
                                 return Err(Error::new(ErrorDetails::InvalidRequest {
                                     message: "The field `output` must be an object or null."
                                         .to_string(),
-                                }))
+                                }));
                             }
                         };
                         Some(JsonDatapointOutputUpdate { raw })
@@ -2235,13 +2237,19 @@ mod test {
     #[test]
     fn test_validate_dataset_name_builder() {
         let err = validate_dataset_name("builder").unwrap_err();
-        assert_eq!(err.to_string(), "Invalid dataset name: builder. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"");
+        assert_eq!(
+            err.to_string(),
+            "Invalid dataset name: builder. Datasets cannot be named \"builder\" or begin with \"tensorzero::\""
+        );
     }
 
     #[test]
     fn test_validate_dataset_name_tensorzero_prefix() {
         let err = validate_dataset_name("tensorzero::test").unwrap_err();
-        assert_eq!(err.to_string(), "Invalid dataset name: tensorzero::test. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"");
+        assert_eq!(
+            err.to_string(),
+            "Invalid dataset name: tensorzero::test. Datasets cannot be named \"builder\" or begin with \"tensorzero::\""
+        );
     }
 
     #[test]

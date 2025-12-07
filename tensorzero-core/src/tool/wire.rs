@@ -13,7 +13,7 @@ use serde_json::Value;
 use tensorzero_derive::export_schema;
 
 use crate::error::Error;
-use crate::rate_limiting::{get_estimated_tokens, RateLimitedInputContent};
+use crate::rate_limiting::{RateLimitedInputContent, get_estimated_tokens};
 
 use super::call::InferenceResponseToolCall;
 
