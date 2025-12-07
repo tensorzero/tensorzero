@@ -13,6 +13,7 @@ pub mod openai_compatible;
 pub mod shared_types;
 pub mod status;
 pub mod stored_inferences;
+pub mod ui;
 pub mod variant_probabilities;
 pub mod workflow_evaluation_run;
 use crate::utils::gateway::AppStateData;

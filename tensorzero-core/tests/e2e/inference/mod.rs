@@ -2,17 +2,17 @@
 use crate::common::get_gateway_endpoint;
 use crate::{
     otel::{
-        attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
-        SpanMap,
+        CapturingOtelExporter, SpanMap, attrs_to_map, build_span_map,
+        install_capturing_otel_exporter,
     },
     providers::common::FERRIS_PNG,
 };
-use base64::prelude::{Engine as Base64Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine as Base64Engine};
 use futures::StreamExt;
 use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
@@ -44,7 +44,7 @@ use tensorzero_core::{
     tool::{ToolCall, ToolCallWrapper},
 };
 use tokio::task::JoinSet;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 mod extra_body;
@@ -332,7 +332,10 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, "Wally, the golden retriever, wagged his tail excitedly as he devoured a slice of cheese pizza.");
+    assert_eq!(
+        content,
+        "Wally, the golden retriever, wagged his tail excitedly as he devoured a slice of cheese pizza."
+    );
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -703,9 +706,11 @@ async fn e2e_test_tool_call() {
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
-            .to_string()
-            .into()],
+        content: vec![
+            "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -896,9 +901,11 @@ async fn e2e_test_tool_call_malformed() {
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
-            .to_string()
-            .into()],
+        content: vec![
+            "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1176,9 +1183,11 @@ async fn e2e_test_inference_json_success() {
         input_messages[0],
         StoredRequestMessage {
             role: Role::User,
-            content: vec!["What is the name of the capital city of Japan?"
-                .to_string()
-                .into()],
+            content: vec![
+                "What is the name of the capital city of Japan?"
+                    .to_string()
+                    .into()
+            ],
         }
     );
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1304,9 +1313,11 @@ async fn e2e_test_variant_failover() {
         .as_object()
         .unwrap();
 
-    assert!(chat_completion_inference_params
-        .get("temperature")
-        .is_none());
+    assert!(
+        chat_completion_inference_params
+            .get("temperature")
+            .is_none()
+    );
     let max_tokens = chat_completion_inference_params.get("max_tokens").unwrap();
     assert_eq!(max_tokens.as_u64().unwrap(), 100);
     assert!(chat_completion_inference_params.get("seed").is_none());
@@ -1504,12 +1515,14 @@ async fn e2e_test_streaming() {
             let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
-            assert!(chunk_json
-                .get("content")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_json
+                    .get("content")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
             let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -1679,12 +1692,14 @@ async fn e2e_test_streaming_dryrun() {
             let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
-            assert!(chunk_json
-                .get("content")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_json
+                    .get("content")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
             let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -2197,12 +2212,14 @@ async fn e2e_test_tool_call_streaming() {
                 );
             }
         } else {
-            assert!(chunk_json
-                .get("content")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_json
+                    .get("content")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
             let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -2330,9 +2347,11 @@ async fn e2e_test_tool_call_streaming() {
         input_messages[0],
         StoredRequestMessage {
             role: Role::User,
-            content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
-                .to_string()
-                .into()],
+            content: vec![
+                "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                    .to_string()
+                    .into()
+            ],
         }
     );
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -2410,12 +2429,14 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
             let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
             accumulated_tool_name.push_str(raw_name);
         } else {
-            assert!(chunk_json
-                .get("content")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_json
+                    .get("content")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
             let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -2544,9 +2565,11 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
         input_messages[0],
         StoredRequestMessage {
             role: Role::User,
-            content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
-                .to_string()
-                .into()],
+            content: vec![
+                "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                    .to_string()
+                    .into()
+            ],
         }
     );
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -3475,18 +3498,22 @@ async fn test_json_function_null_response() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     // Check that raw and parsed keys exist with null values
-    assert!(response_json
-        .get("output")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .contains_key("raw"));
-    assert!(response_json
-        .get("output")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .contains_key("parsed"));
+    assert!(
+        response_json
+            .get("output")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("raw")
+    );
+    assert!(
+        response_json
+            .get("output")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("parsed")
+    );
     assert!(response_json["output"]["raw"].is_null());
     assert!(response_json["output"]["parsed"].is_null());
 }
@@ -3592,13 +3619,15 @@ async fn check_json_cot_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -3733,9 +3762,11 @@ async fn check_json_cot_inference_response(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -3747,13 +3778,15 @@ async fn check_json_cot_inference_response(
             let response = parsed.get("response").unwrap().as_object().unwrap();
             let answer = response.get("answer").unwrap().as_str().unwrap();
             assert!(answer.to_lowercase().contains("tokyo"));
-            assert!(parsed
-                .get("thinking")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_lowercase()
-                .contains("hmm"));
+            assert!(
+                parsed
+                    .get("thinking")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("hmm")
+            );
         }
         StoredContentBlock::ToolCall(tool_call) => {
             // Handles implicit tool calls

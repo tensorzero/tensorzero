@@ -2,7 +2,7 @@ use futures::StreamExt;
 use http::StatusCode;
 use reqwest::Client;
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,

@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use pyo3::{marker::Ungil, Python};
+use pyo3::{Python, marker::Ungil};
 /// Runs a function inside the Tokio runtime, with the GIL released.
 /// This is used when we need to drop a TensorZero client (or a type that holds it),
 /// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.

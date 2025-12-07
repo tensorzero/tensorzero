@@ -1,10 +1,10 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_feedback_clickhouse, select_feedback_tags_clickhouse,
     select_inference_evaluation_human_feedback_clickhouse,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;

@@ -59,12 +59,12 @@ pub async fn embeddings(
                 model_name: params.model_name.clone(),
             })
         })?;
-    if let EmbeddingInput::Batch(array) = &params.input {
-        if array.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "Input cannot be empty".to_string(),
-            }));
-        }
+    if let EmbeddingInput::Batch(array) = &params.input
+        && array.is_empty()
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Input cannot be empty".to_string(),
+        }));
     }
 
     let request = EmbeddingRequest {
@@ -109,8 +109,8 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;

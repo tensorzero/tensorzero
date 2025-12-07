@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "~/types/tensorzero";
+import type { UiConfig } from "~/types/tensorzero";
 
 // Helper function to generate a UUID-like string from a number that sorts correctly
 // Higher numbers produce lexicographically larger UUIDs (for descending sort)
@@ -10,71 +10,7 @@ function makeOrderedUuid(num = 0): string {
   return `${hexNum}-0000-0000-0000-000000000000`;
 }
 
-const config: Config = {
-  gateway: {
-    global_outbound_http_timeout: [300000, 0],
-    disable_pseudonymous_usage_analytics: false,
-    fetch_and_encode_input_files_before_inference: false,
-    auth: {
-      enabled: false,
-      cache: null,
-    },
-    observability: {
-      enabled: true,
-      async_writes: false,
-      batch_writes: {
-        enabled: false,
-        __force_allow_embedded_batch_writes: false,
-        flush_interval_ms: 100n,
-        max_rows: 1000,
-      },
-      disable_automatic_migrations: false,
-    },
-    export: {
-      otlp: {
-        traces: {
-          enabled: false,
-          format: "opentelemetry",
-          extra_headers: {},
-        },
-      },
-    },
-    debug: false,
-    template_filesystem_access: {
-      enabled: false,
-      base_path: null,
-    },
-    bind_address: "localhost:8080",
-    base_path: "/",
-    unstable_error_json: false,
-    unstable_disable_feedback_target_validation: false,
-  },
-  object_store_info: { kind: { type: "disabled" } },
-  provider_types: {
-    anthropic: { defaults: { api_key_location: "" } },
-    azure: { defaults: { api_key_location: "" } },
-    deepseek: { defaults: { api_key_location: "" } },
-    fireworks: { defaults: { api_key_location: "" } },
-    gcp_vertex_gemini: { batch: null, defaults: { credential_location: "" } },
-    gcp_vertex_anthropic: {
-      batch: null,
-      defaults: { credential_location: "" },
-    },
-    google_ai_studio_gemini: { defaults: { api_key_location: "" } },
-    groq: { defaults: { api_key_location: "" } },
-    hyperbolic: { defaults: { api_key_location: "" } },
-    mistral: { defaults: { api_key_location: "" } },
-    openai: { defaults: { api_key_location: "" } },
-    openrouter: { defaults: { api_key_location: "" } },
-    sglang: { defaults: { api_key_location: "" } },
-    tgi: { defaults: { api_key_location: "" } },
-    together: { defaults: { api_key_location: "" } },
-    vllm: { defaults: { api_key_location: "" } },
-    xai: { defaults: { api_key_location: "" } },
-  },
-  optimizers: {},
-  models: { table: {}, global_outbound_http_timeout: [300000, 0] },
-  embedding_models: { table: {}, global_outbound_http_timeout: [300000, 0] },
+const config: UiConfig = {
   functions: {},
   metrics: {
     accuracy: {
@@ -95,13 +31,7 @@ const config: Config = {
   },
   tools: {},
   evaluations: {},
-  postgres: {
-    connection_pool_size: 10,
-  },
-  rate_limiting: {
-    rules: [],
-    enabled: true,
-  },
+  model_names: [],
 };
 
 const meta = {

@@ -4,9 +4,9 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
-use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::Clients;
+use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
+use evaluations::stopping::MIN_DATAPOINTS;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
@@ -14,8 +14,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::endpoints::datasets::{
-    v1::{list_datapoints, types::ListDatapointsRequest},
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    v1::{list_datapoints, types::ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::inference::types::Text;
@@ -25,9 +25,9 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
-    run_evaluation, run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat, run_evaluation,
+    run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
-    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -36,7 +36,7 @@ use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
 use tensorzero_core::config::{
-    path::ResolvedTomlPathData, Config, UninitializedVariantConfig, UninitializedVariantInfo,
+    Config, UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData,
 };
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
@@ -217,9 +217,11 @@ async fn run_evaluations_json() {
             feedback["tags"]["tensorzero::evaluation_name"],
             "entity_extraction"
         );
-        assert!(feedback["tags"]
-            .get("tensorzero::derived_from_human_feedback")
-            .is_none());
+        assert!(
+            feedback["tags"]
+                .get("tensorzero::derived_from_human_feedback")
+                .is_none()
+        );
         let evaluator_inference_id = Uuid::parse_str(
             feedback["tags"]["tensorzero::evaluator_inference_id"]
                 .as_str()
@@ -367,10 +369,12 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         result.is_err(),
         "Should fail when both dataset_name and datapoint_ids are provided"
     );
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Cannot provide both"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot provide both")
+    );
 
     // Test 2: Neither dataset_name nor datapoint_ids provided should fail
     let args_neither = Args {
@@ -393,10 +397,12 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         result.is_err(),
         "Should fail when neither dataset_name nor datapoint_ids are provided"
     );
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Must provide either"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Must provide either")
+    );
 }
 
 /// Test mutual exclusivity of `datapoint_ids` `max_datapoints` in `run_evaluation()`
@@ -430,10 +436,12 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
         result.is_err(),
         "Should fail when both datapoint_ids and max_datapoints are provided"
     );
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Cannot provide both datapoint_ids and max_datapoints"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot provide both datapoint_ids and max_datapoints")
+    );
 }
 
 /// Test mutual exclusivity of `datapoint_ids` `max_datapoints` in `run_evaluation_core_streaming()`
@@ -465,9 +473,11 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         "Should fail when both datapoint_ids and max_datapoints are provided"
     );
     let error = result.err().unwrap();
-    assert!(error
-        .to_string()
-        .contains("Cannot provide both datapoint_ids and max_datapoints"));
+    assert!(
+        error
+            .to_string()
+            .contains("Cannot provide both datapoint_ids and max_datapoints")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -812,14 +822,16 @@ async fn run_llm_judge_evaluation_chat() {
         );
 
         // There should be no Float feedback for this evaluation
-        assert!(select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "FloatMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .is_none());
+        assert!(
+            select_feedback_by_target_id_clickhouse(
+                &clickhouse,
+                "FloatMetricFeedback",
+                inference_id,
+                None,
+            )
+            .await
+            .is_none()
+        );
         // The exact match evaluation should have value None since there is no output in any of these
         assert!(parsed.evaluations["exact_match"].is_none());
 
@@ -861,9 +873,11 @@ async fn run_llm_judge_evaluation_chat() {
             clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
             "topic_starts_with_f"
         );
-        assert!(clickhouse_feedback["tags"]
-            .get("tensorzero::derived_from_human_feedback")
-            .is_none());
+        assert!(
+            clickhouse_feedback["tags"]
+                .get("tensorzero::derived_from_human_feedback")
+                .is_none()
+        );
         let evaluator_inference_id = Uuid::parse_str(
             clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
                 .as_str()
@@ -1037,20 +1051,24 @@ async fn run_image_evaluation() {
         );
 
         // There should be no Float feedback for this evaluation
-        assert!(select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "FloatMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .is_none());
+        assert!(
+            select_feedback_by_target_id_clickhouse(
+                &clickhouse,
+                "FloatMetricFeedback",
+                inference_id,
+                None,
+            )
+            .await
+            .is_none()
+        );
         // The exact match evaluation should fail
-        assert!(!parsed.evaluations["exact_match"]
-            .as_ref()
-            .unwrap()
-            .as_bool()
-            .unwrap());
+        assert!(
+            !parsed.evaluations["exact_match"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
 
         // There should be Boolean feedback for honest answer
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
@@ -1222,7 +1240,10 @@ async fn check_invalid_image_evaluation() {
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
-        assert_eq!(honest_answer_error, "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.");
+        assert_eq!(
+            honest_answer_error,
+            "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format."
+        );
         let inference_id = parsed.response.inference_id();
         let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
             .await
@@ -1254,24 +1275,28 @@ async fn check_invalid_image_evaluation() {
         );
 
         // There should be no Float feedback for this evaluation
-        assert!(select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "FloatMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .is_none());
+        assert!(
+            select_feedback_by_target_id_clickhouse(
+                &clickhouse,
+                "FloatMetricFeedback",
+                inference_id,
+                None,
+            )
+            .await
+            .is_none()
+        );
 
         // There should be no Boolean feedback for honest answer since it should have failed
-        assert!(select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
-        )
-        .await
-        .is_none());
+        assert!(
+            select_feedback_by_target_id_clickhouse(
+                &clickhouse,
+                "BooleanMetricFeedback",
+                inference_id,
+                Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
+            )
+            .await
+            .is_none()
+        );
     }
 }
 
@@ -1375,12 +1400,14 @@ async fn run_llm_judge_evaluation_json_pretty() {
 async fn test_parse_args() {
     // Test default values
     let args = Args::try_parse_from(["test"]).unwrap_err();
-    assert!(args
-        .to_string()
-        .contains("the following required arguments were not provided:"));
-    assert!(args
-        .to_string()
-        .contains("--evaluation-name <EVALUATION_NAME>"));
+    assert!(
+        args.to_string()
+            .contains("the following required arguments were not provided:")
+    );
+    assert!(
+        args.to_string()
+            .contains("--evaluation-name <EVALUATION_NAME>")
+    );
     assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
     // Test required arguments plus dataset-name (x-or with datapoint-ids)
@@ -1486,9 +1513,10 @@ async fn test_parse_args() {
         "not-a-url",
     ])
     .unwrap_err();
-    assert!(args
-        .to_string()
-        .contains("invalid value 'not-a-url' for '--gateway-url <GATEWAY_URL>'"));
+    assert!(
+        args.to_string()
+            .contains("invalid value 'not-a-url' for '--gateway-url <GATEWAY_URL>'")
+    );
 
     // Test invalid format
     let args = Args::try_parse_from([
@@ -1501,9 +1529,10 @@ async fn test_parse_args() {
         "invalid",
     ])
     .unwrap_err();
-    assert!(args
-        .to_string()
-        .contains("invalid value 'invalid' for '--format <FORMAT>'"));
+    assert!(
+        args.to_string()
+            .contains("invalid value 'invalid' for '--format <FORMAT>'")
+    );
 }
 
 #[tokio::test]
@@ -1572,9 +1601,11 @@ async fn run_evaluations_errors() {
             EvaluationUpdate::Error(evaluation_error) => evaluation_error,
             EvaluationUpdate::RunInfo(_) => continue,
         };
-        assert!(error
-            .message
-            .contains("Error sending request to Dummy provider"));
+        assert!(
+            error
+                .message
+                .contains("Error sending request to Dummy provider")
+        );
     }
 }
 
@@ -2124,10 +2155,12 @@ async fn run_evaluations_best_of_3() {
             {
                 happy_count += 1;
             } else {
-                assert!(model_inference["system"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("You are an assistant tasked with re-ranking"));
+                assert!(
+                    model_inference["system"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("You are an assistant tasked with re-ranking")
+                );
             }
         }
         assert_eq!(happy_count, 3);
@@ -2318,10 +2351,12 @@ async fn run_evaluations_mixture_of_3() {
             {
                 happy_count += 1;
             } else {
-                assert!(model_inference["system"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("You have been provided with a set of responses from various"));
+                assert!(
+                    model_inference["system"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("You have been provided with a set of responses from various")
+                );
             }
         }
         assert_eq!(happy_count, 3);

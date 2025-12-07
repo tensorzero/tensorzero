@@ -22,7 +22,7 @@ jobs:
           tags: tag:ci
 
       - name: Send PR Feedback
-        uses: tensorzero/experimental-ci-bot/create-pr-feedback@543b8d3c682bf3b0f892d8edafe1b8f06be58152
+        uses: tensorzero/experimental-ci-bot/create-pr-feedback@8154c016757d424138a3e70f914a81ed6ce1f76c
         with:
           tensorzero-base-url: http://ci-bot-gateway:3000
           tensorzero-pr-merged-metric-name: ci_fix_pr_merged_agent

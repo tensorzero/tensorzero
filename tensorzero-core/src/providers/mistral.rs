@@ -4,7 +4,7 @@ use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
     providers::openai::OpenAIMessagesConfig,
 };
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
@@ -18,19 +18,19 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
+        InferenceProvider,
         types::{
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
-            chat_completion_inference_params::{
-                warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
             ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+            batch::{
+                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
+            chat_completion_inference_params::{
+                ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+            },
         },
-        InferenceProvider,
     },
     model::{Credential, ModelProvider},
     providers::helpers::{
@@ -41,8 +41,8 @@ use crate::{
 };
 
 use super::openai::{
-    get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAIToolType,
+    OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, get_chat_url,
+    tensorzero_to_openai_messages,
 };
 
 lazy_static! {
@@ -749,10 +749,10 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(text) = message.content {
-            if !text.is_empty() {
-                content.push(text.into());
-            }
+        if let Some(text) = message.content
+            && !text.is_empty()
+        {
+            content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -838,13 +838,13 @@ fn mistral_to_tensorzero_chunk(
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
         }
-        if let Some(text) = choice.delta.content {
-            if !text.is_empty() {
-                content.push(ContentBlockChunk::Text(TextChunk {
-                    text,
-                    id: "0".to_string(),
-                }));
-            }
+        if let Some(text) = choice.delta.content
+            && !text.is_empty()
+        {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }));
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
             for tool_call in tool_calls {

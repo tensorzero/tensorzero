@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
-use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
+use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -17,10 +17,10 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{unwritten::UnwrittenConfig, Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob, unwritten::UnwrittenConfig};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::feedback::FeedbackQueries;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
@@ -293,7 +293,9 @@ pub async fn setup_clickhouse(
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
         (Some(false), _) => {
-            tracing::info!("Disabling observability: `gateway.observability.enabled` is set to false in config.");
+            tracing::info!(
+                "Disabling observability: `gateway.observability.enabled` is set to false in config."
+            );
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability enabled but no ClickHouse URL
@@ -301,7 +303,7 @@ pub async fn setup_clickhouse(
             return Err(ErrorDetails::AppState {
                 message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
             }
-            .into())
+            .into());
         }
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => {
@@ -318,7 +320,9 @@ pub async fn setup_clickhouse(
             } else {
                 "`TENSORZERO_CLICKHOUSE_URL` is not set."
             };
-            tracing::warn!("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}");
+            tracing::warn!(
+                "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
+            );
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
@@ -391,7 +395,7 @@ pub async fn setup_postgres(
             return Err(ErrorDetails::AppState {
                 message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
             }
-            .into())
+            .into());
         }
         // Postgres enabled and URL provided
         (Some(true), Some(postgres_url)) => {
@@ -546,7 +550,7 @@ pub struct GatewayHandleTestOptions {
 mod tests {
     use super::*;
     use crate::config::{
-        gateway::GatewayConfig, snapshot::ConfigSnapshot, ObservabilityConfig, PostgresConfig,
+        ObservabilityConfig, PostgresConfig, gateway::GatewayConfig, snapshot::ConfigSnapshot,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
@@ -614,7 +618,9 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."));
+        assert!(logs_contain(
+            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
+        ));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
@@ -649,9 +655,10 @@ mod tests {
         let err = setup_clickhouse(&unwritten_config, None, false)
             .await
             .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL")
+        );
 
         // Bad URL
         let gateway_config = GatewayConfig {
@@ -799,9 +806,10 @@ mod tests {
         }));
 
         let err = setup_postgres(config, None).await.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Missing environment variable `TENSORZERO_POSTGRES_URL`."));
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable `TENSORZERO_POSTGRES_URL`.")
+        );
     }
 
     #[tokio::test]

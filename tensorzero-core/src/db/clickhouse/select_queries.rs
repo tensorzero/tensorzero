@@ -1,7 +1,7 @@
 use crate::{
     db::{
-        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
         EpisodeByIdRow, TableBoundsWithCount,
+        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
     },
     serde_util::deserialize_u64,
 };
@@ -32,23 +32,33 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Minute => (
                 "toStartOfMinute(minute)",
-                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+                format!(
+                    "minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"
+                ),
             ),
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
-                format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
+                format!(
+                    "minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"
+                ),
             ),
             TimeWindow::Day => (
                 "toStartOfDay(minute)",
-                format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
+                format!(
+                    "minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"
+                ),
             ),
             TimeWindow::Week => (
                 "toStartOfWeek(minute)",
-                format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
+                format!(
+                    "minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"
+                ),
             ),
             TimeWindow::Month => (
                 "toStartOfMonth(minute)",
-                format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
+                format!(
+                    "minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"
+                ),
             ),
             TimeWindow::Cumulative => (
                 "toDateTime('1970-01-01 00:00:00')",
@@ -175,7 +185,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both before and after in query_episode_table"
                         .to_string(),
-                }))
+                }));
             }
             (Some(before), None) => (
                 "episode_id_uint < toUInt128({before:UUID})",

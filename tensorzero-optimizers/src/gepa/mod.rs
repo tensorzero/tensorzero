@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::IteratorRandom};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use uuid::Uuid;
 
@@ -16,8 +16,8 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
-        gepa::{GEPAConfig, GEPAJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        gepa::{GEPAConfig, GEPAJobHandle},
     },
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
@@ -33,10 +33,10 @@ pub mod validate;
 
 use analyze::analyze_inferences;
 use evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName, VariantScores,
+    EvaluateVariantParams, VariantName, VariantScores, create_evaluation_dataset, evaluate_variant,
 };
 use mutate::mutate_variant;
-use pareto::{is_improvement, Candidate, ParetoFrontier};
+use pareto::{Candidate, ParetoFrontier, is_improvement};
 use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 /// A GEPA variant with its name and configuration

@@ -167,15 +167,15 @@ pub fn convert_input_audio_to_file(input_audio: OpenAICompatibleInputAudio) -> R
             _ => None,
         };
 
-        if let Some(expected) = expected_mime {
-            if inferred_mime.as_ref() != expected {
-                tracing::warn!(
-                    "Inferred audio MIME type `{}` differs from format field `{}` (expected `{}`). Using inferred type.",
-                    inferred_mime,
-                    input_audio.format,
-                    expected
-                );
-            }
+        if let Some(expected) = expected_mime
+            && inferred_mime.as_ref() != expected
+        {
+            tracing::warn!(
+                "Inferred audio MIME type `{}` differs from format field `{}` (expected `{}`). Using inferred type.",
+                inferred_mime,
+                input_audio.format,
+                expected
+            );
         }
 
         inferred_mime
@@ -199,8 +199,8 @@ mod tests {
     use serde_json::json;
 
     use crate::endpoints::openai_compatible::types::chat_completions::{
-        convert_openai_message_content, OpenAICompatibleContentBlock, OpenAICompatibleMessage,
-        OpenAICompatibleUserMessage,
+        OpenAICompatibleContentBlock, OpenAICompatibleMessage, OpenAICompatibleUserMessage,
+        convert_openai_message_content,
     };
     use crate::inference::types::{Input, InputMessageContent, Role};
     use crate::utils::testing::capture_logs;
@@ -428,18 +428,22 @@ mod tests {
         // Test error when prefix is missing
         let result = parse_base64_file_data_url("YWJjCg==");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("without the `data:` prefix"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("without the `data:` prefix")
+        );
 
         // Test error when base64 separator is missing
         let result = parse_base64_file_data_url("data:image/png,YWJjCg==");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("without the `;base64,` separator"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("without the `;base64,` separator")
+        );
     }
 
     #[test]

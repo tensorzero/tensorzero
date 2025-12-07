@@ -2,9 +2,9 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Extension, Json};
-use futures::stream::Stream;
+use axum::{Extension, Json, debug_handler};
 use futures::FutureExt;
+use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::counter;
@@ -40,11 +40,12 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
     ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
+    collect_chunks,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -1257,10 +1258,8 @@ impl InferenceResponseChunk {
                 InferenceResultChunk::Chat(result) => result.content.is_empty(),
                 InferenceResultChunk::Json(result) => result.raw.is_none(),
             };
-            if is_empty {
-                if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.sum_strict(&extra_usage);
-                }
+            if is_empty && let Some(extra_usage) = extra_usage.take() {
+                result_usage.sum_strict(&extra_usage);
             }
         }
         Some(match inference_result {
@@ -1532,7 +1531,7 @@ fn prepare_candidate_variants(
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
             }
-            .into())
+            .into());
         }
     };
     Ok(needs_sampling)
@@ -1548,9 +1547,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        storage::{StorageKind, StoragePath},
         Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
+        storage::{StorageKind, StoragePath},
     };
 
     #[tokio::test]

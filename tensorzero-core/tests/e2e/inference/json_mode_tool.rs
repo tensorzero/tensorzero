@@ -16,7 +16,7 @@
 //! 8b. JSON function streaming test (verifies JSON streaming with json_mode="tool")
 //! 9. Real OpenAI test (verifies schema enforcement over conflicting prompts)
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::{
     ClientInferenceParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
     InputMessage, Role,

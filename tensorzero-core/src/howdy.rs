@@ -31,8 +31,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
 
 lazy_static! {

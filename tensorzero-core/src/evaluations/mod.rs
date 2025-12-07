@@ -8,12 +8,12 @@ use tensorzero_derive::TensorZeroDeserialize;
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
 use crate::experimentation::ExperimentationConfig;
 use crate::utils::retries::RetryConfig;
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::{
     config::{
-        path::ResolvedTomlPathData, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-        MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
+        MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
+        SchemaData, TimeoutsConfig, path::ResolvedTomlPathData,
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
@@ -24,6 +24,7 @@ use crate::{
     jsonschema_util::StaticJSONSchema,
     tool::create_json_mode_tool_call_config,
     variant::{
+        JsonMode, VariantConfig, VariantInfo,
         best_of_n_sampling::{
             UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
         },
@@ -31,7 +32,6 @@ use crate::{
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
-        JsonMode, VariantConfig, VariantInfo,
     },
 };
 
@@ -234,7 +234,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
                 // Log deprecation warning if "static" is used
                 if type_str == "static" {
                     crate::utils::deprecation_warning(
-                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version."
+                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version.",
                     );
                 }
 
@@ -464,13 +464,13 @@ impl UninitializedEvaluatorConfig {
                             message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }.into());
                     };
-                    if let Some(weight) = variant.inner.weight() {
-                        if weight == 0.0 {
-                            return Err(ErrorDetails::Config {
+                    if let Some(weight) = variant.inner.weight()
+                        && weight == 0.0
+                    {
+                        return Err(ErrorDetails::Config {
                                 message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
-                        }
                     }
                     match &mut variant.inner {
                         VariantConfig::ChatCompletion(variant) => {
@@ -728,9 +728,12 @@ fn get_template_path(
     template_name: &str,
     data: String,
 ) -> ResolvedTomlPathData {
-    ResolvedTomlPathData::new_fake_path(format!(
-        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
-    ), data)
+    ResolvedTomlPathData::new_fake_path(
+        format!(
+            "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
+        ),
+        data,
+    )
 }
 
 fn get_weight(active: Option<bool>) -> Option<f64> {
@@ -1892,7 +1895,9 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                    message: format!(
+                        "Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."
+                    ),
                 }
             );
         }

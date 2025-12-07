@@ -2,10 +2,6 @@ use crate::client::{File, InputMessage, InputMessageContent};
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
-use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
-use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Input;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
@@ -13,6 +9,10 @@ use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
 use crate::inference::types::Template;
+use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
+use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
 use crate::tool::ToolCallWrapper;
 use futures::future::try_join_all;
@@ -196,9 +196,9 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                         .into_iter()
                         .map(|mut value| {
                             // Check if this is a legacy Text variant: {"type": "text", "value": ...}
-                            if let Some(obj) = value.as_object_mut() {
-                                if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-                                    if let Some(val) = obj.remove("value") {
+                            if let Some(obj) = value.as_object_mut()
+                                && obj.get("type").and_then(|v| v.as_str()) == Some("text")
+                                    && let Some(val) = obj.remove("value") {
                                         // Convert based on value type
                                         match val {
                                             Value::String(text) => {
@@ -220,8 +220,6 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                                             }
                                         }
                                     }
-                                }
-                            }
 
                             // Deserialize the transformed value
                             serde_json::from_value(value).map_err(de::Error::custom)

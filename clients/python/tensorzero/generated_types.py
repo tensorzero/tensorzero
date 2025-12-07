@@ -262,11 +262,11 @@ ExtraBody = (
 
 
 @dataclass(kw_only=True)
-class ExtraBodyReplacementKind1:
+class ExtraBodyReplacementKindValue:
     value: Any
 
 
-ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
 
 
 @dataclass(kw_only=True)

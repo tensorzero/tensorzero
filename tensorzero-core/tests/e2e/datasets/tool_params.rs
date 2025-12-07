@@ -8,7 +8,7 @@
 //! 4. Update API uses Option<Option<DynamicToolParams>> for omit/null/value
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tensorzero_core::db::clickhouse::test_helpers::{
     clickhouse_flush_async_insert, get_clickhouse,
