@@ -1,0 +1,49 @@
+name: UI Storybook Tests
+
+on:
+  workflow_call:
+    inputs:
+      is_merge_group:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ui-storybook-tests:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.11.0"
+
+      - name: Setup `pnpm`
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install `pnpm` dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: ui
+        run: pnpm exec playwright install chromium
+
+      - name: Run Storybook tests
+        run: pnpm ui:test:storybook --run

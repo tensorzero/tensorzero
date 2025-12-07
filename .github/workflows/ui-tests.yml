@@ -98,7 +98,7 @@ jobs:
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-inference-provider -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
-      - name: Run `pnpm test`
+      - name: Run `pnpm test:unit`
         env:
           OPENAI_API_KEY: not_used
           FIREWORKS_API_KEY: not_used
@@ -106,7 +106,7 @@ jobs:
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
-        run: pnpm ui:test
+        run: pnpm ui:test:unit
 
       - name: Run `pnpm test` for tensorzero-node
         working-directory: internal/tensorzero-node
