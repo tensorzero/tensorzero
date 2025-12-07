@@ -12,12 +12,10 @@ vi.mock("~/utils/get-tensorzero-client.server", () => ({
   })),
 }));
 
-// Mock the environment
+// Mock the environment (only needed for gateway URL, config is always loaded from gateway)
 vi.mock("../env.server", () => ({
   getEnv: vi.fn(() => ({
-    TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY: true,
-    TENSORZERO_UI_DEFAULT_CONFIG: false,
-    TENSORZERO_UI_CONFIG_PATH: "/path/to/config",
+    TENSORZERO_GATEWAY_URL: "http://localhost:3000",
   })),
 }));
 

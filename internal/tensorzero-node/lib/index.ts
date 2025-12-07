@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  Config,
   CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
   EpisodeByIdRow,
@@ -45,7 +44,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
@@ -127,11 +125,6 @@ export class TensorZeroClient {
 }
 
 export default TensorZeroClient;
-
-export async function getConfig(configPath: string | null): Promise<Config> {
-  const configString = await nativeGetConfig(configPath);
-  return JSON.parse(configString) as Config;
-}
 
 // Export quantiles array from migration_0035
 export { getQuantiles };

@@ -20,6 +20,8 @@ import {
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -63,10 +65,32 @@ export async function action({ request }: Route.ActionArgs) {
     precision_targets,
   } = evaluationFormData;
 
+  // Get the evaluation and function configs from the gateway
+  const config = await getConfig();
+  const evaluationConfig = config.evaluations[evaluation_name];
+  if (!evaluationConfig) {
+    throw new Response(`Evaluation '${evaluation_name}' not found in config`, {
+      status: 404,
+    });
+  }
+
+  // Get the function name from the evaluation config (it's an inference evaluation)
+  const inferenceEvalConfig = evaluationConfig as InferenceEvaluationConfig;
+  const functionName = inferenceEvalConfig.function_name;
+  const functionConfig = await getFunctionConfig(functionName, config);
+  if (!functionConfig) {
+    throw new Response(
+      `Function '${functionName}' not found in config (referenced by evaluation '${evaluation_name}')`,
+      { status: 404 },
+    );
+  }
+
   let evaluation_start_info;
   try {
     evaluation_start_info = await runEvaluation(
       evaluation_name,
+      evaluationConfig,
+      functionConfig,
       dataset_name,
       variant_name,
       concurrency_limit,

@@ -109,13 +109,15 @@ fn send_event(
     }
 }
 
+/// Parameters for run_evaluation_streaming.
+/// Accepts serialized EvaluationConfig and FunctionConfig directly from the gateway.
 #[napi(object)]
 pub struct RunEvaluationStreamingParams {
     pub gateway_url: String,
     pub clickhouse_url: String,
     /// JSON-serialized EvaluationConfig
     pub evaluation_config: String,
-    /// JSON-serialized EvaluationFunctionConfig
+    /// JSON-serialized EvaluationFunctionConfig (deserialized from FunctionConfig JSON)
     pub function_config: String,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
@@ -429,23 +431,6 @@ impl TensorZeroClient {
         })?;
         Ok(probabilities_str)
     }
-}
-
-#[napi]
-pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Error> {
-    let config_path = config_path
-        .as_ref()
-        .map(Path::new)
-        .map(|path| path.to_path_buf());
-    let config = tensorzero::get_config_no_verify_credentials(config_path)
-        .await
-        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?
-        // Note: this is OK because we're simply serializing it and passing to Node
-        // We'll never write anything to DB that uses this exact config since we drop it after serializing
-        .dangerous_into_config_without_writing();
-    let config_str =
-        serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    Ok(config_str)
 }
 
 #[napi]
