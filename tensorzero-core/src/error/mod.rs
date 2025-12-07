@@ -630,7 +630,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
-            ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
