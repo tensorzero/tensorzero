@@ -247,10 +247,7 @@ export function InferenceDetailContent({
 
   const isDefault = inference.function_name === DEFAULT_FUNCTION;
 
-  const modelsSet = new Set<string>([
-    ...usedVariants,
-    ...Object.keys(config.models),
-  ]);
+  const modelsSet = new Set<string>([...usedVariants, ...config.model_names]);
   const models = [...modelsSet].sort();
 
   const options = isDefault ? models : variants;

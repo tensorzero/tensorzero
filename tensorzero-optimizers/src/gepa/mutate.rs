@@ -14,13 +14,13 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_json::{from_value, json, to_value, Map};
+use serde_json::{Map, from_value, json, to_value};
 
 use tensorzero_core::{
     client::{
         Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
-    config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
+    config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
     inference::types::{Arguments, Role, Template},
@@ -28,7 +28,7 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use crate::gepa::{analyze::Analysis, validate::FunctionContext, GEPAVariant};
+use crate::gepa::{GEPAVariant, analyze::Analysis, validate::FunctionContext};
 
 /// Helper struct to deserialize the JSON response that matches the output schema.
 /// The schema defines templates as an array of objects with name and content fields.
@@ -328,7 +328,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
     use tensorzero_core::{
-        config::{path::ResolvedTomlPathData, SchemaData},
+        config::{SchemaData, path::ResolvedTomlPathData},
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{Input, StoredInput},

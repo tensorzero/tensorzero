@@ -75,7 +75,9 @@ async fn test_insert_dicl_examples_success() {
 
     // Verify the data was actually written to ClickHouse by querying the DynamicInContextLearningExample table
     // We should find exactly 2 rows with the expected function_name and variant_name
-    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
+    let query = format!(
+        "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
     let count_result = clickhouse
         .run_query_synchronous_no_params(query)
         .await
@@ -121,7 +123,9 @@ async fn test_insert_dicl_examples_multiple_chunks() {
 
     // Verify the chunking logic worked correctly by checking that all 5 examples were inserted
     // This test specifically validates that the chunking with size 2 creates 3 chunks (2+2+1) and all data is preserved
-    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
+    let query = format!(
+        "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
     let count_result = clickhouse
         .run_query_synchronous_no_params(query)
         .await
@@ -158,7 +162,9 @@ async fn test_insert_dicl_examples_with_empty_input() {
 
     // Verify that no data was written to ClickHouse for empty input
     // This confirms that empty inputs are handled properly without creating spurious database entries
-    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
+    let query = format!(
+        "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
     let count_result = clickhouse
         .run_query_synchronous_no_params(query)
         .await
@@ -199,7 +205,9 @@ async fn test_insert_dicl_examples_json_serialization() {
 
     // Verify that the data with special characters was correctly inserted and can be retrieved
     // This test ensures JSON serialization handles quotes, newlines, and Unicode characters properly
-    let count_query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}'");
+    let count_query = format!(
+        "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}'"
+    );
     let count_result = clickhouse
         .run_query_synchronous_no_params(count_query)
         .await
@@ -212,7 +220,9 @@ async fn test_insert_dicl_examples_json_serialization() {
     );
 
     // Also verify that the input and output contain the expected special characters
-    let content_query = format!("SELECT input, output FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}' FORMAT JSONEachRow");
+    let content_query = format!(
+        "SELECT input, output FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}' FORMAT JSONEachRow"
+    );
     let content_result = clickhouse
         .run_query_synchronous_no_params(content_query)
         .await

@@ -4,8 +4,8 @@
 //! and do not export any OpenTelemetry spans.
 
 use axum::{
-    routing::{get, post, put},
     Router,
+    routing::{get, post, put},
 };
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
