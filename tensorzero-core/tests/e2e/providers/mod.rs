@@ -19,6 +19,7 @@ mod helpers;
 mod hyperbolic;
 mod mistral;
 mod mock_batch;
+mod ollama;
 mod openai;
 mod openrouter;
 mod reasoning;
