@@ -24,6 +24,7 @@ use crate::{
         groq::GroqCredentials,
         hyperbolic::HyperbolicCredentials,
         mistral::MistralCredentials,
+        ollama::OllamaCredentials,
         openai::OpenAICredentials,
         openrouter::OpenRouterCredentials,
         sglang::SGLangCredentials,
@@ -92,6 +93,7 @@ pub enum ProviderType {
     Groq,
     Hyperbolic,
     Mistral,
+    Ollama,
     OpenAI,
     OpenRouter,
     SGLang,
@@ -115,6 +117,7 @@ impl Display for ProviderType {
             ProviderType::Groq => write!(f, "Groq"),
             ProviderType::Hyperbolic => write!(f, "Hyperbolic"),
             ProviderType::Mistral => write!(f, "Mistral"),
+            ProviderType::Ollama => write!(f, "Ollama"),
             ProviderType::OpenAI => write!(f, "OpenAI"),
             ProviderType::OpenRouter => write!(f, "OpenRouter"),
             ProviderType::SGLang => write!(f, "SGLang"),
@@ -355,6 +358,7 @@ pub struct ProviderTypeDefaultCredentials {
     groq: LazyCredential<GroqCredentials>,
     hyperbolic: LazyCredential<HyperbolicCredentials>,
     mistral: LazyCredential<MistralCredentials>,
+    ollama: LazyCredential<OllamaCredentials>,
     openai: LazyCredential<OpenAICredentials>,
     openrouter: LazyCredential<OpenRouterCredentials>,
     sglang: LazyCredential<SGLangCredentials>,
@@ -409,6 +413,11 @@ impl ProviderTypeDefaultCredentials {
             .clone();
         let mistral_location = provider_types_config
             .mistral
+            .defaults
+            .api_key_location
+            .clone();
+        let ollama_location = provider_types_config
+            .ollama
             .defaults
             .api_key_location
             .clone();
@@ -483,6 +492,9 @@ impl ProviderTypeDefaultCredentials {
             }),
             mistral: LazyCredential::new(move || {
                 load_credential_with_fallback(&mistral_location, ProviderType::Mistral)?.try_into()
+            }),
+            ollama: LazyCredential::new(move || {
+                load_credential_with_fallback(&ollama_location, ProviderType::Ollama)?.try_into()
             }),
             openai: LazyCredential::new(move || {
                 load_credential_with_fallback(&openai_location, ProviderType::OpenAI)?.try_into()
@@ -887,6 +899,22 @@ impl ProviderKind for MistralKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.mistral.get_cloned()
+    }
+}
+
+pub struct OllamaKind;
+
+impl ProviderKind for OllamaKind {
+    type Credential = OllamaCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Ollama
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.ollama.get_cloned()
     }
 }
 

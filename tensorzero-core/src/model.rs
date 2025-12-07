@@ -46,9 +46,9 @@ use crate::inference::types::{
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
-    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
-    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
-    VLLMKind, XAIKind,
+    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OllamaKind, OpenAIKind,
+    OpenRouterKind, ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind,
+    TogetherKind, VLLMKind, XAIKind,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
@@ -70,7 +70,7 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
+    groq::GroqProvider, mistral::MistralProvider, ollama::OllamaProvider, openai::OpenAIProvider,
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
@@ -832,6 +832,7 @@ impl ModelProvider {
             ProviderConfig::Groq(_) => "groq",
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
             ProviderConfig::Mistral(_) => "mistral",
+            ProviderConfig::Ollama(_) => "ollama",
             ProviderConfig::OpenAI(_) => "openai",
             ProviderConfig::OpenRouter(_) => "openrouter",
             ProviderConfig::Together(_) => "together",
@@ -860,6 +861,7 @@ impl ModelProvider {
             ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
+            ProviderConfig::Ollama(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
             ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
             ProviderConfig::Together(provider) => Some(provider.model_name()),
@@ -915,6 +917,7 @@ pub enum ProviderConfig {
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
+    Ollama(OllamaProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
     #[serde(rename = "sglang")]
@@ -967,6 +970,7 @@ impl ProviderConfig {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
+            ProviderConfig::Ollama(_) => Cow::Borrowed(crate::providers::ollama::PROVIDER_TYPE),
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
                 Cow::Borrowed(crate::providers::openrouter::PROVIDER_TYPE)
@@ -1083,6 +1087,12 @@ pub enum UninitializedProviderConfig {
     },
     Mistral {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocationWithFallback>,
+    },
+    Ollama {
+        model_name: String,
+        api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
@@ -1334,6 +1344,20 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
                 MistralKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
+            UninitializedProviderConfig::Ollama {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::Ollama(OllamaProvider::new(
+                model_name,
+                api_base,
+                OllamaKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
                         provider_type_default_credentials,
@@ -1671,6 +1695,11 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::Ollama(provider) => {
+                provider
+                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -1809,6 +1838,11 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::Ollama(provider) => {
+                provider
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -1930,6 +1964,11 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::Ollama(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -2037,6 +2076,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::DeepSeek(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Ollama(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
