@@ -17,6 +17,7 @@ pub mod helpers;
 pub mod helpers_thinking_block;
 pub mod hyperbolic;
 pub mod mistral;
+pub mod ollama;
 pub mod openai;
 pub mod openrouter;
 pub mod sglang;

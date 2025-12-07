@@ -29,6 +29,8 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub mistral: MistralProviderTypeConfig,
     #[serde(default)]
+    pub ollama: OllamaProviderTypeConfig,
+    #[serde(default)]
     pub openai: OpenAIProviderTypeConfig,
     #[serde(default)]
     pub openrouter: OpenRouterProviderTypeConfig,
@@ -303,6 +305,33 @@ impl Default for MistralDefaults {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "MISTRAL_API_KEY".to_string(),
+            )),
+        }
+    }
+}
+
+// Ollama
+
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct OllamaProviderTypeConfig {
+    #[serde(default)]
+    pub defaults: OllamaDefaults,
+}
+
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct OllamaDefaults {
+    #[ts(type = "string")]
+    pub api_key_location: CredentialLocationWithFallback,
+}
+
+impl Default for OllamaDefaults {
+    fn default() -> Self {
+        Self {
+            // Ollama typically runs locally without authentication, but support optional API key
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                "OLLAMA_API_KEY".to_string(),
             )),
         }
     }
