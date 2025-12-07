@@ -677,7 +677,7 @@ pub async fn test_redacted_thinking_helper(
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(first_block_type, "thought");
-    assert_eq!(first_block["_internal_provider_type"], provider_type);
+    assert_eq!(first_block["provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
 
     let second_block = &content_blocks[1];
@@ -726,7 +726,7 @@ pub async fn test_redacted_thinking_helper(
     let first_block = &content_blocks[0];
     // Check the type and content in the block
     assert_eq!(first_block["type"], "thought");
-    assert_eq!(first_block["_internal_provider_type"], provider_type);
+    assert_eq!(first_block["provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
@@ -1195,7 +1195,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
             "type": "thought",
             "text": content_blocks[&("thought".to_string(), "0".to_string())],
             "signature": content_block_signatures["0"],
-            "_internal_provider_type": provider_type,
+            "provider_type": provider_type,
         })
     );
 
