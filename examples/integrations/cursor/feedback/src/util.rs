@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tree_sitter::Tree;

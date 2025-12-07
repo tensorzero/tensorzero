@@ -1,7 +1,7 @@
-use crate::common::{mock_inference_provider_base, OptimizationTestCase};
+use crate::common::{OptimizationTestCase, mock_inference_provider_base};
 use tensorzero_core::optimization::{
-    openai_sft::UninitializedOpenAISFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
+    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    openai_sft::UninitializedOpenAISFTConfig,
 };
 
 pub struct OpenAISFTTestCase();
