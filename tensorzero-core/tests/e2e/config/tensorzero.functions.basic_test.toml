@@ -789,3 +789,17 @@ model = "gpt-4o-mini-2024-07-18"
 embedding_model = "openai::text-embedding-3-small"
 k = 3
 max_tokens = 100
+
+## Ollama
+
+[functions.basic_test.variants.dolphin-llama3-8b-ollama]
+type = "chat_completion"
+model = "dolphin-llama3-8b-ollama"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.ollama-shorthand]
+type = "chat_completion"
+model = "ollama::dolphin-llama3:8b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

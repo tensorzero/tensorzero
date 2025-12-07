@@ -194,7 +194,6 @@ type = "aws_sagemaker"
 endpoint_name = "gemma3-1b-provisioned-endpoint"
 region = "us-east-2"
 model_name = "gemma3:1b"
-# We actually host an ollama container, but we don't have an ollama provider yet
 hosted_provider = "openai"
 
 [models.gemma-3-1b-aws-sagemaker-tgi]
@@ -822,3 +821,13 @@ routing = ["openrouter"]
 [embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
 type = "openrouter"
 model_name = "google/gemini-embedding-001"
+
+## Ollama
+
+[models."qwen2-0.5b-ollama"]
+routing = ["ollama"]
+
+[models."qwen2-0.5b-ollama".providers.ollama]
+type = "ollama"
+model_name = "qwen2:0.5b"
+api_base = "http://ollama:11434"
