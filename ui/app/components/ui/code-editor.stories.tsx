@@ -2,6 +2,7 @@ import type { Meta, ReactRenderer, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { CodeEditor, type CodeEditorProps } from "./code-editor";
 import type { ArgsStoryFn } from "storybook/internal/csf";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const meta: Meta<typeof CodeEditor> = {
   title: "UI/CodeEditor",
@@ -17,9 +18,11 @@ const meta: Meta<typeof CodeEditor> = {
   },
   decorators: [
     (Story) => (
-      <div className="max-w-md">
-        <Story />
-      </div>
+      <GlobalToastProvider>
+        <div className="max-w-md">
+          <Story />
+        </div>
+      </GlobalToastProvider>
     ),
   ],
 };
