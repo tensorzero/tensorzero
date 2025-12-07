@@ -16,7 +16,6 @@ import type {
   CloneDatapointsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
-  Config,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -26,6 +25,7 @@ import type {
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
+  UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -660,16 +660,16 @@ export class TensorZeroClient {
 
   /**
    * Fetches the gateway configuration for the UI.
-   * @returns A promise that resolves with the Config object
+   * @returns A promise that resolves with the UiConfig object
    * @throws Error if the request fails
    */
-  async getUiConfig(): Promise<Config> {
+  async getUiConfig(): Promise<UiConfig> {
     const response = await this.fetch("/internal/ui-config", { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as Config;
+    return (await response.json()) as UiConfig;
   }
 
   private async fetch(

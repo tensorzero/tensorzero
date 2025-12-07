@@ -10,8 +10,11 @@ import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
-import type { ChatCompletionConfig, VariantInfo } from "~/types/tensorzero";
-import type { Config } from "~/types/tensorzero";
+import type {
+  ChatCompletionConfig,
+  UiConfig,
+  VariantInfo,
+} from "~/types/tensorzero";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
@@ -23,7 +26,7 @@ export function SFTForm({
   submissionPhase,
   setSubmissionPhase,
 }: {
-  config: Config;
+  config: UiConfig;
   submissionPhase: "idle" | "submitting" | "pending" | "complete";
   setSubmissionPhase: (
     phase: "idle" | "submitting" | "pending" | "complete",

@@ -15,7 +15,7 @@ use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
-use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
+use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
 use tensorzero_core::observability;
@@ -105,7 +105,9 @@ async fn main() -> Result<(), ExitCode> {
             return Err(ExitCode::from(1));
         }
         (true, None) => {
-            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            tracing::warn!(
+                "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
+            );
             (
                 Config::new_empty()
                     .await
@@ -150,29 +152,32 @@ async fn main() -> Result<(), ExitCode> {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
-                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode.");
+                tracing::warn!(
+                    "Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode."
+                );
             } else {
-                tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
+                tracing::error!(
+                    "The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)."
+                );
                 return Err(ExitCode::from(1));
             }
         }
 
         // Set config-level OTLP headers if we have a tracer wrapper
-        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
-            if !unwritten_config
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer
+            && !unwritten_config
                 .gateway
                 .export
                 .otlp
                 .traces
                 .extra_headers
                 .is_empty()
-            {
-                tracer_wrapper
-                    .set_static_otlp_traces_extra_headers(
-                        &unwritten_config.gateway.export.otlp.traces.extra_headers,
-                    )
-                    .log_err_pretty("Failed to set OTLP config headers")?;
-            }
+        {
+            tracer_wrapper
+                .set_static_otlp_traces_extra_headers(
+                    &unwritten_config.gateway.export.otlp.traces.extra_headers,
+                )
+                .log_err_pretty("Failed to set OTLP config headers")?;
         }
 
         match delayed_log_config.delayed_otel {

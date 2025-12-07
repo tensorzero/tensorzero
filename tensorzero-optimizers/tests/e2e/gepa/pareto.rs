@@ -6,16 +6,16 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_optimizers::gepa::evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName,
+    EvaluateVariantParams, VariantName, create_evaluation_dataset, evaluate_variant,
 };
 use tensorzero_optimizers::gepa::pareto::{Candidate, ParetoFrontier};
 use tensorzero_optimizers::gepa::validate::get_uninitialized_variant_configs;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use super::{
-    build_gateway_client, cleanup_dataset, create_gepa_config_chat, create_gepa_config_json,
-    create_test_chat_rendered_sample, create_test_json_rendered_sample, get_e2e_config,
-    get_function_context, TEST_CLICKHOUSE_WAIT_MS,
+    TEST_CLICKHOUSE_WAIT_MS, build_gateway_client, cleanup_dataset, create_gepa_config_chat,
+    create_gepa_config_json, create_test_chat_rendered_sample, create_test_json_rendered_sample,
+    get_e2e_config, get_function_context,
 };
 
 #[tokio::test(flavor = "multi_thread")]
@@ -134,16 +134,16 @@ async fn test_pareto_frontier_update_with_initial_variants() {
     let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
     for (variant_name, eval_results) in &all_evaluation_results {
         let scores = eval_results.per_datapoint_scores();
-        if !scores.is_empty() {
-            if let Some(variant_config) = initial_variants.get(variant_name) {
-                initial_candidates.insert(
-                    variant_name.clone(),
-                    Candidate {
-                        variant: variant_config.clone(),
-                        scores,
-                    },
-                );
-            }
+        if !scores.is_empty()
+            && let Some(variant_config) = initial_variants.get(variant_name)
+        {
+            initial_candidates.insert(
+                variant_name.clone(),
+                Candidate {
+                    variant: variant_config.clone(),
+                    scores,
+                },
+            );
         }
     }
 
@@ -251,16 +251,16 @@ async fn test_pareto_frontier_sample_by_frequency() {
     let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
     for (variant_name, eval_results) in &all_evaluation_results {
         let scores = eval_results.per_datapoint_scores();
-        if !scores.is_empty() {
-            if let Some(variant_config) = initial_variants.get(variant_name) {
-                initial_candidates.insert(
-                    variant_name.clone(),
-                    Candidate {
-                        variant: variant_config.clone(),
-                        scores,
-                    },
-                );
-            }
+        if !scores.is_empty()
+            && let Some(variant_config) = initial_variants.get(variant_name)
+        {
+            initial_candidates.insert(
+                variant_name.clone(),
+                Candidate {
+                    variant: variant_config.clone(),
+                    scores,
+                },
+            );
         }
     }
 
@@ -366,16 +366,16 @@ async fn test_pareto_frontier_maintains_valid_state() {
     let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
     for (variant_name, eval_results) in &all_evaluation_results {
         let scores = eval_results.per_datapoint_scores();
-        if !scores.is_empty() {
-            if let Some(variant_config) = initial_variants.get(variant_name) {
-                initial_candidates.insert(
-                    variant_name.clone(),
-                    Candidate {
-                        variant: variant_config.clone(),
-                        scores,
-                    },
-                );
-            }
+        if !scores.is_empty()
+            && let Some(variant_config) = initial_variants.get(variant_name)
+        {
+            initial_candidates.insert(
+                variant_name.clone(),
+                Candidate {
+                    variant: variant_config.clone(),
+                    scores,
+                },
+            );
         }
     }
 
