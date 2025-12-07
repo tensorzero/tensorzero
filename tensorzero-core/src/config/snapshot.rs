@@ -121,12 +121,15 @@ impl Default for SnapshotHash {
 }
 
 impl ConfigSnapshot {
+    /// Create a ConfigSnapshot from an `UninitializedConfig`.
+    ///
+    /// The config is converted to `StoredConfig`, serialized to TOML, and hashed
+    /// along with the extra templates to produce a deterministic hash.
     pub fn new(
-        config_toml: toml::Table,
+        config: UninitializedConfig,
         extra_templates: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        let config = UninitializedConfig::try_from(config_toml)?;
-        let stored_config = config.into();
+        let stored_config: StoredConfig = config.into();
         let stored_config_toml =
             prepare_table_for_snapshot(toml::Table::try_from(&stored_config).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -149,14 +152,13 @@ impl ConfigSnapshot {
         config_toml: &str,
         extra_templates: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        use super::snapshot::prepare_table_for_snapshot;
         let table: toml::Table = config_toml.parse().map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse TOML: {e}"),
             })
         })?;
-        let sorted_table = prepare_table_for_snapshot(table);
-        Self::new(sorted_table, extra_templates)
+        let config = UninitializedConfig::try_from(table)?;
+        Self::new(config, extra_templates)
     }
 
     /// Create an empty ConfigSnapshot for testing when the actual config doesn't matter.

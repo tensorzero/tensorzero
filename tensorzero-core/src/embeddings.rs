@@ -9,7 +9,7 @@ use crate::cache::{
     CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
     embedding_cache_lookup, start_cache_write,
 };
-use crate::config::{TimeoutsConfig, provider_types::ProviderTypesConfig};
+use crate::config::provider_types::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -115,8 +115,9 @@ pub struct UninitializedEmbeddingModelConfig {
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
-    pub timeouts: TimeoutsConfig,
+    // NOTE: The `timeouts` field was deprecated and removed.
+    // For backward compatibility with stored snapshots, see `StoredEmbeddingModelConfig`
+    // in config/stored.rs which accepts the deprecated field and migrates it.
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -126,24 +127,9 @@ impl UninitializedEmbeddingModelConfig {
         default_credentials: &ProviderTypeDefaultCredentials,
         http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
-        // Handle timeout deprecation
-        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
-            (Some(timeout_ms), None) => Some(timeout_ms),
-            (None, Some(old_timeout)) => {
-                crate::utils::deprecation_warning(
-                    "`timeouts` is deprecated for embedding models. \
-                    Please use `timeout_ms` instead.",
-                );
-                Some(old_timeout)
-            }
-            (None, None) => None,
-            (Some(_), Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "`timeout_ms` and `timeouts` cannot both be set for embedding models"
-                        .to_string(),
-                }));
-            }
-        };
+        // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
+        // field via StoredEmbeddingModelConfig when loading from snapshot)
+        let timeout_ms = self.timeout_ms;
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
@@ -654,11 +640,12 @@ impl EmbeddingProviderInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
-    config: UninitializedProviderConfig,
+    pub config: UninitializedProviderConfig,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
-    timeouts: TimeoutsConfig,
+    // NOTE: The `timeouts` field was deprecated and removed.
+    // For backward compatibility with stored snapshots, see `StoredEmbeddingProviderConfig`
+    // in config/stored.rs which accepts the deprecated field and migrates it.
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
 }
@@ -675,25 +662,9 @@ impl UninitializedEmbeddingProviderConfig {
             .config
             .load(provider_types, default_credentials, http_client)
             .await?;
-        // Handle timeout deprecation
-        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
-            (Some(timeout_ms), None) => Some(timeout_ms),
-            (None, Some(old_timeout)) => {
-                crate::utils::deprecation_warning(
-                    "`timeouts` is deprecated for embedding providers. \
-                    Please use `timeout_ms` instead.",
-                );
-                Some(old_timeout)
-            }
-            (None, None) => None,
-            (Some(_), Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message:
-                        "`timeout_ms` and `timeouts` cannot both be set for embedding providers"
-                            .to_string(),
-                }));
-            }
-        };
+        // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
+        // field via StoredEmbeddingProviderConfig when loading from snapshot)
+        let timeout_ms = self.timeout_ms;
 
         let extra_body = self.extra_body;
         Ok(match provider_config {
@@ -914,7 +885,6 @@ mod tests {
                 provider_tools: Vec::new(),
             },
             timeout_ms: None,
-            timeouts: TimeoutsConfig::default(),
             extra_body: Some(extra_body_config.clone()),
         };
 
