@@ -5,6 +5,7 @@ volumes:
   # Note that we don't actually make this a tmpfs, since it can be quite large
   # We need this for e2e tests that write to a tmpdir from a test, and then read it from the gateway
   shared-tmpdir:
+  ollama-data:
 
 services:
   mock-inference-provider:
@@ -252,3 +253,27 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+      ollama-model-pull:
+        condition: service_completed_successfully
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  ollama-model-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["ollama", "pull", "qwen2:0.5b"]
