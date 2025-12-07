@@ -1,5 +1,5 @@
 use crate::providers::common::E2ETestProvider;
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
@@ -9,9 +9,9 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     db::clickhouse::test_helpers::{get_clickhouse, select_model_inference_clickhouse},
     inference::types::{
+        ContentBlockChatOutput, File, Role, Text,
         file::Base64File,
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, Text,
     },
 };
 use uuid::Uuid;

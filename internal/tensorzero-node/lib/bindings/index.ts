@@ -313,6 +313,7 @@ export * from "./ToolConfig";
 export * from "./ToolResult";
 export * from "./TrackAndStopConfig";
 export * from "./TrackAndStopState";
+export * from "./UiConfig";
 export * from "./UniformConfig";
 export * from "./UninitializedBestOfNEvaluatorConfig";
 export * from "./UninitializedBestOfNSamplingConfig";

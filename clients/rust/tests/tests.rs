@@ -4,8 +4,8 @@
 use reqwest::Url;
 use serde_json::json;
 use tensorzero::{
-    input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode, File,
-    InputMessageContent,
+    ClientBuilder, ClientBuilderMode, File, InputMessageContent,
+    input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::inference::types::StoredInput;
 

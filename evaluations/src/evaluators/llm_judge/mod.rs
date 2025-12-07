@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, bail};
+use serde_json::{Value, json};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
@@ -9,8 +9,8 @@ use tensorzero_core::client::{
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
-    get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
-    LLMJudgeOutputType,
+    LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType, get_evaluator_metric_name,
+    get_llm_judge_function_name,
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, Template, Text,
@@ -18,8 +18,8 @@ use tensorzero_core::inference::types::{
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::helpers::{check_inference_evaluation_human_feedback, get_cache_options};
 use crate::Clients;
+use crate::helpers::{check_inference_evaluation_human_feedback, get_cache_options};
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
@@ -132,13 +132,17 @@ pub async fn run_llm_judge_evaluator(
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
-            bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+            bail!(
+                "Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
+            )
         }
     };
     let evaluator_inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
-            bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+            bail!(
+                "Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
+            )
         }
         InferenceResponse::Json(json_response) => json_response
             .output
@@ -273,7 +277,9 @@ fn prepare_serialized_input(input: &Input) -> Result<String> {
         for content in &message.content {
             match content {
                 InputMessageContent::File { .. } => {
-                    bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
+                    bail!(
+                        "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format."
+                    )
                 }
                 InputMessageContent::Unknown(_) => {
                     bail!("Unknown content not supported for LLM judge evaluations")
@@ -330,7 +336,9 @@ fn serialize_content_for_messages_input(
             InputMessageContent::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
                 if let File::Url(..) = image {
-                    bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+                    bail!(
+                        "URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."
+                    )
                 }
                 serialized_content.push(InputMessageContent::File(image.clone()));
             }

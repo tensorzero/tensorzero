@@ -6,20 +6,18 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
+    Json,
     body::Body,
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Json,
 };
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
     config::Config,
     db::{
-        clickhouse::{
-            query_builder::{InferenceFilter, OrderBy},
-            ClickHouseConnectionInfo,
-        },
+        clickhouse::ClickHouseConnectionInfo,
+        clickhouse::query_builder::{InferenceFilter, OrderBy},
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},

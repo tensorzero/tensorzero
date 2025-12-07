@@ -3,7 +3,7 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -188,7 +188,12 @@ async fn test_tensorzero_auth_enabled() {
     let status = inference_response.status();
     let text = inference_response.text().await.unwrap();
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"));
+    assert_eq!(
+        text,
+        format!(
+            "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+        )
+    );
 }
 
 #[tokio::test]
@@ -370,7 +375,9 @@ async fn test_tensorzero_missing_auth() {
         let text = disabled_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            format!("{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"),
+            format!(
+                "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+            ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }

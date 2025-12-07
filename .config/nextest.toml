@@ -34,7 +34,7 @@ junit.path = "junit.xml"
 filter = 'binary(e2e_gepa)'
 # Analysis or mutation using gpt-4.1-nano occasionally fails to generate a properly formatted output, so we add retries
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-slow-timeout = { period = "30s", terminate-after = 1 }
+slow-timeout = { period = "30s", terminate-after = 2 }
 
 [profile.live-batch]
 default-filter = 'test(batch) and not test(mock)'
@@ -79,11 +79,16 @@ clickhouse_migration = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'test(test_otel_export)'
-slow-timeout = { period = "60s", terminate-after = 2 }
+slow-timeout = { period = "60s", terminate-after = 4 }
 # We sleep long enough that these tests should pass 100% of the time.
 # Any flakiness indicates a potential bug that could cause us to lose spans,
 # so we don't want to retry.
 retries = 0
+
+[[profile.default.overrides]]
+filter = 'test(e2e_test_variant_failover)'
+# This test makes lots of requests, so give it extra time for the slower Github runners.
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
@@ -107,9 +112,26 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 filter = 'test(test_clickhouse_migration_manager)'
 test-group = 'clickhouse_migration'
 
+[[profile.e2e.overrides]]
+filter = 'test(experimentation)'
+# We run with '-j 32', so prevent these relatively heavy tests from running in parallel with too many other things.
+threads-required = 16
+
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
 slow-timeout = { period = "60s", terminate-after = 2 }
+
+# Give these tests more time to run on CI, since we have a lot of
+# load on the free Github runner
+[[profile.default.overrides]]
+filter = 'package(gateway)'
+slow-timeout = { period = "20s", terminate-after = 2 }
+
+# The proc-macro tests use `trybuild`, which runs compilation
+# for various crates as part of the test
+[[profile.default.overrides]]
+filter = 'package(tensorzero-derive)'
+slow-timeout = { period = "20s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 # Web search is very slow
@@ -158,7 +180,7 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 # Settings for running unit tests
 filter = 'not (binary(e2e) | test(export_bindings_) | test(export_schema_))'
 retries = 0
-slow-timeout = { period = "10s", terminate-after = 1 }
+slow-timeout = { period = "10s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'

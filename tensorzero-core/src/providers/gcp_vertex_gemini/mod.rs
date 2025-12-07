@@ -6,20 +6,20 @@ use std::time::Duration;
 
 use crate::error::DelayedError;
 use axum::http;
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use google_cloud_auth::credentials::{CacheableResource, Credentials};
 use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
 use serde_json::Value;
+use serde_json::value::RawValue;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
@@ -36,21 +36,17 @@ use crate::config::provider_types::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
-    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
-    ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE,
+    DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE,
+    warn_discarded_thought_block, warn_discarded_unknown_chunk,
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Usage,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
@@ -58,7 +54,11 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
     UnknownChunk,
 };
-use crate::inference::InferenceProvider;
+use crate::inference::types::{
+    ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
+    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+};
 use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
@@ -67,7 +67,7 @@ use crate::tool::{
     FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
 };
 
-use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
+use super::helpers::{JsonlBatchFileInfo, convert_stream_error, parse_jsonl_batch_file};
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
@@ -284,7 +284,7 @@ pub async fn make_gcp_object_store(
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }))
+            }));
         }
     }
 
@@ -365,10 +365,19 @@ pub fn parse_shorthand_url<'a>(
     expected_publisher: &str,
 ) -> Result<ShorthandUrl<'a>, Error> {
     let components: Vec<&str> = shorthand_url.split('/').collect_vec();
-    let [projects, _project_id, locations, location, publishers_or_endpoint, ..] = &components[..]
+    let [
+        projects,
+        _project_id,
+        locations,
+        location,
+        publishers_or_endpoint,
+        ..,
+    ] = &components[..]
     else {
         return Err(Error::new(ErrorDetails::Config {
-            message: format!("GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `{shorthand_url}`"),
+            message: format!(
+                "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `{shorthand_url}`"
+            ),
         }));
     };
 
@@ -488,7 +497,9 @@ impl GCPVertexGeminiProvider {
         let request_url = format!(
             "https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:generateContent"
         );
-        let streaming_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse");
+        let streaming_request_url = format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:streamGenerateContent?alt=sse"
+        );
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
         let api_v1_base_url = Url::parse(&format!(
             "https://{location_prefix}aiplatform.googleapis.com/v1/"
@@ -558,12 +569,34 @@ impl GCPVertexGeminiProvider {
                 message: format!("Failed to parse base URL - this should never happen: {e}"),
             })
         })?;
-        let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
-            (Some(model_id), None) => (model_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
-                                               format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
-            (None, Some(endpoint_id)) => (endpoint_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"),
-                                                  format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse")),
-            _ => return Err(ErrorDetails::InvalidProviderConfig { message: "Exactly one of model_id or endpoint_id must be provided".to_string() }.into())
+        let (model_or_endpoint_id, request_url, streaming_request_url) = match (
+            &model_id,
+            &endpoint_id,
+        ) {
+            (Some(model_id), None) => (
+                model_id.clone(),
+                format!(
+                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"
+                ),
+                format!(
+                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse"
+                ),
+            ),
+            (None, Some(endpoint_id)) => (
+                endpoint_id.clone(),
+                format!(
+                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:generateContent"
+                ),
+                format!(
+                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/{endpoint_id}:streamGenerateContent?alt=sse"
+                ),
+            ),
+            _ => {
+                return Err(ErrorDetails::InvalidProviderConfig {
+                    message: "Exactly one of model_id or endpoint_id must be provided".to_string(),
+                }
+                .into());
+            }
         };
 
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
@@ -586,11 +619,15 @@ impl GCPVertexGeminiProvider {
                         api_base.as_str().trim_end_matches('/')
                     )
                 } else {
-                    format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs")
+                    format!(
+                        "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
+                    )
                 };
 
                 #[cfg(not(feature = "e2e_tests"))]
-                let batch_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs");
+                let batch_request_url = format!(
+                    "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
+                );
 
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),
@@ -906,7 +943,7 @@ impl GCPVertexCredentials {
                 return Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
                     message: "No credentials are set".to_string(),
-                }))
+                }));
             }
         };
         let mut headers = HeaderMap::new();
@@ -2257,6 +2294,61 @@ async fn convert_non_thought_content_block<'a>(
     }
 }
 
+async fn handle_thought_block<'a>(
+    provider_type: &str,
+    thought: &Thought,
+    model_content_blocks: &mut Vec<GCPVertexGeminiContentPart<'a>>,
+    iter: &mut impl Iterator<Item = Cow<'a, ContentBlock>>,
+) -> Result<(), Error> {
+    // GCP Vertex Gemini never produces 'thought: true' at the moment, and there's no documentation
+    // on whether or not they should be passed back in.;
+    // As a result, we don't attempt to feed `Thought.text` back to GCP, as this would
+    // require us to set 'thought: true' in the request.
+    // Instead, we just warn and discard the content block if it has text.
+    if thought.text.is_some() {
+        warn_discarded_thought_block(provider_type, thought);
+    } else if let Some(signature) = &thought.signature {
+        let next_block = iter.next();
+        match next_block {
+            None => {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Thought block with signature must be followed by a content block in GCP Vertex Gemini".to_string(),
+                    provider_type: provider_type.to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                    }));
+            }
+            Some(Cow::Borrowed(ContentBlock::Thought(_)))
+            | Some(Cow::Owned(ContentBlock::Thought(_))) => {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Thought block with signature cannot be followed by another thought block in GCP Vertex Gemini".to_string(),
+                    provider_type: provider_type.to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                    }));
+            }
+            Some(Cow::Borrowed(ContentBlock::Unknown(_)))
+            | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
+                return Err(Error::new(ErrorDetails::InferenceServer {
+message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
+provider_type: provider_type.to_string(),
+raw_request: None,
+raw_response: None,
+}));
+            }
+            Some(next_block) => {
+                let gcp_part = convert_non_thought_content_block(next_block).await?;
+                model_content_blocks.push(GCPVertexGeminiContentPart {
+                    thought: false,
+                    thought_signature: Some(signature.clone()),
+                    data: gcp_part,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     role: GCPVertexGeminiRole,
     content_blocks: Cow<'a, [ContentBlock]>,
@@ -2428,54 +2520,13 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                     }),
                 });
             }
-            Cow::Borrowed(ContentBlock::Thought(ref thought))
-            | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                // GCP Vertex Gemini never produces 'thought: true' at the moment, and there's no documentation
-                // on whether or not they should be passed back in.
-                // As a result, we don't attempt to feed `Thought.text` back to GCP, as this would
-                // require us to set 'thought: true' in the request.
-                // Instead, we just warn and discard the content block if it has text.
-                if thought.text.is_some() {
-                    warn_discarded_thought_block(provider_type, thought);
-                } else if let Some(signature) = &thought.signature {
-                    let next_block = iter.next();
-                    match next_block {
-                        None => {
-                            return Err(Error::new(ErrorDetails::InferenceServer {
-                                message: "Thought block with signature must be followed by a content block in GCP Vertex Gemini".to_string(),
-                                provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                            }));
-                        }
-                        Some(Cow::Borrowed(ContentBlock::Thought(_)))
-                        | Some(Cow::Owned(ContentBlock::Thought(_))) => {
-                            return Err(Error::new(ErrorDetails::InferenceServer {
-                                message: "Thought block with signature cannot be followed by another thought block in GCP Vertex Gemini".to_string(),
-                                provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                            }));
-                        }
-                        Some(Cow::Borrowed(ContentBlock::Unknown(_)))
-                        | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
-                            return Err(Error::new(ErrorDetails::InferenceServer {
-                                message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
-                                provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
-                                raw_response: None,
-                            }));
-                        }
-                        Some(next_block) => {
-                            let gcp_part = convert_non_thought_content_block(next_block).await?;
-                            model_content_blocks.push(GCPVertexGeminiContentPart {
-                                thought: false,
-                                thought_signature: Some(signature.clone()),
-                                data: gcp_part,
-                            });
-                        }
-                    }
-                }
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
+                handle_thought_block(provider_type, thought, &mut model_content_blocks, &mut iter)
+                    .await?;
+            }
+            Cow::Owned(ContentBlock::Thought(ref thought)) => {
+                handle_thought_block(provider_type, thought, &mut model_content_blocks, &mut iter)
+                    .await?;
             }
             Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
@@ -3756,8 +3807,10 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text }),
+            ContentBlockOutput::ToolCall(tool_call),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
             assert_eq!(tool_call.name, "get_temperature");
@@ -3870,8 +3923,12 @@ mod tests {
             response_with_latency.try_into().unwrap();
         assert_eq!(model_inference_response.raw_request, raw_request);
 
-        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text: text1 }),
+            ContentBlockOutput::ToolCall(tool_call1),
+            ContentBlockOutput::Text(Text { text: text2 }),
+            ContentBlockOutput::ToolCall(tool_call2),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");
@@ -4481,7 +4538,10 @@ mod tests {
         let err1 = parse_shorthand_url("bad-shorthand-url", "google")
             .unwrap_err()
             .to_string();
-        assert_eq!(err1, "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shorthand-url`");
+        assert_eq!(
+            err1,
+            "GCP shorthand url is not in the expected format (should start with `projects/<project_id>/locations/<location>'): `bad-shorthand-url`"
+        );
 
         let missing_components = parse_shorthand_url(
             "projects/tensorzero-public/locations/us-central1/",
@@ -4489,10 +4549,16 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert_eq!(missing_components, "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`");
+        assert_eq!(
+            missing_components,
+            "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`"
+        );
 
         let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
-        assert_eq!(non_google_publisher, "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`");
+        assert_eq!(
+            non_google_publisher,
+            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`"
+        );
 
         let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
         assert_eq!(

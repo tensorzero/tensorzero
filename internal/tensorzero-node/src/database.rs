@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use tensorzero::{
-    setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
-    DatasetQueryParams, TimeWindow,
+    ClickHouseConnection, CountDatapointsForDatasetFunctionParams, DatasetQueryParams, TimeWindow,
+    setup_clickhouse_without_config,
 };
 use uuid::Uuid;
 

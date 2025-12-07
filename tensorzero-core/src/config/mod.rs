@@ -8,17 +8,16 @@ use chrono::Duration;
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
 ///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
-use gateway::AuthConfig;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
 use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use snapshot::SnapshotHash;
 use std::borrow::Cow;
@@ -26,8 +25,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tracing::instrument;
 use tracing::Span;
+use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
 
@@ -44,14 +43,14 @@ use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
-use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
-use crate::tool::{create_json_mode_tool_call_config, StaticToolConfig, ToolChoice};
+use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -158,14 +157,18 @@ impl TimeoutsConfig {
         if let Some(total_ms) = total_ms {
             if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                    message: format!(
+                        "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                    ),
                 }));
             }
         }
         if let Some(ttft_ms) = ttft_ms {
             if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                    message: format!(
+                        "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                    ),
                 }));
             }
         }
@@ -210,7 +213,9 @@ impl ObjectStoreInfo {
                         #[expect(clippy::if_not_else)]
                         if !std::fs::exists(path).unwrap_or(false) {
                             if skip_credential_validation() {
-                                tracing::warn!("Filesystem object store path does not exist: {path}. Treating object store as unconfigured");
+                                tracing::warn!(
+                                    "Filesystem object store path does not exist: {path}. Treating object store as unconfigured"
+                                );
                                 return Ok(None);
                             }
                             return Err(Error::new(ErrorDetails::Config {
@@ -260,21 +265,29 @@ impl ObjectStoreInfo {
                     builder = builder.with_endpoint(endpoint);
                 }
                 if std::env::var("AWS_ALLOW_HTTP").as_deref() == Ok("true") {
-                    tracing::warn!("`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                    tracing::warn!(
+                        "`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                    );
                     if allow_http.is_some() {
-                        tracing::info!("Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`");
+                        tracing::info!(
+                            "Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`"
+                        );
                     }
                 }
                 if let Some(allow_http) = *allow_http {
                     if allow_http {
-                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                        tracing::warn!(
+                            "`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store"
+                        );
                     }
                     builder = builder.with_allow_http(allow_http);
                 }
 
                 if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
                     if endpoint.ends_with(bucket_name) {
-                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
+                        tracing::warn!(
+                            "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
+                        );
                     }
                 }
 
@@ -307,7 +320,9 @@ impl ObjectStoreInfo {
     /// Verifies that the object store is configured correctly by writing an empty file to it.
     pub async fn verify(&self) -> Result<(), Error> {
         if let Some(store) = &self.object_store {
-            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            tracing::info!(
+                "Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)"
+            );
             store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
                 .await
                 .map_err(|e| {
@@ -728,6 +743,66 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
+/// Runtime configuration values to overlay onto snapshot config.
+/// These reflect the current runtime environment rather than historical snapshot values.
+///
+/// When loading a config from a historical snapshot, infrastructure settings should
+/// come from the current runtime environment, not the snapshot. This struct captures
+/// those runtime values that need to be overlaid.
+pub struct RuntimeOverlay {
+    pub gateway: UninitializedGatewayConfig,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub object_store_info: Option<ObjectStoreInfo>,
+}
+
+impl RuntimeOverlay {
+    /// Create a RuntimeOverlay from a live Config.
+    /// Uses destructuring to ensure compile-time errors if fields are added/removed.
+    pub fn from_config(config: &Config) -> Self {
+        // Destructure GatewayConfig to ensure all fields are handled
+        let GatewayConfig {
+            bind_address,
+            observability,
+            debug,
+            template_filesystem_access,
+            export,
+            base_path,
+            unstable_error_json,
+            unstable_disable_feedback_target_validation,
+            disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference,
+            auth,
+            global_outbound_http_timeout,
+        } = &config.gateway;
+
+        Self {
+            gateway: UninitializedGatewayConfig {
+                bind_address: *bind_address,
+                observability: observability.clone(),
+                debug: *debug,
+                template_filesystem_access: Some(template_filesystem_access.clone()),
+                export: export.clone(),
+                base_path: base_path.clone(),
+                unstable_disable_feedback_target_validation:
+                    *unstable_disable_feedback_target_validation,
+                unstable_error_json: *unstable_error_json,
+                disable_pseudonymous_usage_analytics: *disable_pseudonymous_usage_analytics,
+                fetch_and_encode_input_files_before_inference: Some(
+                    *fetch_and_encode_input_files_before_inference,
+                ),
+                auth: auth.clone(),
+                global_outbound_http_timeout_ms: Some(
+                    global_outbound_http_timeout.num_milliseconds() as u64,
+                ),
+            },
+            postgres: config.postgres.clone(),
+            rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
+            object_store_info: config.object_store_info.clone(),
+        }
+    }
+}
+
 /// Result of processing the initial config input (Fresh table or Snapshot).
 /// Contains the fields needed from UninitializedConfig after the branch-specific
 /// processing (functions, gateway, object_storage) has been done.
@@ -816,7 +891,9 @@ async fn process_config_input(
             // Initialize templates from ALL functions (including built-in)
             let all_template_paths = Config::get_templates(&all_functions);
             if gateway_config.template_filesystem_access.enabled {
-                deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+                deprecation_warning(
+                    "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
+                );
             }
             let template_fs_path = gateway_config
                 .template_filesystem_access
@@ -847,14 +924,26 @@ async fn process_config_input(
                 object_store_info,
             })
         }
-        ConfigInput::Snapshot(snapshot) => {
-            let snapshot = *snapshot;
-            // Convert the stored config to UninitializedConfig
+        ConfigInput::Snapshot {
+            snapshot,
+            runtime_overlay,
+        } => {
+            let original_snapshot = *snapshot;
+
+            // Destructure overlay to ensure all fields are handled (compile error if field added/removed)
+            let RuntimeOverlay {
+                gateway: overlay_gateway,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
+                object_store_info: overlay_object_store_info,
+            } = *runtime_overlay;
+
+            // Destructure uninit_config to overlay specific fields
             let UninitializedConfig {
-                gateway,
-                postgres,
-                rate_limiting,
-                object_storage,
+                gateway: _,        // replaced by overlay
+                postgres: _,       // replaced by overlay
+                rate_limiting: _,  // replaced by overlay
+                object_storage: _, // replaced by overlay (via object_store_info)
                 models,
                 embedding_models,
                 functions,
@@ -863,7 +952,28 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-            } = snapshot.config.clone().into();
+            } = original_snapshot.config.clone().into();
+
+            // Reconstruct with overlaid values for snapshot hash computation
+            let overlaid_config = UninitializedConfig {
+                gateway: overlay_gateway.clone(),
+                postgres: overlay_postgres.clone(),
+                rate_limiting: overlay_rate_limiting.clone(),
+                object_storage: overlay_object_store_info
+                    .as_ref()
+                    .map(|info| info.kind.clone()),
+                models: models.clone(),
+                embedding_models: embedding_models.clone(),
+                functions: functions.clone(),
+                metrics: metrics.clone(),
+                tools: tools.clone(),
+                evaluations: evaluations.clone(),
+                provider_types: provider_types.clone(),
+                optimizers: optimizers.clone(),
+            };
+
+            let extra_templates = original_snapshot.extra_templates.clone();
+            let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
 
             // Load all functions from the snapshot (built-in functions are already included)
             let all_functions = functions
@@ -875,10 +985,8 @@ async fn process_config_input(
                 })
                 .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
-            let object_store_info = ObjectStoreInfo::new(object_storage)?;
-            let gateway_config = gateway.load(object_store_info.as_ref())?;
-
-            let extra_templates = snapshot.extra_templates.clone();
+            // Use the overlay object store info directly instead of creating a new one
+            let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
 
             Ok(ProcessedConfigInput {
                 tools,
@@ -888,13 +996,13 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-                postgres,
-                rate_limiting,
+                postgres: overlay_postgres,
+                rate_limiting: overlay_rate_limiting,
                 extra_templates,
                 snapshot,
                 functions: all_functions,
                 gateway_config,
-                object_store_info,
+                object_store_info: overlay_object_store_info,
             })
         }
     }
@@ -942,20 +1050,30 @@ impl Config {
     }
 
     /// Load config from a ConfigSnapshot (historical config stored in ClickHouse)
+    /// with runtime configuration overlaid from the provided RuntimeOverlay.
+    ///
+    /// The runtime overlay ensures that infrastructure settings (gateway, postgres,
+    /// rate limiting, object storage) come from the current runtime environment
+    /// rather than the historical snapshot.
     pub async fn load_from_snapshot(
         snapshot: ConfigSnapshot,
+        runtime_overlay: RuntimeOverlay,
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
                 (),
-                Self::load_from_toml(ConfigInput::Snapshot(Box::new(snapshot))),
+                Self::load_from_toml(ConfigInput::Snapshot {
+                    snapshot: Box::new(snapshot),
+                    runtime_overlay: Box::new(runtime_overlay),
+                }),
             ))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Snapshot(Box::new(
-                snapshot,
-            ))))
+            Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+                snapshot: Box::new(snapshot),
+                runtime_overlay: Box::new(runtime_overlay),
+            }))
             .await?
         };
 
@@ -1413,69 +1531,14 @@ impl Config {
             })?
             .clone())
     }
-
-    /// Overlays runtime-specific configuration from a live config onto this config.
-    ///
-    /// When using a config loaded from a historical snapshot, certain fields should
-    /// reflect the current runtime environment rather than the snapshot's values:
-    /// - `gateway`: Runtime gateway settings (bind address, auth, observability, etc.)
-    /// - `object_store_info`: Current object store configuration
-    /// - `postgres`: Current postgres settings
-    /// - `rate_limiting`: Current rate limiting rules
-    /// - `http_client`: Current HTTP client configuration
-    ///
-    /// These fields are infrastructure/runtime concerns that should not be replayed
-    /// from historical data.
-    pub fn overlay_runtime_config(self, live_config: &Config) -> Config {
-        let gateway = GatewayConfig {
-            bind_address: None,
-            observability: live_config.gateway.observability.clone(),
-            debug: live_config.gateway.debug,
-            template_filesystem_access: live_config.gateway.template_filesystem_access.clone(),
-            export: live_config.gateway.export.clone(),
-            base_path: None,
-            // We would prefer this to not be global but it is global
-            unstable_error_json: live_config.gateway.unstable_error_json,
-            unstable_disable_feedback_target_validation: live_config
-                .gateway
-                .unstable_disable_feedback_target_validation,
-            disable_pseudonymous_usage_analytics: live_config
-                .gateway
-                .disable_pseudonymous_usage_analytics,
-            // Rehydrated inferences have object store pointers so we don't need to use
-            // whatever the historical setting was
-            fetch_and_encode_input_files_before_inference: live_config
-                .gateway
-                .fetch_and_encode_input_files_before_inference,
-            auth: AuthConfig {
-                enabled: false,
-                cache: None,
-            },
-            global_outbound_http_timeout: live_config.gateway.global_outbound_http_timeout,
-        };
-        Config {
-            gateway,
-            models: self.models,
-            embedding_models: self.embedding_models,
-            functions: self.functions,
-            metrics: self.metrics,
-            tools: self.tools,
-            evaluations: self.evaluations,
-            templates: self.templates,
-            object_store_info: live_config.object_store_info.clone(),
-            provider_types: self.provider_types,
-            optimizers: self.optimizers,
-            postgres: live_config.postgres.clone(),
-            rate_limiting: live_config.rate_limiting.clone(),
-            http_client: live_config.http_client.clone(),
-            hash: self.hash,
-        }
-    }
 }
 
 pub enum ConfigInput {
     Fresh(toml::Table),
-    Snapshot(Box<ConfigSnapshot>),
+    Snapshot {
+        snapshot: Box<ConfigSnapshot>,
+        runtime_overlay: Box<RuntimeOverlay>,
+    },
 }
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.

@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import type { Config } from "~/types/tensorzero";
+import type { UiConfig } from "~/types/tensorzero";
 import {
   FormField,
   FormItem,
@@ -41,7 +41,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
-  config: Config;
+  config: UiConfig;
   addDemonstrations: boolean;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;

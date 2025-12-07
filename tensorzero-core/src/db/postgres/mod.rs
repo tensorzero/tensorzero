@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use futures::future::try_join;
 use futures::TryStreamExt;
+use futures::future::try_join;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
+use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -15,7 +15,9 @@ pub mod rate_limiting;
 
 fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    format!("docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations")
+    format!(
+        "docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations"
+    )
 }
 
 #[derive(Debug, Clone)]

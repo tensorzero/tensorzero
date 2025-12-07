@@ -6,14 +6,14 @@ use std::time::Duration;
 use indexmap::IndexMap;
 
 use crate::cache::{
-    embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
-    EmbeddingModelProviderRequest,
+    CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
+    embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
+use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -21,14 +21,14 @@ use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+        Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage, current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -36,7 +36,7 @@ use crate::{
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
-use tracing::{instrument, Span};
+use tracing::{Span, instrument};
 use tracing_futures::Instrument;
 use uuid::Uuid;
 
@@ -93,12 +93,14 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         let global_ms = global_outbound_http_timeout.num_milliseconds();
-        if let Some(timeout_ms) = self.timeout_ms {
-            if chrono::Duration::milliseconds(timeout_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeout_ms` value `{timeout_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(timeout_ms) = self.timeout_ms
+            && chrono::Duration::milliseconds(timeout_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeout_ms` value `{timeout_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
         // Credentials are validated during deserialization
         // We may add additional validation here in the future

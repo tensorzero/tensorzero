@@ -1,8 +1,8 @@
 use axum::{
+    Json,
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -223,7 +223,7 @@ pub async fn get_file_content(Path(file_id): Path<String>) -> Response {
         Some(f) => f.clone(),
         None => {
             return Error::new(format!("File not found: {file_id}"), StatusCode::NOT_FOUND)
-                .into_response()
+                .into_response();
         }
     };
 
@@ -257,13 +257,13 @@ fn generate_batch_output(input_content: &str) -> String {
 
         // DEBUG: Print the body to see the response_format
         let body = input.get("body");
-        if let Some(body_val) = body {
-            if let Some(response_format) = body_val.get("response_format") {
-                tracing::warn!(
-                    "OpenAI batch response_format: {}",
-                    serde_json::to_string_pretty(response_format).unwrap_or_default()
-                );
-            }
+        if let Some(body_val) = body
+            && let Some(response_format) = body_val.get("response_format")
+        {
+            tracing::warn!(
+                "OpenAI batch response_format: {}",
+                serde_json::to_string_pretty(response_format).unwrap_or_default()
+            );
         }
 
         let custom_id = input
@@ -284,10 +284,9 @@ fn generate_batch_output(input_content: &str) -> String {
 /// Detect the type of response needed and generate it
 fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json::Value, String) {
     use crate::batch_response_generator::{
-        generate_json_object, generate_json_object_from_schema, generate_simple_text,
+        ToolCallSpec, generate_json_object, generate_json_object_from_schema, generate_simple_text,
         generate_simple_text_from_request, generate_tool_args, generate_tool_result_summary,
         openai::{generate_json_message, generate_text_message, generate_tool_call_message},
-        ToolCallSpec,
     };
     use serde_json::Value;
 
@@ -303,114 +302,114 @@ fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json
     }
 
     // Check for JSON mode (response_format)
-    if let Some(response_format) = body.get("response_format") {
-        if let Some(format_type) = response_format.get("type").and_then(|v| v.as_str()) {
-            if format_type == "json_object" {
-                return (
-                    generate_json_message(&generate_json_object()),
-                    "stop".to_string(),
-                );
-            }
-            if format_type == "json_schema" {
-                let schema = response_format
-                    .get("json_schema")
-                    .and_then(|json_schema| json_schema.get("schema").or(Some(json_schema)));
-                let json_obj = generate_json_object_from_schema(schema);
-                return (generate_json_message(&json_obj), "stop".to_string());
-            }
+    if let Some(response_format) = body.get("response_format")
+        && let Some(format_type) = response_format.get("type").and_then(|v| v.as_str())
+    {
+        if format_type == "json_object" {
+            return (
+                generate_json_message(&generate_json_object()),
+                "stop".to_string(),
+            );
+        }
+        if format_type == "json_schema" {
+            let schema = response_format
+                .get("json_schema")
+                .and_then(|json_schema| json_schema.get("schema").or(Some(json_schema)));
+            let json_obj = generate_json_object_from_schema(schema);
+            return (generate_json_message(&json_obj), "stop".to_string());
         }
     }
 
     // Check for tool use
-    if let Some(tools) = body.get("tools").and_then(|v| v.as_array()) {
-        if !tools.is_empty() {
-            // Check tool_choice
-            let tool_choice = body.get("tool_choice");
+    if let Some(tools) = body.get("tools").and_then(|v| v.as_array())
+        && !tools.is_empty()
+    {
+        // Check tool_choice
+        let tool_choice = body.get("tool_choice");
 
-            match tool_choice {
-                // Explicit "none" - no tool calls
-                Some(Value::String(s)) if s == "none" => {
-                    return (
-                        generate_text_message(&generate_simple_text_from_request(body)),
-                        "stop".to_string(),
-                    );
-                }
-                // "required" - must use tools
-                Some(Value::String(s)) if s == "required" => {
-                    let tool_name = tools[0]
-                        .get("function")
-                        .and_then(|f| f.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("unknown");
-                    let args = generate_tool_args(tool_name);
-                    return (
-                        generate_tool_call_message(&[ToolCallSpec {
-                            name: tool_name.to_string(),
-                            args,
-                        }]),
-                        "tool_calls".to_string(),
-                    );
-                }
-                // Specific tool choice
-                Some(Value::Object(obj)) if obj.contains_key("function") => {
-                    let tool_name = obj
-                        .get("function")
-                        .and_then(|f| f.get("name"))
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("unknown");
-                    let args = generate_tool_args(tool_name);
-                    return (
-                        generate_tool_call_message(&[ToolCallSpec {
-                            name: tool_name.to_string(),
-                            args,
-                        }]),
-                        "tool_calls".to_string(),
-                    );
-                }
-                // "auto" or default - use heuristics
-                _ => {
-                    if should_use_tools(body, tools) {
-                        // Check if parallel tool calls
-                        let parallel = body
-                            .get("parallel_tool_calls")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true);
+        match tool_choice {
+            // Explicit "none" - no tool calls
+            Some(Value::String(s)) if s == "none" => {
+                return (
+                    generate_text_message(&generate_simple_text_from_request(body)),
+                    "stop".to_string(),
+                );
+            }
+            // "required" - must use tools
+            Some(Value::String(s)) if s == "required" => {
+                let tool_name = tools[0]
+                    .get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown");
+                let args = generate_tool_args(tool_name);
+                return (
+                    generate_tool_call_message(&[ToolCallSpec {
+                        name: tool_name.to_string(),
+                        args,
+                    }]),
+                    "tool_calls".to_string(),
+                );
+            }
+            // Specific tool choice
+            Some(Value::Object(obj)) if obj.contains_key("function") => {
+                let tool_name = obj
+                    .get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown");
+                let args = generate_tool_args(tool_name);
+                return (
+                    generate_tool_call_message(&[ToolCallSpec {
+                        name: tool_name.to_string(),
+                        args,
+                    }]),
+                    "tool_calls".to_string(),
+                );
+            }
+            // "auto" or default - use heuristics
+            _ => {
+                if should_use_tools(body, tools) {
+                    // Check if parallel tool calls
+                    let parallel = body
+                        .get("parallel_tool_calls")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
 
-                        if parallel && tools.len() > 1 {
-                            // Generate parallel tool calls
-                            let tool_specs: Vec<ToolCallSpec> = tools
-                                .iter()
-                                .take(2) // Use first 2 tools for parallel
-                                .filter_map(|t| {
-                                    t.get("function")
-                                        .and_then(|f| f.get("name"))
-                                        .and_then(|n| n.as_str())
-                                })
-                                .map(|name| ToolCallSpec {
-                                    name: name.to_string(),
-                                    args: generate_tool_args(name),
-                                })
-                                .collect();
-                            return (
-                                generate_tool_call_message(&tool_specs),
-                                "tool_calls".to_string(),
-                            );
-                        } else {
-                            // Single tool call
-                            let tool_name = tools[0]
-                                .get("function")
-                                .and_then(|f| f.get("name"))
-                                .and_then(|n| n.as_str())
-                                .unwrap_or("unknown");
-                            let args = generate_tool_args(tool_name);
-                            return (
-                                generate_tool_call_message(&[ToolCallSpec {
-                                    name: tool_name.to_string(),
-                                    args,
-                                }]),
-                                "tool_calls".to_string(),
-                            );
-                        }
+                    if parallel && tools.len() > 1 {
+                        // Generate parallel tool calls
+                        let tool_specs: Vec<ToolCallSpec> = tools
+                            .iter()
+                            .take(2) // Use first 2 tools for parallel
+                            .filter_map(|t| {
+                                t.get("function")
+                                    .and_then(|f| f.get("name"))
+                                    .and_then(|n| n.as_str())
+                            })
+                            .map(|name| ToolCallSpec {
+                                name: name.to_string(),
+                                args: generate_tool_args(name),
+                            })
+                            .collect();
+                        return (
+                            generate_tool_call_message(&tool_specs),
+                            "tool_calls".to_string(),
+                        );
+                    } else {
+                        // Single tool call
+                        let tool_name = tools[0]
+                            .get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("unknown");
+                        let args = generate_tool_args(tool_name);
+                        return (
+                            generate_tool_call_message(&[ToolCallSpec {
+                                name: tool_name.to_string(),
+                                args,
+                            }]),
+                            "tool_calls".to_string(),
+                        );
                     }
                 }
             }
@@ -472,10 +471,9 @@ fn should_use_tools(body: &serde_json::Value, tools: &[serde_json::Value]) -> bo
             .get("function")
             .and_then(|f| f.get("name"))
             .and_then(|n| n.as_str())
+            && content_lower.contains(tool_name)
         {
-            if content_lower.contains(tool_name) {
-                return true;
-            }
+            return true;
         }
     }
 

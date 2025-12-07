@@ -6,11 +6,11 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_optimizers::gepa::evaluate::create_evaluation_dataset;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use super::{
-    cleanup_dataset, create_test_chat_rendered_sample, create_test_json_rendered_sample,
-    get_e2e_config, TEST_CLICKHOUSE_WAIT_MS,
+    TEST_CLICKHOUSE_WAIT_MS, cleanup_dataset, create_test_chat_rendered_sample,
+    create_test_json_rendered_sample, get_e2e_config,
 };
 
 #[tokio::test(flavor = "multi_thread")]

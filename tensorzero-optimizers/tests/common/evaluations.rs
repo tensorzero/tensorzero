@@ -4,7 +4,7 @@
 
 #[test]
 fn test_evaluation_types_are_public() {
-    use evaluations::{mean, std_deviation, EvaluationInfo, EvaluationStats, EvaluatorStats};
+    use evaluations::{EvaluationInfo, EvaluationStats, EvaluatorStats, mean, std_deviation};
 
     // If this compiles, the types are public
     let _: Option<EvaluatorStats> = None;

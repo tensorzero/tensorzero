@@ -25,7 +25,8 @@ import type {
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
 import type { ZodDisplayInput } from "~/utils/clickhouse/common";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -91,8 +92,10 @@ const TruncatedContent = ({
         </div>
       ) : type === "input" ? (
         <Input {...content} />
+      ) : Array.isArray(content) ? (
+        <ChatOutputElement output={content} />
       ) : (
-        <Output output={content} />
+        <JsonOutputElement output={content} />
       )}
     </TruncatedContentTooltip>
   );
