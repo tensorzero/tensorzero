@@ -490,7 +490,7 @@ pub enum OtlpTracesFormat {
     OpenInference,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -528,7 +528,7 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]

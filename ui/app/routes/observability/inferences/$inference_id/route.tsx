@@ -412,7 +412,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     // models successfully used with default function
     ...usedVariants,
     // all configured models in config
-    ...Object.keys(config.models),
+    ...config.model_names,
     // TODO(bret): list of popular/common model choices
     // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
   ]);

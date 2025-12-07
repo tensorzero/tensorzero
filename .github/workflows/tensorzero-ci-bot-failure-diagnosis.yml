@@ -47,7 +47,7 @@ jobs:
 
       - name: Generate patch
         id: generate
-        uses: tensorzero/experimental-ci-bot/generate-pr-patch@6075c5483e949af3acec76c40b755dcccd99e6b0
+        uses: tensorzero/experimental-ci-bot/generate-pr-patch@8154c016757d424138a3e70f914a81ed6ce1f76c
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
