@@ -24,7 +24,6 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use stored::StoredConfig;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::Span;
 use tracing::instrument;
@@ -822,7 +821,8 @@ struct ProcessedConfigInput {
     // Results from branch-specific processing
     extra_templates: HashMap<String, String>,
     snapshot: ConfigSnapshot,
-    user_functions: HashMap<String, Arc<FunctionConfig>>,
+    /// All functions (user-defined + built-in), loaded and ready to use
+    functions: HashMap<String, Arc<FunctionConfig>>,
     gateway_config: GatewayConfig,
     object_store_info: Option<ObjectStoreInfo>,
 }
@@ -841,9 +841,25 @@ async fn process_config_input(
                 );
             }
 
-            // Clone the table before consumption - we need it for ConfigSnapshot creation
-            let table_for_snapshot = table.clone();
             // Deserialize the TOML table into UninitializedConfig
+            let mut config = UninitializedConfig::try_from(table)?;
+
+            // Validate that user functions don't use tensorzero:: prefix
+            for name in config.functions.keys() {
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
+            }
+
+            // Inject built-in functions into the config (SINGLE INJECTION POINT)
+            let built_in_functions = built_in::get_all_built_in_functions()?;
+            config.functions.extend(built_in_functions);
+
+            // Destructure the config now that we've added built-in functions
             let UninitializedConfig {
                 gateway,
                 postgres,
@@ -857,30 +873,23 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-            } = UninitializedConfig::try_from(table)?;
+            } = config.clone();
 
-            // Load user-defined functions and ensure they don't use tensorzero:: prefix
-            let user_functions = functions
+            // Load ALL functions (user + built-in)
+            let all_functions = functions
                 .into_iter()
-                .map(|(name, config)| {
-                    // Prevent user functions from using tensorzero:: prefix
-                    if name.starts_with("tensorzero::") {
-                        return Err(Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "User-defined function name cannot start with 'tensorzero::': {name}"
-                            ),
-                        }));
-                    }
-                    config
+                .map(|(name, func_config)| {
+                    func_config
                         .load(&name, &metrics)
                         .map(|c| (name, Arc::new(c)))
                 })
                 .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
             let object_store_info = ObjectStoreInfo::new(object_storage)?;
             let gateway_config = gateway.load(object_store_info.as_ref())?;
 
-            // Initialize the templates
-            let user_template_paths = Config::get_templates(&user_functions);
+            // Initialize templates from ALL functions (including built-in)
+            let all_template_paths = Config::get_templates(&all_functions);
             if gateway_config.template_filesystem_access.enabled {
                 deprecation_warning(
                     "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
@@ -891,13 +900,12 @@ async fn process_config_input(
                 .base_path
                 .as_ref()
                 .map(|x| x.get_real_path());
-            // IMPORTANT: we grab the `extra_templates` only from user-configured functions so that
-            // we only depend on user configuration in the snapshot.
             let extra_templates = templates
-                .initialize(user_template_paths, template_fs_path)
+                .initialize(all_template_paths, template_fs_path)
                 .await?;
 
-            let snapshot = ConfigSnapshot::new(table_for_snapshot, extra_templates.clone())?;
+            // Create snapshot from the config (which now includes built-in functions)
+            let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
 
             Ok(ProcessedConfigInput {
                 tools,
@@ -911,7 +919,7 @@ async fn process_config_input(
                 rate_limiting,
                 extra_templates,
                 snapshot,
-                user_functions,
+                functions: all_functions,
                 gateway_config,
                 object_store_info,
             })
@@ -964,29 +972,14 @@ async fn process_config_input(
                 optimizers: optimizers.clone(),
             };
 
-            // Create a new snapshot from the overlaid config to get the correct hash
-            let overlaid_table = toml::Table::try_from(Into::<StoredConfig>::into(overlaid_config))
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to serialize overlaid config: {e}"),
-                    })
-                })?;
             let extra_templates = original_snapshot.extra_templates.clone();
-            let snapshot = ConfigSnapshot::new(overlaid_table, extra_templates.clone())?;
+            let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
 
-            // Load user-defined functions and ensure they don't use tensorzero:: prefix
-            let user_functions = functions
+            // Load all functions from the snapshot (built-in functions are already included)
+            let all_functions = functions
                 .into_iter()
-                .map(|(name, config)| {
-                    // Prevent user functions from using tensorzero:: prefix
-                    if name.starts_with("tensorzero::") {
-                        return Err(Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "User-defined function name cannot start with 'tensorzero::': {name}"
-                            ),
-                        }));
-                    }
-                    config
+                .map(|(name, func_config)| {
+                    func_config
                         .load(&name, &metrics)
                         .map(|c| (name, Arc::new(c)))
                 })
@@ -1007,7 +1000,7 @@ async fn process_config_input(
                 rate_limiting: overlay_rate_limiting,
                 extra_templates,
                 snapshot,
-                user_functions,
+                functions: all_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
             })
@@ -1188,7 +1181,7 @@ impl Config {
             rate_limiting,
             extra_templates: _extra_templates,
             snapshot,
-            user_functions,
+            functions,
             gateway_config,
             object_store_info,
         } = process_config_input(input, &mut templates).await?;
@@ -1264,15 +1257,6 @@ impl Config {
             })
         })?;
 
-        // Add built in functions
-        // NOTE: for now these are not versioned (will fix #4922)
-        let built_in_functions = built_in::get_all_built_in_functions()?;
-        let built_in_templates = Config::get_templates(&built_in_functions);
-        templates.add_templates(built_in_templates)?;
-        let functions = built_in_functions
-            .into_iter()
-            .chain(user_functions.into_iter())
-            .collect::<HashMap<String, Arc<FunctionConfig>>>();
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),
@@ -1700,7 +1684,7 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]
@@ -1789,36 +1773,36 @@ pub struct UninitializedSchemas {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPathData>,
-    user_schema: Option<ResolvedTomlPathData>,
-    assistant_schema: Option<ResolvedTomlPathData>,
+    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub(super) system_schema: Option<ResolvedTomlPathData>,
+    pub(super) user_schema: Option<ResolvedTomlPathData>,
+    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    schemas: UninitializedSchemas,
+    pub(super) schemas: UninitializedSchemas,
     #[serde(default)]
-    tools: Vec<String>, // tool names
+    pub(super) tools: Vec<String>, // tool names
     #[serde(default)]
-    tool_choice: ToolChoice,
+    pub(super) tool_choice: ToolChoice,
     #[serde(default)]
-    parallel_tool_calls: Option<bool>,
+    pub(super) parallel_tool_calls: Option<bool>,
     #[serde(default)]
-    description: Option<String>,
-    experimentation: Option<UninitializedExperimentationConfig>,
+    pub(super) description: Option<String>,
+    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPathData>,
-    user_schema: Option<ResolvedTomlPathData>,
-    assistant_schema: Option<ResolvedTomlPathData>,
+    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub(super) system_schema: Option<ResolvedTomlPathData>,
+    pub(super) user_schema: Option<ResolvedTomlPathData>,
+    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    schemas: UninitializedSchemas,
-    output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
+    pub(super) schemas: UninitializedSchemas,
+    pub(super) output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
-    description: Option<String>,
-    experimentation: Option<UninitializedExperimentationConfig>,
+    pub(super) description: Option<String>,
+    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
