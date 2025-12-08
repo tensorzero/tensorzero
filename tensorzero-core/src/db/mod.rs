@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::rate_limiting::ActiveRateLimitKey;
@@ -189,4 +193,13 @@ pub trait ExperimentationQueries {
         function_name: &str,
         candidate_variant_name: &str,
     ) -> Result<String, Error>;
+}
+
+#[async_trait]
+#[cfg_attr(test, automock)]
+pub trait ConfigQueries {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error>;
 }
