@@ -4,37 +4,36 @@
 //! providing compatibility with the OpenAI Embeddings API format. It converts between
 //! OpenAI's embedding request format and TensorZero's internal embedding system.
 
-use axum::{Extension, Json, extract::State};
+use axum::{Extension, Json, debug_handler, extract::State};
 
 use crate::endpoints::embeddings::embeddings;
-use crate::error::Error;
+use crate::error::AxumResponseError;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::embeddings::{OpenAICompatibleEmbeddingParams, OpenAIEmbeddingResponse};
 
+#[debug_handler(state = AppStateData)]
 pub async fn embeddings_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        ..
-    }): AppState,
+    State(app_state): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
-) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
-    let embedding_params = openai_compatible_params.try_into()?;
-    let response = embeddings(
-        config,
-        &http_client,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        embedding_params,
-        api_key_ext,
-    )
-    .await?;
-    Ok(Json(response.into()))
+) -> Result<Json<OpenAIEmbeddingResponse>, AxumResponseError> {
+    async {
+        let embedding_params = openai_compatible_params.try_into()?;
+        let response = embeddings(
+            app_state.config.clone(),
+            &app_state.http_client,
+            app_state.clickhouse_connection_info.clone(),
+            app_state.postgres_connection_info.clone(),
+            app_state.deferred_tasks.clone(),
+            embedding_params,
+            api_key_ext,
+        )
+        .await?;
+        Ok(response.into())
+    }
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }

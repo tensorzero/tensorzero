@@ -5,7 +5,7 @@ use tracing::instrument;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
 use crate::endpoints::datasets::validate_dataset_name;
-use crate::error::Error;
+use crate::error::{AxumResponseError, Error};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest};
@@ -22,11 +22,11 @@ pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<ListDatapointsRequest>,
-) -> Result<Json<GetDatapointsResponse>, Error> {
-    let response =
-        list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request).await?;
-
-    Ok(Json(response))
+) -> Result<Json<GetDatapointsResponse>, AxumResponseError> {
+    list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Handler for the POST `/v1/datasets/get_datapoints` endpoint.
@@ -36,18 +36,19 @@ pub async fn list_datapoints_handler(
 pub async fn get_datapoints_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetDatapointsRequest>,
-) -> Result<Json<GetDatapointsResponse>, Error> {
+) -> Result<Json<GetDatapointsResponse>, AxumResponseError> {
     tracing::warn!(
         "`Please use `/v1/datasets/{{dataset_name}}/get_datapoints` instead for better performance."
     );
 
-    let response = get_datapoints(
+    get_datapoints(
         &app_state.clickhouse_connection_info,
         /*dataset_name=*/ None,
         request,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Handler for the POST `/v1/datasets/{dataset_name}/get_datapoints` endpoint.
@@ -61,16 +62,18 @@ pub async fn get_datapoints_by_dataset_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<GetDatapointsRequest>,
-) -> Result<Json<GetDatapointsResponse>, Error> {
-    validate_dataset_name(&dataset_name)?;
-
-    let response = get_datapoints(
-        &app_state.clickhouse_connection_info,
-        Some(dataset_name),
-        request,
-    )
-    .await?;
-    Ok(Json(response))
+) -> Result<Json<GetDatapointsResponse>, AxumResponseError> {
+    match validate_dataset_name(&dataset_name) {
+        Ok(()) => get_datapoints(
+            &app_state.clickhouse_connection_info,
+            Some(dataset_name),
+            request,
+        )
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state)),
+        Err(e) => Err(AxumResponseError::new(e, app_state)),
+    }
 }
 
 pub async fn list_datapoints(

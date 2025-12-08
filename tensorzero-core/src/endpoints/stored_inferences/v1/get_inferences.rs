@@ -4,7 +4,7 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::inferences::{InferenceQueries, ListInferencesParams};
-use crate::error::Error;
+use crate::error::{AxumResponseError, Error};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -17,14 +17,15 @@ use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRe
 pub async fn get_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetInferencesRequest>,
-) -> Result<Json<GetInferencesResponse>, Error> {
-    let response = get_inferences(
+) -> Result<Json<GetInferencesResponse>, AxumResponseError> {
+    get_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
         request,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub async fn get_inferences(
@@ -63,15 +64,15 @@ pub async fn get_inferences(
 pub async fn list_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<ListInferencesRequest>,
-) -> Result<Json<GetInferencesResponse>, Error> {
-    let response = list_inferences(
+) -> Result<Json<GetInferencesResponse>, AxumResponseError> {
+    list_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
         request,
     )
-    .await?;
-
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub async fn list_inferences(

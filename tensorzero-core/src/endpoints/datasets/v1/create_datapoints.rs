@@ -6,7 +6,7 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::db::datasets::{DatapointInsert, DatasetQueries};
 use crate::endpoints::datasets::validate_dataset_name;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::FetchContext;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -21,16 +21,17 @@ pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsRequest>,
-) -> Result<Json<CreateDatapointsResponse>, Error> {
-    let response = create_datapoints(
+) -> Result<Json<CreateDatapointsResponse>, AxumResponseError> {
+    create_datapoints(
         &app_state.config,
         &app_state.http_client,
         &app_state.clickhouse_connection_info,
         &dataset_name,
         request,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Business logic for creating datapoints manually in a dataset.

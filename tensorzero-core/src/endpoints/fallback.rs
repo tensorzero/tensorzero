@@ -1,25 +1,40 @@
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
+use crate::utils::gateway::AppState;
 use axum::{
     body::Body,
     http::Request,
     response::{IntoResponse, Response},
 };
 
-pub async fn handle_404(req: Request<Body>) -> Response {
+pub async fn handle_404(app_state: AppState, req: Request<Body>) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().to_string();
 
-    Error::new(ErrorDetails::RouteNotFound { path, method }).into_response()
+    AxumResponseError::new(
+        Error::new(ErrorDetails::RouteNotFound { path, method }),
+        app_state.0,
+    )
+    .into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+    use crate::testing::get_unit_test_gateway_handle;
     use axum::{
         body::to_bytes,
+        extract::State,
         http::{Method, StatusCode, Uri},
     };
     use serde_json::Value;
+    use std::sync::Arc;
+
+    fn create_test_app_state() -> AppState {
+        let config = Arc::new(Config::default());
+        let gateway_handle = get_unit_test_gateway_handle(config);
+        State(gateway_handle.app_state.clone())
+    }
 
     #[tokio::test]
     async fn test_handle_404_get() {
@@ -29,7 +44,8 @@ mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let response = handle_404(req).await;
+        let app_state = create_test_app_state();
+        let response = handle_404(app_state, req).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
@@ -56,7 +72,8 @@ mod tests {
             .body(Body::from(serde_json::to_string(&json_body).unwrap()))
             .unwrap();
 
-        let response = handle_404(req).await;
+        let app_state = create_test_app_state();
+        let response = handle_404(app_state, req).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 

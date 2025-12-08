@@ -5,7 +5,7 @@ use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
 use crate::endpoints::datasets::validate_dataset_name;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{DeleteDatapointsRequest, DeleteDatapointsResponse};
@@ -21,14 +21,15 @@ pub async fn delete_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeleteDatapointsPathParams>,
     StructuredJson(request): StructuredJson<DeleteDatapointsRequest>,
-) -> Result<Json<DeleteDatapointsResponse>, Error> {
-    let response = delete_datapoints(
+) -> Result<Json<DeleteDatapointsResponse>, AxumResponseError> {
+    delete_datapoints(
         &app_state.clickhouse_connection_info,
         &path_params.dataset_name,
         request,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 #[axum::debug_handler(state = AppStateData)]
@@ -36,13 +37,14 @@ pub async fn delete_datapoints_handler(
 pub async fn delete_dataset_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeleteDatapointsPathParams>,
-) -> Result<Json<DeleteDatapointsResponse>, Error> {
-    let response = delete_dataset(
+) -> Result<Json<DeleteDatapointsResponse>, AxumResponseError> {
+    delete_dataset(
         &app_state.clickhouse_connection_info,
         &path_params.dataset_name,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Business logic for deleting an entire dataset.

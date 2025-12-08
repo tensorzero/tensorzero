@@ -29,7 +29,7 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::error::{AxumResponseError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
@@ -160,37 +160,34 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        ..
-    }): AppState,
+    State(app_state): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<Response<Body>, Error> {
-    let inference_output = Box::pin(inference(
-        config,
-        &http_client,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        params,
-        api_key_ext,
-    ))
-    .await?;
-    match inference_output {
-        InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
-        InferenceOutput::Streaming(stream) => {
-            let event_stream = prepare_serialized_events(stream);
+) -> Result<Response<Body>, AxumResponseError> {
+    async {
+        let inference_output = Box::pin(inference(
+            app_state.config.clone(),
+            &app_state.http_client,
+            app_state.clickhouse_connection_info.clone(),
+            app_state.postgres_connection_info.clone(),
+            app_state.deferred_tasks.clone(),
+            params,
+            api_key_ext,
+        ))
+        .await?;
+        match inference_output {
+            InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
+            InferenceOutput::Streaming(stream) => {
+                let event_stream = prepare_serialized_events(stream);
 
-            Ok(Sse::new(event_stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response())
+                Ok(Sse::new(event_stream)
+                    .keep_alive(axum::response::sse::KeepAlive::new())
+                    .into_response())
+            }
         }
     }
+    .await
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub type InferenceStream =
