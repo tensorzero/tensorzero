@@ -82,7 +82,7 @@ export default function InferenceFilterBuilder({
     <>
       <FormLabel>Advanced</FormLabel>
       {inferenceFilter ? (
-        <div className="py-1">
+        <div className="py-1 pl-4">
           <FilterNodeRenderer
             filter={inferenceFilter}
             onChange={setInferenceFilter}
