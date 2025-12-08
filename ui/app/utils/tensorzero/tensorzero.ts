@@ -11,7 +11,7 @@ import {
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
-import { TensorZeroServerError } from "./errors";
+import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   Datapoint,
@@ -673,7 +673,12 @@ export class TensorZeroClient {
       headers.set("authorization", `Bearer ${this.apiKey}`);
     }
 
-    return await fetch(url, { method, headers, body });
+    try {
+      return await fetch(url, { method, headers, body });
+    } catch (error) {
+      // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
+      throw new GatewayConnectionError(error);
+    }
   }
 
   private async getErrorText(response: Response): Promise<string> {
