@@ -162,18 +162,7 @@ impl HTTPGateway {
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<(T, String), TensorZeroError> {
         let builder = self.customize_builder(builder);
-        let resp = builder.send().await.map_err(|e| TensorZeroError::Other {
-            source: Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error sending request: {}",
-                    DisplayOrDebug {
-                        val: e,
-                        debug: self.verbose_errors,
-                    }
-                ),
-            })
-            .into(),
-        })?;
+        let resp = self.check_http_response(builder.send().await).await?;
         let raw_response = resp.text().await.map_err(|e| TensorZeroError::Other {
             source: Error::new(ErrorDetails::Serialization {
                 message: format!(
