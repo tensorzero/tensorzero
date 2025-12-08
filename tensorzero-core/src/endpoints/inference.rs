@@ -24,6 +24,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
@@ -668,6 +669,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 tags: tags.clone(),
                 extra_body,
                 extra_headers,
+                snapshot_hash: config.hash.clone(),
             };
 
             let async_writes = config.gateway.observability.async_writes;
@@ -940,6 +942,7 @@ fn create_stream(
                         ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
+                        snapshot_hash: config.hash.clone(),
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1030,6 +1033,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub snapshot_hash: SnapshotHash,
 }
 
 async fn write_inference(
@@ -1039,7 +1043,9 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences().await;
+    let model_responses: Vec<serde_json::Value> = result
+        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
+        .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
     // Write the model responses to the ModelInference table

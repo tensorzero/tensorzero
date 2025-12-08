@@ -1099,9 +1099,13 @@ pub async fn write_completed_batch_inference<'a>(
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            snapshot_hash: config.hash.clone(),
         };
-        model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences().await);
+        model_inference_rows_to_write.extend(
+            inference_result
+                .get_serialized_model_inferences(config.hash.clone())
+                .await,
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

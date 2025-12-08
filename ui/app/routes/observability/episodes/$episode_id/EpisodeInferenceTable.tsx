@@ -15,58 +15,91 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
+import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
+import { Button } from "~/components/ui/button";
+import { Eye } from "lucide-react";
+
+interface EpisodeInferenceTableProps {
+  inferences: StoredInference[];
+  onOpenSheet: (inferenceId: string) => void;
+  onCloseSheet: () => void;
+  openSheetInferenceId: string | null;
+}
 
 export default function EpisodeInferenceTable({
   inferences,
-}: {
-  inferences: StoredInference[];
-}) {
+  onOpenSheet,
+  onCloseSheet,
+  openSheetInferenceId,
+}: EpisodeInferenceTableProps) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>ID</TableHead>
-          <TableHead>Function</TableHead>
-          <TableHead>Variant</TableHead>
-          <TableHead>Time</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {inferences.length === 0 ? (
-          <TableEmptyState message="No inferences found" />
-        ) : (
-          inferences.map((inference) => (
-            <TableRow key={inference.inference_id} id={inference.inference_id}>
-              <TableCell className="max-w-[200px]">
-                <TableItemShortUuid
-                  id={inference.inference_id}
-                  link={toInferenceUrl(inference.inference_id)}
-                />
-              </TableCell>
-              <TableCell>
-                <TableItemFunction
-                  functionName={inference.function_name}
-                  functionType={inference.type}
-                  link={toFunctionUrl(inference.function_name)}
-                />
-              </TableCell>
-              <TableCell>
-                <VariantLink
-                  variantName={inference.variant_name}
-                  functionName={inference.function_name}
-                >
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                    {inference.variant_name}
-                  </code>
-                </VariantLink>
-              </TableCell>
-              <TableCell>
-                <TableItemTime timestamp={inference.timestamp} />
-              </TableCell>
-            </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Function</TableHead>
+            <TableHead>Variant</TableHead>
+            <TableHead>Time</TableHead>
+            <TableHead className="text-center">Preview</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {inferences.length === 0 ? (
+            <TableEmptyState message="No inferences found" />
+          ) : (
+            inferences.map((inference) => (
+              <TableRow
+                key={inference.inference_id}
+                id={inference.inference_id}
+              >
+                <TableCell className="max-w-[200px]">
+                  <TableItemShortUuid
+                    id={inference.inference_id}
+                    link={toInferenceUrl(inference.inference_id)}
+                  />
+                </TableCell>
+                <TableCell>
+                  <TableItemFunction
+                    functionName={inference.function_name}
+                    functionType={inference.type}
+                    link={toFunctionUrl(inference.function_name)}
+                  />
+                </TableCell>
+                <TableCell>
+                  <VariantLink
+                    variantName={inference.variant_name}
+                    functionName={inference.function_name}
+                  >
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                      {inference.variant_name}
+                    </code>
+                  </VariantLink>
+                </TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={inference.timestamp} />
+                </TableCell>
+                <TableCell className="text-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onOpenSheet(inference.inference_id)}
+                    aria-label="View inference details"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+
+      <InferencePreviewSheet
+        inferenceId={openSheetInferenceId}
+        isOpen={!!openSheetInferenceId}
+        onClose={onCloseSheet}
+      />
+    </>
   );
 }

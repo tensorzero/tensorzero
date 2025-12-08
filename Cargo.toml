@@ -23,6 +23,7 @@ resolver = "2"
 version = "2025.11.6"
 rust-version = "1.88.0"
 license = "Apache-2.0"
+edition = "2024"
 
 [workspace.dependencies]
 reqwest = { version = "0.12.24", features = [
@@ -97,6 +98,7 @@ metrics-exporter-prometheus = { version = "0.18.0", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
+blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
 
 [workspace.lints.rust]

@@ -119,6 +119,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -244,6 +245,7 @@ async fn test_datapoint_update_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -421,6 +423,7 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Datapoint 2: Static + one dynamic tool
@@ -455,6 +458,7 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Datapoint 3: Static + different dynamic tool with strict
@@ -489,6 +493,7 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -609,6 +614,7 @@ async fn test_datapoint_only_static_tools() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -710,6 +716,7 @@ async fn test_datapoint_only_dynamic_tools() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -804,6 +811,7 @@ async fn test_datapoint_tool_params_three_states() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1020,6 +1028,7 @@ async fn test_datapoint_no_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse

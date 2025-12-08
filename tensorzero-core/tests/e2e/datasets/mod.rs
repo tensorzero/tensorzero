@@ -88,6 +88,14 @@ async fn test_datapoint_insert_synthetic_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -109,7 +117,6 @@ async fn test_datapoint_insert_synthetic_chat() {
       "is_custom": true,
       "source_inference_id": source_inference_id.to_string(),
       "staled_at": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -603,6 +610,14 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     let updated_at = chrono::NaiveDateTime::parse_from_str(
         updated_at.as_str().unwrap(),
         CLICKHOUSE_DATETIME_FORMAT,
@@ -636,7 +651,6 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -682,6 +696,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -717,7 +737,6 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -796,6 +815,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let new_updated_at = datapoint
         .as_object_mut()
@@ -836,7 +861,6 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -912,6 +936,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -947,7 +977,6 @@ async fn test_datapoint_insert_synthetic_json() {
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1494,6 +1523,15 @@ async fn test_datapoint_insert_output_inherit_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
@@ -1514,7 +1552,6 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -1618,6 +1655,14 @@ async fn test_datapoint_insert_output_none_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -1639,7 +1684,6 @@ async fn test_datapoint_insert_output_none_chat() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1792,6 +1836,14 @@ async fn test_datapoint_insert_output_demonstration_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     println!(
         "Datapoint: {}",
@@ -1818,7 +1870,6 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1883,6 +1934,14 @@ async fn test_datapoint_insert_output_inherit_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1918,7 +1977,6 @@ async fn test_datapoint_insert_output_inherit_json() {
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -2002,6 +2060,14 @@ async fn test_datapoint_insert_output_none_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2037,7 +2103,6 @@ async fn test_datapoint_insert_output_none_json() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2118,6 +2183,14 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2158,7 +2231,6 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2286,6 +2358,15 @@ async fn test_datapoint_insert_missing_output_chat() {
         .await
         .unwrap();
 
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     datapoint
         .as_object_mut()
         .unwrap()
@@ -2312,7 +2393,6 @@ async fn test_datapoint_insert_missing_output_chat() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2357,7 +2437,14 @@ async fn test_datapoint_insert_null_output_chat() {
     let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
-
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     datapoint
         .as_object_mut()
         .unwrap()
@@ -2384,7 +2471,6 @@ async fn test_datapoint_insert_null_output_chat() {
       "is_custom": true,
       "source_inference_id": null,
       "staled_at": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2430,6 +2516,14 @@ async fn test_datapoint_insert_missing_output_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     datapoint
         .as_object_mut()
@@ -2452,7 +2546,6 @@ async fn test_datapoint_insert_missing_output_json() {
       "staled_at": null,
       "source_inference_id": null,
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2504,7 +2597,13 @@ async fn test_datapoint_insert_null_output_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-
+    // Remove the snapshot hash because it is hard to assert on and check it's a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
@@ -2520,7 +2619,6 @@ async fn test_datapoint_insert_null_output_json() {
       "staled_at": null,
       "source_inference_id": null,
       "name": null,
-      "snapshot_hash": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -3031,6 +3129,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
