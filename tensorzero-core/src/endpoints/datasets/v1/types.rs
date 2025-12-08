@@ -87,7 +87,7 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "Chat datapoint output.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
 Otherwise, it will overwrite the existing output (and can be an empty list).")]
     pub output: Option<Option<Vec<ContentBlockChatOutput>>>,
 
@@ -112,7 +112,7 @@ Otherwise, it will overwrite the existing output (and can be an empty list).")]
     #[serde(default)]
     #[schemars(description = "Datapoint tags.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
 Otherwise, it will overwrite the existing tags.")]
     pub tags: Option<HashMap<String, String>>,
 
@@ -177,12 +177,12 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
         if !tool_params_is_default {
             if !tool_params_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `tool_params` (deprecated) and flattened tool parameter fields. Use only the flattened fields."
+                    "Cannot specify both `tool_params` (deprecated) and flattened tool parameter fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+                "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)",
             );
             // Copy tool_params to tool_params_new
             if let Some(tool_params) = &helper.tool_params {
@@ -200,12 +200,12 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
         if !metadata_is_default {
             if !metadata_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields."
+                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)",
             );
             // Copy metadata to metadata_new
             if let Some(metadata) = &helper.metadata {
@@ -239,7 +239,7 @@ pub struct UpdateDynamicToolParamsRequest {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
 plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.")]
     pub allowed_tools: Option<Option<Vec<String>>>,
 
@@ -254,7 +254,7 @@ plus additional tools provided at inference time). If specified as a value, it w
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "User-specified tool choice strategy.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
 tool choice). If specified as a value, it will be set to the provided value.")]
     pub tool_choice: Option<Option<ToolChoice>>,
 
@@ -263,7 +263,7 @@ tool choice). If specified as a value, it will be set to the provided value.")]
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "Whether to use parallel tool calls in the inference.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
 parallel tool calls). If specified as a value, it will be set to the provided value.")]
     pub parallel_tool_calls: Option<Option<bool>>,
 
@@ -288,7 +288,7 @@ pub struct UpdateJsonDatapointRequest {
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "JSON datapoint output.
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
 inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.")]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
@@ -350,12 +350,12 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
         if !metadata_is_default {
             if !metadata_new_is_default {
                 return Err(serde::de::Error::custom(
-                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields."
+                    "Cannot specify both `metadata` (deprecated) and flattened metadata fields. Use only the flattened fields.",
                 ));
             }
             // Emit deprecation warning
             crate::utils::deprecation_warning(
-                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+                "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)",
             );
             // Copy metadata to metadata_new
             if let Some(metadata) = &helper.metadata {
@@ -399,7 +399,7 @@ pub struct DatapointMetadataUpdate {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     #[schemars(extend("x-double-option" = true), description = "Datapoint name.
 
-If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
 be set to the provided value.")]
     pub name: Option<Option<String>>,
 }
@@ -722,7 +722,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
-        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -756,10 +758,12 @@ mod tests {
 
         let result: Result<UpdateChatDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -799,7 +803,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
-        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
@@ -836,10 +842,12 @@ mod tests {
 
         let result: Result<UpdateChatDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
@@ -876,7 +884,9 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
-        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
+        ));
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -910,10 +920,12 @@ mod tests {
 
         let result: Result<UpdateJsonDatapointRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot specify both"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot specify both")
+        );
     }
 
     // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
@@ -991,6 +1003,8 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
-        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
+        assert!(logs_contain(
+            "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
+        ));
     }
 }

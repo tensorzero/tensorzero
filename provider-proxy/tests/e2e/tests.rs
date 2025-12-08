@@ -3,11 +3,12 @@
 use std::{
     future::{Future, IntoFuture},
     net::SocketAddr,
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
-use axum::{routing::post, Router};
-use provider_proxy::{run_server, Args, CacheMode};
+use axum::{Router, routing::post};
+use provider_proxy::{Args, CacheMode, run_server};
 use rand::Rng;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -206,7 +207,7 @@ async fn test_read_old_write_new() {
         shutdown_rx.await.unwrap();
     };
 
-    let (target_server_addr, _) = start_target_server(shutdown_fut).await;
+    let (target_server_addr, target_server_handle) = start_target_server(shutdown_fut).await;
 
     let proxy_addr = server_started_rx.await.unwrap();
 
@@ -230,13 +231,26 @@ async fn test_read_old_write_new() {
         .unwrap();
     assert_eq!(cached, "false");
 
+    let file_path = Arc::new(Mutex::new(None));
+    let file_mtime = Arc::new(Mutex::new(None));
+
     // Wait for a file to show up on disk
     loop {
         let temp_path = temp_dir.path().to_path_buf();
+
+        let file_path_clone = file_path.clone();
+        let file_mtime_clone = file_mtime.clone();
+
         let found_file = tokio::task::spawn_blocking(move || {
             let files = std::fs::read_dir(temp_path).unwrap();
             for file in files {
-                if file.unwrap().path().to_string_lossy().contains("127.0.0.1") {
+                let file = file.unwrap();
+                if file.path().to_string_lossy().contains("127.0.0.1") {
+                    file_path_clone.lock().unwrap().replace(file.path());
+                    file_mtime_clone
+                        .lock()
+                        .unwrap()
+                        .replace(file.path().metadata().unwrap().modified().unwrap());
                     return true;
                 }
             }
@@ -265,6 +279,19 @@ async fn test_read_old_write_new() {
     let second_local_response_body = second_local_response.text().await.unwrap();
 
     shutdown_tx.send(()).unwrap();
+    target_server_handle.await.unwrap().unwrap();
+
+    let file_path = file_path.lock().unwrap().as_ref().unwrap().clone();
+    let file_mtime = *file_mtime.lock().unwrap().as_ref().unwrap();
+
+    // Wait for the file to be modified on disk
+    loop {
+        let new_mtime = file_path.metadata().unwrap().modified().unwrap();
+        if new_mtime > file_mtime {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 
     // Start a new proxy server with the same settings
     let (server_started_tx, server_started_rx) = oneshot::channel();

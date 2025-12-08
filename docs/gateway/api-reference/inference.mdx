@@ -395,14 +395,6 @@ For example, the following hypothetical unknown content block will send the `day
 }
 ```
 
-<Warning>
-
-Certain reasoning models (e.g. DeepSeek R1) can include `thought` content blocks in the response.
-These content blocks can't directly be used as inputs to subsequent inferences in multi-turn scenarios.
-If you need to provide `thought` content blocks to a model, you should convert them to `text` content blocks.
-
-</Warning>
-
 This is the most complex field in the entire API. See this example for more details.
 
 <Accordion title="Example">

@@ -92,25 +92,25 @@ impl<'de> Deserialize<'de> for IntermediaryInputMessageContent {
     {
         let mut value = Value::deserialize(deserializer)?;
 
-        if let Value::Object(ref mut obj) = value {
-            if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-                // Legacy text blocks used `"type": "text"` with additional fields in the same map.
-                // We peel off the legacy fields here, keeping the original path tracking intact,
-                // and delegate to `TextKind` so we reuse the existing validation logic.
-                let mut text_fields = obj.clone();
-                text_fields.remove("type");
-                let text_kind_value = Value::Object(text_fields);
-                let text_kind: TextKind = serde_json::from_value(text_kind_value)
-                    .map_err(|err| DeserializerError::custom(err.to_string()))?;
-                return match text_kind {
-                    TextKind::Text { text } => Ok(IntermediaryInputMessageContent::Final(
-                        Box::new(InputMessageContent::Text(Text { text })),
-                    )),
-                    TextKind::Arguments { arguments } => Ok(
-                        IntermediaryInputMessageContent::TemplateFromArguments(arguments),
-                    ),
-                };
-            }
+        if let Value::Object(ref mut obj) = value
+            && obj.get("type").and_then(|v| v.as_str()) == Some("text")
+        {
+            // Legacy text blocks used `"type": "text"` with additional fields in the same map.
+            // We peel off the legacy fields here, keeping the original path tracking intact,
+            // and delegate to `TextKind` so we reuse the existing validation logic.
+            let mut text_fields = obj.clone();
+            text_fields.remove("type");
+            let text_kind_value = Value::Object(text_fields);
+            let text_kind: TextKind = serde_json::from_value(text_kind_value)
+                .map_err(|err| DeserializerError::custom(err.to_string()))?;
+            return match text_kind {
+                TextKind::Text { text } => Ok(IntermediaryInputMessageContent::Final(Box::new(
+                    InputMessageContent::Text(Text { text }),
+                ))),
+                TextKind::Arguments { arguments } => Ok(
+                    IntermediaryInputMessageContent::TemplateFromArguments(arguments),
+                ),
+            };
         }
 
         let content: InputMessageContent = serde_json::from_value(value)
@@ -144,7 +144,7 @@ fn finalize_intermediary_content(
 mod tests {
     use super::*;
     use crate::inference::types::Input;
-    use serde_json::{json, Deserializer as JsonDeserializer};
+    use serde_json::{Deserializer as JsonDeserializer, json};
 
     fn deserialize_input(
         json: &str,

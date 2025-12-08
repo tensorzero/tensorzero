@@ -1,5 +1,5 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::common::get_gateway_endpoint;
 

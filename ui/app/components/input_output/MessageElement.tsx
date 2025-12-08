@@ -6,13 +6,13 @@ import { DeleteButton } from "~/components/ui/DeleteButton";
 
 export function MessageElement({
   message,
-  key,
+  messageKey,
   isEditing,
   onChange,
   onDelete,
 }: {
   message: InputMessage;
-  key: string;
+  messageKey: string;
   isEditing?: boolean;
   onChange?: (updatedMessage: InputMessage) => void;
   onDelete?: () => void;
@@ -45,7 +45,7 @@ export function MessageElement({
   return (
     <MessageWrapper
       role={message.role}
-      key={key}
+      key={messageKey}
       actionBar={
         isEditing && <DeleteButton onDelete={onDelete} label="Delete message" />
       }
@@ -57,7 +57,7 @@ export function MessageElement({
       )}
       {message.content.map((block, contentBlockIndex) => (
         <ContentBlockElement
-          key={`${key}-${contentBlockIndex}`}
+          key={`${messageKey}-${contentBlockIndex}`}
           block={block}
           isEditing={isEditing}
           onChange={(updatedContentBlock) =>

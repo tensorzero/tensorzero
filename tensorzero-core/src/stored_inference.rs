@@ -20,14 +20,14 @@ use crate::inference::types::{
     ResolvedRequestMessage, Text,
 };
 use crate::tool::{
-    deserialize_tool_info, DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
+    DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
 };
-use crate::variant::{chat_completion::prepare_model_input, VariantConfig};
+use crate::variant::{VariantConfig, chat_completion::prepare_model_input};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, IntoPyObjectExt};
+use pyo3::{IntoPyObjectExt, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -122,6 +122,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
+                    snapshot_hash: Some(config.hash.clone()),
                 };
 
                 Ok(DatapointInsert::Json(datapoint))
@@ -155,6 +156,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
+                    snapshot_hash: Some(config.hash.clone()),
                 };
 
                 Ok(DatapointInsert::Chat(datapoint))

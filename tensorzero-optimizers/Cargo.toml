@@ -2,7 +2,7 @@
 name = "tensorzero-optimizers"
 version.workspace = true
 rust-version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 
 [lints]
@@ -34,6 +34,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 secrecy = { workspace = true }
+blake3 = { workspace = true }
 
 # HTTP client
 reqwest = { workspace = true }

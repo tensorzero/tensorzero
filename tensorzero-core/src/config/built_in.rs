@@ -5,7 +5,7 @@
 //! and cannot be overridden by user-defined functions.
 //!
 //! Built-in functions are variant-less - they have empty variants HashMaps
-//! but are fully defined FunctionConfigs with all necessary fields.
+//! but are fully defined function configs with all necessary fields.
 //!
 //! ## Supported Variant Types
 //!
@@ -15,19 +15,35 @@
 //! are not supported.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use crate::error::Error;
-use crate::function::FunctionConfig;
-
-use crate::config::SchemaData;
-use crate::experimentation::ExperimentationConfig;
-use crate::function::FunctionConfigChat;
-use crate::function::FunctionConfigJson;
-use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
-use crate::tool::create_json_mode_tool_call_config;
+use crate::config::path::ResolvedTomlPathData;
+use crate::config::{
+    UninitializedFunctionConfig, UninitializedFunctionConfigChat, UninitializedFunctionConfigJson,
+    UninitializedSchemas,
+};
+use crate::error::{Error, ErrorDetails};
 use crate::tool::ToolChoice;
-use std::collections::HashSet;
+
+/// Creates an inline schema path for built-in functions.
+///
+/// This uses `ResolvedTomlPathData::new_fake_path()` to create a fake path
+/// that contains the serialized JSON schema data inline, rather than referencing
+/// an actual file on disk.
+fn create_inline_schema_path(
+    function_name: &str,
+    schema_name: &str,
+    schema_value: &serde_json::Value,
+) -> Result<ResolvedTomlPathData, Error> {
+    let serialized = serde_json::to_string(schema_value).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize schema for {function_name}::{schema_name}: {e}"),
+        })
+    })?;
+    Ok(ResolvedTomlPathData::new_fake_path(
+        format!("tensorzero::builtin::{function_name}::{schema_name}.json"),
+        serialized,
+    ))
+}
 
 /// Returns the `tensorzero::hello_chat` function configuration.
 ///
@@ -36,9 +52,8 @@ use std::collections::HashSet;
 ///
 /// Supports system template with a `greeting` variable.
 #[cfg(feature = "e2e_tests")]
-fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
-    // Define a simple schema that accepts a "greeting" variable
-    let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+fn get_hello_chat_function() -> Result<UninitializedFunctionConfig, Error> {
+    let system_schema_value = serde_json::json!({
         "type": "object",
         "properties": {
             "greeting": {
@@ -47,29 +62,27 @@ fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
             }
         },
         "additionalProperties": false
-    }))?;
+    });
 
-    let mut inner = HashMap::new();
-    inner.insert(
-        "system".to_string(),
-        SchemaWithMetadata {
-            schema: system_schema,
-            legacy_definition: true,
+    let system_schema_path =
+        create_inline_schema_path("hello_chat", "system", &system_schema_value)?;
+
+    Ok(UninitializedFunctionConfig::Chat(
+        UninitializedFunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: Some(system_schema_path),
+            user_schema: None,
+            assistant_schema: None,
+            schemas: UninitializedSchemas::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some(
+                "Built-in hello chat function - a simple greeting function with template variable support".to_string(),
+            ),
+            experimentation: None,
         },
-    );
-
-    let schemas = SchemaData { inner };
-
-    Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas,
-        tools: vec![],
-        tool_choice: ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some("Built-in hello chat function - a simple greeting function with template variable support".to_string()),
-        all_explicit_templates_names: HashSet::new(),
-        experimentation: ExperimentationConfig::default(),
-    })))
+    ))
 }
 
 /// Returns the `tensorzero::hello_json` function configuration.
@@ -77,22 +90,20 @@ fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
 /// This is a simple variant-less JSON function that serves as a basic
 /// example of a built-in JSON function.
 #[cfg(feature = "e2e_tests")]
-fn get_hello_json_function() -> Arc<FunctionConfig> {
-    // Use default schema (no validation)
-    let output_schema = StaticJSONSchema::default();
-    let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
-
-    Arc::new(FunctionConfig::Json(FunctionConfigJson {
+fn get_hello_json_function() -> UninitializedFunctionConfig {
+    // output_schema is None - will default to {} during load
+    UninitializedFunctionConfig::Json(UninitializedFunctionConfigJson {
         variants: HashMap::new(),
-        schemas: SchemaData::default(),
-        output_schema,
-        json_mode_tool_call_config,
+        system_schema: None,
+        user_schema: None,
+        assistant_schema: None,
+        schemas: UninitializedSchemas::default(),
+        output_schema: None,
         description: Some(
             "Built-in hello JSON function - a simple JSON response function".to_string(),
         ),
-        all_explicit_template_names: HashSet::new(),
-        experimentation: ExperimentationConfig::default(),
-    }))
+        experimentation: None,
+    })
 }
 
 /// Returns the `tensorzero::optimization::gepa::analyze` function configuration.
@@ -104,9 +115,8 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// - report_error: For critical failures in the inference output
 /// - report_improvement: For suboptimal but technically correct outputs
 /// - report_optimal: For high-quality aspects worth preserving
-fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
-    // Define user schema inline
-    let user_schema_json = serde_json::json!({
+fn get_gepa_analyze_function() -> Result<UninitializedFunctionConfig, Error> {
+    let user_schema_value = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "required": ["function_config", "evaluation_config", "templates_map", "datapoint", "output", "evaluation_scores"],
@@ -159,40 +169,34 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
             }
         }
     });
-    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
 
-    let mut inner = HashMap::new();
-    inner.insert(
-        "user".to_string(),
-        SchemaWithMetadata {
-            schema: user_schema,
-            legacy_definition: true,
+    let user_schema_path =
+        create_inline_schema_path("optimization::gepa::analyze", "user", &user_schema_value)?;
+
+    Ok(UninitializedFunctionConfig::Chat(
+        UninitializedFunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(user_schema_path),
+            assistant_schema: None,
+            schemas: UninitializedSchemas::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some(
+                "Built-in GEPA analyze function - analyzes inference outputs and provides structured XML feedback for optimization".to_string(),
+            ),
+            experimentation: None,
         },
-    );
-
-    let schemas = SchemaData { inner };
-
-    Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas,
-        tools: vec![],
-        tool_choice: ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some(
-            "Built-in GEPA analyze function - analyzes inference outputs and provides structured XML feedback for optimization".to_string(),
-        ),
-        all_explicit_templates_names: HashSet::new(),
-        experimentation: ExperimentationConfig::default(),
-    })))
+    ))
 }
 
 /// Returns the `tensorzero::optimization::gepa::mutate` function configuration.
 ///
 /// This is a JSON function that generates improved prompt templates based on
 /// analysis feedback from the GEPA optimization algorithm.
-fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
-    // Define user schema inline
-    let user_schema_json = serde_json::json!({
+fn get_gepa_mutate_function() -> Result<UninitializedFunctionConfig, Error> {
+    let user_schema_value = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "required": ["function_config", "evaluation_config", "templates_map", "analyses"],
@@ -260,22 +264,13 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
             }
         }
     });
-    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
 
-    let mut inner = HashMap::new();
-    inner.insert(
-        "user".to_string(),
-        SchemaWithMetadata {
-            schema: user_schema,
-            legacy_definition: true,
-        },
-    );
-
-    let schemas = SchemaData { inner };
+    let user_schema_path =
+        create_inline_schema_path("optimization::gepa::mutate", "user", &user_schema_value)?;
 
     // Define output schema inline
     // Note: Using array format instead of additionalProperties to support OpenAI strict mode
-    let output_schema_json = serde_json::json!({
+    let output_schema_value = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
@@ -302,32 +297,36 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
         "required": ["templates"],
         "additionalProperties": false
     });
-    let output_schema = StaticJSONSchema::from_value(output_schema_json)?;
 
-    let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
+    let output_schema_path =
+        create_inline_schema_path("optimization::gepa::mutate", "output", &output_schema_value)?;
 
-    Ok(Arc::new(FunctionConfig::Json(FunctionConfigJson {
-        variants: HashMap::new(),
-        schemas,
-        output_schema,
-        json_mode_tool_call_config,
-        description: Some(
-            "Built-in GEPA mutate function - generates improved message templates based on analysis feedback".to_string(),
-        ),
-        all_explicit_template_names: HashSet::new(),
-        experimentation: ExperimentationConfig::default(),
-    })))
+    Ok(UninitializedFunctionConfig::Json(
+        UninitializedFunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(user_schema_path),
+            assistant_schema: None,
+            schemas: UninitializedSchemas::default(),
+            output_schema: Some(output_schema_path),
+            description: Some(
+                "Built-in GEPA mutate function - generates improved message templates based on analysis feedback".to_string(),
+            ),
+            experimentation: None,
+        },
+    ))
 }
 
-/// Returns all built-in functions as a HashMap.
+/// Returns all built-in functions as UninitializedFunctionConfigs.
 ///
 /// The keys are function names (e.g., "tensorzero::hello_chat")
-/// and the values are Arc-wrapped FunctionConfigs.
+/// and the values are UninitializedFunctionConfigs that can be loaded
+/// via `UninitializedFunctionConfig::load()`.
 ///
 /// **Note**: If you add or remove built-in functions here, you must also update
 /// the UI e2e test in `ui/e2e_tests/homePage.spec.ts` which checks the total
 /// function count displayed on the homepage.
-pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
+pub fn get_all_built_in_functions() -> Result<HashMap<String, UninitializedFunctionConfig>, Error> {
     let mut functions = HashMap::new();
 
     #[cfg(feature = "e2e_tests")]
@@ -360,28 +359,28 @@ mod tests {
     #[test]
     fn test_get_hello_chat_function() {
         let hello_chat = get_hello_chat_function().unwrap();
-        match &*hello_chat {
-            FunctionConfig::Chat(config) => {
+        match hello_chat {
+            UninitializedFunctionConfig::Chat(config) => {
                 assert!(config.variants.is_empty());
                 assert!(config.tools.is_empty());
                 assert_eq!(config.tool_choice, ToolChoice::None);
                 assert!(config.description.is_some());
-                assert!(config.all_explicit_templates_names.is_empty());
+                assert!(config.system_schema.is_some());
             }
-            FunctionConfig::Json(_) => panic!("Expected Chat function"),
+            UninitializedFunctionConfig::Json(_) => panic!("Expected Chat function"),
         }
     }
 
     #[test]
     fn test_get_hello_json_function() {
         let hello_json = get_hello_json_function();
-        match &*hello_json {
-            FunctionConfig::Json(config) => {
+        match hello_json {
+            UninitializedFunctionConfig::Json(config) => {
                 assert!(config.variants.is_empty());
                 assert!(config.description.is_some());
-                assert!(config.all_explicit_template_names.is_empty());
+                assert!(config.output_schema.is_none()); // Will default during load
             }
-            FunctionConfig::Chat(_) => panic!("Expected JSON function"),
+            UninitializedFunctionConfig::Chat(_) => panic!("Expected JSON function"),
         }
     }
 
@@ -393,5 +392,21 @@ mod tests {
         assert!(functions.contains_key("tensorzero::hello_json"));
         assert!(functions.contains_key("tensorzero::optimization::gepa::analyze"));
         assert!(functions.contains_key("tensorzero::optimization::gepa::mutate"));
+    }
+
+    #[test]
+    fn test_built_in_functions_load_successfully() {
+        // Test that built-in functions can be loaded via UninitializedFunctionConfig::load()
+        let functions = get_all_built_in_functions().unwrap();
+        let metrics = std::collections::HashMap::new();
+
+        for (name, config) in functions {
+            let loaded = config.load(&name, &metrics);
+            assert!(
+                loaded.is_ok(),
+                "Failed to load built-in function {name}: {:?}",
+                loaded.err()
+            );
+        }
     }
 }

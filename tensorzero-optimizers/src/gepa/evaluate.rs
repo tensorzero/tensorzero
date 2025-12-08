@@ -20,8 +20,8 @@ use tensorzero_core::{
 };
 
 use evaluations::{
-    stats::EvaluationInfo, EvaluationCoreArgs, EvaluationStats, EvaluationVariant, EvaluatorStats,
-    OutputFormat,
+    EvaluationCoreArgs, EvaluationStats, EvaluationVariant, EvaluatorStats, OutputFormat,
+    stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering

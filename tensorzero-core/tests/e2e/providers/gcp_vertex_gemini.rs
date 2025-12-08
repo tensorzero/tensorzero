@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use http::StatusCode;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
@@ -229,13 +229,15 @@ async fn test_gcp_pro_tool_choice_none() {
         unknown_block.get("provider_name").unwrap().as_str(),
         Some("gcp_vertex_gemini")
     );
-    assert!(unknown_block
-        .get("data")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("executableCode")
-        .is_some());
+    assert!(
+        unknown_block
+            .get("data")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("executableCode")
+            .is_some()
+    );
 }
 
 /// There are fields for both model_name and endpoint_id and we can't know a priori which one to use.
@@ -323,7 +325,7 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
             "type": "thought",
             "text": null,
             "signature": signature,
-            "_internal_provider_type": "gcp_vertex_gemini",
+            "provider_type": "gcp_vertex_gemini",
         })
     );
     assert_eq!(content_blocks[1]["type"], "tool_call");

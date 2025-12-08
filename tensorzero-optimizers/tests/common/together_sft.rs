@@ -1,10 +1,10 @@
-use crate::common::{mock_inference_provider_base, OptimizationTestCase};
+use crate::common::{OptimizationTestCase, mock_inference_provider_base};
 use tensorzero_core::optimization::{
+    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     together_sft::{
         TogetherBatchSize, TogetherLRScheduler, TogetherTrainingMethod, TogetherTrainingType,
         UninitializedTogetherSFTConfig,
     },
-    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
 };
 
 pub struct TogetherSFTTestCase();

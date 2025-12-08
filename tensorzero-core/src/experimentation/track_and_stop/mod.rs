@@ -41,20 +41,20 @@
 //! - `error`: Error types specific to track-and-stop
 
 use arc_swap::ArcSwap;
-use check_stopping::{check_stopping, CheckStoppingArgs, StoppingResult};
+use check_stopping::{CheckStoppingArgs, StoppingResult, check_stopping};
 use error::TrackAndStopError;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tokio_util::sync::CancellationToken;
 
 use estimate_optimal_probabilities::{
-    estimate_optimal_probabilities, EstimateOptimalProbabilitiesArgs,
+    EstimateOptimalProbabilitiesArgs, estimate_optimal_probabilities,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -63,16 +63,16 @@ use uuid::Uuid;
 use crate::{
     config::{MetricConfig, MetricConfigOptimize},
     db::{
+        ExperimentationQueries, HealthCheckable,
         feedback::{FeedbackByVariant, FeedbackQueries},
         postgres::PostgresConnectionInfo,
-        ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     utils::spawn_ignoring_shutdown,
     variant::VariantInfo,
 };
 
-use super::{check_duplicates_across, check_duplicates_within, VariantSampler};
+use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 
 mod check_stopping;
 mod error;
@@ -252,7 +252,7 @@ impl Nursery {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -954,7 +954,9 @@ impl TrackAndStopState {
     ) -> Result<Self, TrackAndStopError> {
         // Filter out feedback for non-candidate variants (can happen if config changed)
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
-            tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
+            tracing::warn!(
+                "Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}"
+            );
             variant_performances
                 .into_iter()
                 .filter(|feedback| candidate_variants.contains(&feedback.variant_name))
@@ -1032,7 +1034,7 @@ impl TrackAndStopState {
                 // we can separate them by filtering the variants based on their counts
                 let nursery_variants: Vec<String> = variant_counts
                     .iter()
-                    .filter(|(_, &count)| count < min_samples_per_variant)
+                    .filter(|&(_, &count)| count < min_samples_per_variant)
                     .map(|(key, _)| key.to_string())
                     .collect();
                 let bandit_feedback: Vec<FeedbackByVariant> = variant_performances
@@ -1166,7 +1168,7 @@ mod tests {
     };
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::feedback::FeedbackByVariant;
-    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
 
     // Helper function to create test variants
     fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
@@ -2793,9 +2795,10 @@ mod tests {
         let result = config.load(&variants, &metrics);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("candidate_variants cannot be empty"));
+        assert!(
+            err.to_string()
+                .contains("candidate_variants cannot be empty")
+        );
     }
 
     #[test]

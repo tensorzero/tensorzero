@@ -22,7 +22,7 @@ use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_optimizers::gepa::{
     evaluate::EvaluationResults,
-    validate::{validate_gepa_config, FunctionContext},
+    validate::{FunctionContext, validate_gepa_config},
 };
 use tokio::time::sleep;
 

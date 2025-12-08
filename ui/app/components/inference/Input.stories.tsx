@@ -611,7 +611,7 @@ export const UnknownAndThoughtContent: Story = {
             type: "thought",
             text: "This is a thought content block for testing.",
             signature: undefined,
-            _internal_provider_type: undefined,
+            provider_type: undefined,
           },
         ],
       },

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use secrecy::SecretString;
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -10,11 +10,12 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
-use crate::db::HealthCheckable;
+use crate::db::{ConfigQueries, HealthCheckable};
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 
@@ -90,11 +91,15 @@ impl ClickHouseConnectionInfo {
         // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
         let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
             Ok(cluster_name) => {
-                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                tracing::info!(
+                    "The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments."
+                );
                 Some(cluster_name)
             }
             Err(_) => {
-                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                tracing::debug!(
+                    "The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments."
+                );
                 None
             }
         };
@@ -202,10 +207,10 @@ impl ClickHouseConnectionInfo {
             let data = fake.data.read().await;
             let table = data.get(table).unwrap();
             for row in table {
-                if let Some(value_in_row) = row.get(column) {
-                    if value_in_row.as_str() == Some(value) {
-                        return Some(row.clone());
-                    }
+                if let Some(value_in_row) = row.get(column)
+                    && value_in_row.as_str() == Some(value)
+                {
+                    return Some(row.clone());
                 }
             }
             None
@@ -322,6 +327,45 @@ impl HealthCheckable for ClickHouseConnectionInfo {
     }
 }
 
+#[async_trait]
+impl ConfigQueries for ClickHouseConnectionInfo {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        #[derive(Deserialize)]
+        struct ConfigSnapshotRow {
+            config: String,
+            extra_templates: HashMap<String, String>,
+        }
+
+        let hash_str = snapshot_hash.to_string();
+        let query = format!(
+            "SELECT config, extra_templates \
+             FROM ConfigSnapshot FINAL \
+             WHERE hash = toUInt256('{hash_str}') \
+             LIMIT 1 \
+             FORMAT JSONEachRow"
+        );
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+
+        if response.response.is_empty() {
+            return Err(Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                snapshot_hash: hash_str,
+            }));
+        }
+
+        let row: ConfigSnapshotRow = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
+
+        ConfigSnapshot::from_stored(&row.config, row.extra_templates, &snapshot_hash)
+    }
+}
+
 pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {
     pub table_engine_name: &'a str,
     pub table_name: &'a str,
@@ -415,15 +459,13 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
             }
             .into());
         }
-        _ => {
-            return Err(ErrorDetails::Config {
-                message: format!(
+        _ => return Err(ErrorDetails::Config {
+            message: format!(
                 "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
                 url.scheme()
             ),
-            }
-            .into())
         }
+        .into()),
     }
 
     // Validate the host
@@ -448,10 +490,10 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         .path_segments()
         .map(Iterator::collect)
         .unwrap_or_default();
-    if let Some(last) = path_segments.last() {
-        if last.is_empty() {
-            path_segments.pop();
-        }
+    if let Some(last) = path_segments.last()
+        && last.is_empty()
+    {
+        path_segments.pop();
     }
     Ok(match path_segments.len() {
         0 => None, // Empty path is valid
@@ -512,11 +554,17 @@ mod tests {
     fn test_set_clickhouse_format_settings() {
         let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1");
+        assert_eq!(
+            database_url.to_string(),
+            "http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1"
+        );
 
         let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1");
+        assert_eq!(
+            database_url.to_string(),
+            "http://chuser:chpassword@localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1"
+        );
     }
 
     #[test]
@@ -547,14 +595,18 @@ mod tests {
         assert_eq!(result, Some("database".to_string()));
 
         let database_url = Url::parse("https://localhost:443/").unwrap();
-        assert!(validate_clickhouse_url_get_db_name(&database_url)
-            .unwrap()
-            .is_none());
+        assert!(
+            validate_clickhouse_url_get_db_name(&database_url)
+                .unwrap()
+                .is_none()
+        );
 
         let database_url = Url::parse("http://default:password@clickhouse.cloud.io:443").unwrap();
-        assert!(validate_clickhouse_url_get_db_name(&database_url)
-            .unwrap()
-            .is_none());
+        assert!(
+            validate_clickhouse_url_get_db_name(&database_url)
+                .unwrap()
+                .is_none()
+        );
 
         let database_url = Url::parse("http://localhost:8123").unwrap();
         assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());

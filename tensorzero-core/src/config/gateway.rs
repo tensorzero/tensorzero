@@ -10,7 +10,7 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
@@ -37,7 +37,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
@@ -46,7 +46,7 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -87,10 +87,12 @@ impl UninitializedGatewayConfig {
         {
             value
         } else {
-            if let Some(info) = object_store_info {
-                if !matches!(info.kind, StorageKind::Disabled) {
-                    tracing::info!("Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled.");
-                }
+            if let Some(info) = object_store_info
+                && !matches!(info.kind, StorageKind::Disabled)
+            {
+                tracing::info!(
+                    "Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled."
+                );
             }
             false
         };
@@ -115,7 +117,7 @@ impl UninitializedGatewayConfig {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,

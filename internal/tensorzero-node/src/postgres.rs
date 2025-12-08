@@ -81,4 +81,30 @@ impl PostgresClient {
             napi::Error::from_reason(format!("Failed to serialize disabled_at timestamp: {e}"))
         })
     }
+
+    #[napi]
+    pub async fn update_api_key_description(
+        &self,
+        public_id: String,
+        description: Option<String>,
+    ) -> Result<String, napi::Error> {
+        let pool = self
+            .connection_info
+            .get_alpha_pool()
+            .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
+
+        let key = tensorzero_auth::postgres::update_key_description(
+            &public_id,
+            description.as_deref(),
+            pool,
+        )
+        .await
+        .map_err(|e| {
+            napi::Error::from_reason(format!("Failed to update API key description: {e}"))
+        })?;
+
+        serde_json::to_string(&key).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize updated API key: {e}"))
+        })
+    }
 }

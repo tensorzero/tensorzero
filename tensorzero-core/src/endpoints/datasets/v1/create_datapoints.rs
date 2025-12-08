@@ -1,5 +1,5 @@
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use futures::future::try_join_all;
 use tracing::instrument;
 
@@ -438,9 +438,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("At least one datapoint must be provided"));
+        assert!(
+            err.to_string()
+                .contains("At least one datapoint must be provided")
+        );
     }
 
     #[tokio::test]
@@ -516,9 +517,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Failed to convert chat datapoint to database insert"));
+        assert!(
+            err.to_string()
+                .contains("Failed to convert chat datapoint to database insert")
+        );
     }
 
     #[tokio::test]
@@ -557,9 +559,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Failed to convert chat datapoint to database insert"));
+        assert!(
+            err.to_string()
+                .contains("Failed to convert chat datapoint to database insert")
+        );
     }
 
     #[tokio::test]

@@ -1,13 +1,13 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{Arc, atomic::AtomicU64};
 
 use anyhow::Result;
 use clap::Parser;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod benchmark;
 
-use benchmark::{create_bucket_settings, create_postgres_pool, Contention, RateLimitBenchmark};
+use benchmark::{Contention, RateLimitBenchmark, create_bucket_settings, create_postgres_pool};
 
 #[derive(Parser)]
 pub struct Args {

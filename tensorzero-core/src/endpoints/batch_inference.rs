@@ -1,10 +1,10 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Extension, Json};
+use axum::{Extension, Json, debug_handler};
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +25,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
@@ -32,14 +33,12 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::RequestMessage;
-use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
-    Usage,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage, current_timestamp,
 };
+use crate::inference::types::{Input, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::rate_limiting::ScopeInfo;
@@ -1089,9 +1088,13 @@ pub async fn write_completed_batch_inference<'a>(
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            snapshot_hash: config.hash.clone(),
         };
-        model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences().await);
+        model_inference_rows_to_write.extend(
+            inference_result
+                .get_serialized_model_inferences(config.hash.clone())
+                .await,
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

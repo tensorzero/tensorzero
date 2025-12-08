@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use crate::error::{Error, ErrorDetails};
 
-use super::stored::StoredConfig;
 use super::UninitializedConfig;
+use super::stored::StoredConfig;
 
 /// A serializable snapshot of a config suitable for storage in the database.
 ///
@@ -87,12 +87,29 @@ impl std::fmt::Display for SnapshotHash {
     }
 }
 
+impl std::ops::Deref for SnapshotHash {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl SnapshotHash {
     pub fn new_test() -> SnapshotHash {
         let hash = blake3::hash(&[]);
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
         SnapshotHash(Arc::from(big_int.to_string()))
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl std::str::FromStr for SnapshotHash {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(SnapshotHash(Arc::from(s.to_string())))
     }
 }
 
@@ -104,12 +121,15 @@ impl Default for SnapshotHash {
 }
 
 impl ConfigSnapshot {
+    /// Create a ConfigSnapshot from an `UninitializedConfig`.
+    ///
+    /// The config is converted to `StoredConfig`, serialized to TOML, and hashed
+    /// along with the extra templates to produce a deterministic hash.
     pub fn new(
-        config_toml: toml::Table,
+        config: UninitializedConfig,
         extra_templates: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        let config = UninitializedConfig::try_from(config_toml)?;
-        let stored_config = config.into();
+        let stored_config: StoredConfig = config.into();
         let stored_config_toml =
             prepare_table_for_snapshot(toml::Table::try_from(&stored_config).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -132,14 +152,13 @@ impl ConfigSnapshot {
         config_toml: &str,
         extra_templates: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        use super::snapshot::prepare_table_for_snapshot;
         let table: toml::Table = config_toml.parse().map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse TOML: {e}"),
             })
         })?;
-        let sorted_table = prepare_table_for_snapshot(table);
-        Self::new(sorted_table, extra_templates)
+        let config = UninitializedConfig::try_from(table)?;
+        Self::new(config, extra_templates)
     }
 
     /// Create an empty ConfigSnapshot for testing when the actual config doesn't matter.
@@ -151,6 +170,39 @@ impl ConfigSnapshot {
             extra_templates: HashMap::new(),
             __private: (),
         }
+    }
+
+    /// Create a ConfigSnapshot from data loaded from the database.
+    ///
+    /// This is used when loading a previously stored config snapshot from ClickHouse.
+    /// The hash is recomputed from the config and templates to ensure consistency.
+    pub fn from_stored(
+        config_toml: &str,
+        extra_templates: HashMap<String, String>,
+        original_hash: &SnapshotHash,
+    ) -> Result<Self, Error> {
+        let table: toml::Table = config_toml.parse().map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse stored config TOML: {e}"),
+            })
+        })?;
+
+        let sorted_table = prepare_table_for_snapshot(table);
+        let config = UninitializedConfig::try_from(sorted_table.clone())?;
+        let hash = ConfigSnapshot::hash(&sorted_table, &extra_templates)?;
+        if hash != *original_hash {
+            return Err(Error::new(ErrorDetails::ConfigSnapshotHashMismatch {
+                expected: original_hash.clone(),
+                actual: hash.clone(),
+            }));
+        }
+
+        Ok(Self {
+            config: config.into(),
+            hash,
+            extra_templates,
+            __private: (),
+        })
     }
 
     /// Compute a blake3 hash of this config snapshot
