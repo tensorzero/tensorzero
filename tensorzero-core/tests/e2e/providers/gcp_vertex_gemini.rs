@@ -325,7 +325,7 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
             "type": "thought",
             "text": null,
             "signature": signature,
-            "_internal_provider_type": "gcp_vertex_gemini",
+            "provider_type": "gcp_vertex_gemini",
         })
     );
     assert_eq!(content_blocks[1]["type"], "tool_call");

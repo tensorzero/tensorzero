@@ -994,28 +994,25 @@ pub enum ThoughtSummaryBlock {
 
 /// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[export_schema]
 pub struct Thought {
-    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub summary: Option<Vec<ThoughtSummaryBlock>>,
     /// When set, this `Thought` block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
     #[serde(
-        rename = "_internal_provider_type",
+        // This alias is written to the database, so we cannot remove it.
+        alias = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(optional)]
     pub provider_type: Option<String>,
 }
 
