@@ -16,7 +16,7 @@ For example:
 ```toml {3}
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct"
+model = "fireworks::accounts/fireworks/models/llama-v3p3-70b-instruct"
 ```
 
 Additionally, you can set `model_name` in the inference request to use a specific Fireworks model, without having to configure a function and variant in TensorZero.
@@ -25,7 +25,7 @@ Additionally, you can set `model_name` in the inference request to use a specifi
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct",
+    "model_name": "fireworks::accounts/fireworks/models/llama-v3p3-70b-instruct",
     "input": {
       "messages": [
         {
@@ -67,7 +67,7 @@ routing = ["fireworks"]
 
 [models.llama3_1_8b_instruct.providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
 [functions.my_function_name]
 type = "chat"

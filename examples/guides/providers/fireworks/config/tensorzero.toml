@@ -3,7 +3,7 @@ routing = ["fireworks"]
 
 [models.llama3_1_8b_instruct.providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
 [functions.my_function_name]
 type = "chat"
