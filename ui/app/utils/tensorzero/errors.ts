@@ -1,6 +1,34 @@
 import { StatusCodes as HttpStatusCode } from "http-status-codes";
 import { isErrorLike } from "~/utils/common";
 
+/**
+ * Error thrown when the UI cannot connect to the TensorZero gateway.
+ * This is distinct from TensorZeroServerError which represents errors
+ * returned by the gateway itself.
+ */
+export class GatewayConnectionError extends Error {
+  constructor(cause?: unknown) {
+    super("Cannot connect to TensorZero gateway", { cause });
+    this.name = "GatewayConnectionError";
+  }
+}
+
+export function isGatewayConnectionError(
+  error: unknown,
+): error is GatewayConnectionError {
+  // Check instanceof for server-side errors
+  if (error instanceof GatewayConnectionError) {
+    return true;
+  }
+  // Check serialized object properties (works if thrown from server loader)
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "GatewayConnectionError"
+  );
+}
+
 export class TensorZeroServerError extends Error {
   readonly status: number;
   readonly statusText: string | null;
