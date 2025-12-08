@@ -1,3 +1,6 @@
+//! Contains the main logic for 'relay' mode
+//! When enabled, we redirect requests made to *any* model, and instead forward them to a downstream gateway
+//! The providers in the initial ('edge') gateway are ignored entirely
 use std::{collections::HashMap, time::Instant};
 
 use futures::StreamExt;
@@ -77,9 +80,13 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                // TODO - what kind of error do we want to return here?
-                Error::new(ErrorDetails::Inference {
+                // TODO - include `raw_request`/`raw_response` here
+                Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
+                    status_code: None,
+                    provider_type: "tensorzero_relay".to_string(),
+                    raw_request: None,
+                    raw_response: None,
                 })
             })?;
 
@@ -208,6 +215,9 @@ impl TensorzeroRelay {
         ))
     }
 
+    // Constructs the input for the downstream gateway `POST /inference` request
+    // We always invoke a default function (using the model name for the 'redirected' model in the edge gateway),
+    // and include all of the tools from the 'edge' gateway (both static and dynamic) as dynamic tools
     async fn build_client_inference_params(
         &self,
         model_name: &str,

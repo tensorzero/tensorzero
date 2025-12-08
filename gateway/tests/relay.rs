@@ -367,18 +367,8 @@ model_name = "error"
 
 #[tokio::test]
 async fn test_relay_with_function() {
-    // Note: For functions, relay resolves the function to a model locally before forwarding.
-    // So both relay and downstream need identical function configs.
-    // We verify relay is working by ensuring function calls succeed through the relay.
-    let downstream_config = r#"
-[functions.test_function]
-type = "chat"
-
-[functions.test_function.variants.test_variant]
-type = "chat_completion"
-weight = 1
-model = "dummy::good"
-"#;
+    // The relay config doesn't need to have any functions defined, since
+    // we just invoke a model (though a default function)
     let relay_config = r#"
 [functions.test_function]
 type = "chat"
@@ -386,7 +376,22 @@ type = "chat"
 [functions.test_function.variants.test_variant]
 type = "chat_completion"
 weight = 1
-model = "dummy::good"
+model = "test_model"
+
+[models.test_model]
+routing = ["bad"]
+
+[models.test_model.providers.bad]
+type = "dummy"
+model_name = "error"
+"#;
+    let downstream_config = r#"
+    [models.test_model]
+routing = ["good"]
+
+[models.test_model.providers.good]
+type = "dummy"
+model_name = "good"
 "#;
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
