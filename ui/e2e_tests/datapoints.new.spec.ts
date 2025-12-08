@@ -233,11 +233,8 @@ test.describe("New Datapoint Page", () => {
 
     // Select dataset first
     await page.getByTestId("dataset-selector").getByRole("combobox").click();
-    await page.getByPlaceholder(/dataset/i).fill("test_switch");
-    await page
-      .locator("[cmdk-item]")
-      .filter({ hasText: "test_switch" })
-      .click();
+    await page.getByPlaceholder(/dataset/i).fill("foo");
+    await page.locator("[cmdk-item]").filter({ hasText: "foo" }).click();
 
     // Select JSON function first
     await page.getByTestId("function-selector").getByRole("combobox").click();
