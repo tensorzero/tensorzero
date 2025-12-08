@@ -21,12 +21,12 @@ use tensorzero_core::{
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
-    error::{Error, ErrorDetails},
+    error::{AxumResponseError, Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
     stored_inference::RenderedSample,
-    utils::gateway::{AppState, AppStateData, StructuredJson},
+    utils::gateway::{AppState, StructuredJson},
 };
 
 use crate::{JobHandle, Optimizer};
@@ -50,19 +50,22 @@ pub struct LaunchOptimizationWorkflowParams {
 }
 
 pub async fn launch_optimization_workflow_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-        ..
-    }): AppState,
+    State(app_state): AppState,
     StructuredJson(params): StructuredJson<LaunchOptimizationWorkflowParams>,
-) -> Result<Response<Body>, Error> {
-    let job_handle =
-        launch_optimization_workflow(&http_client, config, &clickhouse_connection_info, params)
-            .await?;
-    let encoded_job_handle = job_handle.to_base64_urlencoded()?;
-    Ok(encoded_job_handle.into_response())
+) -> Result<Response<Body>, AxumResponseError> {
+    async {
+        let job_handle = launch_optimization_workflow(
+            &app_state.http_client,
+            app_state.config.clone(),
+            &app_state.clickhouse_connection_info,
+            params,
+        )
+        .await?;
+        let encoded_job_handle = job_handle.to_base64_urlencoded()?;
+        Ok(encoded_job_handle.into_response())
+    }
+    .await
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Starts an optimization job.
@@ -177,17 +180,18 @@ pub async fn launch_optimization(
 }
 
 pub async fn poll_optimization_handler(
-    State(AppStateData {
-        http_client,
-        config,
-        ..
-    }): AppState,
+    State(app_state): AppState,
     Path(job_handle): Path<String>,
-) -> Result<Response<Body>, Error> {
-    let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
-    let default_credentials = &config.models.default_credentials;
-    let info = poll_optimization(&http_client, &job_handle, default_credentials).await?;
-    Ok(Json(info).into_response())
+) -> Result<Response<Body>, AxumResponseError> {
+    async {
+        let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
+        let default_credentials = &app_state.config.models.default_credentials;
+        let info =
+            poll_optimization(&app_state.http_client, &job_handle, default_credentials).await?;
+        Ok(Json(info).into_response())
+    }
+    .await
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Poll an existing optimization job.

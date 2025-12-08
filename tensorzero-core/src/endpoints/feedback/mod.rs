@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
@@ -100,8 +100,11 @@ pub async fn feedback_handler(
     State(app_state): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<Json<FeedbackResponse>, Error> {
-    Ok(Json(feedback(app_state, params, api_key_ext).await?))
+) -> Result<Json<FeedbackResponse>, AxumResponseError> {
+    feedback(app_state.clone(), params, api_key_ext)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 // Helper function to avoid requiring axum types in the client

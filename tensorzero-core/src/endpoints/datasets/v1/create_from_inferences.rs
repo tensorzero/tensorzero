@@ -9,7 +9,7 @@ use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 use crate::endpoints::datasets::validate_dataset_name;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -26,16 +26,16 @@ pub async fn create_from_inferences_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsFromInferenceRequest>,
-) -> Result<Json<CreateDatapointsResponse>, Error> {
-    let response = create_from_inferences(
+) -> Result<Json<CreateDatapointsResponse>, AxumResponseError> {
+    create_from_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
         dataset_name,
         request,
     )
-    .await?;
-
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Creates datapoints from inferences based on either specific inference IDs or an inference query.

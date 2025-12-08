@@ -841,7 +841,10 @@ async fn tensorzero_otel_tracing_middleware(
     let custom_tracer_key = match extract_tensorzero_headers(&tracer_wrapper, req.headers()) {
         Ok(key) => key,
         Err(e) => {
-            return e.into_response();
+            // Return a simple error response without needing AppState
+            let status_code = e.status_code();
+            let error_message = e.to_string();
+            return (status_code, error_message).into_response();
         }
     };
 
@@ -862,7 +865,10 @@ async fn tensorzero_otel_tracing_middleware(
         let span = match make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper) {
             Ok(span) => span,
             Err(e) => {
-                return e.into_response();
+                // Return a simple error response without needing AppState
+                let status_code = e.status_code();
+                let error_message = e.to_string();
+                return (status_code, error_message).into_response();
             }
         };
         let response = next.run(req).instrument(span.clone()).await;

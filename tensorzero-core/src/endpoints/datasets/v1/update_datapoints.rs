@@ -15,7 +15,7 @@ use crate::endpoints::datasets::{
     CLICKHOUSE_DATETIME_FORMAT, StoredChatInferenceDatapoint, StoredDatapoint,
     StoredJsonInferenceDatapoint, validate_dataset_name,
 };
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
@@ -48,9 +48,11 @@ pub async fn update_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdateDatapointsPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsRequest>,
-) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let response = update_datapoints(&app_state, &path_params.dataset_name, request).await?;
-    Ok(Json(response))
+) -> Result<Json<UpdateDatapointsResponse>, AxumResponseError> {
+    update_datapoints(&app_state, &path_params.dataset_name, request)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Business logic for updating datapoints in a dataset.
@@ -405,14 +407,15 @@ pub async fn update_datapoints_metadata_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
-) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let response = update_datapoints_metadata(
+) -> Result<Json<UpdateDatapointsResponse>, AxumResponseError> {
+    update_datapoints_metadata(
         &app_state.clickhouse_connection_info,
         &path_params.dataset_name,
         request,
     )
-    .await?;
-    Ok(Json(response))
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Business logic for updating datapoint metadata in a dataset.

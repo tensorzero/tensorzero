@@ -26,6 +26,7 @@ use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use axum::response::{IntoResponse, Response};
 
 #[cfg(test)]
 use crate::db::clickhouse::ClickHouseClient;
@@ -121,7 +122,7 @@ impl Drop for GatewayHandle {
 }
 
 /// State for the API
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 // `#[non_exhaustive]` only affects downstream crates, so we can't use it here
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
@@ -422,6 +423,23 @@ pub async fn setup_postgres(
     Ok(postgres_connection_info)
 }
 
+/// Rejection type for StructuredJson extractor
+pub struct StructuredJsonRejection(pub Error);
+
+impl IntoResponse for StructuredJsonRejection {
+    fn into_response(self) -> Response {
+        let status_code = self.0.status_code();
+        let error_message = self.0.to_string();
+        (status_code, error_message).into_response()
+    }
+}
+
+impl From<Error> for StructuredJsonRejection {
+    fn from(error: Error) -> Self {
+        StructuredJsonRejection(error)
+    }
+}
+
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
 ///
 /// When this extractor is present, we don't check if the `Content-Type` header is `application/json`,
@@ -434,7 +452,7 @@ where
     S: Send + Sync,
     T: Send + Sync + DeserializeOwned,
 {
-    type Rejection = Error;
+    type Rejection = StructuredJsonRejection;
 
     #[instrument(skip_all, level = "trace", name = "StructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {

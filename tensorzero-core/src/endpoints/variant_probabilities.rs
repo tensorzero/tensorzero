@@ -5,7 +5,7 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::error::{Error, ErrorDetails};
+use crate::error::{AxumResponseError, Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the variant sampling probabilities endpoint
@@ -28,10 +28,11 @@ pub struct GetVariantSamplingProbabilitiesResponse {
 pub async fn get_variant_sampling_probabilities_handler(
     State(app_state): AppState,
     Query(params): Query<GetVariantSamplingProbabilitiesParams>,
-) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
-    Ok(Json(
-        get_variant_sampling_probabilities(app_state, params).await?,
-    ))
+) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, AxumResponseError> {
+    get_variant_sampling_probabilities(app_state.clone(), params)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// HTTP handler for the variant sampling probabilities endpoint (path-based)
@@ -39,11 +40,12 @@ pub async fn get_variant_sampling_probabilities_handler(
 pub async fn get_variant_sampling_probabilities_by_function_handler(
     State(app_state): AppState,
     Path(function_name): Path<String>,
-) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
+) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, AxumResponseError> {
     let params = GetVariantSamplingProbabilitiesParams { function_name };
-    Ok(Json(
-        get_variant_sampling_probabilities(app_state, params).await?,
-    ))
+    get_variant_sampling_probabilities(app_state.clone(), params)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Core business logic for getting variant sampling probabilities

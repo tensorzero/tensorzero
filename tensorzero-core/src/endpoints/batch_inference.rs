@@ -22,7 +22,7 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::error::{AxumResponseError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessage;
@@ -114,8 +114,11 @@ pub async fn start_batch_inference_handler(
     State(app_state): State<AppStateData>,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
-) -> Result<Response<Body>, Error> {
-    Ok(Json(start_batch_inference(app_state, params, api_key_ext).await?).into_response())
+) -> Result<Response<Body>, AxumResponseError> {
+    start_batch_inference(app_state.clone(), params, api_key_ext)
+        .await
+        .map(|result| Json(result).into_response())
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub async fn start_batch_inference(
@@ -488,44 +491,62 @@ pub struct PollPathParams {
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
-    State(AppStateData {
+    State(app_state): AppState,
+    Path(path_params): Path<PollPathParams>,
+) -> Result<Response<Body>, AxumResponseError> {
+    let AppStateData {
         config,
         http_client,
         clickhouse_connection_info,
         ..
-    }): AppState,
-    Path(path_params): Path<PollPathParams>,
-) -> Result<Response<Body>, Error> {
-    let batch_request = get_batch_request(&clickhouse_connection_info, &path_params).await?;
+    } = &app_state;
+
+    poll_batch_inference_inner(config, http_client, clickhouse_connection_info, path_params)
+        .await
+        .map(|response| Json(response).into_response())
+        .map_err(|e| AxumResponseError::new(e, app_state))
+}
+
+async fn poll_batch_inference_inner(
+    config: &Config,
+    http_client: &TensorzeroHttpClient,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    path_params: PollPathParams,
+) -> Result<PollInferenceResponse, Error> {
+    let batch_request = get_batch_request(clickhouse_connection_info, &path_params).await?;
     match batch_request.status {
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response =
-                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
-                    .await?;
-            let response = write_poll_batch_inference(
-                &clickhouse_connection_info,
+            let response = poll_batch_inference(
                 &batch_request,
-                response,
-                &config,
+                http_client.clone(),
+                &config.models,
+                &credentials,
             )
             .await?;
-            Ok(Json(response.filter_by_query(path_params)).into_response())
+            let response = write_poll_batch_inference(
+                clickhouse_connection_info,
+                &batch_request,
+                response,
+                config,
+            )
+            .await?;
+            Ok(response.filter_by_query(path_params))
         }
         BatchStatus::Completed => {
             let function = config.get_function(&batch_request.function_name)?;
             let response = get_completed_batch_inference_response(
-                &clickhouse_connection_info,
+                clickhouse_connection_info,
                 &batch_request,
                 &path_params,
                 &function,
             )
             .await?;
             let response = PollInferenceResponse::Completed(response);
-            Ok(Json(response.filter_by_query(path_params)).into_response())
+            Ok(response.filter_by_query(path_params))
         }
-        BatchStatus::Failed => Ok(Json(PollInferenceResponse::Failed).into_response()),
+        BatchStatus::Failed => Ok(PollInferenceResponse::Failed),
     }
 }
 

@@ -21,6 +21,7 @@ use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
+use crate::utils::gateway::AppStateData;
 
 pub mod delayed_error;
 pub use delayed_error::DelayedError;
@@ -1621,18 +1622,44 @@ impl std::fmt::Display for ErrorDetails {
     }
 }
 
-impl IntoResponse for Error {
+/// A wrapper around `Error` that holds additional information needed to produce an Axum response
+/// We only implement `IntoResponse` for `AxumResponseError`, which forces HTTP route handlers to
+/// convert an `Error` into an `AxumResponseError` via `AxumResponseError::new`
+/// The vast majority of the codebase should just use `Error` - only HTTP routes need to use `AxumResponseError`
+#[derive(Clone, Debug)]
+pub struct AxumResponseError {
+    error: Error,
+    state: AppStateData,
+}
+
+impl AxumResponseError {
+    pub fn new(error: Error, state: AppStateData) -> Self {
+        Self { error, state }
+    }
+
+    pub fn get_details(&self) -> &ErrorDetails {
+        self.error.get_details()
+    }
+}
+
+impl std::fmt::Display for AxumResponseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl IntoResponse for AxumResponseError {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let message = self.to_string();
+        let message = self.error.to_string();
         let mut body = json!({
             "error": message,
         });
-        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
-            body["error_json"] =
-                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+        if self.state.config.gateway.unstable_error_json {
+            body["error_json"] = serde_json::to_value(self.error.get_details())
+                .unwrap_or_else(|e| json!(e.to_string()));
         }
-        let mut response = (self.status_code(), Json(body)).into_response();
+        let mut response = (self.error.status_code(), Json(body)).into_response();
         // Attach the error to the response, so that we can set a nice message in our
         // `apply_otel_http_trace_layer` middleware
         response.extensions_mut().insert(self);

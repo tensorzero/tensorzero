@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::ObjectStoreInfo,
-    error::{Error, ErrorDetails},
+    error::{AxumResponseError, Error, ErrorDetails},
     inference::types::storage::StoragePath,
-    utils::gateway::{AppState, AppStateData},
+    utils::gateway::AppState,
 };
 use aws_smithy_types::base64;
 
@@ -37,18 +37,22 @@ pub struct PathParams {
 /// and the urlencoding the resulting string.
 /// For example, `GET /internal/object_storage?storage_path={%22kind%22:{%22type%22:%22filesystem%22,%22path%22:%22/tmp%22},%22path%22:%22fake-tensorzero-file%22}`
 pub async fn get_object_handler(
-    State(AppStateData { config, .. }): AppState,
+    State(app_state): AppState,
     Query(params): Query<PathParams>,
-) -> Result<Json<ObjectResponse>, Error> {
-    // Use the existing object store if it matches the requested kind, so
-    let storage_path: StoragePath = serde_json::from_str(&params.storage_path).map_err(|e| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Error parsing storage path: {e}"),
-        })
-    })?;
-    Ok(Json(
-        get_object(config.object_store_info.as_ref(), storage_path).await?,
-    ))
+) -> Result<Json<ObjectResponse>, AxumResponseError> {
+    async {
+        // Use the existing object store if it matches the requested kind, so
+        let storage_path: StoragePath =
+            serde_json::from_str(&params.storage_path).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Error parsing storage path: {e}"),
+                })
+            })?;
+        get_object(app_state.config.object_store_info.as_ref(), storage_path).await
+    }
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Fetches an object using the object store and path specified by the encoded `StoragePath`.

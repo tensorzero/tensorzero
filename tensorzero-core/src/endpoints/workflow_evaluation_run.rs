@@ -11,7 +11,7 @@ use crate::{
     config::{Config, snapshot::SnapshotHash},
     db::clickhouse::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal},
     endpoints::validate_tags,
-    error::{Error, ErrorDetails},
+    error::{AxumResponseError, Error, ErrorDetails},
     utils::{
         gateway::{AppState, AppStateData, StructuredJson},
         uuid::{
@@ -49,8 +49,11 @@ pub struct WorkflowEvaluationRunResponse {
 pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
-) -> Result<Json<WorkflowEvaluationRunResponse>, Error> {
-    workflow_evaluation_run(app_state, params).await.map(Json)
+) -> Result<Json<WorkflowEvaluationRunResponse>, AxumResponseError> {
+    workflow_evaluation_run(app_state.clone(), params)
+        .await
+        .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 /// Creates a new workflow evaluation run.
@@ -101,10 +104,11 @@ pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,
     Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunEpisodeParams>,
-) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, Error> {
-    workflow_evaluation_run_episode(app_state, path_params.run_id, params)
+) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, AxumResponseError> {
+    workflow_evaluation_run_episode(app_state.clone(), path_params.run_id, params)
         .await
         .map(Json)
+        .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub async fn workflow_evaluation_run_episode(
@@ -396,7 +400,7 @@ async fn lookup_workflow_evaluation_run(
 pub async fn dynamic_evaluation_run_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
-) -> Result<Json<WorkflowEvaluationRunResponse>, Error> {
+) -> Result<Json<WorkflowEvaluationRunResponse>, AxumResponseError> {
     tracing::warn!(
         "DEPRECATED: The `/dynamic_evaluation_run` endpoint is deprecated. Please use `/workflow_evaluation_run` instead. Support for `/dynamic_evaluation_run` will be removed in a future version."
     );
@@ -409,7 +413,7 @@ pub async fn dynamic_evaluation_run_episode_handler(
     State(app_state): AppState,
     Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunEpisodeParams>,
-) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, Error> {
+) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, AxumResponseError> {
     tracing::warn!(
         run_id = %path_params.run_id,
         "DEPRECATED: The `/dynamic_evaluation_run/{{run_id}}/episode` endpoint is deprecated. Please use `/workflow_evaluation_run/{{run_id}}/episode` instead. Support for `/dynamic_evaluation_run/{{run_id}}/episode` will be removed in a future version."

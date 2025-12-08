@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::error::Error;
+use crate::error::{AxumResponseError, Error};
 use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::super::legacy::validate_dataset_name;
@@ -33,19 +33,24 @@ pub async fn clone_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<CloneDatapointsPathParams>,
     StructuredJson(request): StructuredJson<CloneDatapointsRequest>,
-) -> Result<Json<CloneDatapointsResponse>, Error> {
-    validate_dataset_name(&path_params.dataset_name)?;
+) -> Result<Json<CloneDatapointsResponse>, AxumResponseError> {
+    async {
+        validate_dataset_name(&path_params.dataset_name)?;
 
-    let new_ids = clone_datapoints(
-        &path_params.dataset_name,
-        &request.datapoint_ids,
-        &app_state.clickhouse_connection_info,
-    )
-    .await?;
+        let new_ids = clone_datapoints(
+            &path_params.dataset_name,
+            &request.datapoint_ids,
+            &app_state.clickhouse_connection_info,
+        )
+        .await?;
 
-    Ok(Json(CloneDatapointsResponse {
-        datapoint_ids: new_ids,
-    }))
+        Ok(CloneDatapointsResponse {
+            datapoint_ids: new_ids,
+        })
+    }
+    .await
+    .map(Json)
+    .map_err(|e| AxumResponseError::new(e, app_state))
 }
 
 pub async fn clone_datapoints(
