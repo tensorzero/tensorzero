@@ -149,6 +149,13 @@ async fn check_cache<
         );
         sanitized_header = true;
     }
+    if args.sanitize_traceparent && request.headers().contains_key("traceparent") {
+        request.headers_mut().insert(
+            "traceparent",
+            HeaderValue::from_static("TENSORZERO_PROVIDER_PROXY_TOKEN"),
+        );
+        sanitized_header = true;
+    }
     if args.sanitize_aws_sigv4 {
         let header_names = [
             "authorization",
@@ -319,6 +326,10 @@ pub struct Args {
     /// Health check port
     #[arg(long, default_value = "3004")]
     pub health_port: u16,
+    /// If `true`, replaces `traceparent` header with `traceparent: TENSORZERO_PROVIDER_PROXY_TOKEN`
+    /// when constructing a cache key.
+    #[arg(long, default_value = "true")]
+    pub sanitize_traceparent: bool,
     /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]
