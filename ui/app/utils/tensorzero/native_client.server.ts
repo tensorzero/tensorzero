@@ -35,7 +35,10 @@ export async function getNativeDatabaseClient(): Promise<DatabaseClient> {
 export function runNativeEvaluationStreaming(params: {
   gatewayUrl: string;
   clickhouseUrl: string;
-  configPath: string;
+  /** JSON-serialized EvaluationConfig */
+  evaluationConfig: string;
+  /** JSON-serialized EvaluationFunctionConfig */
+  functionConfig: string;
   evaluationName: string;
   datasetName: string;
   variantName: string;

@@ -58,7 +58,7 @@ async fn test_evaluate_variant_chat() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),
@@ -130,7 +130,7 @@ async fn test_evaluate_variant_json() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),
@@ -203,7 +203,7 @@ async fn test_evaluate_variant_per_datapoint_scores() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),
