@@ -21,7 +21,7 @@ import { Filter, Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
-import { Form } from "~/components/ui/form";
+import { Form, FormLabel } from "~/components/ui/form";
 import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
@@ -280,12 +280,12 @@ export default function DatasetRowTable({
           side="right"
           className="flex w-full flex-col md:w-5/6 xl:w-1/2"
         >
-          <Form {...filterForm}>
+          <Form {...filterForm} className="flex min-h-0 flex-1 flex-col">
             <SheetHeader>
               <SheetTitle>Filter</SheetTitle>
             </SheetHeader>
 
-            <div className="mt-4 flex-1 space-y-4">
+            <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto">
               <div>
                 <label className="text-sm font-medium">Function</label>
                 <div className="mt-1 flex items-center gap-2">
@@ -338,7 +338,7 @@ export default function DatasetRowTable({
               </div>
             </div>
 
-            <SheetFooter className="mt-4">
+            <SheetFooter className="mt-4 shrink-0">
               <Button onClick={handleFilterSubmit}>Apply Filters</Button>
             </SheetFooter>
           </Form>
