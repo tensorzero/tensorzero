@@ -194,6 +194,11 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    // Assert ChatInference has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "ChatInference should have snapshot_hash"
+    );
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -204,6 +209,11 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
+    );
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -232,6 +242,62 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 ]
             },
         ]
+    );
+
+    // Assert InferenceById materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM InferenceById WHERE id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "InferenceById should have snapshot_hash"
+    );
+
+    // Assert InferenceByEpisodeId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM InferenceByEpisodeId WHERE episode_id_uint = toUInt128(toUUID('{episode_id}')) AND id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "InferenceByEpisodeId should have snapshot_hash"
+    );
+
+    // Assert InferenceTag materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM InferenceTag WHERE inference_id = '{inference_id}' AND key = 'tensorzero::tag_key' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "InferenceTag should have snapshot_hash"
+    );
+
+    // Assert TagInference materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM TagInference WHERE key = 'tensorzero::tag_key' AND value = 'tensorzero::tag_value' AND inference_id = '{inference_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "TagInference should have snapshot_hash"
     );
 }
 
@@ -1145,6 +1211,11 @@ async fn e2e_test_inference_json_success() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    // Assert JsonInference has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "JsonInference should have snapshot_hash"
+    );
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -1155,6 +1226,11 @@ async fn e2e_test_inference_json_success() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
+    );
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);

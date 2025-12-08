@@ -83,7 +83,7 @@ pub struct ModelConfig {
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
@@ -771,7 +771,7 @@ async fn wrap_provider_stream(
     )
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
@@ -984,7 +984,7 @@ impl ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -995,7 +995,7 @@ pub enum HostedProviderKind {
 
 #[derive(ts_rs::TS)]
 #[ts(export)]
-#[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]

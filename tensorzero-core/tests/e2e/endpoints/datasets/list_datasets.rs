@@ -1,6 +1,7 @@
 /// Tests for the GET /internal/datasets endpoint (list_datasets).
 use reqwest::{Client, StatusCode};
 use std::time::Duration;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -49,6 +50,7 @@ async fn test_list_datasets_no_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
     clickhouse
@@ -134,6 +136,7 @@ async fn test_list_datasets_with_function_filter() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
     let datapoint_2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -158,6 +161,7 @@ async fn test_list_datasets_with_function_filter() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
     clickhouse
@@ -262,6 +266,7 @@ async fn test_list_datasets_with_pagination() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: Some(SnapshotHash::new_test()),
         });
 
         datapoints.push(datapoint);

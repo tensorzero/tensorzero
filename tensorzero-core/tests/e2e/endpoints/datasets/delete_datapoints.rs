@@ -52,6 +52,7 @@ async fn test_delete_datapoints_single_chat() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -174,6 +175,7 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let chat_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -202,6 +204,7 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
@@ -229,6 +232,7 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -332,6 +336,7 @@ async fn test_delete_datapoints_non_existent_id() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -456,6 +461,7 @@ async fn test_delete_datapoints_already_stale() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse

@@ -14,6 +14,7 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
@@ -188,6 +189,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
                 config.gateway.unstable_disable_feedback_target_validation,
+                config.hash.clone(),
             )
             .await?;
         }
@@ -305,6 +307,7 @@ async fn write_comment(
     feedback_id: Uuid,
     dryrun: bool,
     disable_validation: bool,
+    snapshot_hash: SnapshotHash,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
@@ -319,7 +322,8 @@ async fn write_comment(
         "target_id": target_id,
         "value": value,
         "id": feedback_id,
-        "tags": tags
+        "tags": tags,
+        "snapshot_hash": snapshot_hash,
     });
     if !dryrun {
         deferred_tasks.spawn(async move {
@@ -363,7 +367,7 @@ async fn write_demonstration(
             message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
-    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
+    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let _ = connection_info
@@ -404,7 +408,7 @@ async fn write_float(
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let payload = payload;
@@ -456,7 +460,7 @@ async fn write_boolean(
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let payload_array = [payload];
