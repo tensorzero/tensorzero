@@ -5,6 +5,7 @@ use futures::future::try_join_all;
 use url::Url;
 
 use crate::client::{ClientBuilder, ClientBuilderMode, ContentBlockChunk, InferenceResponseChunk};
+use crate::config::UninitializedRelayConfig;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
@@ -31,18 +32,30 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TensorzeroRelay {
     client: Client,
+    url: Url,
+}
+
+impl From<&TensorzeroRelay> for UninitializedRelayConfig {
+    fn from(relay: &TensorzeroRelay) -> Self {
+        UninitializedRelayConfig {
+            gateway_url: Some(relay.url.clone()),
+        }
+    }
 }
 
 impl TensorzeroRelay {
     pub fn new(gateway_url: Url) -> Result<Self, Error> {
         Ok(Self {
-            client: ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
-                .build_http()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: e.to_string(),
-                    })
-                })?,
+            client: ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+                url: gateway_url.clone(),
+            })
+            .build_http()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: e.to_string(),
+                })
+            })?,
+            url: gateway_url,
         })
     }
 }

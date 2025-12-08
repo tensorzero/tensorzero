@@ -11,7 +11,7 @@
 
 mod common;
 
-use common::{start_gateway_on_random_port, ChildData};
+use common::{ChildData, start_gateway_on_random_port};
 use reqwest::Client;
 use serde_json::json;
 use uuid::Uuid;

@@ -16,7 +16,7 @@ use crate::config::gateway::UninitializedGatewayConfig;
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::config::{
     MetricConfig, PostgresConfig, TimeoutsConfig, UninitializedConfig, UninitializedFunctionConfig,
-    UninitializedToolConfig,
+    UninitializedRelayConfig, UninitializedToolConfig,
 };
 use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddingProviderConfig};
 use crate::evaluations::UninitializedEvaluationConfig;
@@ -163,6 +163,8 @@ pub struct StoredConfig {
     pub provider_types: ProviderTypesConfig,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    #[serde(default)]
+    pub relay: Option<UninitializedRelayConfig>,
 
     // Fields WITH deprecations - use Stored* types
     #[serde(default)]
@@ -185,6 +187,7 @@ impl From<UninitializedConfig> for StoredConfig {
             provider_types,
             optimizers,
             embedding_models,
+            relay,
         } = stored;
 
         // Note: as we migrate the config and deprecate stuff in the future,
@@ -206,6 +209,7 @@ impl From<UninitializedConfig> for StoredConfig {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            relay,
         }
     }
 }
@@ -226,6 +230,7 @@ impl From<StoredConfig> for UninitializedConfig {
             provider_types,
             optimizers,
             embedding_models,
+            relay,
         } = stored;
 
         Self {
@@ -245,6 +250,7 @@ impl From<StoredConfig> for UninitializedConfig {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            relay,
         }
     }
 }
