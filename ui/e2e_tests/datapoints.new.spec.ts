@@ -224,4 +224,45 @@ test.describe("New Datapoint Page", () => {
     // Verify no errors
     await expect(page.getByText("error", { exact: false })).not.toBeVisible();
   });
+
+  test("should handle switching from JSON to chat function without crashing", async ({
+    page,
+  }) => {
+    await page.goto("/datapoints/new");
+    await page.waitForLoadState("networkidle");
+
+    // Select dataset first
+    await page.getByTestId("dataset-selector").getByRole("combobox").click();
+    await page.getByPlaceholder(/dataset/i).fill("test_switch");
+    await page
+      .locator("[cmdk-item]")
+      .filter({ hasText: "test_switch" })
+      .click();
+
+    // Select JSON function first
+    await page.getByTestId("function-selector").getByRole("combobox").click();
+    await page.getByPlaceholder("Find a function...").fill("extract_entities");
+    await page
+      .locator("[cmdk-item]")
+      .filter({ hasText: "extract_entities" })
+      .click();
+
+    // Wait for JSON output section with Schema tab
+    await expect(page.getByRole("tab", { name: "Schema" })).toBeVisible();
+
+    // Switch to chat function
+    await page.getByTestId("function-selector").getByRole("combobox").click();
+    await page.getByPlaceholder("Find a function...").fill("write_haiku");
+    await page
+      .locator("[cmdk-item]")
+      .filter({ hasText: "write_haiku" })
+      .click();
+
+    // Verify chat output renders without error (no Schema tab for chat)
+    await expect(page.getByRole("heading", { name: "Output" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Schema" })).not.toBeVisible();
+
+    // Verify the chat output component is visible
+    await expect(page.getByTestId("chat-output")).toBeVisible();
+  });
 });

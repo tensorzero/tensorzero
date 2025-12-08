@@ -37,6 +37,20 @@ const DEFAULT_JSON_OUTPUT: JsonInferenceOutput = {
   parsed: {},
 };
 
+// Type guard to check if output is a JsonInferenceOutput
+function isJsonOutput(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput | undefined,
+): output is JsonInferenceOutput {
+  return output !== undefined && "raw" in output && "parsed" in output;
+}
+
+// Type guard to check if output is a ContentBlockChatOutput[]
+function isChatOutput(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput | undefined,
+): output is ContentBlockChatOutput[] {
+  return output !== undefined && Array.isArray(output);
+}
+
 export function NewDatapointForm() {
   const functions = useAllFunctionConfigs();
   const isReadOnly = useReadOnly();
@@ -59,7 +73,18 @@ export function NewDatapointForm() {
   const functionConfig = useFunctionConfig(selectedFunction);
   const functionType = functionConfig?.type;
 
-  // Reset output and output schema when function config changes
+  // Reset all form state when function selection changes
+  // This prevents type mismatches when switching between chat and JSON functions
+  useEffect(() => {
+    setInput(DEFAULT_INPUT);
+    setOutput(undefined);
+    setOutputSchema(undefined);
+    setTags({});
+    setName("");
+    setValidationError(null);
+  }, [selectedFunction]);
+
+  // Set default output and output schema based on function type
   useEffect(() => {
     if (functionConfig?.type === "chat") {
       setOutput(DEFAULT_CHAT_OUTPUT);
@@ -67,11 +92,7 @@ export function NewDatapointForm() {
     } else if (functionConfig?.type === "json") {
       setOutput(DEFAULT_JSON_OUTPUT);
       setOutputSchema(functionConfig.output_schema.value);
-    } else {
-      setOutput(undefined);
-      setOutputSchema(undefined);
     }
-    setValidationError(null);
   }, [functionConfig]);
 
   // Handle form submission errors
@@ -177,7 +198,7 @@ export function NewDatapointForm() {
             <SectionHeader heading="Output" />
             {functionType === "json" ? (
               <JsonOutputElement
-                output={output as JsonInferenceOutput | undefined}
+                output={isJsonOutput(output) ? output : undefined}
                 outputSchema={outputSchema}
                 isEditing={true}
                 onOutputChange={(newOutput) => {
@@ -191,7 +212,7 @@ export function NewDatapointForm() {
               />
             ) : (
               <ChatOutputElement
-                output={output as ContentBlockChatOutput[] | undefined}
+                output={isChatOutput(output) ? output : undefined}
                 isEditing={true}
                 onOutputChange={(newOutput) => setOutput(newOutput)}
               />
