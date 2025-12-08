@@ -21,7 +21,7 @@ import { Filter, Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
-import { Form, FormLabel } from "~/components/ui/form";
+import { Form } from "~/components/ui/form";
 import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
