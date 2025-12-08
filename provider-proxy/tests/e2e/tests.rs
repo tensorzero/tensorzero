@@ -67,6 +67,7 @@ async fn test_provider_proxy() {
         Args {
             cache_path: temp_dir.path().to_path_buf(),
             port: 0,
+            sanitize_traceparent: true,
             sanitize_bearer_auth: true,
             sanitize_aws_sigv4: true,
             sanitize_model_headers: true,
@@ -192,6 +193,7 @@ async fn test_read_old_write_new() {
         Args {
             cache_path: temp_dir.path().to_path_buf(),
             port: 0,
+            sanitize_traceparent: true,
             sanitize_bearer_auth: true,
             sanitize_aws_sigv4: true,
             health_port: 0,
@@ -302,6 +304,7 @@ async fn test_read_old_write_new() {
         Args {
             cache_path: temp_dir.path().to_path_buf(),
             port: 0,
+            sanitize_traceparent: true,
             sanitize_bearer_auth: true,
             sanitize_aws_sigv4: true,
             health_port: 0,
