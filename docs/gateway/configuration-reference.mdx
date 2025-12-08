@@ -1431,7 +1431,7 @@ Can be either a string for a single credential location, or an object with `defa
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models.llama3_1_8b_instruct_turbo.providers.together]
+[models.llama3_3_70b_instruct_turbo.providers.together]
 # ...
 type = "together"
 api_key_location = "dynamic::together_api_key"
@@ -1452,7 +1452,7 @@ See [Together's documentation](https://docs.together.ai/docs/chat-models) for th
 You can also deploy your own models on Together AI.
 
 ```toml title="tensorzero.toml"
-[models.llama3_1_8b_instruct_turbo.providers.together]
+[models.llama3_3_70b_instruct_turbo.providers.together]
 # ...
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"

@@ -62,10 +62,10 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.llama3_1_8b_instruct]
+[models.llama3_3_70b_instruct]
 routing = ["fireworks"]
 
-[models.llama3_1_8b_instruct.providers.fireworks]
+[models.llama3_3_70b_instruct.providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
@@ -74,7 +74,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "llama3_1_8b_instruct"
+model = "llama3_3_70b_instruct"
 ```
 
 See the [list of models available on Fireworks](https://fireworks.ai/models).
