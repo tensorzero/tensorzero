@@ -792,14 +792,14 @@ max_tokens = 100
 
 ## Ollama
 
-[functions.basic_test.variants.dolphin-llama3-8b-ollama]
+[functions.basic_test.variants."qwen2-0.5b-ollama"]
 type = "chat_completion"
-model = "dolphin-llama3-8b-ollama"
+model = "qwen2-0.5b-ollama"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.ollama-shorthand]
 type = "chat_completion"
-model = "ollama::dolphin-llama3:8b"
+model = "ollama::qwen2:0.5b"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100

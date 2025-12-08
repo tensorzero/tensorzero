@@ -2323,6 +2323,7 @@ pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "hyperbolic::",
     "groq::",
     "mistral::",
+    "ollama::",
     "openai::",
     "openrouter::",
     "together::",
@@ -2437,6 +2438,13 @@ impl ShorthandModelConfig for ModelConfig {
             "xai" => ProviderConfig::XAI(XAIProvider::new(
                 model_name,
                 XAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "ollama" => ProviderConfig::Ollama(OllamaProvider::new(
+                model_name,
+                None,
+                OllamaKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),

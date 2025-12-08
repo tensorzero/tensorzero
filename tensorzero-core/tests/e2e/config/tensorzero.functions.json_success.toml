@@ -734,9 +734,9 @@ max_tokens = 100
 
 ## Ollama
 
-[functions.json_success.variants.dolphin-llama3-8b-ollama]
+[functions.json_success.variants."qwen2-0.5b-ollama"]
 type = "chat_completion"
-model = "dolphin-llama3-8b-ollama"
+model = "qwen2-0.5b-ollama"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
