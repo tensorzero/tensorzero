@@ -154,23 +154,23 @@ impl TimeoutsConfig {
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
 
-        if let Some(total_ms) = total_ms {
-            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
-                    ),
-                }));
-            }
+        if let Some(total_ms) = total_ms
+            && Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
-        if let Some(ttft_ms) = ttft_ms {
-            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
-                    ),
-                }));
-            }
+        if let Some(ttft_ms) = ttft_ms
+            && Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
 
         Ok(())
@@ -283,12 +283,12 @@ impl ObjectStoreInfo {
                     builder = builder.with_allow_http(allow_http);
                 }
 
-                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
-                    if endpoint.ends_with(bucket_name) {
-                        tracing::warn!(
-                            "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
-                        );
-                    }
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint)
+                    && endpoint.ends_with(bucket_name)
+                {
+                    tracing::warn!(
+                        "S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`"
+                    );
                 }
 
                 // This is used to speed up our unit tests - in the future,
@@ -1077,10 +1077,8 @@ impl Config {
             .await?
         };
 
-        if validate_credentials {
-            if let Some(object_store) = &unwritten_config.object_store_info {
-                object_store.verify().await?;
-            }
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
         Ok(unwritten_config)
@@ -1105,10 +1103,8 @@ impl Config {
             .await?
         };
 
-        if validate_credentials {
-            if let Some(object_store) = &unwritten_config.object_store_info {
-                object_store.verify().await?;
-            }
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
         Ok(unwritten_config)
@@ -1930,15 +1926,15 @@ impl UninitializedFunctionConfig {
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
-                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode().is_some() {
-                            return Err(ErrorDetails::Config {
-                                message: format!(
-                                    "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
-                                ),
-                            }
-                            .into());
+                    if let VariantConfig::ChatCompletion(chat_config) = &variant.inner
+                        && chat_config.json_mode().is_some()
+                    {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
+                            ),
                         }
+                        .into());
                     }
                 }
                 let experimentation = params
