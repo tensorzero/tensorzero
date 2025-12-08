@@ -23,6 +23,7 @@ from tensorzero import (
     StoredInferenceJson,
     StoredInput,
     StoredInputMessage,
+    StoredInputMessageContentTemplate,
     StoredInputMessageContentText,
     StoredInputMessageContentThought,
     TensorZeroGateway,
@@ -217,7 +218,9 @@ def json_function_rendered_samples(
             messages=[
                 StoredInputMessage(
                     role="user",
-                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                    content=[
+                        StoredInputMessageContentTemplate(type="template", name="user", arguments={"country": "Japan"})
+                    ],
                 )
             ],
         ),
