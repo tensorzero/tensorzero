@@ -19,8 +19,8 @@ use axum::{
     body::Body,
     extract::{Json, Multipart, Path},
     response::{
-        sse::{Event, Sse},
         IntoResponse, Response,
+        sse::{Event, Sse},
     },
 };
 use clap::Parser;
@@ -29,7 +29,7 @@ use futures::Stream;
 use mimalloc::MiMalloc;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -348,13 +348,17 @@ async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Valu
                                             url_data.get("url").and_then(|v| v.as_str()).unwrap();
                                         if !url.starts_with("data:") {
                                             return Err(Error::new(
-                                                format!("Invalid JSONL line (\"{line}\"): image_url is not a data URL"),
+                                                format!(
+                                                    "Invalid JSONL line (\"{line}\"): image_url is not a data URL"
+                                                ),
                                                 StatusCode::BAD_REQUEST,
                                             ));
                                         }
                                         if url.len() < 100 {
                                             return Err(Error::new(
-                                                format!("Invalid JSONL line (\"{line}\"): image_url is too short"),
+                                                format!(
+                                                    "Invalid JSONL line (\"{line}\"): image_url is too short"
+                                                ),
                                                 StatusCode::BAD_REQUEST,
                                             ));
                                         }
@@ -656,10 +660,10 @@ mod tests {
             .unwrap();
         let body_json = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
 
-        let arguments = body_json["choices"][0]["message"]["tool_calls"][0]["function"]
-            ["arguments"]
-            .as_str()
-            .unwrap();
+        let arguments =
+            body_json["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+                .as_str()
+                .unwrap();
         assert_eq!(
             arguments,
             "{\n\"answer\": \"The 2020 World Series was played in Texas at Globe Life Field in Arlington.\"}",
