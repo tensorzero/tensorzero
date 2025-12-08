@@ -11,11 +11,11 @@ use crate::variant::{
 };
 use chrono::Duration;
 #[cfg(feature = "pyo3")]
+use pyo3::IntoPyObjectExt;
+#[cfg(feature = "pyo3")]
 use pyo3::exceptions::{PyKeyError, PyValueError};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
 use serde::Serialize;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -39,6 +39,8 @@ use crate::tool::{
     ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
+
+pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -298,85 +300,83 @@ impl FunctionConfig {
         &self,
         params: &crate::endpoints::inference::Params,
     ) -> Result<(), Error> {
-        if let FunctionConfig::Chat(chat_config) = self {
-            if let Some(JsonMode::Tool) = &params.params.chat_completion.json_mode {
-                // Check if the chat function has tools configured
-                if !chat_config.tools.is_empty() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "JSON mode `tool` is not supported with other tools configured."
-                            .to_string(),
-                    }
-                    .into());
+        if let FunctionConfig::Chat(chat_config) = self
+            && let Some(JsonMode::Tool) = &params.params.chat_completion.json_mode
+        {
+            // Check if the chat function has tools configured
+            if !chat_config.tools.is_empty() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "JSON mode `tool` is not supported with other tools configured."
+                        .to_string(),
                 }
+                .into());
+            }
 
-                // Check if the chat function has tool_choice configured (not Auto, which is the default)
-                if !matches!(chat_config.tool_choice, ToolChoice::Auto) {
-                    return Err(ErrorDetails::InvalidRequest {
+            // Check if the chat function has tool_choice configured (not Auto, which is the default)
+            if !matches!(chat_config.tool_choice, ToolChoice::Auto) {
+                return Err(ErrorDetails::InvalidRequest {
                         message: "JSON mode `tool` is not supported with `tool_choice` configured in the function.".to_string(),
                     }
                     .into());
-                }
+            }
 
-                // Check if the chat function has parallel_tool_calls configured
-                if chat_config.parallel_tool_calls.is_some() {
-                    return Err(ErrorDetails::InvalidRequest {
+            // Check if the chat function has parallel_tool_calls configured
+            if chat_config.parallel_tool_calls.is_some() {
+                return Err(ErrorDetails::InvalidRequest {
                         message: "JSON mode `tool` is not supported with `parallel_tool_calls` configured in the function.".to_string(),
                     }
                     .into());
-                }
+            }
 
-                // Require output_schema when using `json_mode="tool"`
-                if params.output_schema.is_none() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "JSON mode `tool` requires `output_schema`.".to_string(),
-                    }
-                    .into());
+            // Require output_schema when using `json_mode="tool"`
+            if params.output_schema.is_none() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "JSON mode `tool` requires `output_schema`.".to_string(),
                 }
+                .into());
+            }
 
-                // Reject dynamic tool params when using `json_mode="tool"` (similar to JSON functions)
-                let DynamicToolParams {
-                    ref allowed_tools,
-                    ref additional_tools,
-                    ref parallel_tool_calls,
-                    ref provider_tools,
-                    ref tool_choice,
-                } = params.dynamic_tool_params;
+            // Reject dynamic tool params when using `json_mode="tool"` (similar to JSON functions)
+            let DynamicToolParams {
+                ref allowed_tools,
+                ref additional_tools,
+                ref parallel_tool_calls,
+                ref provider_tools,
+                ref tool_choice,
+            } = params.dynamic_tool_params;
 
-                if allowed_tools.is_some() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "Cannot pass `allowed_tools` when using JSON mode `tool`."
-                            .to_string(),
-                    }
-                    .into());
+            if allowed_tools.is_some() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "Cannot pass `allowed_tools` when using JSON mode `tool`.".to_string(),
                 }
-                if additional_tools.is_some() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "Cannot pass `additional_tools` when using JSON mode `tool`."
-                            .to_string(),
-                    }
-                    .into());
+                .into());
+            }
+            if additional_tools.is_some() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "Cannot pass `additional_tools` when using JSON mode `tool`."
+                        .to_string(),
                 }
-                if parallel_tool_calls.is_some() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "Cannot pass `parallel_tool_calls` when using JSON mode `tool`."
-                            .to_string(),
-                    }
-                    .into());
+                .into());
+            }
+            if parallel_tool_calls.is_some() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "Cannot pass `parallel_tool_calls` when using JSON mode `tool`."
+                        .to_string(),
                 }
-                if !provider_tools.is_empty() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "Cannot pass `provider_tools` when using JSON mode `tool`."
-                            .to_string(),
-                    }
-                    .into());
+                .into());
+            }
+            if !provider_tools.is_empty() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "Cannot pass `provider_tools` when using JSON mode `tool`."
+                        .to_string(),
                 }
-                if tool_choice.is_some() {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: "Cannot pass `tool_choice` when using JSON mode `tool`."
-                            .to_string(),
-                    }
-                    .into());
+                .into());
+            }
+            if tool_choice.is_some() {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "Cannot pass `tool_choice` when using JSON mode `tool`.".to_string(),
                 }
+                .into());
             }
         }
         self.validate_input(&params.input)
@@ -772,10 +772,14 @@ fn validate_single_message(
             if !content.is_string() && !all_templates_names.contains(template_name) {
                 return Err(match index {
                     Some(index) => Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Message at index {index} has non-string content but there is no template `{template_name}` in any variant"),
+                        message: format!(
+                            "Message at index {index} has non-string content but there is no template `{template_name}` in any variant"
+                        ),
                     }),
                     None => Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("System message has non-string content but there is no template `{template_name}` in any variant"),
+                        message: format!(
+                            "System message has non-string content but there is no template `{template_name}` in any variant"
+                        ),
                     }),
                 });
             }
@@ -787,8 +791,8 @@ fn validate_single_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::path::ResolvedTomlPathData;
     use crate::config::UninitializedSchemas;
+    use crate::config::path::ResolvedTomlPathData;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::Arguments;
     use crate::inference::types::FinishReason;
@@ -2534,9 +2538,11 @@ mod tests {
         assert_eq!(json_block_index, Some(3));
         // Should exclude the ToolCall block from auxiliary_content
         assert_eq!(auxiliary_content.len(), 3);
-        assert!(auxiliary_content
-            .iter()
-            .any(|b| matches!(b, ContentBlockOutput::Text(_))));
+        assert!(
+            auxiliary_content
+                .iter()
+                .any(|b| matches!(b, ContentBlockOutput::Text(_)))
+        );
         assert_eq!(
             auxiliary_content
                 .iter()

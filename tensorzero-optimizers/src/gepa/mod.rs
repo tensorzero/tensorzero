@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::IteratorRandom};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use uuid::Uuid;
 
@@ -16,8 +16,8 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
-        gepa::{GEPAConfig, GEPAJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        gepa::{GEPAConfig, GEPAJobHandle},
     },
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
@@ -33,10 +33,10 @@ pub mod validate;
 
 use analyze::analyze_inferences;
 use evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName, VariantScores,
+    EvaluateVariantParams, VariantName, VariantScores, create_evaluation_dataset, evaluate_variant,
 };
 use mutate::mutate_variant;
-use pareto::{is_improvement, Candidate, ParetoFrontier};
+use pareto::{Candidate, ParetoFrontier, is_improvement};
 use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 /// A GEPA variant with its name and configuration
@@ -163,7 +163,7 @@ impl Optimizer for GEPAConfig {
             .map(|(variant_name, variant_config)| {
                 let gateway_client = gateway_client.clone();
                 let clickhouse_connection_info = clickhouse_connection_info.clone();
-                let tensorzero_config = Arc::clone(&config);
+                let functions = config.functions.clone();
                 let evaluation_config_param = Arc::clone(&function_context.evaluation_config);
                 let evaluation_name = evaluation_name.clone();
                 let variant_name = variant_name.clone();
@@ -174,7 +174,7 @@ impl Optimizer for GEPAConfig {
                     match evaluate_variant(EvaluateVariantParams {
                         gateway_client,
                         clickhouse_connection_info,
-                        tensorzero_config,
+                        functions,
                         evaluation_config: evaluation_config_param,
                         evaluation_name,
                         variant_name: variant_name.clone(),
@@ -329,7 +329,7 @@ impl Optimizer for GEPAConfig {
             let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
-                tensorzero_config: Arc::clone(&config),
+                functions: config.functions.clone(),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
                 variant_name: parent.name.clone(),
@@ -432,7 +432,7 @@ impl Optimizer for GEPAConfig {
             let child_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
-                tensorzero_config: Arc::clone(&config),
+                functions: config.functions.clone(),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
                 variant_name: child.name.clone(),
@@ -484,7 +484,7 @@ impl Optimizer for GEPAConfig {
                 match evaluate_variant(EvaluateVariantParams {
                     gateway_client: gateway_client.clone(),
                     clickhouse_connection_info: clickhouse_connection_info.clone(),
-                    tensorzero_config: Arc::clone(&config),
+                    functions: config.functions.clone(),
                     evaluation_config: Arc::clone(&function_context.evaluation_config),
                     evaluation_name: self.evaluation_name.clone(),
                     variant_name: child.name.clone(),

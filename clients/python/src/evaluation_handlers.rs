@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use evaluations::{
-    stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate},
     OutputFormat, RunInfo,
+    stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate},
 };
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration},

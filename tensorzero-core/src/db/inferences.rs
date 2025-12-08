@@ -18,7 +18,7 @@ use crate::serde_util::deserialize_json_string;
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
-use crate::tool::{deserialize_tool_info, ToolCallConfigDatabaseInsert};
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_tool_info};
 
 pub(crate) const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 

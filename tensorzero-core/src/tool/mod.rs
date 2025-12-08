@@ -23,8 +23,9 @@ pub use config::{
 };
 pub use params::{BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams};
 pub use storage::{
+    LegacyToolCallConfigDatabaseInsert, ToolCallConfigDatabaseInsert,
     apply_dynamic_tool_params_update_to_tool_call_config, deserialize_optional_tool_info,
-    deserialize_tool_info, LegacyToolCallConfigDatabaseInsert, ToolCallConfigDatabaseInsert,
+    deserialize_tool_info,
 };
 pub use types::{
     FunctionTool, OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition,
@@ -307,18 +308,24 @@ mod tests {
         .unwrap();
         // Should have all function tools (get_temperature, query_articles) + dynamic tool (establish_campground)
         assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "query_articles"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "query_articles")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
 
         // We pass a list of a single allowed tool and then configure a new tool
         // All function tools are still included, plus the dynamic tool
@@ -344,18 +351,24 @@ mod tests {
         .unwrap();
         // Should have all function tools + dynamic tool
         assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "query_articles"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "query_articles")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
         assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
         // We pass a list of no allowed tools and then configure a new tool
@@ -382,10 +395,12 @@ mod tests {
         .unwrap();
         // Should have all function tools + dynamic tool
         assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
             tool_call_config.tool_choice,
@@ -927,34 +942,44 @@ mod tests {
         assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
 
         // Verify the static tools are included
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "query_articles"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "query_articles")
+        );
 
         // Verify the dynamic tool is included
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
         assert_eq!(
             tool_call_config.strict_tools_available().unwrap().count(),
             2
         );
-        assert!(tool_call_config
-            .strict_tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
-        assert!(tool_call_config
-            .strict_tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .strict_tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
+        assert!(
+            tool_call_config
+                .strict_tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
     }
 
     #[tokio::test]
@@ -1021,25 +1046,33 @@ mod tests {
         // function_tools: get_temperature, query_articles
         // dynamic tools: establish_campground
         assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "query_articles"));
-        assert!(tool_call_config
-            .tools_available()
-            .unwrap()
-            .any(|t| t.name() == "establish_campground"));
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "query_articles")
+        );
+        assert!(
+            tool_call_config
+                .tools_available()
+                .unwrap()
+                .any(|t| t.name() == "establish_campground")
+        );
 
         // But only get_temperature should be in allowed_tools
         assert_eq!(tool_call_config.allowed_tools.tools.len(), 1);
-        assert!(tool_call_config
-            .allowed_tools
-            .tools
-            .contains(&"get_temperature".to_string()));
+        assert!(
+            tool_call_config
+                .allowed_tools
+                .tools
+                .contains(&"get_temperature".to_string())
+        );
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::Explicit
@@ -1050,10 +1083,12 @@ mod tests {
             tool_call_config.strict_tools_available().unwrap().count(),
             1
         );
-        assert!(tool_call_config
-            .strict_tools_available()
-            .unwrap()
-            .any(|t| t.name() == "get_temperature"));
+        assert!(
+            tool_call_config
+                .strict_tools_available()
+                .unwrap()
+                .any(|t| t.name() == "get_temperature")
+        );
     }
 
     // Helper struct to test deserialization with flattening

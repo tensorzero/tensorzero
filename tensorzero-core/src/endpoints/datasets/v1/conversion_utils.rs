@@ -67,6 +67,7 @@ impl CreateChatDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
@@ -147,6 +148,7 @@ impl CreateJsonDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
@@ -344,9 +346,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("not configured as a chat function"));
+        assert!(
+            err.to_string()
+                .contains("not configured as a chat function")
+        );
     }
 
     #[tokio::test]
@@ -610,9 +613,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("not configured as a JSON function"));
+        assert!(
+            err.to_string()
+                .contains("not configured as a JSON function")
+        );
     }
 
     #[tokio::test]

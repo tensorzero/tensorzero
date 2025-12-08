@@ -11,14 +11,17 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use futures::StreamExt;
 use pyo3::{
+    IntoPyObjectExt,
     exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
     ffi::c_str,
     prelude::*,
     types::{PyDict, PyList, PyString, PyType},
-    IntoPyObjectExt,
 };
 use python_helpers::{
     convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
@@ -32,20 +35,19 @@ use tensorzero_core::{
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
-        pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_rendered_sample,
-            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
-            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
-            JSON_LOADS,
-        },
         ResolvedInput, ResolvedInputMessage,
+        pyo3_helpers::{
+            JSON_DUMPS, JSON_LOADS, deserialize_from_pyobj, deserialize_from_rendered_sample,
+            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
+            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class,
+        },
     },
     optimization::{
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
         gepa::UninitializedGEPAConfig, openai_rft::UninitializedOpenAIRFTConfig,
         openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     tool::ProviderTool,
     variant::{
@@ -64,11 +66,11 @@ use tensorzero_core::{
     utils::gateway::ShutdownHandle,
 };
 use tensorzero_rust::{
-    err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientExt, ClientInferenceParams, ClientSecretString, Datapoint,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input,
-    LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams, OptimizationJobHandle,
-    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
+    ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -79,7 +81,7 @@ mod gil_helpers;
 mod python_helpers;
 
 use crate::evaluation_handlers::{AsyncEvaluationJobHandler, EvaluationJobHandler};
-use crate::gil_helpers::{tokio_block_on_without_gil, DropInTokio};
+use crate::gil_helpers::{DropInTokio, tokio_block_on_without_gil};
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1117,7 +1119,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1144,7 +1146,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1185,7 +1187,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1212,7 +1214,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1243,7 +1245,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1261,7 +1263,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1299,7 +1301,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1324,7 +1326,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), res).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1433,10 +1435,32 @@ impl TensorZeroGateway {
             })
             .transpose()?;
 
+        // Extract evaluation config from app_state
+        let evaluation_config = app_state
+            .config
+            .evaluations
+            .get(&evaluation_name)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "evaluation '{evaluation_name}' not found"
+                ))
+            })?
+            .clone();
+
+        // Build function configs table from all functions in the config
+        let function_configs: EvaluationFunctionConfigTable = app_state
+            .config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+        let function_configs = Arc::new(function_configs);
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
-            config: app_state.config.clone(),
+            evaluation_config,
+            function_configs,
             evaluation_name,
             evaluation_run_id,
             dataset_name,
@@ -1600,7 +1624,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -2310,7 +2334,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2340,7 +2364,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2380,7 +2404,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2412,7 +2436,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2442,7 +2466,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2466,7 +2490,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2507,7 +2531,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2535,7 +2559,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2648,10 +2672,32 @@ impl AsyncTensorZeroGateway {
 
             let evaluation_run_id = uuid::Uuid::now_v7();
 
+            // Extract evaluation config from app_state
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "evaluation '{evaluation_name}' not found"
+                    ))
+                })?
+                .clone();
+
+            // Build function configs table from all functions in the config
+            let function_configs: EvaluationFunctionConfigTable = app_state
+                .config
+                .functions
+                .iter()
+                .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+                .collect();
+            let function_configs = Arc::new(function_configs);
+
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
-                config: app_state.config.clone(),
+                evaluation_config,
+                function_configs,
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
@@ -2804,7 +2850,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
@@ -2830,7 +2876,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
@@ -3016,7 +3062,10 @@ fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {
         PyErr::warn(
             py,
             &user_warning,
-            c_str!("No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."), 0
+            c_str!(
+                "No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."
+            ),
+            0,
         )?;
     }
     Ok(())

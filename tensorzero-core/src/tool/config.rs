@@ -15,9 +15,9 @@ use serde_json::Value;
 use crate::error::{Error, ErrorDetails};
 use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
 
+use super::IMPLICIT_TOOL_DESCRIPTION;
 use super::types::{FunctionTool, OpenAICustomTool, ProviderTool, Tool};
 use super::wire::ToolChoice;
-use super::IMPLICIT_TOOL_DESCRIPTION;
 
 #[cfg(test)]
 use super::params::DynamicToolParams;

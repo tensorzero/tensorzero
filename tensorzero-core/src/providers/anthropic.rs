@@ -1,5 +1,5 @@
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use lazy_static::lazy_static;
 use mime::MediaType;
 use reqwest::StatusCode;
@@ -15,18 +15,20 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
-    warn_discarded_unknown_chunk, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_unknown_chunk,
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
-    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
+    ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
+    ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -35,7 +37,6 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
     UnknownChunk, Usage,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -970,13 +971,13 @@ pub(crate) fn prefill_json_response(
     content: Vec<ContentBlockOutput>,
 ) -> Result<Vec<ContentBlockOutput>, Error> {
     // Check if the content is a single text block
-    if content.len() == 1 {
-        if let ContentBlockOutput::Text(text) = &content[0] {
-            // If it's a single text block, add a "{" to the beginning
-            return Ok(vec![ContentBlockOutput::Text(Text {
-                text: format!("{{{}", text.text.trim()),
-            })]);
-        }
+    if content.len() == 1
+        && let ContentBlockOutput::Text(text) = &content[0]
+    {
+        // If it's a single text block, add a "{" to the beginning
+        return Ok(vec![ContentBlockOutput::Text(Text {
+            text: format!("{{{}", text.text.trim()),
+        })]);
     }
     // If it's not a single text block, return content as-is but log an error
     Error::new(ErrorDetails::OutputParsing {
@@ -1830,15 +1831,17 @@ mod tests {
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
                 model: &model,
-                messages: vec![AnthropicMessage::from_request_message(
-                    &inference_request.messages[0],
-                    AnthropicMessagesConfig {
-                        fetch_and_encode_input_files_before_inference: false,
-                    },
-                    PROVIDER_TYPE,
-                )
-                .await
-                .unwrap(),],
+                messages: vec![
+                    AnthropicMessage::from_request_message(
+                        &inference_request.messages[0],
+                        AnthropicMessagesConfig {
+                            fetch_and_encode_input_files_before_inference: false,
+                        },
+                        PROVIDER_TYPE,
+                    )
+                    .await
+                    .unwrap(),
+                ],
                 max_tokens: 64_000,
                 stream: Some(false),
                 system: Some(vec![AnthropicSystemBlock::Text {

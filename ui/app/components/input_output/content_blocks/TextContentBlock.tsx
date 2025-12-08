@@ -1,5 +1,6 @@
 import { AlignLeftIcon } from "lucide-react";
-import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
+import { useFormattedJson } from "~/components/ui/code-editor";
+import { VirtualizedCodeEditor } from "~/components/ui/virtualized-code-editor";
 import { type ReactNode } from "react";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 
@@ -32,7 +33,7 @@ export function TextContentBlock({
       >
         {label}
       </ContentBlockLabel>
-      <CodeEditor
+      <VirtualizedCodeEditor
         value={formattedText}
         readOnly={!isEditing}
         onChange={onChange}

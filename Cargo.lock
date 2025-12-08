@@ -2205,6 +2205,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-core",
  "tensorzero-optimizers",
+ "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
  "tower-http",
@@ -6158,6 +6159,7 @@ dependencies = [
  "object_store",
  "once_cell",
  "opentelemetry",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
@@ -6183,6 +6185,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -6240,6 +6243,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.22.1",
+ "blake3",
  "chrono",
  "evaluations",
  "futures",
@@ -6283,6 +6287,10 @@ dependencies = [
  "url",
  "uuid",
 ]
+
+[[package]]
+name = "tensorzero-unsafe-helpers"
+version = "2025.11.6"
 
 [[package]]
 name = "termcolor"

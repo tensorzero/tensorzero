@@ -389,10 +389,12 @@ pub(crate) mod tests {
             malformed_template.to_string(),
         )]);
         let result = template_config.initialize(template_paths, None).await;
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to add template"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to add template")
+        );
     }
 
     #[tokio::test]
