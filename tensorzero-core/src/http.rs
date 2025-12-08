@@ -521,7 +521,7 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                             })
                         })?
                         .no_proxy(NoProxy::from_string(
-                            "localhost,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
+                            "localhost,0.0.0.0,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
                         )),
                 )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy

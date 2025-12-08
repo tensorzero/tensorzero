@@ -35,7 +35,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TensorzeroRelay {
     client: Client,
-    url: Url,
+    pub url: Url,
 }
 
 impl From<&TensorzeroRelay> for UninitializedRelayConfig {
