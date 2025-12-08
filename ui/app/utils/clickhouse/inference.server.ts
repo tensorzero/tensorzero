@@ -14,6 +14,7 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   StoredInference,
+  InferenceFilter,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -56,9 +57,19 @@ export async function listInferencesWithPagination(params: {
   function_name?: string;
   variant_name?: string;
   episode_id?: string;
+  filter?: InferenceFilter;
+  search_query?: string;
 }): Promise<ListInferencesResult> {
-  const { limit, before, after, function_name, variant_name, episode_id } =
-    params;
+  const {
+    limit,
+    before,
+    after,
+    function_name,
+    variant_name,
+    episode_id,
+    filter,
+    search_query,
+  } = params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
@@ -76,6 +87,8 @@ export async function listInferencesWithPagination(params: {
       function_name,
       variant_name,
       episode_id,
+      filter,
+      search_query_experimental: search_query,
     });
 
     // Determine if there are more pages based on whether we got more than limit results
