@@ -26,6 +26,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::inference_stats::get_inference_stats_handler),
         )
         .route(
+            "/internal/functions/{function_name}/inference-stats/{metric_name}",
+            get(endpoints::internal::inference_stats::get_inference_with_feedback_stats_handler),
+        )
+        .route(
             "/internal/ui-config",
             get(endpoints::ui::get_config::ui_config_handler),
         )

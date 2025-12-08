@@ -149,6 +149,7 @@ export * from "./InferenceParams";
 export * from "./InferenceResponse";
 export * from "./InferenceResponseToolCall";
 export * from "./InferenceStatsResponse";
+export * from "./InferenceWithFeedbackStatsResponse";
 export * from "./Input";
 export * from "./InputMessage";
 export * from "./InputMessageContent";

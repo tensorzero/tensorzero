@@ -85,6 +85,15 @@ pub enum FunctionConfigType {
     Json,
 }
 
+impl FunctionConfigType {
+    pub fn table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "ChatInference",
+            FunctionConfigType::Json => "JsonInference",
+        }
+    }
+}
+
 impl FunctionConfig {
     pub fn config_type(&self) -> FunctionConfigType {
         match self {
@@ -93,11 +102,8 @@ impl FunctionConfig {
         }
     }
 
-    pub fn table_name(&self) -> &str {
-        match self {
-            FunctionConfig::Chat(_) => "ChatInference",
-            FunctionConfig::Json(_) => "JsonInference",
-        }
+    pub fn table_name(&self) -> &'static str {
+        self.config_type().table_name()
     }
 
     pub fn experimentation(&self) -> &ExperimentationConfig {
