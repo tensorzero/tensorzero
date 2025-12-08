@@ -4,7 +4,7 @@
 //!
 //! These tests spawn two gateway processes:
 //! 1. A "downstream" gateway with actual model providers (using dummy provider)
-//! 2. A "relay" gateway configured with `[relay]` to forward requests to the downstream gateway
+//! 2. A "relay" gateway configured with `[gateway.relay]` to forward requests to the downstream gateway
 //!
 //! This validates that the relay correctly proxies inference requests through
 //! another TensorZero gateway instance.
@@ -34,7 +34,7 @@ async fn start_relay_test_environment(
     // Build relay configuration with downstream port injected
     let relay_config = format!(
         r#"
-[relay]
+[gateway.relay]
 gateway_url = "http://0.0.0.0:{}"
 
 {}
@@ -445,7 +445,7 @@ async fn test_relay_downstream_unreachable() {
     let relay = start_gateway_on_random_port(
         &format!(
             r#"
-[relay]
+[gateway.relay]
 gateway_url = "http://0.0.0.0:19999"
 
 {relay_config}
@@ -534,7 +534,7 @@ async fn test_skip_relay_mixed_models() {
     // while local_model should succeed using its local provider.
 
     let relay_config = r#"
-[relay]
+[gateway.relay]
 gateway_url = "http://tensorzero.invalid"
 
 [models.local_model]

@@ -47,7 +47,7 @@ pub async fn embeddings(
     params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
-    if config.relay.is_some() {
+    if config.gateway.relay.is_some() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: "Embeddings endpoint is not supported in relay mode".to_string(),
         }));

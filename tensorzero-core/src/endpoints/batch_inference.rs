@@ -130,7 +130,7 @@ pub async fn start_batch_inference(
     params: StartBatchInferenceParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<PrepareBatchInferenceOutput, Error> {
-    if config.relay.is_some() {
+    if config.gateway.relay.is_some() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: "start_batch_inference is not supported in relay mode".to_string(),
         }));
@@ -247,7 +247,7 @@ pub async fn start_batch_inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
-        relay: config.relay.clone(),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -502,7 +502,7 @@ pub async fn poll_batch_inference_handler(
     }): AppState,
     Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
-    if config.relay.is_some() {
+    if config.gateway.relay.is_some() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: "poll_batch_inference is not supported in relay mode".to_string(),
         }));

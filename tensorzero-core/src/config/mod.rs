@@ -115,8 +115,6 @@ pub struct Config {
     pub http_client: TensorzeroHttpClient,
     #[serde(skip)]
     pub hash: SnapshotHash,
-    #[serde(skip)]
-    pub relay: Option<TensorzeroRelay>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -758,7 +756,6 @@ pub struct RuntimeOverlay {
     pub postgres: PostgresConfig,
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_store_info: Option<ObjectStoreInfo>,
-    pub relay: Option<UninitializedRelayConfig>,
 }
 
 impl RuntimeOverlay {
@@ -779,6 +776,7 @@ impl RuntimeOverlay {
             fetch_and_encode_input_files_before_inference,
             auth,
             global_outbound_http_timeout,
+            relay,
         } = &config.gateway;
 
         Self {
@@ -800,11 +798,11 @@ impl RuntimeOverlay {
                 global_outbound_http_timeout_ms: Some(
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
+                relay: relay.as_ref().map(UninitializedRelayConfig::from),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
             object_store_info: config.object_store_info.clone(),
-            relay: config.relay.as_ref().map(UninitializedRelayConfig::from),
         }
     }
 }
@@ -823,7 +821,6 @@ struct ProcessedConfigInput {
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
-    relay: Option<UninitializedRelayConfig>,
 
     // Results from branch-specific processing
     extra_templates: HashMap<String, String>,
@@ -880,7 +877,6 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-                relay,
             } = config.clone();
 
             // Load ALL functions (user + built-in)
@@ -930,7 +926,6 @@ async fn process_config_input(
                 functions: all_functions,
                 gateway_config,
                 object_store_info,
-                relay,
             })
         }
         ConfigInput::Snapshot {
@@ -945,7 +940,6 @@ async fn process_config_input(
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
                 object_store_info: overlay_object_store_info,
-                relay: overlay_relay,
             } = *runtime_overlay;
 
             // Destructure uninit_config to overlay specific fields
@@ -962,7 +956,6 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-                relay: _, // Replaced by overlay
             } = original_snapshot.config.clone().into();
 
             // Reconstruct with overlaid values for snapshot hash computation
@@ -981,7 +974,6 @@ async fn process_config_input(
                 evaluations: evaluations.clone(),
                 provider_types: provider_types.clone(),
                 optimizers: optimizers.clone(),
-                relay: overlay_relay.clone(),
             };
 
             let extra_templates = original_snapshot.extra_templates.clone();
@@ -1015,7 +1007,6 @@ async fn process_config_input(
                 functions: all_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
-                relay: overlay_relay,
             })
         }
     }
@@ -1193,7 +1184,6 @@ impl Config {
             functions,
             gateway_config,
             object_store_info,
-            relay,
         } = process_config_input(input, &mut templates).await?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
@@ -1267,16 +1257,6 @@ impl Config {
             })
         })?;
 
-        let relay = if let Some(relay_config) = relay {
-            if let Some(gateway_url) = relay_config.gateway_url {
-                Some(TensorzeroRelay::new(gateway_url)?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),
@@ -1293,7 +1273,6 @@ impl Config {
             rate_limiting: rate_limiting.try_into()?,
             http_client,
             hash: snapshot.hash.clone(),
-            relay,
         };
 
         // Validate the config
@@ -1731,8 +1710,6 @@ pub struct UninitializedConfig {
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
-    #[serde(default)]
-    pub relay: Option<UninitializedRelayConfig>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -286,7 +286,7 @@ async fn main() -> Result<(), ExitCode> {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
-    if let Some(relay) = &config.relay {
+    if let Some(relay) = &config.gateway.relay {
         tracing::info!("├ Relay mode: enabled (gateway_url = {})", relay.url);
     } else {
         tracing::info!("├ Relay mode: disabled");

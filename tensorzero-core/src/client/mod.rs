@@ -913,6 +913,10 @@ impl Client {
         }
     }
 
+    /// Runs a TensorZero inference over HTTP
+    /// This is like `inference`, but only works in HTTPGateway mode
+    /// The `HttpResponse` struct contains extra http-specific information (e.g. raw_request and raw_response),
+    /// which would not be available when calling `inference` on an embedded gateway.
     pub async fn http_inference(
         &self,
         params: ClientInferenceParams,

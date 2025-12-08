@@ -384,7 +384,7 @@ pub async fn inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
-        relay: config.relay.clone(),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
