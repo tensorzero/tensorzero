@@ -440,7 +440,7 @@ function InputSectionContent({
   );
 }
 
-export function loader({
+export async function loader({
   params,
 }: {
   params: { dataset_name: string; id: string };
