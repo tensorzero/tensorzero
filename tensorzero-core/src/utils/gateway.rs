@@ -583,6 +583,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
         let config = Config {
@@ -653,6 +654,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
         let config = Config {
@@ -688,6 +690,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
         let config = Config {
             gateway: gateway_config,
@@ -722,6 +725,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
         let config = Config {
             gateway: gateway_config,

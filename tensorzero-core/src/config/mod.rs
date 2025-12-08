@@ -1,7 +1,6 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
-use crate::relay::TensorzeroRelay;
 use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.

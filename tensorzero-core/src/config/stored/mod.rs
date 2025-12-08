@@ -16,7 +16,7 @@ use crate::config::gateway::UninitializedGatewayConfig;
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::config::{
     MetricConfig, PostgresConfig, TimeoutsConfig, UninitializedConfig, UninitializedFunctionConfig,
-    UninitializedRelayConfig, UninitializedToolConfig,
+    UninitializedToolConfig,
 };
 use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddingProviderConfig};
 use crate::evaluations::UninitializedEvaluationConfig;
