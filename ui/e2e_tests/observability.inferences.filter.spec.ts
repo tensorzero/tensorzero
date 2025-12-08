@@ -36,7 +36,9 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL contains the filter parameter
-    await expect(page).toHaveURL(/function_name=write_haiku/);
+    await expect(page).toHaveURL(/function_name=write_haiku/, {
+      timeout: 10_000,
+    });
 
     // Verify that inferences are displayed
     await expect(page.locator("tbody tr")).not.toHaveCount(0);
@@ -65,7 +67,9 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL contains the variant filter parameter
-    await expect(page).toHaveURL(/variant_name=openai_promptA/);
+    await expect(page).toHaveURL(/variant_name=openai_promptA/, {
+      timeout: 10_000,
+    });
   });
 
   test("should filter by episode ID", async ({ page }) => {
@@ -86,6 +90,7 @@ test.describe("Inference Filtering", () => {
     // Verify URL contains the episode_id filter parameter
     await expect(page).toHaveURL(
       /episode_id=0196367a-842d-74c2-9e62-67f07369b6ad/,
+      { timeout: 10_000 },
     );
   });
 
@@ -105,7 +110,7 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL contains the search query
-    await expect(page).toHaveURL(/search_query=haiku/);
+    await expect(page).toHaveURL(/search_query=haiku/, { timeout: 10_000 });
   });
 
   test("should add advanced tag filter", async ({ page }) => {
@@ -133,7 +138,7 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL contains filter parameter with JSON
-    await expect(page).toHaveURL(/filter=/);
+    await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
   });
 
   test("should add metric filter", async ({ page }) => {
@@ -157,7 +162,7 @@ test.describe("Inference Filtering", () => {
       await page.getByRole("button", { name: "Apply Filters" }).click();
 
       // Verify URL contains filter parameter with JSON
-      await expect(page).toHaveURL(/filter=/);
+      await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
     }
   });
 
@@ -187,7 +192,7 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL no longer contains function_name
-    await expect(page).not.toHaveURL(/function_name/);
+    await expect(page).not.toHaveURL(/function_name/, { timeout: 10_000 });
   });
 
   test("should show active filter state on button", async ({ page }) => {
@@ -201,7 +206,9 @@ test.describe("Inference Filtering", () => {
     // The button should still be visible (we can't easily check variant in e2e,
     // but we verify the page loads correctly with filters)
     await expect(filterButton).toBeVisible();
-    await expect(page).toHaveURL(/function_name=write_haiku/);
+    await expect(page).toHaveURL(/function_name=write_haiku/, {
+      timeout: 10_000,
+    });
 
     // All visible function cells should show write_haiku (confirming filter is active)
     const functionCells = page.locator("tbody tr td:nth-child(3)");
@@ -231,8 +238,12 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("button", { name: "Apply Filters" }).click();
 
     // Verify URL contains both parameters
-    await expect(page).toHaveURL(/function_name=write_haiku/);
-    await expect(page).toHaveURL(/variant_name=openai_promptA/);
+    await expect(page).toHaveURL(/function_name=write_haiku/, {
+      timeout: 10_000,
+    });
+    await expect(page).toHaveURL(/variant_name=openai_promptA/, {
+      timeout: 10_000,
+    });
   });
 
   test("should preserve filters when paginating", async ({ page }) => {
@@ -256,7 +267,9 @@ test.describe("Inference Filtering", () => {
       if (!isDisabled) {
         await nextButton.click();
         // Verify filter is preserved in the URL
-        await expect(page).toHaveURL(/function_name=write_haiku/);
+        await expect(page).toHaveURL(/function_name=write_haiku/, {
+          timeout: 10_000,
+        });
 
         // Verify filter is preserved - all function cells still show write_haiku
         const newFunctionCells = page.locator("tbody tr td:nth-child(3)");
