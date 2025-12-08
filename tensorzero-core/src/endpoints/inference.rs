@@ -52,6 +52,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -381,6 +382,7 @@ pub async fn inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -1144,6 +1146,20 @@ impl InferenceResponse {
         }
     }
 
+    pub fn usage(&self) -> Usage {
+        match self {
+            InferenceResponse::Chat(c) => c.usage,
+            InferenceResponse::Json(j) => j.usage,
+        }
+    }
+
+    pub fn finish_reason(&self) -> Option<FinishReason> {
+        match self {
+            InferenceResponse::Chat(c) => c.finish_reason,
+            InferenceResponse::Json(j) => j.finish_reason,
+        }
+    }
+
     pub fn variant_name(&self) -> &str {
         match self {
             InferenceResponse::Chat(c) => &c.variant_name,
@@ -1354,6 +1370,7 @@ pub struct InferenceClients {
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,
+    pub relay: Option<TensorzeroRelay>,
 }
 
 // Carryall struct for models used in inference

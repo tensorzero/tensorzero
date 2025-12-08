@@ -230,6 +230,7 @@ pub fn convert_to_optimizer_status(
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
                 }),
             }
         }
