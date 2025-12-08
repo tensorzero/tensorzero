@@ -70,11 +70,11 @@ const mockConfig: UiConfig = {
       level: "inference",
     },
     confidence_with_a_very_very_very_very_very_very_very_very_long_metric_name:
-    {
-      type: "float",
-      optimize: "max",
-      level: "inference",
-    },
+      {
+        type: "float",
+        optimize: "max",
+        level: "inference",
+      },
     toxicity: {
       type: "float",
       optimize: "min",
@@ -105,7 +105,7 @@ const mockConfig: UiConfig = {
 export const Default: Story = {
   args: {
     inferenceFilter: undefined,
-    setInferenceFilter: () => { },
+    setInferenceFilter: () => {},
   },
   render: function DefaultStory() {
     const [inferenceFilter, setInferenceFilter] = useState<
@@ -134,7 +134,7 @@ export const Default: Story = {
 export const Filled: Story = {
   args: {
     inferenceFilter: undefined,
-    setInferenceFilter: () => { },
+    setInferenceFilter: () => {},
   },
   render: function FilledStory() {
     const [inferenceFilter, setInferenceFilter] = useState<
@@ -163,7 +163,7 @@ export const Filled: Story = {
 export const EmptyMetrics: Story = {
   args: {
     inferenceFilter: undefined,
-    setInferenceFilter: () => { },
+    setInferenceFilter: () => {},
   },
   render: function EmptyMetricsStory() {
     const [inferenceFilter, setInferenceFilter] = useState<

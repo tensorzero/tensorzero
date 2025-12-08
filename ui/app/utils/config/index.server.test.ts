@@ -87,7 +87,9 @@ describe("config cache and hash polling", () => {
 
       const config = await getConfig();
 
+      // eslint-disable-next-line no-restricted-syntax
       expect(config.functions["tensorzero::default"]).toBeDefined();
+      // eslint-disable-next-line no-restricted-syntax
       expect(config.functions["tensorzero::default"]?.type).toBe("chat");
     });
   });
