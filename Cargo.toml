@@ -77,7 +77,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.41", features = ["serde"] }
-git2 = { version = "0.20.2", default-features = false }
+git2 = { version = "0.20.3", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
     "tracing_level_info",
 ] }
@@ -94,7 +94,7 @@ sqlx = { version = "0.8.6", features = [
     "uuid",
 ] }
 rlt = "0.2.1"
-metrics-exporter-prometheus = { version = "0.18.0", features = [
+metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
