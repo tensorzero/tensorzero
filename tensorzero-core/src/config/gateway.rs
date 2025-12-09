@@ -1,6 +1,9 @@
 use chrono::Duration;
 use serde::{Deserialize, Serialize};
 
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
+use crate::model_table::load_tensorzero_relay_credential;
+use crate::relay::RelayCredentials;
 use crate::{
     config::{
         ExportConfig, ObservabilityConfig, TemplateFilesystemAccess, UninitializedRelayConfig,
@@ -103,8 +106,17 @@ impl UninitializedGatewayConfig {
         };
 
         let relay = if let Some(relay_config) = self.relay {
-            if let Some(gateway_url) = relay_config.gateway_url {
-                Some(TensorzeroRelay::new(gateway_url)?)
+            if let Some(gateway_url) = &relay_config.gateway_url {
+                let location = relay_config.api_key_location.clone().unwrap_or(
+                    CredentialLocationWithFallback::Single(CredentialLocation::None),
+                );
+
+                let credential = load_tensorzero_relay_credential(&location)?;
+                Some(TensorzeroRelay::new(
+                    gateway_url.clone(),
+                    RelayCredentials::try_from(credential)?,
+                    relay_config,
+                )?)
             } else {
                 None
             }

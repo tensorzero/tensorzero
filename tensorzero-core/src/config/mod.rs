@@ -47,7 +47,9 @@ use crate::inference::types::Usage;
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
+use crate::model::{
+    CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
+};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
@@ -796,7 +798,7 @@ impl RuntimeOverlay {
                 global_outbound_http_timeout_ms: Some(
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
-                relay: relay.as_ref().map(UninitializedRelayConfig::from),
+                relay: relay.as_ref().map(|relay| relay.original_config.clone()),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1692,7 +1694,12 @@ pub struct UninitializedConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedRelayConfig {
+    /// If set, all models will be forwarded to this gateway URL
+    /// (instead of calling the providers defined in our config)
     pub gateway_url: Option<Url>,
+    /// If set, provides a TensorZero API key when invoking `gateway_url`.
+    /// If unset, no API key will be sent.
+    pub api_key_location: Option<CredentialLocationWithFallback>,
 }
 
 /// The result of parsing all of the globbed config files,
