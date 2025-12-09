@@ -31,9 +31,9 @@ test.describe("System Message - Text", () => {
     const systemMessageEditorBlocks = systemSection.locator(
       "div[contenteditable='true']",
     );
-    await expect(systemMessageEditorBlocks).toHaveCount(2);
+    await expect(systemMessageEditorBlocks).toHaveCount(1);
 
-    const systemMessageEditor = systemSection.first();
+    const systemMessageEditor = systemMessageEditorBlocks.first();
     await systemMessageEditor.waitFor({ state: "visible" });
 
     const systemMessageText1 = v7();
