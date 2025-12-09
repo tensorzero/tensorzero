@@ -1591,7 +1591,7 @@ class StoredJsonInference:
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
     extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
-    inference_params: InferenceParams | None = field(default_factory=lambda: {"chat_completion": {}})
+    inference_params: InferenceParams | None = None
     processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     ttft_ms: int | None = None
@@ -1923,7 +1923,7 @@ class StoredChatInference:
     episode_id: str
     function_name: str
     inference_id: str
-    inference_params: InferenceParams
+    inference_params: InferenceParams | None = None
     input: StoredInput
     output: list[ContentBlockChatOutput]
     timestamp: str
