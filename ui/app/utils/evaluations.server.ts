@@ -7,11 +7,11 @@ import { logger } from "~/utils/logger";
 import { getEnv } from "./env.server";
 import { runNativeEvaluationStreaming } from "./tensorzero/native_client.server";
 import type {
-  EvaluationConfig,
-  EvaluationFunctionConfig,
   EvaluationRunEvent,
   FunctionConfig,
+  EvaluationFunctionConfig,
 } from "~/types/tensorzero";
+import { getConfig } from "./config/index.server";
 
 /**
  * Converts a FunctionConfig to the minimal EvaluationFunctionConfig format
@@ -108,8 +108,6 @@ export function parseEvaluationFormData(
 
 export async function runEvaluation(
   evaluationName: string,
-  evaluationConfig: EvaluationConfig,
-  functionConfig: FunctionConfig,
   datasetName: string,
   variantName: string,
   concurrency: number,
@@ -121,6 +119,25 @@ export async function runEvaluation(
   const startTime = new Date();
   let evaluationRunId: string | null = null;
   let startResolved = false;
+
+  // Get config and look up evaluation and function configs
+  const config = await getConfig();
+  const evaluationConfig = config.evaluations[evaluationName];
+  if (!evaluationConfig) {
+    throw new Error(`Evaluation '${evaluationName}' not found in config`);
+  }
+  // eslint-disable-next-line no-restricted-syntax
+  const functionConfig = config.functions[evaluationConfig.function_name];
+  if (!functionConfig) {
+    throw new Error(
+      `Function '${evaluationConfig.function_name}' not found in config`,
+    );
+  }
+
+  // Convert to minimal EvaluationFunctionConfig and serialize
+  const evaluationFunctionConfig = toEvaluationFunctionConfig(functionConfig);
+  const serializedEvaluationConfig = JSON.stringify(evaluationConfig);
+  const serializedFunctionConfig = JSON.stringify(evaluationFunctionConfig);
 
   let resolveStart: (value: EvaluationStartInfo) => void = () => {};
   let rejectStart: (reason?: unknown) => void = () => {};
@@ -198,11 +215,6 @@ export async function runEvaluation(
       }
     }
   };
-
-  // Convert to minimal EvaluationFunctionConfig and serialize
-  const evaluationFunctionConfig = toEvaluationFunctionConfig(functionConfig);
-  const serializedEvaluationConfig = JSON.stringify(evaluationConfig);
-  const serializedFunctionConfig = JSON.stringify(evaluationFunctionConfig);
 
   const nativePromise = runNativeEvaluationStreaming({
     gatewayUrl: env.TENSORZERO_GATEWAY_URL,

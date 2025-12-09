@@ -109,15 +109,13 @@ fn send_event(
     }
 }
 
-/// Parameters for run_evaluation_streaming.
-/// Accepts serialized EvaluationConfig and FunctionConfig directly from the gateway.
 #[napi(object)]
 pub struct RunEvaluationStreamingParams {
     pub gateway_url: String,
     pub clickhouse_url: String,
     /// JSON-serialized EvaluationConfig
     pub evaluation_config: String,
-    /// JSON-serialized EvaluationFunctionConfig (deserialized from FunctionConfig JSON)
+    /// JSON-serialized EvaluationFunctionConfig
     pub function_config: String,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
