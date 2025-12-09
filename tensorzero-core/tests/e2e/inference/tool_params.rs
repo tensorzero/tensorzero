@@ -756,6 +756,28 @@ async fn test_allowed_tools_uses_key_not_display_name() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
+    // Verify that the tool call in the inference response uses the DISPLAY NAME
+    // The dummy "tool" model returns a tool call with name "get_temperature"
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 1, "Should have one tool call");
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+
+    // The `name` field should be the DISPLAY NAME, not the config key
+    let tool_call_name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(
+        tool_call_name, "get_temperature",
+        "Tool call name should be the display name, not the config key 'get_temperature_with_name'"
+    );
+
+    // The `raw_name` should also be the display name (what the model returned)
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(
+        raw_name, "get_temperature",
+        "Raw name should be the display name"
+    );
+
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Verify the tool was available and stored correctly
