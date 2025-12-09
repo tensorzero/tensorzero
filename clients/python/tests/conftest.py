@@ -160,6 +160,7 @@ def mixed_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         extra_body=[],
         output_schema={
             "type": "object",
@@ -233,6 +234,7 @@ def json_function_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         extra_body=[],
         output_schema={
             "type": "object",

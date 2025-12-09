@@ -120,6 +120,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 extra_body=[],
                 output_schema={
                     "type": "object",
@@ -486,6 +487,7 @@ async def test_async_render_samples_success(
                 ),
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 extra_body=[],
                 output_schema={
                     "type": "object",
