@@ -127,6 +127,8 @@ export * from "./InferenceOutputSource";
 export * from "./InferenceParams";
 export * from "./InferenceResponse";
 export * from "./InferenceResponseToolCall";
+export * from "./InferenceStatsByVariant";
+export * from "./InferenceStatsGroupBy";
 export * from "./InferenceStatsResponse";
 export * from "./InferenceWithFeedbackStatsResponse";
 export * from "./Input";

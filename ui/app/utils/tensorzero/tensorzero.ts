@@ -690,19 +690,24 @@ export class TensorZeroClient {
   }
 
   /**
-   * Fetches inference statistics for a function, optionally filtered by variant.
+   * Fetches inference statistics for a function, optionally filtered by variant or grouped by variant.
    * @param functionName - The name of the function to get stats for
-   * @param variantName - Optional variant name to filter by
-   * @returns A promise that resolves with the inference count
+   * @param options - Optional parameters for filtering or grouping
+   * @param options.variantName - Optional variant name to filter by
+   * @param options.groupBy - Optional grouping (e.g., "variant" to get counts per variant)
+   * @returns A promise that resolves with the inference stats
    * @throws Error if the request fails
    */
   async getInferenceStats(
     functionName: string,
-    variantName?: string,
+    options?: { variantName?: string; groupBy?: "variant" },
   ): Promise<InferenceStatsResponse> {
     const searchParams = new URLSearchParams();
-    if (variantName) {
-      searchParams.append("variant_name", variantName);
+    if (options?.variantName) {
+      searchParams.append("variant_name", options.variantName);
+    }
+    if (options?.groupBy) {
+      searchParams.append("group_by", options.groupBy);
     }
     const queryString = searchParams.toString();
     const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
