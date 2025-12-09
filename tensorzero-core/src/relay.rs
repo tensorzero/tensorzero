@@ -7,7 +7,9 @@ use futures::StreamExt;
 use futures::future::try_join_all;
 use url::Url;
 
-use crate::client::{ClientBuilder, ClientBuilderMode, ContentBlockChunk, InferenceResponseChunk};
+use crate::client::{
+    ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk, InferenceResponseChunk,
+};
 use crate::config::UninitializedRelayConfig;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::{
@@ -366,7 +368,11 @@ impl TensorzeroRelay {
             // TODO - implement extra_body and extra_headers
             extra_body: Default::default(),
             extra_headers: Default::default(),
-            credentials: HashMap::new(),
+            credentials: clients
+                .credentials
+                .iter()
+                .map(|(k, v)| (k.clone(), ClientSecretString(v.clone())))
+                .collect(),
             // TODO - how do we want this to interact with dryrun?
             cache_options: CacheParamsOptions {
                 max_age_s: clients.cache_options.max_age_s,
