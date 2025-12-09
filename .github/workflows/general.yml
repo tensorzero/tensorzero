@@ -719,6 +719,8 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
+      # Github OIDC token for Namespace authentication
+      id-token: write
     needs: [build-gateway-container, build-mock-inference-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
