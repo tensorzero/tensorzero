@@ -744,7 +744,7 @@ async fn test_relay_with_dynamic_api_key() {
     assert_eq!(
         response.status(),
         200,
-        "Request with static API key should succeed"
+        "Request with dynamic API key should succeed"
     );
     let body: serde_json::Value = response.json().await.unwrap();
 
