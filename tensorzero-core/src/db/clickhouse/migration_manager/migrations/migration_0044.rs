@@ -1,3 +1,4 @@
+use super::get_column_type;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::Error;
@@ -11,6 +12,7 @@ use async_trait::async_trait;
 pub struct Migration0044<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
+const MIGRATION_ID: &str = "0044";
 
 #[async_trait]
 impl Migration for Migration0044<'_> {
@@ -59,7 +61,30 @@ impl Migration for Migration0044<'_> {
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+        // NOTE: this is best-effort since we can't iterate over every node in the cluster.
+        if get_column_type(
+            self.clickhouse,
+            "ModelInferenceCache",
+            "input_tokens",
+            MIGRATION_ID,
+        )
+        .await?
+            != "Nullable(UInt32)"
+        {
+            return Ok(false);
+        }
+
+        if get_column_type(
+            self.clickhouse,
+            "ModelInferenceCache",
+            "output_tokens",
+            MIGRATION_ID,
+        )
+        .await?
+            != "Nullable(UInt32)"
+        {
+            return Ok(false);
+        }
+        Ok(true)
     }
 }
