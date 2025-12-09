@@ -27,6 +27,7 @@ test.describe("Output - Text Blocks", () => {
     const outputSection = page
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Output" }) });
+    await outputSection.waitFor({ state: "visible" });
 
     // Add text block to output
     const addTextButton = outputSection
