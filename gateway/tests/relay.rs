@@ -685,7 +685,7 @@ async fn test_relay_with_env_api_key() {
     assert_eq!(
         response.status(),
         200,
-        "Request with static API key should succeed"
+        "Request with env API key should succeed"
     );
     let body: serde_json::Value = response.json().await.unwrap();
 
