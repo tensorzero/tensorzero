@@ -87,7 +87,9 @@ impl TensorzeroRelay {
 
         let InferenceOutput::Streaming(streaming) = res.response else {
             return Err(Error::new(ErrorDetails::InternalError {
-                message: format!("Expected streaming inference response. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!(
+                    "Expected streaming inference response. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             }));
         };
 
