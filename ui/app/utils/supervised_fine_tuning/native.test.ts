@@ -8,6 +8,14 @@ if (!gatewayUrl) {
 }
 const client = await TensorZeroClient.buildHttp(gatewayUrl);
 
+// In CI, the gateway runs inside Docker and needs to reach the mock-inference-provider
+// via Docker networking. Locally, the gateway can reach localhost:3030.
+const openaiBaseUrl =
+  process.env.OPENAI_BASE_URL ||
+  (process.env.CI
+    ? "http://mock-inference-provider:3030/openai"
+    : "http://localhost:3030/openai");
+
 describe("native sft", () => {
   // NOTE: This test hits a fake server so you can run it anytime without paying OpenAI
   it("should launch a job and poll it", async () => {
@@ -30,7 +38,7 @@ describe("native sft", () => {
         learning_rate_multiplier: 1,
         n_epochs: 1,
         credentials: null,
-        api_base: process.env.OPENAI_BASE_URL || "http://localhost:3030/openai",
+        api_base: openaiBaseUrl,
         seed: null,
         suffix: null,
       },
