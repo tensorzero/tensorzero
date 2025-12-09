@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use http::StatusCode;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use uuid::Uuid;
 
@@ -12,7 +12,7 @@ use tensorzero_core::inference::types::Text;
 
 use crate::common::get_gateway_endpoint;
 use crate::otel::install_capturing_otel_exporter;
-use crate::otel_export::{get_tempo_spans, TempoSpans};
+use crate::otel_export::{TempoSpans, get_tempo_spans};
 
 /// Test that static headers from config are applied
 /// This verifies that the config parses correctly and the system works end-to-end

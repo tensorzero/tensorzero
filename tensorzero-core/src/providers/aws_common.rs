@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use aws_config::{meta::region::RegionProviderChain, Region};
+use aws_config::{Region, meta::region::RegionProviderChain};
+use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::interceptors::context::AfterDeserializationInterceptorContextRef;
 use aws_smithy_runtime_api::client::interceptors::context::BeforeTransmitInterceptorContextMut;
-use aws_smithy_runtime_api::client::interceptors::Intercept;
 use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
 use aws_smithy_runtime_api::client::stalled_stream_protection::StalledStreamProtectionConfig;
 use aws_smithy_types::body::SdkBody;
@@ -14,8 +14,8 @@ use reqwest::StatusCode;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
-        extra_body::FullExtraBodyConfig, extra_headers::FullExtraHeadersConfig,
-        ModelInferenceRequest,
+        ModelInferenceRequest, extra_body::FullExtraBodyConfig,
+        extra_headers::FullExtraHeadersConfig,
     },
     model::{ModelProvider, ModelProviderRequestInfo},
 };

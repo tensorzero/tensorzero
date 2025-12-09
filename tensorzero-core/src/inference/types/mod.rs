@@ -53,8 +53,8 @@ pub use file::{
     Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
     PendingObjectStoreFile, UrlFile,
 };
-use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
+use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -79,6 +79,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheData, NonStreamingCacheData};
 use crate::config::ObjectStoreInfo;
+use crate::config::snapshot::SnapshotHash;
 use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
 use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
@@ -87,19 +88,19 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
-    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent,
+    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent, write_file,
 };
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolCallWrapper, ToolResult, deserialize_optional_tool_info,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -125,10 +126,10 @@ pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
 pub use streams::{
-    collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
-    InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
+    ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
+    InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    UnknownChunk, collect_chunks,
 };
 pub use usage::Usage;
 
@@ -360,6 +361,7 @@ impl InputMessageContent {
                         let detail_clone = detail.clone();
                         let detail_for_future = detail.clone();
                         let filename_for_future = filename.clone();
+                        let filename_clone = filename.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -379,6 +381,7 @@ impl InputMessageContent {
                                 url,
                                 mime_type,
                                 detail: detail_clone,
+                                filename: filename_clone,
                             },
                             future: delayed_file_future.boxed().shared(),
                         }))
@@ -446,6 +449,7 @@ impl InputMessageContent {
                         let mime_type_for_closure = file.mime_type.clone();
                         let detail_for_future = file.detail.clone();
                         let filename_for_future = file.filename.clone();
+                        let filename_clone = file.filename.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -470,7 +474,7 @@ impl InputMessageContent {
                                     source_url: file.source_url.clone(),
                                     mime_type: file.mime_type.clone(),
                                     detail: file.detail.clone(),
-                                    filename: file.filename.clone(),
+                                    filename: filename_clone,
                                 },
                                 storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
@@ -994,28 +998,25 @@ pub enum ThoughtSummaryBlock {
 
 /// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[export_schema]
 pub struct Thought {
-    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub summary: Option<Vec<ThoughtSummaryBlock>>,
     /// When set, this `Thought` block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
     #[serde(
-        rename = "_internal_provider_type",
+        // This alias is written to the database, so we cannot remove it.
+        alias = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(optional)]
     pub provider_type: Option<String>,
 }
 
@@ -1695,6 +1696,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1719,6 +1722,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1745,6 +1750,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub ttft_ms: Option<u32>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[cfg(test)]
@@ -1868,6 +1874,7 @@ impl ModelInferenceDatabaseInsert {
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1927,6 +1934,7 @@ impl ModelInferenceDatabaseInsert {
             cached: result.cached,
             finish_reason: result.finish_reason,
             input_messages: serialize_or_log(&stored_input_messages),
+            snapshot_hash: Some(snapshot_hash),
         })
     }
 }
@@ -1968,32 +1976,43 @@ impl InferenceResult {
         }
     }
 
-    pub async fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+    pub async fn get_serialized_model_inferences(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
         };
-        join_all(model_inference_responses.iter().map(|r| async {
-            let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id).await;
-            let model_inference = match model_inference {
-                Ok(model_inference) => model_inference,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to construct ModelInferenceDatabaseInsert: {e:?}"),
+        join_all(model_inference_responses.iter().map(|r| {
+            let snapshot_hash = snapshot_hash.clone();
+            async move {
+                let model_inference =
+                    ModelInferenceDatabaseInsert::new(r.clone(), inference_id, snapshot_hash).await;
+                let model_inference = match model_inference {
+                    Ok(model_inference) => model_inference,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to construct ModelInferenceDatabaseInsert: {e:?}"
+                            ),
+                        }
+                        .log();
+                        return Default::default();
                     }
-                    .log();
-                    return Default::default();
-                }
-            };
-            match serde_json::to_value(model_inference) {
-                Ok(v) => v,
-                Err(e) => {
-                    ErrorDetails::Serialization {
-                        message: format!("Failed to serialize ModelInferenceDatabaseInsert: {e:?}"),
+                };
+                match serde_json::to_value(model_inference) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
+                            ),
+                        }
+                        .log();
+                        Default::default()
                     }
-                    .log();
-                    Default::default()
                 }
             }
         }))
@@ -2170,6 +2189,7 @@ impl ChatInferenceDatabaseInsert {
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -2207,6 +2227,7 @@ impl JsonInferenceDatabaseInsert {
             tags: metadata.tags,
             extra_body: metadata.extra_body,
             ttft_ms: metadata.ttft_ms,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -3366,14 +3387,16 @@ mod tests {
         assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
 
         // Invalid legacy FQN - errors
-        assert!(serde_json::from_value::<Unknown>(
-            json!({"data": {}, "model_provider_name": "bad"})
-        )
-        .is_err());
-        assert!(serde_json::from_value::<Unknown>(
-            json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
-        )
-        .is_err());
+        assert!(
+            serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "bad"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<Unknown>(
+                json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+            )
+            .is_err()
+        );
 
         // Conflict: both old and new fields
         assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());

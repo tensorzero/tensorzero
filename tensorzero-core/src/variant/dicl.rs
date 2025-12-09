@@ -6,26 +6,25 @@ use futures::future::try_join_all;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::ResolvedTomlPathData;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
+use crate::config::path::ResolvedTomlPathData;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
-use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
-use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
-use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
-use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
 use crate::inference::types::StoredInputMessageContent;
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
+use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
+use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ModelInferenceRequest,
-    RequestMessage, Role, Text,
+    ModelInferenceRequest, RequestMessage, Role, Text, batch::StartBatchModelInferenceWithMetadata,
+    chat_completion_inference_params::ChatCompletionInferenceParamsV2,
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -42,9 +41,9 @@ use crate::{
 };
 
 use super::{
-    chat_completion::{prepare_request_message, ChatTemplates},
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, Variant,
+    chat_completion::{ChatTemplates, prepare_request_message},
+    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
 };
 
 /// The primary configuration for the Dicl variant
@@ -403,15 +402,15 @@ impl Variant for DiclConfig {
             })?;
 
         // Validate that max_distance is non-negative if specified
-        if let Some(max_distance) = self.max_distance() {
-            if max_distance < 0.0 {
-                return Err(ErrorDetails::Config {
+        if let Some(max_distance) = self.max_distance()
+            && max_distance < 0.0
+        {
+            return Err(ErrorDetails::Config {
                     message: format!(
                         "`functions.{function_name}.variants.{variant_name}`: `max_distance` must be non-negative (got {max_distance})"
                     ),
                 }
                 .into());
-            }
         }
 
         Ok(())
@@ -658,15 +657,16 @@ impl DiclConfig {
         let filtered_count = raw_examples.len();
 
         // Debug log if max_distance reduced examples below k
-        if let Some(max_distance) = max_distance_value {
-            if initial_count >= self.k() as usize && filtered_count < self.k() as usize {
-                tracing::debug!(
-                    "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
-                    max_distance,
-                    initial_count,
-                    filtered_count
-                );
-            }
+        if let Some(max_distance) = max_distance_value
+            && initial_count >= self.k() as usize
+            && filtered_count < self.k() as usize
+        {
+            tracing::debug!(
+                "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
+                max_distance,
+                initial_count,
+                filtered_count
+            );
         }
 
         // Convert RawExamples into Examples (parses those serialized JSON strings)
@@ -723,7 +723,8 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
+        let content =
+            vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -973,18 +974,18 @@ mod tests {
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
     use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::StoredInputMessage;
+    use crate::inference::types::System;
     use crate::inference::types::file::ObjectStoragePointer;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
-    use crate::inference::types::StoredInputMessage;
-    use crate::inference::types::System;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::tool::ToolChoice;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            storage::{StorageKind, StoragePath},
             Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
+            storage::{StorageKind, StoragePath},
         },
         tool::{InferenceResponseToolCall, ToolCall},
     };

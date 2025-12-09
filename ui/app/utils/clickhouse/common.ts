@@ -101,7 +101,7 @@ export const thoughtContentSchema = z.object({
     .array(thoughtSummaryBlockSchema)
     .nullish()
     .transform((val) => val ?? undefined),
-  _internal_provider_type: z.string().optional(),
+  provider_type: z.string().optional(),
 });
 export type ZodThoughtContent = z.infer<typeof thoughtContentSchema>;
 

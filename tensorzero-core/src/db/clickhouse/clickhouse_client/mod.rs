@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::db::HealthCheckable;
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseResponse;
 use crate::db::clickhouse::ExternalDataInfo;
 use crate::db::clickhouse::GetMaybeReplicatedTableEngineNameArgs;
 use crate::db::clickhouse::TableName;
-use crate::db::HealthCheckable;
 use crate::error::{DelayedError, Error};
 
 #[cfg(test)]

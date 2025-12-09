@@ -2,7 +2,7 @@ use crate::common::get_gateway_endpoint;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +17,7 @@ use tensorzero_core::{
     cache::{CacheEnabledMode, CacheOptions},
     config::provider_types::ProviderTypesConfig,
     db::{
-        clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
+        clickhouse::{ClickHouseConnectionInfo, test_helpers::select_json_inference_clickhouse},
         postgres::PostgresConnectionInfo,
     },
     embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
@@ -363,7 +363,9 @@ async fn embed_insert_example(
             tags: Arc::new(HashMap::new()),
             api_key_public_id: None,
         },
+        relay: None,
     };
+
     let response = provider_config
         .embed(&request, &clients, &(&provider_config).into())
         .await
@@ -402,7 +404,7 @@ pub async fn test_dicl_inference_request_simple() {
     // Delete any existing examples for this function and variant
     let delete_query = format!(
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-        );
+    );
     clickhouse
         .run_query_synchronous_no_params(delete_query)
         .await
@@ -649,7 +651,10 @@ pub async fn test_dicl_inference_request_simple() {
                 assert!(!raw_response.to_lowercase().contains("rowling"));
                 assert!(raw_response.to_lowercase().contains("nose"));
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(
+                    system,
+                    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
+                );
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
@@ -866,7 +871,10 @@ pub async fn test_dicl_inference_request_simple() {
                 assert!(!raw_response.to_lowercase().contains("rowling"));
                 assert!(raw_response.to_lowercase().contains("nose"));
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(
+                    system,
+                    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
+                );
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
@@ -933,7 +941,7 @@ async fn test_dicl_json_request() {
     // Delete any existing examples for this function and variant
     let delete_query = format!(
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-        );
+    );
     clickhouse
         .run_query_synchronous_no_params(delete_query)
         .await
@@ -1186,7 +1194,10 @@ async fn test_dicl_json_request() {
                 assert!(!raw_response.to_lowercase().contains("brasilia"));
                 assert!(raw_response.to_lowercase().contains("nose"));
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(system, "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n");
+                assert_eq!(
+                    system,
+                    "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n"
+                );
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {

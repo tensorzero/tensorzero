@@ -1,8 +1,8 @@
 use axum::http;
 use bytes::Bytes;
-use futures::{stream::Peekable, Stream};
+use futures::{Stream, stream::Peekable};
 use serde::de::DeserializeOwned;
-use serde_json::{map::Entry, Map, Value};
+use serde_json::{Map, Value, map::Entry};
 use std::{collections::HashMap, pin::Pin};
 use uuid::Uuid;
 
@@ -10,13 +10,13 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::{TensorZeroEventSource, TensorzeroRequestBuilder},
     inference::types::{
+        ProviderInferenceResponseChunk,
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
         extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
         resolved_input::{FileUrl, LazyFile},
-        ProviderInferenceResponseChunk,
     },
-    model::{fully_qualified_name, ModelProviderRequestInfo},
+    model::{ModelProviderRequestInfo, fully_qualified_name},
 };
 
 pub struct JsonlBatchFileInfo {
@@ -86,7 +86,9 @@ pub fn warn_cannot_forward_url_if_missing_mime_type(
             future: _
         }
     ) {
-        tracing::warn!("Cannot forward image_url to {provider_type} because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding.");
+        tracing::warn!(
+            "Cannot forward image_url to {provider_type} because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding."
+        );
     }
 }
 
@@ -620,7 +622,9 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                     // Move inside an object if the current pointer component is a valid key
                     Entry::Occupied(occupied) => value = occupied.into_mut(),
                     Entry::Vacant(_) => {
-                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - parent of pointer doesn't exist");
+                        tracing::warn!(
+                            "Skipping deletion of extra_body pointer `{pointer}` - parent of pointer doesn't exist"
+                        );
                         // If a parent of our target pointer doesn't exist, then do nothing,
                         // since `value`` is already an object where the target pointer doesn't exist
                         return Ok(());
@@ -632,14 +636,18 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                             if let Some(target) = list.get_mut(index) {
                                 value = target;
                             } else {
-                                tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
+                                tracing::warn!(
+                                    "Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds"
+                                );
                                 // If a parent of our target pointer doesn't exist, then do nothing,
                                 // since `value`` is already an object where the target pointer doesn't exist
                                 return Ok(());
                             }
                         }
                         None => {
-                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                            tracing::warn!(
+                                "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
+                            );
                             // If a parent of our target pointer doesn't exist, then do nothing,
                             // since `value`` is already an object where the target pointer doesn't exist
                             return Ok(());
@@ -647,7 +655,9 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                     }
                 }
                 other => {
-                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    tracing::warn!(
+                        "Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}"
+                    );
                     return Ok(());
                 }
             }
@@ -655,7 +665,9 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
             match value {
                 Value::Object(map) => {
                     if map.remove(&token).is_none() {
-                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - key `{token}` doesn't exist");
+                        tracing::warn!(
+                            "Skipping deletion of extra_body pointer `{pointer}` - key `{token}` doesn't exist"
+                        );
                     }
                 }
                 Value::Array(list) => match parse_index(&token) {
@@ -663,15 +675,21 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                         if index < list.len() {
                             list.remove(index);
                         } else {
-                            tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds");
+                            tracing::warn!(
+                                "Skipping deletion of extra_body pointer `{pointer}` - index `{token}` out of bounds"
+                            );
                         }
                     }
                     None => {
-                        tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`");
+                        tracing::warn!(
+                            "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
+                        );
                     }
                 },
                 other => {
-                    tracing::warn!("Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}");
+                    tracing::warn!(
+                        "Skipping deletion of extra_body pointer `{pointer}` - found non array/object target {other}"
+                    );
                     return Ok(());
                 }
             }
@@ -726,8 +744,10 @@ fn write_json_pointer_with_parent_creation(
                     // or an array [.., some_value] with `some_value` at index `n`.
                     if parse_index(&token).is_some() {
                         return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
-                        message: format!("TensorZero doesn't support pointing an index ({token}) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new"),
-                        pointer: pointer.to_string(),
+                            message: format!(
+                                "TensorZero doesn't support pointing an index ({token}) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new"
+                            ),
+                            pointer: pointer.to_string(),
                         }));
                     } else {
                         // For non-integer keys, create a new object. This allows writing things like
@@ -754,7 +774,7 @@ fn write_json_pointer_with_parent_creation(
                 return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
                     message: format!("Can only index into object or array - found target {other}"),
                     pointer: pointer.to_string(),
-                }))
+                }));
             }
         }
     }
@@ -862,11 +882,11 @@ mod tests {
     use serde_json::json;
 
     use crate::inference::types::{
+        ContentBlockChunk, TextChunk,
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
         extra_headers::{DynamicExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders},
-        ContentBlockChunk, TextChunk,
     };
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
 
     use super::*;
 

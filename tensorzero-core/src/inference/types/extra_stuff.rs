@@ -137,15 +137,15 @@ async fn validate_model_provider_filter(
     // Check if the model exists in the table (supports shorthand notation)
     if let Some(model_config) = models.get(model_name).await? {
         // Check if the provider exists in that model (if provider_name is specified)
-        if let Some(provider_name) = provider_name {
-            if !model_config.providers.contains_key(provider_name) {
-                return Err(ErrorDetails::InvalidInferenceTarget {
+        if let Some(provider_name) = provider_name
+            && !model_config.providers.contains_key(provider_name)
+        {
+            return Err(ErrorDetails::InvalidInferenceTarget {
                     message: format!(
                         "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}`.",
                     ),
                 }
                 .into());
-            }
         }
         Ok(())
     } else {
@@ -226,6 +226,7 @@ mod tests {
                     },
                 )]),
                 timeouts: Default::default(),
+                skip_relay: false,
             },
         )]);
 

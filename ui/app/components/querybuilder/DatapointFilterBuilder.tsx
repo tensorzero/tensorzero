@@ -49,7 +49,7 @@ export default function DatapointFilterBuilder({
     <>
       <FormLabel>Advanced</FormLabel>
       {datapointFilter ? (
-        <div className="py-1">
+        <div className="py-1 pl-4">
           <FilterNodeRenderer
             filter={datapointFilter}
             onChange={setDatapointFilter}

@@ -320,6 +320,27 @@ class GCPVertexGeminiSFTConfig:
     ) -> None: ...
 
 @final
+class GEPAConfig:
+    def __init__(
+        self,
+        *,
+        function_name: str,
+        evaluation_name: str,
+        analysis_model: str,
+        mutation_model: str,
+        initial_variants: Optional[List[str]] = None,
+        variant_prefix: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        max_iterations: Optional[int] = None,
+        max_concurrency: Optional[int] = None,
+        seed: Optional[int] = None,
+        timeout: Optional[int] = None,
+        include_inference_for_mutation: Optional[bool] = None,
+        retries: Optional[Dict[str, Any]] = None,
+        max_tokens: Optional[int] = None,
+    ) -> None: ...
+
+@final
 class TogetherSFTConfig:
     """
     Configuration for Together supervised fine-tuning.
@@ -1589,6 +1610,7 @@ __all__ = [
     "FunctionConfigJson",
     "FunctionsConfig",
     "GCPVertexGeminiSFTConfig",
+    "GEPAConfig",
     "LocalHttpGateway",
     "MixtureOfNConfig",
     "OpenAIRFTConfig",

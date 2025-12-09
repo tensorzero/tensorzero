@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ToolDetails } from "./ToolDetails";
-import type { Config } from "~/types/tensorzero";
+import type { UiConfig } from "~/types/tensorzero";
 import { useState } from "react";
 import { ConfigProvider } from "~/context/config";
 import { Button } from "../ui/button";
@@ -20,7 +20,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const mockConfig = {
+const mockConfig: UiConfig = {
+  functions: {},
+  metrics: {},
   tools: {
     search_wikipedia: {
       name: "search_wikipedia",
@@ -46,7 +48,10 @@ const mockConfig = {
       strict: true,
     },
   },
-} as unknown as Config;
+  evaluations: {},
+  model_names: [],
+  config_hash: "test-config-hash",
+};
 
 export const Default: Story = {
   args: {

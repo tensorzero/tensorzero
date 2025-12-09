@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientExt, ClientInferenceParams, ContentBlockChunk, File, InferenceOutput, InferenceResponse,
@@ -33,8 +33,8 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
-    DEEPSEEK_PAPER_PDF, FERRIS_PNG,
+    DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
+    ModelTestProvider,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -1199,6 +1199,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1288,6 +1289,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1363,6 +1365,7 @@ async fn test_embedding_sanity_check() {
             tags: Arc::new(HashMap::new()),
             api_key_public_id: None,
         },
+        relay: None,
     };
 
     // Compute all 3 embeddings concurrently
@@ -1420,7 +1423,7 @@ fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use object_store::{aws::AmazonS3Builder, ObjectStore};
+    use object_store::{ObjectStore, aws::AmazonS3Builder};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
     use std::sync::Arc;
@@ -1433,8 +1436,11 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", &r2_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", &r2_secret_access_key);
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &r2_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &r2_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1461,7 +1467,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1488,7 +1494,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 
@@ -1610,9 +1616,9 @@ async fn test_content_block_text_field() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_image_inference_with_provider_gcp_storage() {
-    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
-    use object_store::{aws::AmazonS3Builder, ObjectStore};
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use object_store::{ObjectStore, aws::AmazonS3Builder};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
     use std::sync::Arc;
@@ -1625,8 +1631,11 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", &gcloud_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", &gcloud_secret_access_key);
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &gcloud_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &gcloud_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1653,7 +1662,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1675,7 +1684,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 
@@ -1685,7 +1694,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use object_store::{aws::AmazonS3Builder, ObjectStore};
+    use object_store::{ObjectStore, aws::AmazonS3Builder};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
     use std::sync::Arc;
@@ -1697,8 +1706,11 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", &minio_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", &minio_secret_access_key);
+    tensorzero_unsafe_helpers::set_env_var_tests_only("S3_ACCESS_KEY_ID", &minio_access_key_id);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "S3_SECRET_ACCESS_KEY",
+        &minio_secret_access_key,
+    );
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1727,7 +1739,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1755,7 +1767,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 
@@ -1839,10 +1851,12 @@ pub async fn test_shorthand_embedding() {
         response_json["data"][0]["object"].as_str().unwrap(),
         "embedding"
     );
-    assert!(!response_json["data"][0]["embedding"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
     assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
 }
@@ -2046,7 +2060,10 @@ async fn test_forward_image_url() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+    assert_eq!(
+        raw_request,
+        "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    );
 
     let file_path =
         "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
@@ -2126,7 +2143,10 @@ async fn test_forward_file_url() {
         .as_str()
         .unwrap();
     // OpenAI currently doesn't support forwarding file urls, so we should base64 encode the file data
-    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_data\":\"data:application/pdf;base64,<TENSORZERO_FILE_0>\",\"filename\":\"input.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+    assert_eq!(
+        raw_request,
+        "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_data\":\"data:application/pdf;base64,<TENSORZERO_FILE_0>\",\"filename\":\"input.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}"
+    );
 
     let file_path =
         "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";
@@ -2586,10 +2606,10 @@ model = "test-model"
         let chunk = chunk_result.unwrap();
 
         // Extract inference_id from the first chunk
-        if inference_id.is_none() {
-            if let InferenceResponseChunk::Chat(chat_chunk) = &chunk {
-                inference_id = Some(chat_chunk.inference_id);
-            }
+        if inference_id.is_none()
+            && let InferenceResponseChunk::Chat(chat_chunk) = &chunk
+        {
+            inference_id = Some(chat_chunk.inference_id);
         }
 
         // Collect text and unknown chunks

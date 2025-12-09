@@ -2,7 +2,7 @@
 /// the HTTP endpoint to perform updates to validate that updates are implemented
 /// correctly.
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{FunctionTool, GetDatapointParams, StoredDatapoint};
@@ -65,6 +65,7 @@ async fn test_update_chat_datapoint_output() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -198,6 +199,7 @@ async fn test_update_json_datapoint_output() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -293,6 +295,7 @@ async fn test_update_multiple_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let datapoint_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -324,6 +327,7 @@ async fn test_update_multiple_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let insert_result = clickhouse
@@ -460,6 +464,7 @@ async fn test_update_datapoint_type_mismatch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -527,6 +532,7 @@ async fn test_update_datapoint_with_metadata() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -661,6 +667,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -764,6 +771,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -858,6 +866,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -944,6 +953,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1037,6 +1047,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1134,6 +1145,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1218,6 +1230,7 @@ async fn test_update_metadata_chat_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1318,6 +1331,7 @@ async fn test_update_metadata_json_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1401,6 +1415,7 @@ async fn test_update_metadata_set_name_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1479,6 +1494,7 @@ async fn test_update_metadata_batch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let datapoint2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -1503,6 +1519,7 @@ async fn test_update_metadata_batch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1665,6 +1682,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
         source_inference_id: None,
         // Make a non-custom datapoint so that it can be modified
         is_custom: false,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -1812,6 +1830,7 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
         source_inference_id: None,
         // Mark as non-custom so that it can be modified
         is_custom: false,
+        snapshot_hash: None,
     });
 
     clickhouse

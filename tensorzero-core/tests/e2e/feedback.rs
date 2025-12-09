@@ -1,5 +1,5 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
@@ -10,14 +10,14 @@ use tensorzero_core::{
         },
         postgres::PostgresConnectionInfo,
     },
-    endpoints::feedback::{feedback, Params},
+    endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
     utils::gateway::GatewayHandle,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -105,6 +105,11 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     assert_eq!(retrieved_target_type, "episode");
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "good job!");
+    // Assert CommentFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "CommentFeedback should have snapshot_hash"
+    );
 
     // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "comment", "key", &tag_value)
@@ -113,6 +118,11 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
+    // Assert FeedbackTag has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FeedbackTag should have snapshot_hash"
+    );
 
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -179,6 +189,25 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     assert_eq!(retrieved_target_type, "inference");
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "bad job!");
+    // Assert CommentFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "CommentFeedback should have snapshot_hash"
+    );
+
+    // Assert CommentFeedbackByTargetId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM CommentFeedbackByTargetId WHERE target_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "CommentFeedbackByTargetId should have snapshot_hash"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -318,6 +347,25 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
     })]))
     .unwrap();
     assert_eq!(retrieved_value, expected_value);
+    // Assert DemonstrationFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "DemonstrationFeedback should have snapshot_hash"
+    );
+
+    // Assert DemonstrationFeedbackByInferenceId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM DemonstrationFeedbackByInferenceId WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "DemonstrationFeedbackByInferenceId should have snapshot_hash"
+    );
 
     // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "demonstration", "key", &tag_value)
@@ -326,6 +374,11 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
+    // Assert FeedbackTag has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FeedbackTag should have snapshot_hash"
+    );
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -1098,6 +1151,25 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     assert_eq!(retrieved_value, 32.8);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "user_rating");
+    // Assert FloatMetricFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FloatMetricFeedback should have snapshot_hash"
+    );
+
+    // Assert FloatMetricFeedbackByTargetId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM FloatMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "FloatMetricFeedbackByTargetId should have snapshot_hash"
+    );
 
     // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "user_rating", "key", &tag_value)
@@ -1106,6 +1178,11 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
+    // Assert FeedbackTag has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FeedbackTag should have snapshot_hash"
+    );
 
     // Test boolean feedback on episode (should fail)
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": true});
@@ -1209,6 +1286,25 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     assert_eq!(retrieved_value, 0.5);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "brevity_score");
+    // Assert FloatMetricFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FloatMetricFeedback should have snapshot_hash"
+    );
+
+    // Assert FloatMetricFeedbackByVariant materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM FloatMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "FloatMetricFeedbackByVariant should have snapshot_hash"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1342,6 +1438,25 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "task_success");
+    // Assert BooleanMetricFeedback has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "BooleanMetricFeedback should have snapshot_hash"
+    );
+
+    // Assert BooleanMetricFeedbackByVariant materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "BooleanMetricFeedbackByVariant should have snapshot_hash"
+    );
 
     // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key", &tag_value)
@@ -1350,6 +1465,11 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
+    // Assert FeedbackTag has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FeedbackTag should have snapshot_hash"
+    );
 
     let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key2", &tag_value2)
         .await
@@ -1357,6 +1477,11 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
+    // Assert FeedbackTag has snapshot_hash
+    assert!(
+        !result["snapshot_hash"].is_null(),
+        "FeedbackTag should have snapshot_hash"
+    );
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
@@ -1452,6 +1577,20 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
+
+    // Assert BooleanMetricFeedbackByTargetId materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM BooleanMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "BooleanMetricFeedbackByTargetId should have snapshot_hash"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

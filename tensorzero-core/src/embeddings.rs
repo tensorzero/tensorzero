@@ -6,14 +6,14 @@ use std::time::Duration;
 use indexmap::IndexMap;
 
 use crate::cache::{
-    embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
-    EmbeddingModelProviderRequest,
+    CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
+    embedding_cache_lookup, start_cache_write,
 };
-use crate::config::{provider_types::ProviderTypesConfig, TimeoutsConfig};
+use crate::config::provider_types::ProviderTypesConfig;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
+use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -21,14 +21,14 @@ use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     inference::types::{
-        current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+        Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage, current_timestamp,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -36,7 +36,7 @@ use crate::{
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
-use tracing::{instrument, Span};
+use tracing::{Span, instrument};
 use tracing_futures::Instrument;
 use uuid::Uuid;
 
@@ -93,12 +93,14 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         let global_ms = global_outbound_http_timeout.num_milliseconds();
-        if let Some(timeout_ms) = self.timeout_ms {
-            if chrono::Duration::milliseconds(timeout_ms as i64) > *global_outbound_http_timeout {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("The `timeout_ms` value `{timeout_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
-                }));
-            }
+        if let Some(timeout_ms) = self.timeout_ms
+            && chrono::Duration::milliseconds(timeout_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeout_ms` value `{timeout_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
         }
         // Credentials are validated during deserialization
         // We may add additional validation here in the future
@@ -106,15 +108,16 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
-    pub timeouts: TimeoutsConfig,
+    // NOTE: The `timeouts` field was deprecated and removed.
+    // For backward compatibility with stored snapshots, see `StoredEmbeddingModelConfig`
+    // in config/stored.rs which accepts the deprecated field and migrates it.
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -124,24 +127,9 @@ impl UninitializedEmbeddingModelConfig {
         default_credentials: &ProviderTypeDefaultCredentials,
         http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
-        // Handle timeout deprecation
-        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
-            (Some(timeout_ms), None) => Some(timeout_ms),
-            (None, Some(old_timeout)) => {
-                crate::utils::deprecation_warning(
-                    "`timeouts` is deprecated for embedding models. \
-                    Please use `timeout_ms` instead.",
-                );
-                Some(old_timeout)
-            }
-            (None, None) => None,
-            (Some(_), Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "`timeout_ms` and `timeouts` cannot both be set for embedding models"
-                        .to_string(),
-                }));
-            }
-        };
+        // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
+        // field via StoredEmbeddingModelConfig when loading from snapshot)
+        let timeout_ms = self.timeout_ms;
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
@@ -649,14 +637,15 @@ impl EmbeddingProviderInfo {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
-    config: UninitializedProviderConfig,
+    pub config: UninitializedProviderConfig,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
-    timeouts: TimeoutsConfig,
+    // NOTE: The `timeouts` field was deprecated and removed.
+    // For backward compatibility with stored snapshots, see `StoredEmbeddingProviderConfig`
+    // in config/stored.rs which accepts the deprecated field and migrates it.
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
 }
@@ -673,25 +662,9 @@ impl UninitializedEmbeddingProviderConfig {
             .config
             .load(provider_types, default_credentials, http_client)
             .await?;
-        // Handle timeout deprecation
-        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
-            (Some(timeout_ms), None) => Some(timeout_ms),
-            (None, Some(old_timeout)) => {
-                crate::utils::deprecation_warning(
-                    "`timeouts` is deprecated for embedding providers. \
-                    Please use `timeout_ms` instead.",
-                );
-                Some(old_timeout)
-            }
-            (None, None) => None,
-            (Some(_), Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message:
-                        "`timeout_ms` and `timeouts` cannot both be set for embedding providers"
-                            .to_string(),
-                }));
-            }
-        };
+        // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
+        // field via StoredEmbeddingProviderConfig when loading from snapshot)
+        let timeout_ms = self.timeout_ms;
 
         let extra_body = self.extra_body;
         Ok(match provider_config {
@@ -876,6 +849,7 @@ mod tests {
                         tags: Arc::new(HashMap::new()),
                         api_key_public_id: None,
                     },
+                    relay: None,
                 },
             )
             .await;
@@ -912,7 +886,6 @@ mod tests {
                 provider_tools: Vec::new(),
             },
             timeout_ms: None,
-            timeouts: TimeoutsConfig::default(),
             extra_body: Some(extra_body_config.clone()),
         };
 

@@ -139,7 +139,10 @@ export { getQuantiles };
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;
   clickhouseUrl: string;
-  configPath: string;
+  /** JSON-serialized EvaluationConfig */
+  evaluationConfig: string;
+  /** JSON-serialized EvaluationFunctionConfig */
+  functionConfig: string;
   evaluationName: string;
   datasetName: string;
   variantName: string;
@@ -400,5 +403,16 @@ export class PostgresClient {
 
   async disableApiKey(publicId: string): Promise<string> {
     return this.nativePostgresClient.disableApiKey(publicId);
+  }
+
+  async updateApiKeyDescription(
+    publicId: string,
+    description?: string | null,
+  ): Promise<KeyInfo> {
+    const result = await this.nativePostgresClient.updateApiKeyDescription(
+      publicId,
+      description ?? null,
+    );
+    return JSON.parse(result) as KeyInfo;
   }
 }

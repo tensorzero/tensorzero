@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::inference::types::{
     Role, StoredContentBlock, StoredRequestMessage, Text, Unknown, Usage,
 };
@@ -450,7 +450,10 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
             }
             assert_eq!(raw_request, expected_request);
             let system = result.get("system").unwrap().as_str().unwrap();
-            assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
+            assert_eq!(
+                system,
+                "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."
+            );
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
             let input_messages: Vec<StoredRequestMessage> =
                 serde_json::from_str(input_messages).unwrap();
@@ -724,7 +727,10 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
             });
             assert_eq!(raw_request, expected_request);
             let system = result.get("system").unwrap().as_str().unwrap();
-            assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
+            assert_eq!(
+                system,
+                "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."
+            );
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
             let input_messages: Vec<StoredRequestMessage> =
                 serde_json::from_str(input_messages).unwrap();
@@ -1022,9 +1028,17 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
     // Both candidates should be present (but not the fuser, since it failed)
     println!("results: {results:#?}");
     assert_eq!(results.len(), 2);
+    let mut first_result = results[0].clone();
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = first_result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     assert_eq!(
-        results[0],
+        first_result,
         serde_json::json!({
           "id": results[0].get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
@@ -1042,12 +1056,20 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 
+    let mut second_result = results[1].clone();
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = second_result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
+
     assert_eq!(
-        results[1],
+        second_result,
         serde_json::json!({
           "id": results[1].get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
@@ -1064,7 +1086,6 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }
@@ -1183,9 +1204,16 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
     println!("results: {results:#?}");
     assert_eq!(results.len(), 1);
 
-    let result = results[0].clone();
+    let mut result = results[0].clone();
 
     println!("result: {result}");
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     assert_eq!(
         result,
@@ -1205,7 +1233,6 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }

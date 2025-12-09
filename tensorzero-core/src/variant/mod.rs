@@ -22,6 +22,8 @@ use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::Role;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -29,8 +31,6 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -40,7 +40,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -919,8 +919,8 @@ mod tests {
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
-        DUMMY_STREAMING_RESPONSE,
+        DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
+        DummyProvider,
     };
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1180,6 +1180,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1259,6 +1260,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1371,6 +1373,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1437,6 +1440,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1486,6 +1490,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1583,6 +1588,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1656,6 +1662,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1697,6 +1704,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
 
         // Prepare the model inference request
@@ -1814,6 +1822,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let inference_params = InferenceParams::default();
 
@@ -1895,6 +1904,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
         let retry_config = RetryConfig::default();
 

@@ -3,7 +3,7 @@ use reqwest::Url;
 use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::inference::types::Text;
 
-use crate::common::{start_gateway_on_random_port, ChildData};
+use crate::common::{ChildData, start_gateway_on_random_port};
 
 mod common;
 
@@ -36,7 +36,7 @@ async fn test_base_path_with_trailing_slash() {
 async fn test_base_path(child_data: ChildData) {
     // Prevent cross-container communication issues in CI
     // (the provider-proxy container would try to connect to 'localhost')
-    std::env::remove_var("TENSORZERO_E2E_PROXY");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("TENSORZERO_E2E_PROXY");
     // The health endpoint should be available at the base path
     let health_response = reqwest::Client::new()
         .get(format!("http://{}/my/prefix/health", child_data.addr))

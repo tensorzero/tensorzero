@@ -51,8 +51,8 @@
     "lucide-react": "^0.487.0",
     "match-sorter": "^8.0.3",
     "radix-ui": "^1.4.3",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "react-hook-form": "^7.60.0",
     "react-router": "^7.9.5",
     "recharts": "^2.15.4",
@@ -76,8 +76,8 @@
     "@types/json-schema": "^7.0.15",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^22.16.0",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitest/browser": "^4.0.8",
     "@vitest/coverage-v8": "^4.0.8",
     "buildkite-test-collector": "^1.9.1",
@@ -95,9 +95,6 @@
     "vite-plugin-wasm": "^3.5.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.0.8"
-  },
-  "overrides": {
-    "react-is": "^19.0.0-rc-69d4b800-20241021"
   },
   "eslintConfig": {
     "extends": [

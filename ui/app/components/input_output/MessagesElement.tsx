@@ -52,6 +52,7 @@ export function MessagesElement({
     <MessageElement
       message={message}
       key={`message-${messageIndex}`}
+      messageKey={`message-${messageIndex}`}
       isEditing={isEditing}
       onChange={(updatedMessage) =>
         onUpdateMessage(messageIndex, updatedMessage)

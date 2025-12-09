@@ -2,9 +2,9 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Extension, Json};
-use futures::stream::Stream;
+use axum::{Extension, Json, debug_handler};
 use futures::FutureExt;
+use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::counter;
@@ -24,13 +24,14 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
-use crate::function::{FunctionConfig, FunctionConfigChat};
+use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
@@ -40,16 +41,18 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
     ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
+    collect_chunks,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -207,8 +210,6 @@ impl std::fmt::Debug for InferenceOutput {
         }
     }
 }
-
-pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
 pub struct InferenceIds {
@@ -381,6 +382,7 @@ pub async fn inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -665,6 +667,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 tags: tags.clone(),
                 extra_body,
                 extra_headers,
+                snapshot_hash: config.hash.clone(),
             };
 
             let async_writes = config.gateway.observability.async_writes;
@@ -937,6 +940,7 @@ fn create_stream(
                         ttft_ms: inference_ttft.map(|ttft| ttft.as_millis() as u32),
                         extra_body,
                         extra_headers,
+                        snapshot_hash: config.hash.clone(),
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1027,6 +1031,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tags: HashMap<String, String>,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub snapshot_hash: SnapshotHash,
 }
 
 async fn write_inference(
@@ -1036,7 +1041,9 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences().await;
+    let model_responses: Vec<serde_json::Value> = result
+        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
+        .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
     // Write the model responses to the ModelInference table
@@ -1136,6 +1143,20 @@ impl InferenceResponse {
                     finish_reason: result.finish_reason,
                 })
             }
+        }
+    }
+
+    pub fn usage(&self) -> Usage {
+        match self {
+            InferenceResponse::Chat(c) => c.usage,
+            InferenceResponse::Json(j) => j.usage,
+        }
+    }
+
+    pub fn finish_reason(&self) -> Option<FinishReason> {
+        match self {
+            InferenceResponse::Chat(c) => c.finish_reason,
+            InferenceResponse::Json(j) => j.finish_reason,
         }
     }
 
@@ -1257,10 +1278,8 @@ impl InferenceResponseChunk {
                 InferenceResultChunk::Chat(result) => result.content.is_empty(),
                 InferenceResultChunk::Json(result) => result.raw.is_none(),
             };
-            if is_empty {
-                if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.sum_strict(&extra_usage);
-                }
+            if is_empty && let Some(extra_usage) = extra_usage.take() {
+                result_usage.sum_strict(&extra_usage);
             }
         }
         Some(match inference_result {
@@ -1351,6 +1370,7 @@ pub struct InferenceClients {
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,
+    pub relay: Option<TensorzeroRelay>,
 }
 
 // Carryall struct for models used in inference
@@ -1532,7 +1552,7 @@ fn prepare_candidate_variants(
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
             }
-            .into())
+            .into());
         }
     };
     Ok(needs_sampling)
@@ -1548,9 +1568,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        storage::{StorageKind, StoragePath},
         Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
+        storage::{StorageKind, StoragePath},
     };
 
     #[tokio::test]

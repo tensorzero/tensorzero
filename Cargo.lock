@@ -2205,6 +2205,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-core",
  "tensorzero-optimizers",
+ "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
  "tower-http",
@@ -6158,6 +6159,7 @@ dependencies = [
  "object_store",
  "once_cell",
  "opentelemetry",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
@@ -6174,7 +6176,6 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_path_to_error",
- "serde_with",
  "sha2",
  "sqlx 0.8.6",
  "sqlx 0.9.0-alpha.1",
@@ -6183,6 +6184,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -6283,6 +6285,10 @@ dependencies = [
  "url",
  "uuid",
 ]
+
+[[package]]
+name = "tensorzero-unsafe-helpers"
+version = "2025.11.6"
 
 [[package]]
 name = "termcolor"

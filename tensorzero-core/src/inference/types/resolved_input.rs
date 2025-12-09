@@ -2,16 +2,16 @@ use std::borrow::Cow;
 use std::future::Future;
 use std::pin::Pin;
 
-use futures::future::Shared;
 use futures::FutureExt;
+use futures::future::Shared;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::{
-    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, RawText, Role,
-    System, Text, Thought, Unknown,
+    Base64File, ObjectStorageFile, PendingObjectStoreFile, RawText, Role, System, Text, Thought,
+    Unknown, storage::StoragePath,
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
@@ -94,6 +94,7 @@ pub struct FileUrl {
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<Detail>,
+    pub filename: Option<String>,
 }
 
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.

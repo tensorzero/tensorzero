@@ -4,8 +4,8 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
 
 use tensorzero_core::providers::openai::{
-    prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
-    OpenAIRequestMessage, OpenAISFTTool, SystemOrDeveloper,
+    OpenAIFileID, OpenAIRequestMessage, OpenAISFTTool, SystemOrDeveloper, prepare_openai_messages,
+    tensorzero_to_openai_assistant_message,
 };
 use tensorzero_core::{
     config::TimeoutsConfig,
@@ -14,7 +14,7 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::{
-        grader::OpenAIGrader, OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE,
+        OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE, grader::OpenAIGrader,
     },
     stored_inference::LazyRenderedSample,
     tool::ToolCall,
@@ -373,6 +373,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
                 }),
             }
         }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use evaluations::{helpers::setup_logging, run_evaluation, Args};
+use evaluations::{Args, helpers::setup_logging, run_evaluation};
 use tracing::{info, instrument};
 use uuid::Uuid;
 

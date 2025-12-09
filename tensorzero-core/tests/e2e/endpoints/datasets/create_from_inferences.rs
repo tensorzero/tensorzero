@@ -4,11 +4,11 @@ use uuid::Uuid;
 
 use tensorzero::ClientExt;
 use tensorzero_core::config::Config;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,

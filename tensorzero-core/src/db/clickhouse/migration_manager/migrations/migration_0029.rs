@@ -1,5 +1,5 @@
-use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::Error;
 use async_trait::async_trait;
 

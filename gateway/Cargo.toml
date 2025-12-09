@@ -2,7 +2,7 @@
 name = "gateway"
 version.workspace = true
 rust-version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 
 [dependencies]
@@ -38,3 +38,4 @@ reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
+tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }

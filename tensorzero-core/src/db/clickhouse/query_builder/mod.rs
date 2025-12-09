@@ -282,6 +282,10 @@ impl InferenceFilter {
                 ))
             }
             InferenceFilter::And { children } => {
+                // Empty AND is vacuously true - all zero conditions are met
+                if children.is_empty() {
+                    return Ok("TRUE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -303,6 +307,10 @@ impl InferenceFilter {
                 Ok(format!("({child_sqls_str})"))
             }
             InferenceFilter::Or { children } => {
+                // Empty OR is false - no conditions can be met
+                if children.is_empty() {
+                    return Ok("FALSE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -1111,6 +1119,36 @@ FORMAT JSONEachRow";
             },
         ];
         assert_eq!(params, expected_params);
+    }
+
+    /// Tests that an empty AND filter generates valid SQL (returns 1, meaning all rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_and_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::And { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty AND is vacuously true
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND TRUE");
+    }
+
+    /// Tests that an empty OR filter generates valid SQL (returns 0, meaning no rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_or_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::Or { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty OR is vacuously false
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND FALSE");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -2771,9 +2809,15 @@ FORMAT JSONEachRow";
         let (sql, _) = generate_list_inferences_sql(&config, &opts).unwrap();
 
         // SQL should order by total_term_frequency DESC for both tables
-        assert_query_contains(&sql, "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         assert_query_contains(&sql, "UNION ALL");
-        assert_query_contains(&sql, "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         // Should also order by total_term_frequency DESC for the combined result
         assert_query_contains(&sql, "AS combined ORDER BY total_term_frequency DESC");
     }
