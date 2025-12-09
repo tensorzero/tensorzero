@@ -71,3 +71,33 @@ docker run --rm --network host \
 </Tab>
 
 </Tabs>
+
+### Configure Gateway Options
+
+You can optionally configure Postgres-related settings in your `tensorzero.toml` configuration file using the `[postgres]` section.
+
+```toml title="tensorzero.toml"
+[postgres]
+enabled = true  # explicitly require Postgres (optional)
+connection_pool_size = 20  # default: 20
+```
+
+#### `enabled`
+
+Controls whether PostgreSQL connectivity is required, optional, or disabled:
+
+- **`true`**: PostgreSQL is required. The gateway will fail to start if it cannot connect (requires `TENSORZERO_POSTGRES_URL`).
+- **`false`**: PostgreSQL is disabled, even if `TENSORZERO_POSTGRES_URL` is set.
+- **Omitted (default)**: PostgreSQL is used if `TENSORZERO_POSTGRES_URL` is set, otherwise disabled with a warning.
+
+<Note>
+
+If you have features that require PostgreSQL (rate limiting, Track-and-Stop experimentation, or authentication) configured but PostgreSQL is disabled or unavailable, the gateway will fail to start with a configuration error.
+
+</Note>
+
+#### `connection_pool_size`
+
+The maximum number of connections in the PostgreSQL connection pool. Default: `20`.
+
+See the [Configuration Reference](/gateway/configuration-reference#postgres) for complete details.
