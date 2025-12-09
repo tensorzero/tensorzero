@@ -153,8 +153,9 @@ impl TensorzeroRelay {
             .await
             .map_err(|e| {
                 // TODO - fix raw_request/raw_response here
-                Error::new(ErrorDetails::InferenceServer {
+                Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
+                    status_code: None,
                     provider_type: "tensorzero_relay".to_string(),
                     raw_request: None,
                     raw_response: None,
