@@ -705,13 +705,14 @@ OpenAI custom tools support alternative output formats beyond JSON Schema, such 
 
 Each custom tool object has the following structure:
 
-- **`type`**: Must be `"openai_custom"`
-- **`name`**: The name of the tool (string, required)
-- **`description`**: A description of what the tool does (string, optional)
-- **`format`**: The output format for the tool (object, optional):
-  - `{"type": "text"}`: Freeform text output
-  - `{"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}`: Output constrained by a [Lark grammar](https://lark-parser.readthedocs.io/)
-  - `{"type": "grammar", "grammar": {"syntax": "regex", "definition": "..."}}`: Output constrained by a regular expression
+- **`type`**: Must be `"custom"`
+- **`custom`**: An object containing:
+  - **`name`**: The name of the tool (string, required)
+  - **`description`**: A description of what the tool does (string, optional)
+  - **`format`**: The output format for the tool (object, optional):
+    - `{"type": "text"}`: Freeform text output
+    - `{"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}`: Output constrained by a [Lark grammar](https://lark-parser.readthedocs.io/)
+    - `{"type": "grammar", "grammar": {"syntax": "regex", "definition": "..."}}`: Output constrained by a regular expression
 
 <Accordion title="Example: OpenAI Custom Tool">
 
@@ -728,16 +729,16 @@ response = client.chat.completions.create(
     messages=[
         {"role": "user", "content": "Generate Python code to print 'Hello, World!'"}
     ],
-    extra_body={
-        "tools": [
-            {
-                "type": "openai_custom",
+    tools=[
+        {
+            "type": "custom",
+            "custom": {
                 "name": "code_generator",
                 "description": "Generates Python code snippets",
                 "format": {"type": "text"}
             }
-        ]
-    }
+        }
+    ],
 )
 ```
 
