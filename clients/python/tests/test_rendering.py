@@ -3,9 +3,11 @@ from datetime import datetime, timezone
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatCompletionInferenceParams,
     ContentBlockChatOutputText,
     FileBase64,
     FunctionTool,
+    InferenceParams,
     JsonInferenceOutput,
     StorageKindS3Compatible,
     StoragePath,
@@ -88,6 +90,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 output=[ContentBlockChatOutputText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 additional_tools=[
                     FunctionTool(
                         name="test",
@@ -117,6 +120,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                extra_body=[],
                 output_schema={
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
@@ -271,6 +275,7 @@ def test_sync_render_samples_nonexistent_function(
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -305,6 +310,7 @@ def test_sync_render_samples_unspecified_function(
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -337,6 +343,7 @@ def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway)
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -371,6 +378,7 @@ def test_sync_render_samples_missing_variable(
                 output=[ContentBlockChatOutputText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 tool_choice="auto",
                 parallel_tool_calls=False,
                 dispreferred_outputs=[],
@@ -445,6 +453,7 @@ async def test_async_render_samples_success(
                 output=[ContentBlockChatOutputText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 additional_tools=[
                     FunctionTool(
                         name="test",
@@ -477,6 +486,7 @@ async def test_async_render_samples_success(
                 ),
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                extra_body=[],
                 output_schema={
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
@@ -629,6 +639,7 @@ async def test_async_render_samples_nonexistent_function(
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -664,6 +675,7 @@ async def test_async_render_samples_unspecified_function(
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -699,6 +711,7 @@ async def test_async_render_samples_no_variant(
                     output=[ContentBlockChatOutputText(text="Hello world")],
                     episode_id=str(uuid7()),
                     inference_id=str(uuid7()),
+                    inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                     tool_choice="auto",
                     parallel_tool_calls=False,
                     dispreferred_outputs=[],
@@ -734,6 +747,7 @@ async def test_async_render_samples_missing_variable(
                 output=[ContentBlockChatOutputText(text="Hello world")],
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
+                inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
                 tool_choice="auto",
                 parallel_tool_calls=False,
                 dispreferred_outputs=[],

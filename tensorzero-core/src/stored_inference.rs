@@ -353,6 +353,7 @@ pub struct StoredJsonInference {
     pub output_schema: Value,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[schemars(!default)]
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
