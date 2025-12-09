@@ -238,7 +238,7 @@ impl GatewayHandle {
             && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
             return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
+                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
             }));
         }
 
@@ -390,9 +390,7 @@ pub async fn setup_postgres(
     let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
         // Postgres disabled by config
         (Some(false), _) => {
-            tracing::info!(
-                "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
-            );
+            tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
             PostgresConnectionInfo::Disabled
         }
         // Postgres enabled but no URL
@@ -409,7 +407,7 @@ pub async fn setup_postgres(
         // Postgres default and no URL
         (None, None) => {
             tracing::debug!(
-                "Disabling Postgres: `gateway.postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
+                "Disabling Postgres: `postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
             );
             PostgresConnectionInfo::Disabled
         }
@@ -765,7 +763,7 @@ mod tests {
             PostgresConnectionInfo::Disabled
         ));
         assert!(logs_contain(
-            "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
+            "Disabling Postgres: `postgres.enabled` is set to false in config."
         ));
 
         // Postgres disabled even with URL provided
