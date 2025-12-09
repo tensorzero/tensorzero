@@ -20,7 +20,6 @@ env:
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   RUST_MSRV: 1.88.0
-  TENSORZERO_CI: 1
 
 jobs:
   check-version-consistency:
