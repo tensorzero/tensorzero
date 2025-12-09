@@ -15,6 +15,7 @@ import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
+import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesTable } from "~/routes/observability/inferences/$inference_id/ModelInferencesTable";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
@@ -380,11 +381,13 @@ export function InferenceDetailContent({
         {inference.type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {inference.tool_params && (
-              <ParameterCard
-                parameters={JSON.stringify(inference.tool_params, null, 2)}
-              />
-            )}
+            <ToolParametersSection
+              allowedTools={inference.allowed_tools}
+              additionalTools={inference.additional_tools}
+              toolChoice={inference.tool_choice}
+              parallelToolCalls={inference.parallel_tool_calls}
+              providerTools={inference.provider_tools}
+            />
           </SectionLayout>
         )}
 
@@ -430,7 +433,11 @@ export function InferenceDetailContent({
               action="/api/feedback"
             >
               <input type="hidden" name="metricName" value="demonstration" />
-              <input type="hidden" name="inferenceId" value={inference.id} />
+              <input
+                type="hidden"
+                name="inferenceId"
+                value={inference.inference_id}
+              />
               <input
                 type="hidden"
                 name="value"

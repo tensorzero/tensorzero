@@ -1,36 +1,16 @@
 import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
-import type { ZodDisplayInputMessage } from "~/utils/clickhouse/common";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
-  CacheParamsOptions,
-  FunctionConfig,
-  JsonValue,
   PathWithContents,
   UninitializedVariantInfo,
   VariantInfo,
   ChatTemplates,
-  StaticToolConfig,
-  ToolChoice,
-  Tool,
   ResolvedTomlPathData,
   StoredInference,
-  StoredInput,
 } from "~/types/tensorzero";
-import type {
-  InputMessageContent as TensorZeroContent,
-  ImageContent as TensorZeroImage,
-  InputMessage as TensorZeroMessage,
-  Input as TensorZeroInput,
-} from "~/utils/tensorzero";
-import type {
-  ZodResolvedFileContent,
-  ZodDisplayInputMessageContent,
-  ZodDisplayInput,
-} from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
@@ -49,10 +29,7 @@ import type {
   ZodInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { v7 } from "uuid";
-import {
-  loadFileDataForInput,
-  loadFileDataForStoredInput,
-} from "~/utils/resolve.server";
+import { loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 interface InferenceActionError {
   message: string;
@@ -444,148 +421,6 @@ export type VariantResponseInfo =
       output?: JsonInferenceOutput;
       usage?: InferenceUsage;
     };
-
-function resolvedInputToInput(input: StoredInput): Input {
-  return {
-    system: input.system,
-    messages: input.messages.map(),
-  };
-}
-
-function resolvedInputToTensorZeroInput(
-  input: ZodDisplayInput,
-): TensorZeroInput {
-  return {
-    ...input,
-    messages: input.messages.map(resolvedInputMessageToTensorZeroMessage),
-  };
-}
-
-function resolvedInputMessageToTensorZeroMessage(
-  message: ZodDisplayInputMessage,
-): TensorZeroMessage {
-  return {
-    ...message,
-    content: message.content.map(
-      resolvedInputMessageContentToTensorZeroContent,
-    ),
-  };
-}
-
-function resolvedInputMessageContentToTensorZeroContent(
-  content: ZodDisplayInputMessageContent,
-): TensorZeroContent {
-  switch (content.type) {
-    case "text":
-      return {
-        type: "text",
-        text: content.text,
-      };
-    case "missing_function_text":
-      return {
-        type: "text",
-        text: content.value,
-      };
-    case "raw_text":
-    case "tool_call":
-    case "tool_result":
-    case "thought":
-    case "template":
-    case "unknown":
-      return content;
-    case "file":
-      return resolvedFileContentToTensorZeroFile(content);
-    case "file_error":
-      throw new Error("Can't convert image error to tensorzero content");
-  }
-}
-
-function resolvedFileContentToTensorZeroFile(
-  content: ZodResolvedFileContent,
-): TensorZeroImage {
-  const data = content.file.data.split(",")[1];
-  return {
-    type: "image",
-    mime_type: content.file.mime_type,
-    data,
-  };
-}
-
-function resolvedInputMessageToInputMessage(
-  message: InputMessage,
-): InputMessage {
-  return {
-    role: message.role,
-    content: message.content.map(
-      resolvedInputMessageContentToInputMessageContent,
-    ),
-  };
-}
-
-function resolvedInputMessageContentToInputMessageContent(
-  content: InputMessageContent,
-): InputMessageContent {
-  switch (content.type) {
-    case "template":
-      return content;
-    case "text":
-      return {
-        type: "text",
-        text: content.text,
-      };
-    case "raw_text":
-      return {
-        type: "raw_text",
-        value: content.value,
-      };
-    case "tool_call": {
-      // TODO: handle both types of tool here
-      return {
-        type: "tool_call",
-        id: content.id,
-        name: content.name,
-        arguments: content.arguments,
-        raw_arguments: JSON.stringify(content.arguments),
-        raw_name: content.raw_name,
-      };
-    }
-    case "tool_result":
-      return {
-        type: "tool_result",
-        id: content.id,
-        name: content.name,
-        result: content.result,
-      };
-    case "thought":
-      return {
-        type: "thought",
-        text: content.text,
-        signature: content.signature,
-        provider_type: content.provider_type,
-      };
-    case "unknown":
-      return {
-        type: "unknown",
-        data: content.data,
-        model_name: content.model_name,
-        provider_name: content.provider_name,
-      };
-    case "file":
-      return loadFileDataForInput(content);
-  }
-}
-
-function resolvedFileContentToClientFile(
-  content: ZodResolvedFileContent,
-): InputMessageContent {
-  const data = content.file.data.split(",")[1];
-  return {
-    type: "file",
-    file_type: "base64",
-    mime_type: content.file.mime_type,
-    data,
-  };
-}
 
 function convertTemplate(
   template: PathWithContents | null,

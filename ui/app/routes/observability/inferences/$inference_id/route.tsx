@@ -1,7 +1,4 @@
-import {
-  queryInferenceById,
-  queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference.server";
+import { queryModelInferencesByInferenceId } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,

@@ -146,14 +146,7 @@ export interface ClientInferenceInputArgs {
 export function preparePlaygroundInferenceRequest(
   args: ClientInferenceInputArgs,
 ): ClientInferenceParams {
-  const {
-    variant,
-    functionName,
-    datapoint,
-    input,
-    functionConfig,
-    toolsConfig,
-  } = args;
+  const { variant, datapoint } = args;
   const variantInferenceInfo = getVariantInferenceInfo(variant);
   const request = prepareInferenceActionRequest({
     source: "t0_datapoint",
