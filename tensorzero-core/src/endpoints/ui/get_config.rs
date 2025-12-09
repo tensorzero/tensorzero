@@ -28,6 +28,7 @@ pub struct UiConfig {
     pub tools: HashMap<String, Arc<StaticToolConfig>>,
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>,
     pub model_names: Vec<String>,
+    pub config_hash: String,
 }
 
 impl UiConfig {
@@ -50,6 +51,7 @@ impl UiConfig {
                 .map(|(k, v)| (k.clone(), Arc::clone(v)))
                 .collect(),
             model_names: config.models.table.keys().map(|s| s.to_string()).collect(),
+            config_hash: config.hash.to_string(),
         }
     }
 }
@@ -137,6 +139,9 @@ mod tests {
         // Verify tools and evaluations are empty
         assert!(ui_config.tools.is_empty());
         assert!(ui_config.evaluations.is_empty());
+
+        // Verify config_hash is present
+        assert!(!ui_config.config_hash.is_empty());
     }
 
     #[test]
@@ -185,5 +190,8 @@ mod tests {
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Episode);
+
+        // Verify config_hash is present
+        assert!(!ui_config.config_hash.is_empty());
     }
 }
