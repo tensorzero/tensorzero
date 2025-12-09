@@ -275,9 +275,7 @@ jobs:
           TENSORZERO_CI: 1
           TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
           TENSORZERO_POSTGRES_URL: "postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
-          # These 2 vars are set so the env.server code doesn't complain
-          TENSORZERO_UI_CONFIG_PATH: "ui/fixtures/config/tensorzero.toml"
-          TENSORZERO_GATEWAY_URL: "placeholder"
+          TENSORZERO_GATEWAY_URL: "http://gateway:3000"
         run: pnpm ui:test:e2e --grep-invert "@credentials" -j 4
 
       - name: Print Docker Compose logs
