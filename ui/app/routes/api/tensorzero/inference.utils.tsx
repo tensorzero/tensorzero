@@ -358,7 +358,7 @@ export function prepareInferenceActionRequest(
     if (
       args.source === "inference" &&
       args.resource.extra_body &&
-      args.resource.extra_body.extra_body.length > 0
+      args.resource.extra_body.length > 0
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
@@ -375,11 +375,11 @@ export function prepareInferenceActionRequest(
   }
 }
 
-async function prepareDefaultFunctionRequest(
+function prepareDefaultFunctionRequest(
   inference: StoredInference,
   input: Input,
   selectedVariant: string,
-): Promise<Partial<ClientInferenceParams>> {
+): Partial<ClientInferenceParams> {
   if (inference.type === "chat") {
     const tool_choice = inference.tool_choice;
     const parallel_tool_calls = inference.parallel_tool_calls;

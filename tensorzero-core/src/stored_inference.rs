@@ -11,6 +11,7 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+use crate::inference::types::extra_body::DynamicExtraBody;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -269,6 +270,7 @@ pub struct StoredChatInference {
     #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
+    #[ts(as = "Vec<DynamicExtraBody>")]
     pub extra_body: UnfilteredInferenceExtraBody,
     pub inference_params: InferenceParams,
     #[ts(optional)]
@@ -353,10 +355,11 @@ pub struct StoredJsonInference {
     pub output_schema: Value,
     #[serde(default)]
     pub tags: HashMap<String, String>,
-    #[schemars(!default)]
     #[serde(default)]
+    #[ts(as = "Vec<DynamicExtraBody>")]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
+    #[schemars(!default)]
     pub inference_params: InferenceParams,
     #[ts(optional)]
     pub processing_time_ms: Option<u64>,

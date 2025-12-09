@@ -1582,16 +1582,16 @@ class StoredInput:
 @dataclass(kw_only=True)
 class StoredJsonInference:
     episode_id: str
-    extra_body: UnfilteredInferenceExtraBody
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: JsonInferenceOutput
     output_schema: Any
     timestamp: str
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
-    inference_params: InferenceParams | None = field(default_factory=lambda: {"chat_completion": {}})
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
     processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     ttft_ms: int | None = None
