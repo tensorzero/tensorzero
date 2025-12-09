@@ -658,6 +658,270 @@ test.describe("User Message - Thought Blocks", () => {
   });
 });
 
+test.describe("User Message - File URL Blocks", () => {
+  test("should add, edit, and delete file URL block with advanced fields", async ({
+    page,
+  }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File (URL) content block
+    const addFileUrlButton = userSection
+      .getByRole("button", { name: "File (URL)" })
+      .last();
+    await expect(addFileUrlButton).toBeVisible();
+    await addFileUrlButton.click();
+
+    // Fill URL field with a real image that exists
+    const testUrl =
+      "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png";
+    const urlInput = userSection.locator('input[type="url"]').last();
+    await urlInput.fill(testUrl);
+
+    // Expand Advanced accordion
+    await userSection.getByText("Advanced").click();
+
+    // Fill advanced fields
+    const mimeType = "image/png";
+    const filename = "test-file-" + v7() + ".png";
+
+    // Use exact placeholder match to avoid ambiguity
+    const filenameInput = userSection.getByRole("textbox", {
+      name: "image.png",
+      exact: true,
+    });
+    await filenameInput.fill(filename);
+
+    const mimeTypeInput = userSection.getByRole("textbox", {
+      name: "image/png",
+      exact: true,
+    });
+    await mimeTypeInput.fill(mimeType);
+
+    const detailSelect = userSection.locator('button[role="combobox"]').last();
+    await detailSelect.click();
+    await page.getByRole("option", { name: "High" }).click();
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Step 1: Verify file was added (URL files are converted to object_storage with image display)
+    // After save, the URL file becomes an object_storage image
+    // Need to expand "Show more" first since the content might be collapsed
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify fields were persisted
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(filename)).toBeVisible();
+    await expect(userSection.getByText("Detail:")).toBeVisible();
+    await expect(userSection.getByText("high")).toBeVisible();
+
+    // Step 2: Delete the file block
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    const deleteButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .last();
+    await deleteButton.click();
+
+    await saveAndWaitForRedirect(page);
+
+    // Verify file block was deleted (image no longer present)
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+
+    // Reload and verify deletion persists
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+  });
+});
+
+test.describe("User Message - File Base64 Blocks", () => {
+  // Tiny 1x1 pixel PNG for testing
+  const TEST_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=";
+
+  test("should add, edit, and delete file base64 block by pasting data", async ({
+    page,
+  }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File (Base64) content block
+    const addFileBase64Button = userSection
+      .getByRole("button", { name: "File (Base64)" })
+      .last();
+    await expect(addFileBase64Button).toBeVisible();
+    await addFileBase64Button.click();
+
+    // Fill the base64 textarea with test data
+    const base64Textarea = userSection
+      .getByPlaceholder("Or paste base64-encoded file data...")
+      .last();
+    await base64Textarea.fill(TEST_BASE64);
+
+    // Expand Advanced accordion
+    await userSection.getByText("Advanced").click();
+
+    // Fill advanced fields
+    const mimeType = "image/png";
+    const filename = "test-base64-" + v7() + ".png";
+
+    const filenameInput = userSection.getByRole("textbox", {
+      name: "image.png",
+      exact: true,
+    });
+    await filenameInput.fill(filename);
+
+    const mimeTypeInput = userSection.getByRole("textbox", {
+      name: "image/png",
+      exact: true,
+    });
+    await mimeTypeInput.fill(mimeType);
+
+    const detailSelect = userSection.locator('button[role="combobox"]').last();
+    await detailSelect.click();
+    await page.getByRole("option", { name: "High" }).click();
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Verify file was added - base64 images should display
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify fields were persisted
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(filename)).toBeVisible();
+    await expect(userSection.getByText("Detail:")).toBeVisible();
+    await expect(userSection.getByText("high")).toBeVisible();
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Delete the file block
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    const deleteButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .last();
+    await deleteButton.click();
+
+    await saveAndWaitForRedirect(page);
+
+    // Verify file block was deleted (image no longer present)
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+
+    // Reload and verify deletion persists
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+  });
+
+  test("should add file base64 block via file upload", async ({ page }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File (Base64) content block
+    const addFileBase64Button = userSection
+      .getByRole("button", { name: "File (Base64)" })
+      .last();
+    await expect(addFileBase64Button).toBeVisible();
+    await addFileBase64Button.click();
+
+    // Convert base64 to buffer and upload via file input
+    const buffer = Buffer.from(TEST_BASE64, "base64");
+    const uploadFilename = "uploaded-test-" + v7() + ".png";
+
+    // Find the hidden file input and set files
+    const fileInput = userSection.locator('input[type="file"]').last();
+    await fileInput.setInputFiles({
+      name: uploadFilename,
+      mimeType: "image/png",
+      buffer: buffer,
+    });
+
+    // Verify filename is shown after upload
+    await expect(userSection.getByText(uploadFilename)).toBeVisible();
+
+    // Verify base64 data was populated in textarea
+    const base64Textarea = userSection
+      .getByPlaceholder("Or paste base64-encoded file data...")
+      .last();
+    await expect(base64Textarea).toHaveValue(TEST_BASE64);
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Verify file was added - base64 images should display
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify filename was auto-populated
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(uploadFilename)).toBeVisible();
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+  });
+});
+
 // ============================================================================
 // Assistant Message Content Block Tests
 // ============================================================================
@@ -1237,362 +1501,6 @@ test.describe("Assistant Message - Thought Blocks", () => {
       .getByRole("button", { name: "Edit" })
       .waitFor({ state: "visible" });
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
-  });
-});
-
-// ============================================================================
-// Output Content Block Tests
-// ============================================================================
-
-test.describe("Output - Text Blocks", () => {
-  test("should add, edit, and delete text block in output", async ({
-    page,
-  }) => {
-    // Create datapoint from inference with chat output
-    await createDatapointFromInference(page, {
-      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-    });
-
-    // Enter edit mode
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons
-    await expandShowMoreIfPresent(page);
-
-    // Find Output section
-    const outputSection = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Output" }) });
-
-    // Add text block to output
-    const addTextButton = outputSection
-      .getByRole("button", { name: "Text" })
-      .last();
-    await expect(addTextButton).toBeVisible();
-    await addTextButton.click();
-
-    const textEditor = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
-    await textEditor.waitFor({ state: "visible" });
-
-    const textContent = v7();
-    await textEditor.fill(`Output text: ${textContent}`);
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Step 1: Verify text block was added
-    await expect(page.getByText(textContent)).toBeVisible();
-
-    // Step 2: Edit the text block content
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons again
-    await expandShowMoreIfPresent(page);
-
-    const textEditor2 = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
-    await textEditor2.waitFor({ state: "visible" });
-
-    const textContent2 = v7();
-    await textEditor2.fill(`Edited output text: ${textContent2}`);
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify edited content is visible and old content is gone
-    await expect(page.getByText(textContent2)).toBeVisible();
-    await expect(page.getByText(textContent)).not.toBeVisible();
-
-    // Step 3: Delete the text block
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons again
-    await expandShowMoreIfPresent(page);
-
-    const deleteButton = outputSection
-      .getByRole("button", { name: "Delete content block" })
-      .last();
-    await deleteButton.click();
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify text block was deleted
-    await expect(page.getByText(textContent2)).not.toBeVisible();
-    await expect(page.getByText(textContent)).not.toBeVisible();
-
-    // Reload and verify deletion persists
-    await page.reload();
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
-    await expect(page.getByText(textContent2)).not.toBeVisible();
-  });
-});
-
-test.describe("Output - Tool Call Blocks", () => {
-  test("should add, edit, and delete tool call block in output", async ({
-    page,
-  }) => {
-    // Create datapoint from inference with tool-enabled function
-    await createDatapointFromInference(page, {
-      inferenceId: "0196a0e5-ba06-7fd1-bf50-aed8fc9cf2ae",
-    });
-
-    // Enter edit mode
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons
-    await expandShowMoreIfPresent(page);
-
-    // Find Output section
-    const outputSection = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Output" }) });
-
-    // Add tool call to output
-    const addToolCallButton = outputSection
-      .getByRole("button", { name: "Tool Call" })
-      .last();
-    await expect(addToolCallButton).toBeVisible();
-    await addToolCallButton.click();
-
-    // Expand all "Show more" buttons again (tool call might be collapsed)
-    await expandShowMoreIfPresent(page);
-
-    // Fill in tool call details
-    const toolId = "tool_" + v7();
-    const toolName = "think"; // Use valid tool name for this function
-
-    // Find the tool call inputs using data-testid (use .last() since there may be existing tool calls)
-    const nameInput = outputSection.getByTestId("tool-name-input").last();
-    await nameInput.waitFor({ state: "visible" });
-    await nameInput.fill(toolName);
-
-    const idInput = outputSection.getByTestId("tool-id-input").last();
-    await idInput.fill(toolId);
-
-    const argsEditor = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
-    await argsEditor.fill('{"thought": "test thought"}');
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify tool call visible (check for unique content and ID)
-    await expect(page.getByText("test thought")).toBeVisible();
-    // TODO (#4058): we are not roundtripping IDs
-    // await expect(page.getByText(toolId)).toBeVisible();
-
-    // Reload and verify persistence
-    await page.reload();
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await expect(page.getByText("test thought")).toBeVisible();
-    // TODO (#4058): we are not roundtripping IDs
-    // await expect(page.getByText(toolId)).toBeVisible();
-
-    // Edit again and verify ID is preserved
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons again
-    await expandShowMoreIfPresent(page);
-
-    // Modify the arguments
-    const argsEditorEdit = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
-    await argsEditorEdit.waitFor({ state: "visible" });
-    await argsEditorEdit.fill('{"thought": "updated thought"}');
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // TODO (#4058): we are not roundtripping IDs
-    // await expect(page.getByText(toolId)).toBeVisible();
-    await expect(page.getByText("updated thought")).toBeVisible();
-
-    // Delete tool call
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons again
-    await expandShowMoreIfPresent(page);
-
-    const deleteButton = outputSection
-      .getByRole("button", { name: "Delete content block" })
-      .last();
-    await deleteButton.click();
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify tool call removed
-    await expect(page.getByText(toolId)).not.toBeVisible();
-
-    // Reload and verify deletion persists
-    await page.reload();
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
-    await expect(page.getByText(toolId)).not.toBeVisible();
-  });
-});
-
-// ============================================================================
-// Message-Level Operations
-// ============================================================================
-
-test.describe("Message Operations", () => {
-  test("should add and delete user message", async ({ page }) => {
-    // Create datapoint
-    await createDatapointFromInference(page, {
-      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-    });
-
-    // Enter edit mode
-    await page.getByRole("button", { name: "Edit" }).click();
-
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    await expandShowMoreIfPresent(page);
-
-    // Count existing user messages
-    const userMessagesInitial = await page.getByTestId("message-user").count();
-
-    // Add new user message
-    const addUserButton = page.getByRole("button", { name: "User Message" });
-    await expect(addUserButton).toBeVisible();
-    await addUserButton.click();
-
-    // Verify new message appeared
-    await expect(page.getByTestId("message-user")).toHaveCount(
-      userMessagesInitial + 1,
-    );
-
-    // Expand "Show more" again as content might have grown
-    await expandShowMoreIfPresent(page);
-
-    // Add content to new message
-    const newUserSection = page.getByTestId("message-user").last();
-
-    const addTextButton = newUserSection
-      .getByRole("button", { name: "Text" })
-      .last();
-    await addTextButton.click();
-
-    const textEditor = newUserSection
-      .locator("div[contenteditable='true']")
-      .last();
-    const newMessageContent = v7();
-    await textEditor.fill(`New user message: ${newMessageContent}`);
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify
-    await expect(page.getByText(newMessageContent)).toBeVisible();
-
-    // Delete the message
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Find and click delete message button (not content block delete)
-    const deleteMessageButton = page
-      .getByRole("button", { name: "Delete message" })
-      .last();
-    await deleteMessageButton.click();
-
-    await saveAndWaitForRedirect(page);
-
-    // Verify message removed
-    await expect(page.getByText(newMessageContent)).not.toBeVisible();
-  });
-
-  test("should add and delete assistant message", async ({ page }) => {
-    // Create datapoint
-    await createDatapointFromInference(page, {
-      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-    });
-
-    // Enter edit mode
-    await page.getByRole("button", { name: "Edit" }).click();
-
-    // Wait for edit mode to activate
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    await expandShowMoreIfPresent(page);
-
-    // Count existing assistant messages
-    const assistantMessagesInitial = await page
-      .getByTestId("message-assistant")
-      .count();
-
-    // Add assistant message
-    const addAssistantButton = page.getByRole("button", {
-      name: "Assistant Message",
-    });
-    await expect(addAssistantButton).toBeVisible();
-    await addAssistantButton.click();
-
-    // Verify new message appeared
-    await expect(page.getByTestId("message-assistant")).toHaveCount(
-      assistantMessagesInitial + 1,
-    );
-
-    // Expand "Show more" again as content might have grown
-    await expandShowMoreIfPresent(page);
-
-    // Add content to assistant message
-    const assistantSection = page.getByTestId("message-assistant").last();
-
-    const addTextButton = assistantSection
-      .getByRole("button", {
-        name: "Text",
-      })
-      .last();
-    await addTextButton.click();
-
-    const textEditor = assistantSection
-      .locator("div[contenteditable='true']")
-      .last();
-    const assistantContent = v7();
-    await textEditor.fill(`New assistant message: ${assistantContent}`);
-
-    // Save
-    await saveAndWaitForRedirect(page);
-
-    // Verify
-    await expect(page.getByText(assistantContent)).toBeVisible();
-
-    // Delete
-    await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-
-    const deleteMessageButton = page
-      .getByRole("button", { name: "Delete message" })
-      .last();
-    await deleteMessageButton.click();
-
-    await saveAndWaitForRedirect(page);
-
-    // Verify removed
-    await expect(page.getByText(assistantContent)).not.toBeVisible();
   });
 });
 

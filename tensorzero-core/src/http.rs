@@ -1,10 +1,11 @@
 use chrono::Duration;
 use once_cell::sync::OnceCell;
+use opentelemetry_http::HeaderInjector;
 use std::{
     pin::Pin,
     sync::{
-        atomic::{AtomicU8, Ordering},
         Arc,
+        atomic::{AtomicU8, Ordering},
     },
     task::{Context, Poll},
 };
@@ -12,12 +13,12 @@ use tracing::Span;
 use tracing_futures::Instrument;
 
 use futures::Stream;
-use http::{HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
 use reqwest::{Body, Response};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -103,6 +104,8 @@ const CONCURRENCY_LIMIT: u8 = 100;
 
 /// A wrapper for `reqwest::Client` that adds extra features:
 /// * Improved connection pooling support for HTTP/2
+/// * Workaround for long-lived `h2` spans (see `tensorzero_h2_workaround_span`)
+/// * Outgoing OpenTelemetry 'tracecontext/baggage' propagation
 #[derive(Debug, Clone)]
 pub struct TensorzeroHttpClient {
     // A 'waterfall' of clients for connecting pooling.
@@ -405,7 +408,23 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
-    pub fn eventsource(self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+    // We call this method just before sending the request, so that we capture the OpenTelemetry Context (including the parent span)
+    // as close to the request callsite as possible.
+    #[must_use]
+    fn with_otlp_headers(mut self) -> Self {
+        let mut extra_headers = HeaderMap::new();
+        opentelemetry::global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(
+                &opentelemetry::Context::current(),
+                &mut HeaderInjector(&mut extra_headers),
+            );
+        });
+        self.builder = self.builder.headers(extra_headers);
+        self
+    }
+
+    pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+        self = self.with_otlp_headers();
         Ok(TensorZeroEventSource {
             source: self.builder.eventsource()?,
             ticket: self.ticket.into_owned(),
@@ -415,7 +434,8 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
     // This method takes an owned `self`, so we'll drop `self.ticket` when this method
     // returns (after we've gotten a response)
-    pub async fn send(self) -> Result<Response, reqwest::Error> {
+    pub async fn send(mut self) -> Result<Response, reqwest::Error> {
+        self = self.with_otlp_headers();
         self.builder
             .send()
             .instrument(tensorzero_h2_workaround_span())
@@ -423,9 +443,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
-        self,
+        mut self,
         provider_type: &str,
     ) -> Result<T, Error> {
+        self = self.with_otlp_headers();
         let (client, request) = self.builder.build_split();
         let request = request.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
@@ -508,10 +529,11 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
         })?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
-    if cfg!(feature = "e2e_tests") {
-        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
-            http_client_builder = http_client_builder
+    if cfg!(feature = "e2e_tests")
+        && let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY")
+    {
+        tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+        http_client_builder = http_client_builder
                 .proxy(
                     Proxy::all(proxy_url)
                         .map_err(|e| {
@@ -520,13 +542,12 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                             })
                         })?
                         .no_proxy(NoProxy::from_string(
-                            "localhost,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
+                            "localhost,0.0.0.0,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
                         )),
                 )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
                 .danger_accept_invalid_certs(true);
-        }
     }
 
     http_client_builder.build().map_err(|e| {
@@ -542,22 +563,22 @@ mod tests {
         future::IntoFuture,
         net::SocketAddr,
         sync::{
-            atomic::{AtomicU8, Ordering},
             Arc,
+            atomic::{AtomicU8, Ordering},
         },
     };
 
     use axum::{
-        extract::Request,
-        response::{sse::Event, Sse},
-        routing::get,
         Router,
+        extract::Request,
+        response::{Sse, sse::Event},
+        routing::get,
     };
     use futures::StreamExt;
     use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::{LimitedClient, TensorZeroEventSource, CONCURRENCY_LIMIT};
+    use crate::http::{CONCURRENCY_LIMIT, LimitedClient, TensorZeroEventSource};
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
         let app = Router::new()
@@ -685,7 +706,11 @@ mod tests {
         // (the maximum is achieved if all tasks happen to run concurrently)
         assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
         let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
-        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ), "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+        assert!(
+            num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize)),
+            "Too many initialized clients - found {num_initialized_clients} but expected at most {}",
+            num_tasks / (CONCURRENCY_LIMIT as usize)
+        );
         for client_cell in client.clients.iter() {
             if let Some(client) = client_cell.get() {
                 assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);

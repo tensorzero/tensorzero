@@ -1,5 +1,5 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
@@ -94,7 +94,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
     use crate::db::inferences::{
-        InferenceOutputSource, MockInferenceQueries, DEFAULT_INFERENCE_QUERY_LIMIT,
+        DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, MockInferenceQueries,
     };
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat};

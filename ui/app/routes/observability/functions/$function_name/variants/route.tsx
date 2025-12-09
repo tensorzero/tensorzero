@@ -14,8 +14,7 @@ import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   countInferencesForVariant,
-  queryInferenceTableBounds,
-  queryInferenceTable,
+  listInferencesWithPagination,
 } from "~/utils/clickhouse/inference.server";
 import { getVariantPerformances } from "~/utils/clickhouse/function";
 import type { TimeWindow } from "~/types/tensorzero";
@@ -61,7 +60,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
-  const inferencePromise = queryInferenceTable({
+  const inferencePromise = listInferencesWithPagination({
     function_name,
     variant_name,
     limit,
@@ -69,14 +68,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     after: afterInference || undefined,
   });
 
-  const tableBoundsPromise = queryInferenceTableBounds({
-    function_name,
-    variant_name,
-  });
-
   const numInferencesPromise = countInferencesForVariant(
     function_name,
-    function_config,
     variant_name,
   );
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
@@ -99,14 +92,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       : undefined;
 
   const [
-    inferences,
-    inference_bounds,
+    inferenceResult,
     num_inferences,
     variant_performances,
     metricsWithFeedback,
   ] = await Promise.all([
     inferencePromise,
-    tableBoundsPromise,
     numInferencesPromise,
     variantPerformancesPromise,
     metricsWithFeedbackPromise,
@@ -116,8 +107,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     function_name,
     variant_name,
     num_inferences,
-    inferences,
-    inference_bounds,
+    inferences: inferenceResult.inferences,
+    hasNextInferencePage: inferenceResult.hasNextPage,
+    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
     variant_performances,
     metricsWithFeedback,
   };
@@ -129,7 +121,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     variant_name,
     num_inferences,
     inferences,
-    inference_bounds,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     variant_performances,
     metricsWithFeedback,
   } = loaderData;
@@ -164,7 +157,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
+    searchParams.set("beforeInference", bottomInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -172,14 +165,9 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
+    searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  const disablePreviousInferencePage =
-    !topInference || inference_bounds.last_id === topInference.id;
-  const disableNextInferencePage =
-    !bottomInference || inference_bounds.first_id === bottomInference.id;
 
   const [metric_name, setMetricName] = useState(
     () => searchParams.get("metric_name") || "",
@@ -244,8 +232,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
               <PageButtons
                 onPreviousPage={handlePreviousInferencePage}
                 onNextPage={handleNextInferencePage}
-                disablePrevious={disablePreviousInferencePage}
-                disableNext={disableNextInferencePage}
+                disablePrevious={!hasPreviousInferencePage}
+                disableNext={!hasNextInferencePage}
               />
             </>
           ) : (

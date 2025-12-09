@@ -14,8 +14,8 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
-use futures::stream::Peekable;
 use futures::Stream;
+use futures::stream::Peekable;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,7 +61,8 @@ pub struct ThoughtChunk {
 
     /// See `Thought.provider_type`
     #[serde(
-        rename = "_internal_provider_type",
+        // This alias is written to the database, so we cannot remove it.
+        alias = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
@@ -270,7 +271,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     });
     // `usage` is `None` until we receive a chunk with usage information
     let mut usage: Option<Usage> = None;
-    let mut ttft: Option<Duration> = None;
     let response_time = value
         .last()
         .ok_or_else(|| {
@@ -288,6 +288,15 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     // This is used to build up a thought summary list for each thought,
     // which is used to construct the final 'summary' field on Thought.
     let mut thought_summaries: IndexMap<String, IndexSet<String>> = IndexMap::new();
+
+    // Set our TTFT to the latency of the first chunk, regardless of whether the chunk actually had any content.
+    // Some models can produce entirely empty chunks - we treat this as the "first token" being the invisible
+    // end-of-response marker.
+    let ttft = value.first().map(|chunk| chunk.latency()).ok_or_else(|| {
+        Error::new(ErrorDetails::TypeConversion {
+            message: "Never got TTFT because there were no chunks in the response".to_string(),
+        })
+    })?;
 
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
@@ -313,8 +322,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 &mut blocks,
                                 (ContentBlockOutputType::Text, text.id),
                                 text.text,
-                                &mut ttft,
-                                chunk.latency,
                                 Into::into,
                                 |block, text| {
                                     if let ContentBlockOutput::Text(Text {
@@ -345,8 +352,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     &mut blocks,
                                     (ContentBlockOutputType::Thought, id.clone()),
                                     text,
-                                    &mut ttft,
-                                    chunk.latency,
                                     |text| {
                                         ContentBlockOutput::Thought(Thought {
                                             text: Some(text),
@@ -367,8 +372,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     &mut blocks,
                                     (ContentBlockOutputType::Thought, id.clone()),
                                     signature,
-                                    &mut ttft,
-                                    chunk.latency,
                                     |signature| {
                                         ContentBlockOutput::Thought(Thought {
                                             text: None,
@@ -390,10 +393,16 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 );
                             }
                             if summary_id.is_some() && summary_text.is_none() {
-                                tracing::error!("Summary id is present but summary text is missing for thought {}", id);
+                                tracing::error!(
+                                    "Summary id is present but summary text is missing for thought {}",
+                                    id
+                                );
                             }
                             if summary_id.is_none() && summary_text.is_some() {
-                                tracing::error!("Summary text is present but summary id is missing for thought {}", id);
+                                tracing::error!(
+                                    "Summary text is present but summary id is missing for thought {}",
+                                    id
+                                );
                             }
                             if let (Some(summary_id), Some(summary_text)) =
                                 (summary_id, summary_text)
@@ -411,8 +420,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     &mut blocks,
                                     (ContentBlockOutputType::Thought, id),
                                     summary_text,
-                                    &mut ttft,
-                                    chunk.latency,
                                     |summary_text| {
                                         ContentBlockOutput::Thought(Thought {
                                             text: None,
@@ -476,9 +483,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 }
                                 // If there is no tool call block, create one
                                 _ => {
-                                    if ttft.is_none() {
-                                        ttft = Some(chunk.latency);
-                                    }
                                     blocks.insert(
                                         (ContentBlockOutputType::ToolCall, tool_call.id.clone()),
                                         ContentBlockOutput::ToolCall(tool_call_chunk_to_tool_call(
@@ -494,11 +498,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                             model_name,
                             provider_name,
                         }) => {
-                            // Unknown chunks are not merged/coalesced - each one gets a unique entry
-                            // We use the chunk ID as part of the key to ensure uniqueness
-                            if ttft.is_none() {
-                                ttft = Some(chunk.latency);
-                            }
                             blocks.insert(
                                 (ContentBlockOutputType::Unknown, id.clone()),
                                 ContentBlockOutput::Unknown(Unknown {
@@ -526,11 +525,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                     }
                     // If there is no text block, create one
                     _ => {
-                        // We put this here and below rather than in the loop start because we
-                        // only want to set TTFT if there is some real content
-                        if ttft.is_none() {
-                            ttft = Some(chunk.latency);
-                        }
                         if let Some(raw) = chunk.raw {
                             blocks
                                 .insert((ContentBlockOutputType::Text, String::new()), raw.into());
@@ -563,11 +557,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             }
         }
     }
-    let ttft = ttft.ok_or_else(|| {
-        Error::new(ErrorDetails::TypeConversion {
-            message: "Never got TTFT because there was never content in the response.".to_string(),
-        })
-    })?;
     let latency = Latency::Streaming {
         ttft,
         response_time,
@@ -670,8 +659,6 @@ fn handle_textual_content_block<F, A>(
     blocks: &mut IndexMap<(ContentBlockOutputType, String), ContentBlockOutput>,
     key: (ContentBlockOutputType, String),
     text: String,
-    ttft: &mut Option<Duration>,
-    chunk_latency: Duration,
     create_block: F,
     append_text: A,
 ) where
@@ -683,10 +670,6 @@ fn handle_textual_content_block<F, A>(
         Some(existing_block) => append_text(existing_block, &text),
         // If there is no block, create one
         _ => {
-            // We only want to set TTFT if there is some real content
-            if ttft.is_none() {
-                *ttft = Some(chunk_latency);
-            }
             if !text.is_empty() {
                 blocks.insert(key, create_block(text));
             }
@@ -704,8 +687,8 @@ mod tests {
         experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            current_timestamp, ContentBlockChatOutput, ContentBlockOutputType, InferenceResult,
-            Text, Thought,
+            ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
+            current_timestamp,
         },
         jsonschema_util::StaticJSONSchema,
         tool::InferenceResponseToolCall,
@@ -715,16 +698,12 @@ mod tests {
     fn test_handle_textual_content_block() {
         let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
             IndexMap::new();
-        let mut ttft: Option<Duration> = None;
-        let chunk_latency = Duration::from_millis(100);
 
         // Test case 1: Create new text block
         handle_textual_content_block(
             &mut blocks,
             (ContentBlockOutputType::Text, "1".to_string()),
             "Hello".to_string(),
-            &mut ttft,
-            chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),
             |block, text| {
                 if let ContentBlockOutput::Text(Text {
@@ -737,7 +716,6 @@ mod tests {
         );
 
         assert_eq!(blocks.len(), 1);
-        assert_eq!(ttft, Some(chunk_latency));
         match blocks
             .get(&(ContentBlockOutputType::Text, "1".to_string()))
             .unwrap()
@@ -751,8 +729,6 @@ mod tests {
             &mut blocks,
             (ContentBlockOutputType::Text, "1".to_string()),
             " World".to_string(),
-            &mut ttft,
-            chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),
             |block, text| {
                 if let ContentBlockOutput::Text(Text {
@@ -778,8 +754,6 @@ mod tests {
             &mut blocks,
             (ContentBlockOutputType::Text, "2".to_string()),
             String::new(),
-            &mut ttft,
-            chunk_latency,
             |text| ContentBlockOutput::Text(Text { text }),
             |block, text| {
                 if let ContentBlockOutput::Text(Text {
@@ -798,8 +772,6 @@ mod tests {
             &mut blocks,
             (ContentBlockOutputType::Thought, "3".to_string()),
             "Thinking...".to_string(),
-            &mut ttft,
-            chunk_latency,
             |text| {
                 ContentBlockOutput::Thought(Thought {
                     text: Some(text),

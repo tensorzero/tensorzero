@@ -7,7 +7,7 @@ use evaluations::EvaluationInfo;
 use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
-    config::{path::ResolvedTomlPathData, SchemaData},
+    config::{SchemaData, path::ResolvedTomlPathData},
     endpoints::{
         datasets::{Datapoint, StoredChatInferenceDatapoint},
         inference::{ChatInferenceResponse, InferenceResponse},
@@ -340,6 +340,7 @@ pub fn create_test_evaluation_info(
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
+        snapshot_hash: None,
     };
 
     let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
@@ -730,7 +731,7 @@ async fn test_analyze_input_echo_helper(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_includes_system_template() {
-    let payload = test_analyze_input_echo_helper(
+    let payload = Box::pin(test_analyze_input_echo_helper(
         vec![create_test_evaluation_info(
             "test_function",
             "Test input",
@@ -739,7 +740,7 @@ async fn test_analyze_input_includes_system_template() {
         create_test_function_config(),
         None,
         create_test_evaluation_config(),
-    )
+    ))
     .await;
 
     let system_prompt = payload
@@ -842,6 +843,7 @@ async fn test_analyze_input_format_scenarios() {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let response = InferenceResponse::Chat(
@@ -953,12 +955,12 @@ async fn test_analyze_input_format_scenarios() {
     ];
 
     for scenario in scenarios {
-        let payload = test_analyze_input_echo_helper(
+        let payload = Box::pin(test_analyze_input_echo_helper(
             scenario.eval_infos,
             scenario.function_config,
             scenario.static_tools,
             scenario.eval_config,
-        )
+        ))
         .await;
 
         (scenario.assert_fn)(&payload);

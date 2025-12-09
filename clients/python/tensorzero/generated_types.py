@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .unset_type import UNSET, UnsetType
+from .omit_type import OMIT, OmitType
 
 Model = Any
 
@@ -77,11 +77,11 @@ class DatapointMetadataUpdate:
     A request to update the metadata of a datapoint.
     """
 
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
 
@@ -262,11 +262,11 @@ ExtraBody = (
 
 
 @dataclass(kw_only=True)
-class ExtraBodyReplacementKind1:
+class ExtraBodyReplacementKindValue:
     value: Any
 
 
-ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
 
 
 @dataclass(kw_only=True)
@@ -871,11 +871,11 @@ class UpdateDatapointMetadataRequest:
     """
     The ID of the datapoint to update. Required.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
 
@@ -1200,9 +1200,9 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
-    field_internal_provider_type: str | None = None
+    provider_type: str | None = None
     """
-    When set, this 'Thought' block will only be used for providers
+    When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
     """
@@ -1348,18 +1348,18 @@ class UpdateDynamicToolParamsRequest:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
@@ -1367,11 +1367,11 @@ class UpdateDynamicToolParamsRequest:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
 
@@ -1575,11 +1575,11 @@ class UpdateChatDatapointRequestInternal:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
     input: Input | None = None
@@ -1591,25 +1591,25 @@ class UpdateChatDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: list[ContentBlockChatOutput] | None | UnsetType = UNSET
+    output: list[ContentBlockChatOutput] | None | OmitType = OMIT
     """
     Chat datapoint output.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing output (and can be an empty list).
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
@@ -1621,14 +1621,14 @@ class UpdateChatDatapointRequestInternal:
     """
     Datapoint tags.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing tags.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
     tool_params: UpdateDynamicToolParamsRequest | None = None
@@ -1666,17 +1666,17 @@ class UpdateJsonDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: JsonDatapointOutputUpdate | None | UnsetType = UNSET
+    output: JsonDatapointOutputUpdate | None | OmitType = OMIT
     """
     JSON datapoint output.
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
     inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.
     """
     output_schema: Any | None = None

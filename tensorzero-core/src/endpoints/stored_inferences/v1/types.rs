@@ -5,7 +5,7 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
-    InferenceOutputSource, ListInferencesParams, PaginationParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, ListInferencesParams, PaginationParams,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
@@ -239,7 +239,7 @@ impl ListInferencesRequest {
             (Some(_), Some(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both 'before' and 'after' parameters".to_string(),
-                }))
+                }));
             }
             (Some(before), None) => Some(PaginationParams::Before { id: before }),
             (None, Some(after)) => Some(PaginationParams::After { id: after }),
@@ -298,52 +298,4 @@ pub struct GetInferencesRequest {
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
-}
-
-/// Response containing the inference table bounds.
-/// Used by the `GET /internal/inferences/bounds` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[serde_with::skip_serializing_none]
-#[ts(export, optional_fields)]
-pub struct GetInferenceBoundsResponse {
-    /// The most recent inference ID (MAX id_uint).
-    pub latest_id: Option<Uuid>,
-
-    /// The oldest inference ID (MIN id_uint).
-    pub earliest_id: Option<Uuid>,
-
-    /// The total number of inferences matching the filter criteria.
-    pub count: u64,
-}
-
-/// Metadata about an inference.
-/// Used by the `GET /internal/inferences` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS, Clone, PartialEq)]
-#[ts(export)]
-pub struct InternalInferenceMetadata {
-    /// The ID of the inference.
-    pub id: Uuid,
-
-    /// The function name of the inference.
-    pub function_name: String,
-
-    /// The variant name of the inference.
-    pub variant_name: String,
-
-    /// The episode ID of the inference.
-    pub episode_id: Uuid,
-
-    /// The function type of the inference.
-    pub function_type: String,
-
-    /// The timestamp of the inference.
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Response containing the list of inferences by ID.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct InternalListInferencesByIdResponse {
-    /// The list of inferences.
-    pub inferences: Vec<InternalInferenceMetadata>,
 }

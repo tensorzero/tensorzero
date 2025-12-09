@@ -22,7 +22,7 @@ use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_optimizers::gepa::{
     evaluate::EvaluationResults,
-    validate::{validate_gepa_config, FunctionContext},
+    validate::{FunctionContext, validate_gepa_config},
 };
 use tokio::time::sleep;
 
@@ -47,7 +47,7 @@ async fn get_e2e_config() -> Arc<Config> {
         )
         .await
         .expect("Failed to load e2e config")
-        .config,
+        .into_config_without_writing_for_tests(),
     )
 }
 

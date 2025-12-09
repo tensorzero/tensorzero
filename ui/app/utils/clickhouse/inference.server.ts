@@ -3,18 +3,13 @@ import {
   modelInferenceInputMessageSchema,
   ZodJsonValueSchema,
 } from "./common";
-import {
-  contentBlockOutputSchema,
-  getInferenceTableName,
-  inputSchema,
-} from "./common";
+import { contentBlockOutputSchema, inputSchema } from "./common";
 import { data } from "react-router";
 import type {
-  FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-  TableBoundsWithCount,
-  InternalInferenceMetadata,
+  StoredInference,
+  InferenceFilter,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -32,31 +27,44 @@ import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { getTensorZeroClient } from "../tensorzero.server";
+import { isTensorZeroServerError } from "../tensorzero";
 
 /**
- * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
- * before the given `before` ID or after the given `after` ID. Optional filters can be applied
- * for function_name, variant_name, and episode_id.
- *
- * - If `before` and `after` are both not provided, returns the most recent `limit` Inferences.
- * - If `before` and `after` are both provided, throw an error.
- * - If `before` is provided, returns the most recent `limit` Inferences before the given `before` ID.
- * - If `after` is provided, returns the earliest `limit` Inferences after the given `after` ID.
- *
- * All returned data should be ordered by `id` in descending order.
- *
- * TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
+ * Result type for listInferencesWithPagination with pagination info.
  */
-export async function queryInferenceTable(params: {
+export type ListInferencesResult = {
+  inferences: StoredInference[];
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+/**
+ * Lists inferences using the public v1 API with cursor-based pagination.
+ * Implements the limit+1 pattern to detect if there are more pages.
+ *
+ * @param params - Query parameters for listing inferences
+ * @returns Inferences with pagination info (hasNextPage, hasPreviousPage)
+ */
+export async function listInferencesWithPagination(params: {
   limit: number;
-  before?: string; // UUIDv7 string
-  after?: string; // UUIDv7 string
+  before?: string; // UUIDv7 string - get inferences before this ID (going to older)
+  after?: string; // UUIDv7 string - get inferences after this ID (going to newer)
   function_name?: string;
   variant_name?: string;
   episode_id?: string;
-}): Promise<InternalInferenceMetadata[]> {
-  const { limit, before, after, function_name, variant_name, episode_id } =
-    params;
+  filter?: InferenceFilter;
+  search_query?: string;
+}): Promise<ListInferencesResult> {
+  const {
+    limit,
+    before,
+    after,
+    function_name,
+    variant_name,
+    episode_id,
+    filter,
+    search_query,
+  } = params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
@@ -64,74 +72,95 @@ export async function queryInferenceTable(params: {
 
   try {
     const client = getTensorZeroClient();
-    const result = await client.internalListInferencesById({
-      limit,
+
+    // Request limit + 1 to detect if there are more pages
+    const response = await client.listInferences({
+      output_source: "inference",
+      limit: limit + 1,
       before,
       after,
       function_name,
       variant_name,
       episode_id,
+      filter,
+      search_query_experimental: search_query,
     });
-    return result.inferences;
-  } catch (error) {
-    logger.error("Failed to query inference table:", error);
-    throw data("Error querying inference table", { status: 500 });
-  }
-}
 
-/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
-export async function queryInferenceTableBounds(params?: {
-  function_name?: string;
-  variant_name?: string;
-  episode_id?: string;
-}): Promise<TableBoundsWithCount> {
-  try {
-    const client = getTensorZeroClient();
-    const result = await client.getInferenceBounds(params);
+    // Determine if there are more pages based on whether we got more than limit results
+    const hasMore = response.inferences.length > limit;
+
+    // Only return up to limit inferences (hide the extra one used for detection)
+    // For 'after' pagination, the extra item is at the BEGINNING after the backend reverses
+    // For 'before' pagination (or no pagination), the extra item is at the END
+    let inferences: typeof response.inferences;
+    if (hasMore) {
+      if (after) {
+        // Extra item is at position 0, so take items from position 1 onwards
+        inferences = response.inferences.slice(1, limit + 1);
+      } else {
+        // Extra item is at the end, so take first 'limit' items
+        inferences = response.inferences.slice(0, limit);
+      }
+    } else {
+      inferences = response.inferences;
+    }
+
+    // Pagination direction logic:
+    // - When using 'before': we're going to older inferences (next page = older)
+    // - When using 'after': we're going to newer inferences (previous page = newer)
+    // - When neither: we're on the first page (most recent)
+    let hasNextPage: boolean;
+    let hasPreviousPage: boolean;
+
+    if (before) {
+      // Going backwards in time (older). hasMore means there are older pages.
+      hasNextPage = hasMore;
+      // We came from a newer page, so there's always a previous (newer) page
+      hasPreviousPage = true;
+    } else if (after) {
+      // Going forwards in time (newer). hasMore means there are newer pages.
+      // But since results are displayed newest first, "previous" button goes to newer
+      hasPreviousPage = hasMore;
+      // We came from an older page, so there's always a next (older) page
+      hasNextPage = true;
+    } else {
+      // Initial page load - showing most recent
+      hasNextPage = hasMore;
+      hasPreviousPage = false;
+    }
 
     return {
-      // TODO: handle undefined values instead of nulls
-      first_id: result.earliest_id || null,
-      last_id: result.latest_id || null,
-      count: result.count,
+      inferences,
+      hasNextPage,
+      hasPreviousPage,
     };
   } catch (error) {
-    logger.error("Failed to query inference table bounds:", error);
-    throw data("Error querying inference table bounds", { status: 500 });
+    logger.error("Failed to list inferences:", error);
+    if (isTensorZeroServerError(error)) {
+      throw data("Error listing inferences", {
+        status: error.status,
+        statusText: error.statusText ?? undefined,
+      });
+    }
+    throw data("Error listing inferences", { status: 500 });
   }
 }
 
 export async function countInferencesForFunction(
   function_name: string,
-  function_config: FunctionConfig,
 ): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
+  const client = getTensorZeroClient();
+  const result = await client.getInferenceStats(function_name);
+  return Number(result.inference_count);
 }
 
 export async function countInferencesForVariant(
   function_name: string,
-  function_config: FunctionConfig,
   variant_name: string,
 ): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name, variant_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
+  const client = getTensorZeroClient();
+  const result = await client.getInferenceStats(function_name, variant_name);
+  return Number(result.inference_count);
 }
 
 export async function countInferencesForEpisode(

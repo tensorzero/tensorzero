@@ -20,10 +20,10 @@ use crate::inference::types::resolved_input::{
 use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
     ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
     Unknown,
+    batch::StartBatchModelInferenceWithMetadata,
+    chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -35,8 +35,8 @@ mod templates;
 pub use templates::ChatTemplates;
 
 use super::{
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant, infer_model_request,
+    infer_model_request_stream, prepare_model_inference_request,
 };
 
 /// If we have a schema, then we forward the 'arguments' object as-is to the template.
@@ -449,14 +449,14 @@ pub fn prepare_system_message(
                 }))
             } else {
                 // Otherwise, we use the system message as-is.
-                let system_value = match system {
+
+                match system {
                     Some(System::Text(text)) => Cow::Owned(Value::String(text.clone())),
                     Some(System::Template(arguments)) => {
                         Cow::Owned(Value::Object(arguments.0.clone()))
                     }
                     None => Cow::Owned(Value::Null),
-                };
-                system_value
+                }
             };
             Some(templates.template_message(&template.template.path.get_template_key(), &context)?)
         }
@@ -508,7 +508,11 @@ pub async fn prepare_request_message(
                     })?;
                 if template.schema.is_none() && template.legacy_definition {
                     return Err(Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Request message content {} is not a string but `input_wrappers.{}` is set in the variant config", serde_json::to_string(&template_input.arguments).unwrap_or_default(), message.role)
+                        message: format!(
+                            "Request message content {} is not a string but `input_wrappers.{}` is set in the variant config",
+                            serde_json::to_string(&template_input.arguments).unwrap_or_default(),
+                            message.role
+                        ),
                     }));
                 }
                 let text_content = templates_config.template_message(
@@ -713,15 +717,15 @@ impl Variant for ChatCompletionConfig {
         })?;
 
         // Validate that json_mode = "tool" is not used with chat functions that have tools configured
-        if let Some(JsonMode::Tool) = self.json_mode {
-            if function.tools().next().is_some() {
-                return Err(ErrorDetails::Config {
+        if let Some(JsonMode::Tool) = self.json_mode
+            && function.tools().next().is_some()
+        {
+            return Err(ErrorDetails::Config {
                     message: format!(
                         "`functions.{function_name}.variants.{variant_name}`: Cannot use `json_mode = \"tool\"` with chat functions that have tools configured. Please remove tools from the function or use a JSON function instead."
                     ),
                 }
                 .into());
-            }
         }
 
         Ok(())
@@ -872,7 +876,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas};
+    use crate::config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
@@ -894,7 +898,7 @@ mod tests {
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::model_table::ProviderTypeDefaultCredentials;
-    use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
+    use crate::providers::dummy::{DUMMY_JSON_RESPONSE_RAW, DummyProvider};
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
@@ -1288,6 +1292,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -1361,6 +1366,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1376,6 +1382,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1395,6 +1402,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1410,6 +1418,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![LazyResolvedInputMessage {
@@ -1651,6 +1660,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
@@ -2298,6 +2308,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
@@ -2343,6 +2354,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -2358,6 +2370,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();

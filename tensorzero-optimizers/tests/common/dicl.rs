@@ -1,8 +1,8 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{collections::HashMap, fs, sync::Arc};
 use tempfile::TempDir;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -13,10 +13,10 @@ use tensorzero::{
     Role, System,
 };
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, ConfigLoadInfo, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-        select_model_inferences_clickhouse, CLICKHOUSE_URL,
+        CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
+        select_json_inference_clickhouse, select_model_inferences_clickhouse,
     },
     http::TensorzeroHttpClient,
     inference::types::{
@@ -26,8 +26,8 @@ use tensorzero_core::{
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
-        dicl::UninitializedDiclOptimizationConfig, OptimizationJobInfo, OptimizerOutput,
-        UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+        OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerConfig,
+        UninitializedOptimizerInfo, dicl::UninitializedDiclOptimizationConfig,
     },
     stored_inference::StoredOutput,
 };
@@ -110,12 +110,13 @@ pub async fn test_dicl_optimization_chat() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(
@@ -248,7 +249,7 @@ pub async fn test_dicl_optimization_chat() {
     let first_content = &chat_response.content[0];
 
     // Check that the response follows the Pinocchio pattern
-    if let ContentBlockChatOutput::Text(ref text_content) = first_content {
+    if let ContentBlockChatOutput::Text(text_content) = first_content {
         validate_pinocchio_pattern(&text_content.text);
     }
 
@@ -324,10 +325,10 @@ pub async fn test_dicl_optimization_chat() {
     }
 
     // Validate usage metrics from the last chunk (which should contain final usage)
-    if let Some(last_chunk) = chunks.last() {
-        if let Some(usage) = &last_chunk.usage {
-            validate_usage_metrics(*usage);
-        }
+    if let Some(last_chunk) = chunks.last()
+        && let Some(usage) = &last_chunk.usage
+    {
+        validate_usage_metrics(*usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -394,12 +395,13 @@ pub async fn test_dicl_optimization_json() {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_config_without_writing_for_tests();
 
     let job_handle = optimizer_info
         .launch(
@@ -530,10 +532,10 @@ pub async fn test_dicl_optimization_json() {
     assert!(json_response.output.parsed.is_some());
 
     // Check the Pinocchio pattern in JSON response
-    if let Some(ref parsed) = json_response.output.parsed {
-        if let Some(answer) = parsed.get("answer").and_then(|v| v.as_str()) {
-            validate_pinocchio_pattern(answer);
-        }
+    if let Some(ref parsed) = json_response.output.parsed
+        && let Some(answer) = parsed.get("answer").and_then(|v| v.as_str())
+    {
+        validate_pinocchio_pattern(answer);
     }
 
     // Verify usage metrics
@@ -600,18 +602,18 @@ pub async fn test_dicl_optimization_json() {
     // Validate the full raw content follows Pinocchio pattern
     if !full_raw_content.is_empty() {
         // Parse the accumulated JSON and validate it contains the nose growth pattern
-        if let Ok(json_value) = serde_json::from_str::<Value>(&full_raw_content) {
-            if let Some(answer) = json_value.get("answer").and_then(|v| v.as_str()) {
-                validate_pinocchio_pattern(answer);
-            }
+        if let Ok(json_value) = serde_json::from_str::<Value>(&full_raw_content)
+            && let Some(answer) = json_value.get("answer").and_then(|v| v.as_str())
+        {
+            validate_pinocchio_pattern(answer);
         }
     }
 
     // Validate usage metrics from the last chunk (which should contain final usage)
-    if let Some(last_chunk) = chunks.last() {
-        if let Some(usage) = &last_chunk.usage {
-            validate_usage_metrics(*usage);
-        }
+    if let Some(last_chunk) = chunks.last()
+        && let Some(usage) = &last_chunk.usage
+    {
+        validate_usage_metrics(*usage);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -933,7 +935,10 @@ async fn validate_model_inference_clickhouse(
                 assert!(raw_response.to_lowercase().contains("nose"));
 
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(
+                    system,
+                    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
+                );
 
                 // Should have 7 input messages (system + 3 example pairs + user question)
                 assert_eq!(input_messages.len(), 7);
@@ -956,7 +961,9 @@ async fn validate_model_inference_clickhouse(
                 assert_eq!(output.len(), 0);
             }
             _ => {
-                panic!("Unexpected model: {model_name}, expected either {expected_model} or {expected_embedding_model}");
+                panic!(
+                    "Unexpected model: {model_name}, expected either {expected_model} or {expected_embedding_model}"
+                );
             }
         }
 

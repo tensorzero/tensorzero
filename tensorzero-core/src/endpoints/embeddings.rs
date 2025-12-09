@@ -10,12 +10,13 @@ use crate::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
-    endpoints::{inference::InferenceClients, RequestApiKeyExtension},
+    endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
     rate_limiting::ScopeInfo,
 };
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 #[cfg(test)]
 use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;
@@ -46,6 +47,11 @@ pub async fn embeddings(
     params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
+    if config.gateway.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Embeddings endpoint is not supported in relay mode".to_string(),
+        }));
+    }
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
     span.record("num_inputs", params.input.num_inputs());
@@ -58,12 +64,12 @@ pub async fn embeddings(
                 model_name: params.model_name.clone(),
             })
         })?;
-    if let EmbeddingInput::Batch(array) = &params.input {
-        if array.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "Input cannot be empty".to_string(),
-            }));
-        }
+    if let EmbeddingInput::Batch(array) = &params.input
+        && array.is_empty()
+    {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Input cannot be empty".to_string(),
+        }));
     }
 
     let request = EmbeddingRequest {
@@ -87,6 +93,7 @@ pub async fn embeddings(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: None,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -108,8 +115,8 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;

@@ -11,10 +11,10 @@ use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
 use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
@@ -40,7 +40,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         )
         .await
         .unwrap()
-        .config,
+        .into_config_without_writing_for_tests(),
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,

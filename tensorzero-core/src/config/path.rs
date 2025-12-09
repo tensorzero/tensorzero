@@ -5,9 +5,9 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use toml::{
+    Spanned, Table,
     de::{DeTable, DeValue},
     map::Entry,
-    Spanned, Table,
 };
 
 use crate::error::{Error, ErrorDetails};
@@ -808,7 +808,7 @@ pub(super) fn resolve_toml_relative_paths(
                                 error_path.join(".")
                             ),
                         }
-                        .into())
+                        .into());
                     }
                 }
             } else {

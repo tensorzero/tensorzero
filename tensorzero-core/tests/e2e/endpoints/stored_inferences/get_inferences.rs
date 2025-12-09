@@ -1,6 +1,6 @@
 /// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::InferenceOutputSource;
 use uuid::Uuid;
 

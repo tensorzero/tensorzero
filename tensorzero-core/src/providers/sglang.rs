@@ -6,38 +6,38 @@ use futures::StreamExt;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk,
 };
-use crate::inference::InferenceProvider;
+use crate::inference::types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+};
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
+use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, OpenAIRequestMessage,
-    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage, StreamOptions,
-    SystemOrDeveloper,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
+    OpenAIUsage, StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
+    prepare_openai_messages,
 };
 
 const PROVIDER_NAME: &str = "SGLang";

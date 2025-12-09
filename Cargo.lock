@@ -2205,6 +2205,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-core",
  "tensorzero-optimizers",
+ "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
  "tower-http",
@@ -6086,15 +6087,19 @@ dependencies = [
 name = "tensorzero-auth"
 version = "2025.11.6"
 dependencies = [
+ "axum",
  "chrono",
  "futures",
  "hex",
+ "moka",
  "rand 0.9.2",
  "secrecy",
  "serde",
+ "serde_json",
  "sha2",
  "sqlx 0.9.0-alpha.1",
  "thiserror 2.0.17",
+ "tracing",
  "ts-rs",
 ]
 
@@ -6150,9 +6155,11 @@ dependencies = [
  "minijinja-utils",
  "mockall",
  "moka",
+ "num-bigint",
  "object_store",
  "once_cell",
  "opentelemetry",
+ "opentelemetry-http",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
@@ -6178,6 +6185,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -6235,6 +6243,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.22.1",
+ "blake3",
  "chrono",
  "evaluations",
  "futures",
@@ -6278,6 +6287,10 @@ dependencies = [
  "url",
  "uuid",
 ]
+
+[[package]]
+name = "tensorzero-unsafe-helpers"
+version = "2025.11.6"
 
 [[package]]
 name = "termcolor"

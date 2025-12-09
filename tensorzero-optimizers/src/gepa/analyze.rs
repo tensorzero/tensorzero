@@ -8,14 +8,14 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 use serde::Serialize;
-use serde_json::{json, to_value, Map, Value};
+use serde_json::{Map, Value, json, to_value};
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{
         Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
-    config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
+    config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
     inference::types::{Arguments, ContentBlockChatOutput, Role, StoredInput, Template},
@@ -262,9 +262,11 @@ async fn analyze_inference(
                 message:
                     "Expected at least one Text content block from analyze function, found none"
                         .to_string(),
-            }))
+            }));
         }
     };
+
+    tracing::debug!("Generated analysis: {}", analysis);
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
@@ -404,7 +406,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use tensorzero_core::{
-        config::{path::ResolvedTomlPathData, SchemaData},
+        config::{SchemaData, path::ResolvedTomlPathData},
         endpoints::{
             datasets::{Datapoint, StoredChatInferenceDatapoint},
             inference::{ChatInferenceResponse, InferenceResponse},
@@ -558,6 +560,7 @@ mod tests {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
@@ -628,10 +631,12 @@ mod tests {
 
         // Verify system template path and content
         let system_template = config.templates.inner.get("system").unwrap();
-        assert!(system_template
-            .path
-            .get_template_key()
-            .ends_with("system.minijinja"));
+        assert!(
+            system_template
+                .path
+                .get_template_key()
+                .ends_with("system.minijinja")
+        );
         let system_content = system_template.path.data();
         assert!(system_content.contains("You are an expert in diagnosing quality issues"));
         assert!(system_content.contains("## Context"));
@@ -643,10 +648,12 @@ mod tests {
 
         // Verify user template path and content
         let user_template = config.templates.inner.get("user").unwrap();
-        assert!(user_template
-            .path
-            .get_template_key()
-            .ends_with("user.minijinja"));
+        assert!(
+            user_template
+                .path
+                .get_template_key()
+                .ends_with("user.minijinja")
+        );
         let user_content = user_template.path.data();
         assert!(user_content.contains("<function_context>"));
         assert!(user_content.contains("<inference_context>"));

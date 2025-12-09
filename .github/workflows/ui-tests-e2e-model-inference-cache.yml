@@ -37,7 +37,7 @@ permissions:
 jobs:
   ui-tests-e2e-model-inference-cache:
     name: ui-tests-e2e-model-inference-cache (auth=${{ matrix.auth_enabled }})
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -176,7 +176,7 @@ jobs:
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: model-inference-cache
           path: |
@@ -240,6 +240,11 @@ jobs:
           echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
           echo "API key written to fixtures/.env"
 
+      # This will skip images from the still-running containers, but will free up all of the temporary
+      # images from the multi-stage builder (if we built any containers locally)
+      - name: Prune docker images to free up disk space
+        run: docker system prune -f
+
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
         run: |
@@ -273,7 +278,7 @@ jobs:
           # These 2 vars are set so the env.server code doesn't complain
           TENSORZERO_UI_CONFIG_PATH: "ui/fixtures/config/tensorzero.toml"
           TENSORZERO_GATEWAY_URL: "placeholder"
-        run: pnpm ui:test:e2e --grep-invert "@credentials"
+        run: pnpm ui:test:e2e --grep-invert "@credentials" -j 4
 
       - name: Print Docker Compose logs
         if: always()
@@ -304,20 +309,10 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts (GitHub runner)
-        if: failure() && inputs.regen_cache == false
+        if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: playwright-report-auth-${{ matrix.auth_enabled }}
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
-      - name: Upload Playwright artifacts (Namespace runner)
-        if: failure() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
-        with:
-          name: playwright-report-auth-${{ matrix.auth_enabled }}
+          name: playwright-report-auth-${{ matrix.auth_enabled }}-merge-group-${{ inputs.is_merge_group }}-regen-cache-${{ inputs.regen_cache }}
           path: |
             ui/playwright-report/
             ui/test-results/

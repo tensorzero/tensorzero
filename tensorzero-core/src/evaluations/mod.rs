@@ -8,12 +8,12 @@ use tensorzero_derive::TensorZeroDeserialize;
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
 use crate::experimentation::ExperimentationConfig;
 use crate::utils::retries::RetryConfig;
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::{
     config::{
-        path::ResolvedTomlPathData, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-        MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
+        MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
+        SchemaData, TimeoutsConfig, path::ResolvedTomlPathData,
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
@@ -24,6 +24,7 @@ use crate::{
     jsonschema_util::StaticJSONSchema,
     tool::create_json_mode_tool_call_config,
     variant::{
+        JsonMode, VariantConfig, VariantInfo,
         best_of_n_sampling::{
             UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
         },
@@ -31,7 +32,6 @@ use crate::{
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
-        JsonMode, VariantConfig, VariantInfo,
     },
 };
 
@@ -41,19 +41,19 @@ pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
 pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationConfig {
@@ -61,7 +61,7 @@ pub enum EvaluationConfig {
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluatorConfig {
@@ -69,6 +69,33 @@ pub enum EvaluatorConfig {
     #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
 }
+
+/// Minimal function configuration for evaluation purposes.
+/// Contains only the information needed to validate output schemas during evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum EvaluationFunctionConfig {
+    /// Chat function - no output schema validation needed
+    Chat,
+    /// JSON function - contains output schema for validation
+    Json { output_schema: StaticJSONSchema },
+}
+
+impl From<&FunctionConfig> for EvaluationFunctionConfig {
+    fn from(config: &FunctionConfig) -> Self {
+        match config {
+            FunctionConfig::Chat(_) => EvaluationFunctionConfig::Chat,
+            FunctionConfig::Json(json_config) => EvaluationFunctionConfig::Json {
+                output_schema: json_config.output_schema.clone(),
+            },
+        }
+    }
+}
+
+/// A map of function names to their evaluation configurations.
+/// Used to look up output schemas when running evaluations.
+pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfig>;
 
 impl EvaluatorConfig {
     pub fn cutoff(&self) -> Option<f32> {
@@ -96,7 +123,7 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -104,7 +131,7 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
@@ -118,7 +145,7 @@ pub struct LLMJudgeConfig {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
@@ -126,7 +153,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
@@ -177,7 +204,8 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
     format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedEvaluationConfig {
     Inference(UninitializedInferenceEvaluationConfig),
 }
@@ -233,7 +261,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
                 // Log deprecation warning if "static" is used
                 if type_str == "static" {
                     crate::utils::deprecation_warning(
-                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version."
+                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version.",
                     );
                 }
 
@@ -259,7 +287,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
@@ -352,7 +380,7 @@ impl UninitializedInferenceEvaluationConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
@@ -361,7 +389,7 @@ enum UninitializedEvaluatorConfig {
     LLMJudge(UninitializedLLMJudgeConfig),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
@@ -463,13 +491,13 @@ impl UninitializedEvaluatorConfig {
                             message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }.into());
                     };
-                    if let Some(weight) = variant.inner.weight() {
-                        if weight == 0.0 {
-                            return Err(ErrorDetails::Config {
+                    if let Some(weight) = variant.inner.weight()
+                        && weight == 0.0
+                    {
+                        return Err(ErrorDetails::Config {
                                 message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
-                        }
                     }
                     match &mut variant.inner {
                         VariantConfig::ChatCompletion(variant) => {
@@ -534,14 +562,14 @@ impl UninitializedEvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeVariantConfig,
     timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedLLMJudgeVariantConfig {
@@ -556,7 +584,7 @@ enum UninitializedLLMJudgeVariantConfig {
     ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
@@ -664,7 +692,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
@@ -676,7 +704,7 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
@@ -688,7 +716,7 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
@@ -713,7 +741,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
@@ -727,9 +755,12 @@ fn get_template_path(
     template_name: &str,
     data: String,
 ) -> ResolvedTomlPathData {
-    ResolvedTomlPathData::new_fake_path(format!(
-        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
-    ), data)
+    ResolvedTomlPathData::new_fake_path(
+        format!(
+            "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
+        ),
+        data,
+    )
 }
 
 fn get_weight(active: Option<bool>) -> Option<f64> {
@@ -1891,7 +1922,9 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                    message: format!(
+                        "Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."
+                    ),
                 }
             );
         }

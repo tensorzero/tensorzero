@@ -10,8 +10,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
 };
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /*
  * The high level flow for our rate limiting system is:
@@ -36,16 +36,16 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 #[derive(Debug, Serialize, Clone, ts_rs::TS)]
 #[ts(export)]
 pub struct RateLimitingConfig {
-    rules: Vec<RateLimitingConfigRule>,
-    enabled: bool,
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
+    pub(crate) enabled: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
-    rules: Vec<RateLimitingConfigRule>,
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -64,6 +64,17 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             rules: config.rules,
             enabled: config.enabled,
         })
+    }
+}
+
+impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
+    fn from(config: &RateLimitingConfig) -> Self {
+        // Destructure to ensure all fields are handled (compile error if field added/removed)
+        let RateLimitingConfig { rules, enabled } = config;
+        Self {
+            rules: rules.clone(),
+            enabled: *enabled,
+        }
     }
 }
 
@@ -412,10 +423,10 @@ impl RateLimitingConfigRule {
         max_priority: &mut usize,
     ) -> Option<Vec<ActiveRateLimit>> {
         let key = self.scope.get_key_if_matches(scope_info)?;
-        if let RateLimitingConfigPriority::Priority(priority) = self.priority {
-            if priority > *max_priority {
-                *max_priority = priority;
-            }
+        if let RateLimitingConfigPriority::Priority(priority) = self.priority
+            && priority > *max_priority
+        {
+            *max_priority = priority;
         }
         Some(
             self.limits
@@ -788,10 +799,10 @@ impl TicketBorrows {
 
         if results_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
-            message: format!(
-                "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
-            )
-        }));
+                message: format!(
+                    "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
+            }));
         }
         let receipts = align_and_check_limits(&active_limits, results, ticket_requests)?;
         let borrows = receipts
@@ -876,7 +887,11 @@ impl TicketBorrows {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
                     // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
-                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
+                    tracing::warn!(
+                        "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
+                        active_limit.limit.resource,
+                        receipt.tickets_consumed
+                    );
                     let difference = actual_usage_this_request - receipt.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
@@ -2044,9 +2059,11 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
         };
-        assert!(config_disabled
-            .get_rate_limited_resources(&scope_info)
-            .is_empty());
+        assert!(
+            config_disabled
+                .get_rate_limited_resources(&scope_info)
+                .is_empty()
+        );
     }
 
     #[test]

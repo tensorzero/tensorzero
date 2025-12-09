@@ -773,19 +773,22 @@ jobs:
         if: matrix.replicated == true
         run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
 
+      - name: Setup Namespace caching for Clickhouse fixtures
+        uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
+        with:
+          path: |
+            ./ui/fixtures/s3-fixtures/
+
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,mock-inference}-container
-          merge-multiple: true
-
-      - name: Load container images
         run: |
-          docker load < gateway-container.tar
-          docker load < mock-inference-container.tar
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }}
+          # Retag the images to what we expect the names to be
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }} tensorzero/mock-inference-provider:sha-${{ github.sha }}
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py

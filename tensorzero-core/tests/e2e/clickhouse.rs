@@ -15,6 +15,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use tensorzero_core::config::BatchWritesConfig;
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
@@ -27,15 +29,14 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
-    self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
-    RunMigrationArgs, RunMigrationManagerArgs,
+    self, MigrationRecordDatabaseInsert, RunMigrationArgs, RunMigrationManagerArgs,
+    get_all_migration_records, make_all_migrations,
 };
-use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_core::db::clickhouse::test_helpers::{CLICKHOUSE_URL, get_clickhouse};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
@@ -509,7 +510,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
     ]
 );
 
@@ -627,8 +628,12 @@ async fn test_clickhouse_migration_manager() {
                     );
                 }
             }
-            assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
-                "CumulativeUsage backfilling failed.");
+            assert!(
+                !logs_contain(
+                    "Materialized view `CumulativeUsageView` was not written because it was recently created"
+                ),
+                "CumulativeUsage backfilling failed."
+            );
 
             let run_migration = || async {
                 migration_manager::run_migration(RunMigrationArgs {
@@ -792,6 +797,7 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         finish_reason: None,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

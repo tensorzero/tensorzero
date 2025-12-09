@@ -3,13 +3,13 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
     },
-    endpoints::status::TENSORZERO_VERSION,
+    endpoints::status::{StatusResponse, TENSORZERO_VERSION},
 };
 use tokio::process::Command;
 use uuid::Uuid;
@@ -36,7 +36,7 @@ async fn test_tensorzero_auth_enabled() {
         "
     [gateway.observability]
     enabled = true
-    
+
     [gateway.auth]
     enabled = true
     [gateway.auth.cache]
@@ -188,7 +188,12 @@ async fn test_tensorzero_auth_enabled() {
     let status = inference_response.status();
     let text = inference_response.text().await.unwrap();
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"));
+    assert_eq!(
+        text,
+        format!(
+            "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+        )
+    );
 }
 
 #[tokio::test]
@@ -212,6 +217,8 @@ async fn test_tensorzero_unauthenticated_routes() {
     let status = health_response.status();
     let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
+
+    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
     assert_eq!(
         text,
         "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
@@ -225,10 +232,16 @@ async fn test_tensorzero_unauthenticated_routes() {
 
     let status = status_response.status();
     let text = status_response.text().await.unwrap();
+    let parsed_status_response: StatusResponse = serde_json::from_str(&text).unwrap();
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(parsed_status_response.status, "ok", "Status should be ok");
     assert_eq!(
-        text,
-        format!("{{\"status\":\"ok\",\"version\":\"{TENSORZERO_VERSION}\"}}")
+        parsed_status_response.version, TENSORZERO_VERSION,
+        "Version should match $TENSORZERO_VERSION"
+    );
+    assert_ne!(
+        parsed_status_response.config_hash, "",
+        "There should be a config hash"
     );
 }
 
@@ -292,7 +305,7 @@ async fn test_tensorzero_missing_auth() {
         let text = response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header is required\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header is required\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -310,7 +323,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_auth_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header must start with 'Bearer '\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header must start with 'Bearer '\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -328,7 +341,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_key_format_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
+            "{\"error\":\"TensorZero authentication error: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -349,7 +362,7 @@ async fn test_tensorzero_missing_auth() {
         let text = missing_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -370,7 +383,9 @@ async fn test_tensorzero_missing_auth() {
         let text = disabled_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"),
+            format!(
+                "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+            ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -633,7 +648,7 @@ async fn test_auth_cache_requires_full_key_match() {
     );
     assert_eq!(
         text,
-        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+        "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
     );
 
     // Verify the original valid key still works (cache should still be valid)
@@ -751,7 +766,7 @@ async fn test_rate_limit_auth_single_key() {
             r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 
@@ -885,7 +900,7 @@ async fn test_rate_limit_auth_each_key() {
         r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 

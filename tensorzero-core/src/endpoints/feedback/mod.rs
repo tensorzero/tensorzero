@@ -4,31 +4,32 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{debug_handler, Extension, Json};
+use axum::{Extension, Json, debug_handler};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::{time::Instant, try_join};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
+    ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{
-    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert,
+    StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    deserialize_optional_tool_info,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
+use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
@@ -188,6 +189,7 @@ pub async fn feedback(
                 feedback_id,
                 dryrun,
                 config.gateway.unstable_disable_feedback_target_validation,
+                config.hash.clone(),
             )
             .await?;
         }
@@ -305,6 +307,7 @@ async fn write_comment(
     feedback_id: Uuid,
     dryrun: bool,
     disable_validation: bool,
+    snapshot_hash: SnapshotHash,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
@@ -319,7 +322,8 @@ async fn write_comment(
         "target_id": target_id,
         "value": value,
         "id": feedback_id,
-        "tags": tags
+        "tags": tags,
+        "snapshot_hash": snapshot_hash,
     });
     if !dryrun {
         deferred_tasks.spawn(async move {
@@ -363,7 +367,7 @@ async fn write_demonstration(
             message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
-    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
+    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let _ = connection_info
@@ -404,7 +408,7 @@ async fn write_float(
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let payload = payload;
@@ -456,7 +460,7 @@ async fn write_boolean(
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
     if !dryrun {
         deferred_tasks.spawn(async move {
             let payload_array = [payload];
@@ -1531,9 +1535,10 @@ mod tests {
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Demonstration does not fit function output schema"));
+        assert!(
+            err.to_string()
+                .contains("Demonstration does not fit function output schema")
+        );
 
         // Case 7: Mismatched function type - Chat function with JSON demonstration info
         let value = json!("Hello, world!");

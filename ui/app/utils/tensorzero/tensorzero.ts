@@ -11,7 +11,7 @@ import {
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
-import { TensorZeroServerError } from "./errors";
+import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   Datapoint,
@@ -19,10 +19,13 @@ import type {
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  GetInferenceBoundsResponse,
-  InternalListInferencesByIdResponse,
+  GetInferencesResponse,
+  InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
+  ListInferencesRequest,
+  StatusResponse,
+  UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
@@ -326,15 +329,6 @@ export const DatapointResponseSchema = z.object({
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
 
 /**
- * Schema for status response
- */
-export const StatusResponseSchema = z.object({
-  status: z.string(),
-  version: z.string(),
-});
-export type StatusResponse = z.infer<typeof StatusResponseSchema>;
-
-/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -608,85 +602,68 @@ export class TensorZeroClient {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return StatusResponseSchema.parse(await response.json());
+    return (await response.json()) as StatusResponse;
   }
 
   /**
-   * Gets inference table bounds (min/max IDs and count) with optional filters.
-   * @param params - Optional filters (function_name, variant_name, episode_id)
-   * @returns A promise that resolves with the inference bounds
+   * Lists inferences with optional filtering, pagination, and sorting.
+   * Uses the public v1 API endpoint.
+   * @param request - The list inferences request parameters
+   * @returns A promise that resolves with the inferences response
    * @throws Error if the request fails
    */
-  async getInferenceBounds(params?: {
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<GetInferenceBoundsResponse> {
+  async listInferences(
+    request: ListInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/list_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetInferencesResponse;
+  }
+
+  /**
+   * Fetches the gateway configuration for the UI.
+   * @returns A promise that resolves with the UiConfig object
+   * @throws Error if the request fails
+   */
+  async getUiConfig(): Promise<UiConfig> {
+    const response = await this.fetch("/internal/ui-config", { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as UiConfig;
+  }
+
+  /**
+   * Fetches inference statistics for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get stats for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with the inference count
+   * @throws Error if the request fails
+   */
+  async getInferenceStats(
+    functionName: string,
+    variantName?: string,
+  ): Promise<InferenceStatsResponse> {
     const searchParams = new URLSearchParams();
-
-    if (params?.function_name) {
-      searchParams.append("function_name", params.function_name);
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
     }
-    if (params?.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params?.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
     const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences/bounds${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as GetInferenceBoundsResponse;
-  }
-
-  /**
-   * Internal: List inferences by ID with pagination.
-   * @param params - Query parameters for listing inferences
-   * @returns A promise that resolves with the list of inferences
-   * @throws Error if the request fails
-   */
-  async internalListInferencesById(params: {
-    limit: number;
-    before?: string;
-    after?: string;
-    function_name?: string;
-    variant_name?: string;
-    episode_id?: string;
-  }): Promise<InternalListInferencesByIdResponse> {
-    const searchParams = new URLSearchParams();
-    searchParams.append("limit", params.limit.toString());
-
-    if (params.before) {
-      searchParams.append("before", params.before);
-    }
-    if (params.after) {
-      searchParams.append("after", params.after);
-    }
-    if (params.function_name) {
-      searchParams.append("function_name", params.function_name);
-    }
-    if (params.variant_name) {
-      searchParams.append("variant_name", params.variant_name);
-    }
-    if (params.episode_id) {
-      searchParams.append("episode_id", params.episode_id);
-    }
-
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/inferences${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as InternalListInferencesByIdResponse;
+    return (await response.json()) as InferenceStatsResponse;
   }
 
   private async fetch(
@@ -715,7 +692,12 @@ export class TensorZeroClient {
       headers.set("authorization", `Bearer ${this.apiKey}`);
     }
 
-    return await fetch(url, { method, headers, body });
+    try {
+      return await fetch(url, { method, headers, body });
+    } catch (error) {
+      // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
+      throw new GatewayConnectionError(error);
+    }
   }
 
   private async getErrorText(response: Response): Promise<string> {

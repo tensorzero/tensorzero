@@ -6,16 +6,16 @@ use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::process::ExitCode;
 use std::time::Duration;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
-use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
+use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
 use tensorzero_core::observability;
@@ -55,91 +55,89 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
-        .expect_pretty("Failed to set up logs");
+        .log_err_pretty("Failed to set up logs")?;
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     if args.early_exit_commands.create_api_key {
         handle_create_api_key()
             .await
-            .expect_pretty("Failed to create API key");
-        return;
+            .log_err_pretty("Failed to create API key")?;
+        return Ok(());
     }
 
     if args.early_exit_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
-            .expect_pretty("Failed to run ClickHouse migrations");
+            .log_err_pretty("Failed to run ClickHouse migrations")?;
         tracing::info!("ClickHouse is ready.");
-        return;
+        return Ok(());
     }
 
     if args.early_exit_commands.run_postgres_migrations {
         manual_run_postgres_migrations()
             .await
-            .expect_pretty("Failed to run PostgreSQL migrations");
+            .log_err_pretty("Failed to run PostgreSQL migrations")?;
         tracing::info!("Postgres is ready.");
-        return;
+        return Ok(());
     }
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
-    let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
+    let metrics_handle =
+        observability::setup_metrics().log_err_pretty("Failed to set up metrics")?;
 
     // Handle `--config-file` or `--default-config`
-    let (config_load_info, glob) = match (args.default_config, args.config_file) {
+    let (unwritten_config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
-            std::process::exit(1);
+            return Err(ExitCode::from(1));
         }
         (false, None) => {
             tracing::error!("You must specify either `--config-file` or `--default-config`.");
-            std::process::exit(1);
+            return Err(ExitCode::from(1));
         }
         (true, None) => {
-            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            tracing::warn!(
+                "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
+            );
             (
                 Config::new_empty()
                     .await
-                    .expect_pretty("Failed to load default config"),
+                    .log_err_pretty("Failed to load default config")?,
                 None,
             )
         }
         (false, Some(path)) => {
             let glob = ConfigFileGlob::new_from_path(&path)
-                .expect_pretty("Failed to process config file glob");
+                .log_err_pretty("Failed to process config file glob")?;
             (
 
                     Config::load_and_verify_from_path(&glob)
                         .await
                         .ok() // Don't print the error here, since it was already printed when it was constructed
-                        .expect_pretty(&format!(
+                        .log_err_pretty(&format!(
                             "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
                             glob.glob,
                             glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                        )),
+                        ))?,
                 Some(glob),
             )
         }
     };
-    let ConfigLoadInfo {
-        config,
-        snapshot: _, // TODO: write the snapshot
-    } = config_load_info;
-    let config = Arc::new(config);
 
-    if config.gateway.debug {
+    if unwritten_config.gateway.debug {
         delayed_log_config
             .delayed_debug_logs
             .enable_debug()
-            .expect_pretty("Failed to enable debug logs");
+            .log_err_pretty("Failed to enable debug logs")?;
     }
 
     // Note: We only enable OTLP after config file parsing/loading is complete,
@@ -150,39 +148,49 @@ async fn main() {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
-    if config.gateway.export.otlp.traces.enabled {
+    if unwritten_config.gateway.export.otlp.traces.enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
-                tracing::warn!("Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode.");
+                tracing::warn!(
+                    "Running without explicit `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in e2e tests mode."
+                );
             } else {
-                tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
-                std::process::exit(1);
+                tracing::error!(
+                    "The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`)."
+                );
+                return Err(ExitCode::from(1));
             }
         }
 
         // Set config-level OTLP headers if we have a tracer wrapper
-        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
-            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
-                tracer_wrapper
-                    .set_static_otlp_traces_extra_headers(
-                        &config.gateway.export.otlp.traces.extra_headers,
-                    )
-                    .expect_pretty("Failed to set OTLP config headers");
-            }
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer
+            && !unwritten_config
+                .gateway
+                .export
+                .otlp
+                .traces
+                .extra_headers
+                .is_empty()
+        {
+            tracer_wrapper
+                .set_static_otlp_traces_extra_headers(
+                    &unwritten_config.gateway.export.otlp.traces.extra_headers,
+                )
+                .log_err_pretty("Failed to set OTLP config headers")?;
         }
 
         match delayed_log_config.delayed_otel {
             Ok(delayed_otel) => {
                 delayed_otel
                     .enable_otel()
-                    .expect_pretty("Failed to enable OpenTelemetry");
+                    .log_err_pretty("Failed to enable OpenTelemetry")?;
             }
             Err(e) => {
                 tracing::error!(
                     "Could not enable OpenTelemetry export due to previous error: `{e}`. Exiting."
                 );
-                std::process::exit(1);
+                return Err(ExitCode::from(1));
             }
         }
     } else if let Err(e) = delayed_log_config.delayed_otel {
@@ -192,23 +200,25 @@ async fn main() {
     }
 
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(config.clone())
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
         .await
-        .expect_pretty("Failed to initialize AppState");
+        .log_err_pretty("Failed to initialize AppState")?;
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
 
+    let config = gateway_handle.app_state.config.clone();
+
     // Set debug mode
-    error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+    error::set_debug(config.gateway.debug).log_err_pretty("Failed to set debug mode")?;
     error::set_unstable_error_json(config.gateway.unstable_error_json)
-        .expect_pretty("Failed to set unstable error JSON");
+        .log_err_pretty("Failed to set unstable error JSON")?;
 
     let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
     if !base_path.starts_with("/") {
         tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
-        std::process::exit(1);
+        return Err(ExitCode::from(1));
     }
     let base_path = base_path.trim_end_matches("/");
 
@@ -232,18 +242,18 @@ async fn main() {
                 "Failed to bind to socket address {bind_address}: {e}. Tip: Ensure no other process is using port {} or try a different port.",
                 bind_address.port()
             );
-            std::process::exit(1);
+            return Err(ExitCode::from(1));
         }
         Err(e) => {
             tracing::error!("Failed to bind to socket address {bind_address}: {e}");
-            std::process::exit(1);
+            return Err(ExitCode::from(1));
         }
     };
 
     // This will give us the chosen port if the user specified a port of 0
     let actual_bind_address = listener
         .local_addr()
-        .expect_pretty("Failed to get bind address from listener");
+        .log_err_pretty("Failed to get bind address from listener")?;
 
     // Print the bind address
     tracing::info!("TensorZero Gateway is listening on {actual_bind_address}");
@@ -276,6 +286,12 @@ async fn main() {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
+    if let Some(relay) = &config.gateway.relay {
+        tracing::info!("├ Relay mode: enabled (gateway_url = {})", relay.url);
+    } else {
+        tracing::info!("├ Relay mode: disabled");
+    }
+
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
         tracing::info!("└ OpenTelemetry: enabled");
@@ -288,7 +304,9 @@ async fn main() {
     let server_fut = axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal.clone())
         .into_future()
-        .map(|r| r.expect_pretty("Failed to start server"))
+        .map(|r| {
+            let _ = r.log_err_pretty("Failed to start server");
+        })
         .shared();
 
     // This is a purely informational logging task, so we don't need to wait for it to finish.
@@ -326,6 +344,7 @@ async fn main() {
             .await;
         tracing::info!("OpenTelemetry exporter shut down");
     }
+    Ok(())
 }
 
 /// A background task that waits for the server shutdown to initiate, and then logs status information every 5 seconds until
@@ -362,18 +381,22 @@ fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
 }
 
 pub async fn shutdown_signal() {
+    // If any errors occur in these futures, we log them and return from the future
+    // This will cause the `tokio::select!` block to resolve - i.e. we treat it as
+    // though a shutdown signal was immediately received.
     let ctrl_c = async {
-        signal::ctrl_c()
+        let _ = signal::ctrl_c()
             .await
-            .expect_pretty("Failed to install Ctrl+C handler");
+            .log_err_pretty("Failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect_pretty("Failed to install SIGTERM handler")
-            .recv()
-            .await;
+        if let Ok(mut sig) = signal::unix::signal(signal::unix::SignalKind::terminate())
+            .log_err_pretty("Failed to install SIGTERM handler")
+        {
+            sig.recv().await;
+        }
     };
 
     #[cfg(not(unix))]
@@ -381,10 +404,11 @@ pub async fn shutdown_signal() {
 
     #[cfg(unix)]
     let hangup = async {
-        signal::unix::signal(signal::unix::SignalKind::hangup())
-            .expect_pretty("Failed to install SIGHUP handler")
-            .recv()
-            .await;
+        if let Ok(mut sig) = signal::unix::signal(signal::unix::SignalKind::hangup())
+            .log_err_pretty("Failed to install SIGHUP handler")
+        {
+            sig.recv().await;
+        }
     };
 
     #[cfg(not(unix))]
@@ -414,30 +438,32 @@ pub async fn shutdown_signal() {
 /// handle errors gracefully.
 ///
 /// We use `expect_pretty` for better DX when handling errors in main.rs.
-/// `expect_pretty` will print an error message and exit with a status code of 1.
-trait ExpectPretty<T> {
-    fn expect_pretty(self, msg: &str) -> T;
+/// `expect_pretty` will print an error message and return an `ExitCode`.
+/// This is propagated in `main` via `?`, so that we exit the process while still
+/// running drop impls.
+trait LogErrPretty<T> {
+    fn log_err_pretty(self, msg: &str) -> Result<T, ExitCode>;
 }
 
-impl<T, E: Display> ExpectPretty<T> for Result<T, E> {
-    fn expect_pretty(self, msg: &str) -> T {
+impl<T, E: Display> LogErrPretty<T> for Result<T, E> {
+    fn log_err_pretty(self, msg: &str) -> Result<T, ExitCode> {
         match self {
-            Ok(value) => value,
+            Ok(value) => Ok(value),
             Err(err) => {
                 tracing::error!("{msg}: {err}");
-                std::process::exit(1);
+                Err(ExitCode::from(1))
             }
         }
     }
 }
 
-impl<T> ExpectPretty<T> for Option<T> {
-    fn expect_pretty(self, msg: &str) -> T {
+impl<T> LogErrPretty<T> for Option<T> {
+    fn log_err_pretty(self, msg: &str) -> Result<T, ExitCode> {
         match self {
-            Some(value) => value,
+            Some(value) => Ok(value),
             None => {
                 tracing::error!("{msg}");
-                std::process::exit(1);
+                Err(ExitCode::from(1))
             }
         }
     }

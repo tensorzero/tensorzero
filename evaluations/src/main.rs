@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use evaluations::{helpers::setup_logging, run_evaluation, Args};
+use evaluations::{Args, helpers::setup_logging, run_evaluation};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
 
     setup_logging(&args)?;
 
-    let result = run_evaluation(args, evaluation_run_id, &mut writer).await;
+    let result = Box::pin(run_evaluation(args, evaluation_run_id, &mut writer)).await;
 
     match &result {
         Ok(()) => {

@@ -4,7 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
@@ -12,16 +12,16 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -29,8 +29,8 @@ use crate::providers::helpers::{
 use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
 };
 use crate::inference::TensorZeroEventError;
 use crate::providers::chat_completions::prepare_chat_completion_tools;

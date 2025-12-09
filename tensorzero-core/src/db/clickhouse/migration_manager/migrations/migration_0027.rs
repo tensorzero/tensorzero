@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 
 use super::{check_index_exists, check_table_exists};
-use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
 /// This migration adds an index by `inference_id` to the `TagInference`,

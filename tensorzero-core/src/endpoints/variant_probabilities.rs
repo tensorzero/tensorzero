@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use axum::extract::{Path, Query, State};
-use axum::{debug_handler, Json};
+use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -131,7 +131,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config;
+        .into_config_without_writing_for_tests();
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
 

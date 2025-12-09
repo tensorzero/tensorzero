@@ -1,10 +1,10 @@
 #![expect(clippy::print_stdout)]
 
+use axum::Router;
 use axum::body::Body;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::Router;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -299,7 +299,7 @@ async fn test_base64_image_with_fetch_true() {
                         InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
-                                mime::IMAGE_PNG,
+                                Some(mime::IMAGE_PNG),
                                 IMAGE_BASE64.to_string(),
                                 None,
                                 None,
@@ -379,7 +379,7 @@ async fn test_base64_image_with_fetch_false() {
                         InputMessageContent::File(File::Base64(
                             Base64File::new(
                                 None,
-                                mime::IMAGE_PNG,
+                                Some(mime::IMAGE_PNG),
                                 IMAGE_BASE64.to_string(),
                                 None,
                                 None,
@@ -509,7 +509,9 @@ async fn test_wikipedia_image_url_with_fetch_true() {
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_some(), "Inference should be in ClickHouse");
 
-    println!("✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = true");
+    println!(
+        "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = true"
+    );
 }
 
 #[tokio::test]
@@ -585,7 +587,9 @@ async fn test_wikipedia_image_url_with_fetch_false() {
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_some(), "Inference should be in ClickHouse");
 
-    println!("✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = false");
+    println!(
+        "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = false"
+    );
 }
 
 #[tokio::test]

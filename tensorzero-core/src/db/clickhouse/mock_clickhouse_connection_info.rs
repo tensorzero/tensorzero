@@ -3,15 +3,14 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
     CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
     DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
     MockDatasetQueries,
 };
-use crate::db::inferences::{
-    GetInferenceBoundsParams, InferenceBounds, InferenceMetadata, InferenceQueries,
-    ListInferencesByIdParams, ListInferencesParams, MockInferenceQueries,
-};
+use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
@@ -29,6 +28,7 @@ use crate::stored_inference::StoredInferenceDatabase;
 pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) inference_queries: MockInferenceQueries,
     pub(crate) dataset_queries: MockDatasetQueries,
+    pub(crate) config_queries: MockConfigQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -36,6 +36,7 @@ impl MockClickHouseConnectionInfo {
         Self {
             inference_queries: MockInferenceQueries::new(),
             dataset_queries: MockDatasetQueries::new(),
+            config_queries: MockConfigQueries::new(),
         }
     }
 }
@@ -48,20 +49,6 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
-    }
-
-    async fn get_inference_bounds(
-        &self,
-        params: GetInferenceBoundsParams,
-    ) -> Result<InferenceBounds, Error> {
-        self.inference_queries.get_inference_bounds(params).await
-    }
-
-    async fn list_inferences_by_id(
-        &self,
-        params: ListInferencesByIdParams,
-    ) -> Result<Vec<InferenceMetadata>, Error> {
-        self.inference_queries.list_inferences_by_id(params).await
     }
 }
 
@@ -118,5 +105,15 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries
             .delete_datapoints(dataset_name, datapoint_ids)
             .await
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for MockClickHouseConnectionInfo {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.config_queries.get_config_snapshot(snapshot_hash).await
     }
 }

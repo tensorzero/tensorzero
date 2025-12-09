@@ -1,22 +1,23 @@
 use std::collections::HashMap;
 
 use axum::{
-    debug_handler,
+    Json, debug_handler,
     extract::{Path, State},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    config::Config,
-    db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
+    config::{Config, snapshot::SnapshotHash},
+    db::clickhouse::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
-    utils::gateway::{AppState, AppStateData, StructuredJson},
-    utils::uuid::{
-        compare_timestamps, generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
-        WORKFLOW_EVALUATION_THRESHOLD,
+    utils::{
+        gateway::{AppState, AppStateData, StructuredJson},
+        uuid::{
+            WORKFLOW_EVALUATION_THRESHOLD, compare_timestamps,
+            generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
+        },
     },
 };
 
@@ -71,6 +72,7 @@ pub async fn workflow_evaluation_run(
         params.tags,
         params.project_name,
         params.display_name,
+        &config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunResponse { run_id })
@@ -108,6 +110,7 @@ pub async fn workflow_evaluation_run_episode_handler(
 pub async fn workflow_evaluation_run_episode(
     AppStateData {
         clickhouse_connection_info,
+        config,
         ..
     }: AppStateData,
     run_id: Uuid,
@@ -143,6 +146,7 @@ pub async fn workflow_evaluation_run_episode(
         tags,
         run_id,
         episode_id,
+        &config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })
@@ -206,6 +210,7 @@ async fn write_workflow_evaluation_run(
     tags: HashMap<String, String>,
     project_name: Option<String>,
     run_display_name: Option<String>,
+    snapshot_hash: &SnapshotHash,
 ) -> Result<(), Error> {
     let query = r"
     INSERT INTO DynamicEvaluationRun (
@@ -213,14 +218,16 @@ async fn write_workflow_evaluation_run(
         variant_pins,
         tags,
         project_name,
-        run_display_name
+        run_display_name,
+        snapshot_hash
     )
     VALUES (
         toUInt128({run_id:UUID}),
         {variant_pins:Map(String, String)},
         {tags:Map(String, String)},
         {project_name:Nullable(String)},
-        {run_display_name:Nullable(String)}
+        {run_display_name:Nullable(String)},
+        toUInt256OrNull({snapshot_hash:Nullable(String)})
     )
     ";
     let mut params = HashMap::new();
@@ -235,6 +242,7 @@ async fn write_workflow_evaluation_run(
         "run_display_name",
         run_display_name.as_deref().unwrap_or("\\N"),
     ); // Use \\N to indicate NULL
+    params.insert("snapshot_hash", snapshot_hash);
     clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
@@ -259,6 +267,7 @@ async fn write_workflow_evaluation_run_episode(
     tags: HashMap<String, String>,
     run_id: Uuid,
     episode_id: Uuid,
+    snapshot_hash: &SnapshotHash,
 ) -> Result<(), Error> {
     let query = r"
     INSERT INTO DynamicEvaluationRunEpisode
@@ -267,14 +276,16 @@ async fn write_workflow_evaluation_run_episode(
         episode_id_uint,
         variant_pins,
         datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
-        tags
+        tags,
+        snapshot_hash
     )
     SELECT
         {run_id:UUID} AS run_id,
         toUInt128({episode_id:UUID}) AS episode_id_uint,
         variant_pins,
         {datapoint_name:Nullable(String)} AS datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
-        mapUpdate(tags, {tags:Map(String, String)}) AS tags -- merge the tags in the params on top of tags in the workflow evaluation run
+        mapUpdate(tags, {tags:Map(String, String)}) AS tags, -- merge the tags in the params on top of tags in the workflow evaluation run
+        toUInt256OrNull({snapshot_hash:Nullable(String)}) AS snapshot_hash
     FROM DynamicEvaluationRun
     WHERE run_id_uint = toUInt128({run_id:UUID})
     ";
@@ -286,6 +297,7 @@ async fn write_workflow_evaluation_run_episode(
     query_params.insert("datapoint_name", task_name.unwrap_or("\\N")); // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
     let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
+    query_params.insert("snapshot_hash", &**snapshot_hash);
     clickhouse
         .run_query_synchronous(query.to_string(), &query_params)
         .await?;

@@ -153,7 +153,7 @@ ChatInferenceResponse(
                     type='summary_text'
                 )
             ],
-            _internal_provider_type='openai'
+            provider_type='openai'
         ),
         UnknownContentBlock(
             data={
@@ -172,7 +172,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -191,7 +191,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -210,7 +210,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -226,7 +226,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -242,7 +242,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -258,7 +258,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -277,7 +277,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -296,7 +296,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         UnknownContentBlock(
             data={
@@ -315,7 +315,7 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo...',
-            _internal_provider_type=None
+            provider_type=None
         ),
         Text(
             text="Short answer: about 123–124 million people.\n\nMore precisely:\n- Japan's official estimate (Ministry of Internal Affairs and Communications / e‑Stat) reported a total population of 123,802,000 (including foreign residents) as of October 1, 2024 (release published Apr 14, 2025). ([e-stat.go.jp](https://www.e-stat.go.jp/en/stat-search/files?layout=dataset&page=1&query=Population+Estimates%2C+natural))  \n- The United Nations (WPP 2024, used by sources such as Worldometer) gives a mid‑2025 estimate of about 123.1 million. ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nDo you want a live "right now" estimate for today (Oct 20, 2025) or a breakdown by Japanese nationals vs. foreign residents? I can fetch the latest live or official figures for the exact date you want.",
@@ -749,7 +749,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
           "text": "I need to search for Japan's current population data."
         }
       ],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -769,7 +769,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -789,7 +789,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -808,7 +808,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -828,7 +828,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -848,7 +848,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -868,7 +868,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "unknown",
@@ -887,7 +887,7 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
       "text": null,
       "signature": "gAAAAABo...",
       "summary": [],
-      "_internal_provider_type": "openai"
+      "provider_type": "openai"
     },
     {
       "type": "text",
@@ -910,3 +910,26 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
 </Tab>
 
 </Tabs>
+
+## Call the OpenAI Responses API with Azure
+
+You can call the OpenAI Responses API with Azure by setting `api_base` in your configuration to your Azure deployment URL.
+
+```toml
+[models.azure-gpt-5-mini-responses]
+routing = ["azure"]
+
+[models.azure-gpt-5-mini-responses.providers.azure]
+type = "openai"  # CAREFUL: not `azure`!
+api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_OPENAI_API_KEY"
+model_name = "gpt-5-mini"
+api_type = "responses"
+```
+
+<Warning>
+
+The `azure` model provider does not support the Responses API.
+You must use the `openai` provider with a custom `api_base` instead.
+
+</Warning>

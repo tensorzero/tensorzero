@@ -10,7 +10,7 @@ use opentelemetry::SpanId;
 use opentelemetry::TraceId;
 use opentelemetry_sdk::trace::IdGenerator;
 use opentelemetry_sdk::trace::RandomIdGenerator;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use url::Url;
@@ -47,7 +47,7 @@ async fn test_otel_export_trace_export_with_parent() {
 #[tokio::test]
 async fn test_otel_export_trace_export_with_custom_header() {
     // Prevent overloading Tempo (it gives us 'job queue full' errors if we send too many requests at once)
-    let semaphore = Arc::new(Semaphore::new(10));
+    let semaphore = Arc::new(Semaphore::new(2));
     let mut futures = JoinSet::new();
     let num_tasks = 100;
     for _ in 0..num_tasks {
@@ -201,7 +201,18 @@ pub async fn get_tempo_spans(
     let start_time = start_time.timestamp();
     let now = Utc::now().timestamp();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .retry(
+            reqwest::retry::for_host("localhost").classify_fn(|req_resp| {
+                if req_resp.status().is_some_and(|s| s.is_success()) {
+                    req_resp.success()
+                } else {
+                    req_resp.retryable()
+                }
+            }),
+        )
+        .build()
+        .unwrap();
 
     let tempo_base_url = std::env::var("TENSORZERO_TEMPO_URL")
         .unwrap_or_else(|_| "http://localhost:3200".to_string());
@@ -266,7 +277,9 @@ pub async fn get_tempo_spans(
                                 attr["value"]["stringValue"].as_str().unwrap();
                             if tag_value == inference_id_jaeger {
                                 if target_span.is_some() {
-                                    panic!("Found multiple function_inference spans with `{tag_key}`: {tag_value}");
+                                    panic!(
+                                        "Found multiple function_inference spans with `{tag_key}`: {tag_value}"
+                                    );
                                 } else {
                                     target_span = Some(span.clone());
                                 }
@@ -320,6 +333,88 @@ async fn test_otel_health_not_exported() {
         spans.resources,
         Vec::<Value>::new(),
         "Resources should be empty"
+    );
+}
+
+#[tokio::test]
+async fn test_otel_export_outgoing_traceparent() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "loopback-dummy",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let start_time = Utc::now();
+    let tempo_semaphore = Arc::new(Semaphore::new(1));
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .header(
+            "tensorzero-otlp-traces-extra-attribute-function_name",
+            "\"my-overridden-function-name\"",
+        )
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let _response_json = response.json::<Value>().await.unwrap();
+    let TempoSpans {
+        target_span: _,
+        span_by_id,
+        resources: _,
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    // We should have a 'POST /openai/v1/chat/completions` span from the loopback inference
+    let (openai_span_id, _) = span_by_id
+        .iter()
+        .find(|(_, span)| span["name"] == "POST /openai/v1/chat/completions")
+        .expect("Missing `POST /openai/v1/chat/completions` span");
+
+    // Walk up the parent chain, and verify that the `POST /openai/v1/chat/completions` has the correct parent span.
+    // This tests both that we set the outgoing `traceparent` header, and that we process incoming `traceparent` headers correctly.
+
+    let mut ancestors = Vec::new();
+    let mut parent_id = Some(openai_span_id.clone());
+    while let Some(parent) = parent_id {
+        let parent_span = span_by_id.get(&parent).unwrap();
+        ancestors.push(parent_span["name"].as_str().unwrap());
+        parent_id = parent_span
+            .get("parentSpanId")
+            .map(|id| id.as_str().unwrap().to_string());
+    }
+
+    assert_eq!(
+        ancestors,
+        [
+            "POST /openai/v1/chat/completions",
+            "model_provider_inference",
+            "model_inference",
+            "variant_inference",
+            "function_inference",
+            "POST /inference"
+        ]
     );
 }
 

@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
@@ -16,7 +17,7 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map,
 };
-use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
@@ -91,6 +92,12 @@ pub struct ChatInferenceDatapointInsert {
 
     /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
+
+    /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 /// Type that gets serialized directly to be written to ClickHouse. Serialization should match
@@ -147,6 +154,12 @@ pub struct JsonInferenceDatapointInsert {
 
     /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
+
+    /// Hash of the configuration snapshot that created this datapoint. Optional.
+    /// This should always be Some when writing (after the feature flag is removed)
+    /// but since we also read this type, it will remain an Option.
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
