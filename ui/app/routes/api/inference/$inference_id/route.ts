@@ -1,7 +1,5 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import {
-  queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference.server";
+import { queryModelInferencesByInferenceId } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
@@ -28,7 +26,7 @@ export async function loader({
 
   try {
     const dbClient = await getNativeDatabaseClient();
-      const tensorZeroClient = getTensorZeroClient();
+    const tensorZeroClient = getTensorZeroClient();
 
     const inferencesPromise = tensorZeroClient.getInferences({
       ids: [inference_id],
@@ -94,13 +92,13 @@ export async function loader({
       ]);
     }
 
-   if (inferences.inferences.length !== 1) {
-    throw data(`No inference found for id ${inference_id}.`, {
-      status: 404,
-    });
-  }
-  const inference = inferences.inferences[0];
-  const resolvedInput = await loadFileDataForStoredInput(inference.input);
+    if (inferences.inferences.length !== 1) {
+      throw data(`No inference found for id ${inference_id}.`, {
+        status: 404,
+      });
+    }
+    const inference = inferences.inferences[0];
+    const resolvedInput = await loadFileDataForStoredInput(inference.input);
 
     // Get used variants for default function
     const usedVariants =

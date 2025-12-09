@@ -161,9 +161,7 @@ export function VariantResponseModal({
 
   // Get original variant name if available (only for inferences)
   const originalVariant =
-    source === "inference"
-      ? (item as StoredInference).variant_name
-      : undefined;
+    source === "inference" ? (item as StoredInference).variant_name : undefined;
 
   const refreshButton = onRefresh && (
     <Button

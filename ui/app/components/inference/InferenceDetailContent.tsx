@@ -334,9 +334,7 @@ export function InferenceDetailContent({
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputElement
-            input = {input}
-          />
+          <InputElement input={input} />
         </SectionLayout>
 
         <SectionLayout>

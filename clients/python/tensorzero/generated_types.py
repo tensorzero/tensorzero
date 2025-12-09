@@ -570,6 +570,9 @@ class JsonInferenceOutput:
     """
 
 
+JsonMode = Literal["off", "on", "strict", "tool"]
+
+
 @dataclass(kw_only=True)
 class OpenAICustomToolFormatText:
     type: Literal["text"] = "text"
@@ -598,6 +601,9 @@ class RawText:
 
 
 Role = Literal["user", "assistant"]
+
+
+ServiceTier = Literal["auto", "default", "priority", "flex"]
 
 
 @dataclass(kw_only=True)
@@ -935,6 +941,22 @@ class Base64File:
 
 
 @dataclass(kw_only=True)
+class ChatCompletionInferenceParams:
+    frequency_penalty: float | None = None
+    json_mode: JsonMode | None = None
+    max_tokens: int | None = None
+    presence_penalty: float | None = None
+    reasoning_effort: str | None = None
+    seed: int | None = None
+    service_tier: ServiceTier | None = None
+    stop_sequences: list[str] | None = None
+    temperature: float | None = None
+    thinking_budget_tokens: int | None = None
+    top_p: float | None = None
+    verbosity: str | None = None
+
+
+@dataclass(kw_only=True)
 class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
     """
     Defines the types of content block that can come from a `chat` function
@@ -1062,6 +1084,16 @@ class InferenceFilterTime(TimeFilter):
     """
 
     type: Literal["time"] = "time"
+
+
+@dataclass(kw_only=True)
+class InferenceParams:
+    """
+    InferenceParams is the top-level struct for inference parameters.
+    We backfill these from the configs given in the variants used and ultimately write them to the database.
+    """
+
+    chat_completion: ChatCompletionInferenceParams
 
 
 @dataclass(kw_only=True)
@@ -1559,7 +1591,10 @@ class StoredJsonInference:
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
     extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
+    inference_params: InferenceParams | None = field(default_factory=lambda: {"chat_completion": {}})
+    processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)
@@ -1888,6 +1923,7 @@ class StoredChatInference:
     episode_id: str
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: list[ContentBlockChatOutput]
     timestamp: str
@@ -1909,6 +1945,7 @@ class StoredChatInference:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
+    processing_time_ms: int | None = None
     provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
     Provider-specific tool configurations
@@ -1919,6 +1956,7 @@ class StoredChatInference:
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)
