@@ -504,6 +504,12 @@ If a content block has type `image_url`, it must have the following additional f
   - `url`: The URL for a remote image (e.g. `"https://example.com/image.png"`) or base64-encoded data for an embedded image (e.g. `"data:image/png;base64,..."`).
   - `detail` (optional): Controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality.
 
+If a content block has type `input_audio`, it must have the following additional field:
+
+- `input_audio`: An object containing:
+  - `data`: Base64-encoded audio data (without a `data:` prefix or MIME type header).
+  - `format`: The audio format as a string (e.g., `"mp3"`, `"wav"`). Note: The MIME type is detected from the actual audio bytes, and a warning is logged if the detected type differs from this field.
+
 The TensorZero-specific content block types are:
 
 - `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
