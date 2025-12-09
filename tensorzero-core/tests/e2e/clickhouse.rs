@@ -15,6 +15,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use tensorzero_core::config::BatchWritesConfig;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
@@ -796,6 +797,7 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         finish_reason: None,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

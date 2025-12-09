@@ -742,6 +742,7 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 is_deleted: false,
+                snapshot_hash: None,
                 updated_at: chrono::Utc::now()
                     .format(CLICKHOUSE_DATETIME_FORMAT)
                     .to_string(),
@@ -781,6 +782,7 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 is_deleted: false,
+                snapshot_hash: None,
                 updated_at: chrono::Utc::now()
                     .format(CLICKHOUSE_DATETIME_FORMAT)
                     .to_string(),
@@ -884,6 +886,7 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 is_deleted: false,
+                snapshot_hash: None,
                 updated_at: chrono::Utc::now()
                     .format(CLICKHOUSE_DATETIME_FORMAT)
                     .to_string(),
@@ -923,6 +926,7 @@ mod tests {
                 source_inference_id: None,
                 is_custom: true,
                 is_deleted: false,
+                snapshot_hash: None,
                 updated_at: chrono::Utc::now()
                     .format(CLICKHOUSE_DATETIME_FORMAT)
                     .to_string(),

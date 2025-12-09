@@ -87,8 +87,10 @@ export function AddToDatasetButton({
       formData.append("function_name", functionName);
       formData.append("variant_name", variantName);
       formData.append("episode_id", episodeId);
-      formData.append("_action", "addToDataset");
-      fetcher.submit(formData, { method: "post" });
+      fetcher.submit(formData, {
+        method: "post",
+        action: "/api/datasets/datapoints/from-inference",
+      });
     }
   };
 

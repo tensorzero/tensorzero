@@ -130,6 +130,11 @@ pub async fn start_batch_inference(
     params: StartBatchInferenceParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<PrepareBatchInferenceOutput, Error> {
+    if config.gateway.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "start_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     let num_inferences = params.inputs.len();
@@ -242,6 +247,7 @@ pub async fn start_batch_inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -496,6 +502,11 @@ pub async fn poll_batch_inference_handler(
     }): AppState,
     Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
+    if config.gateway.relay.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "poll_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
     let batch_request = get_batch_request(&clickhouse_connection_info, &path_params).await?;
     match batch_request.status {
         BatchStatus::Pending => {
@@ -1088,9 +1099,13 @@ pub async fn write_completed_batch_inference<'a>(
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            snapshot_hash: config.hash.clone(),
         };
-        model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences().await);
+        model_inference_rows_to_write.extend(
+            inference_result
+                .get_serialized_model_inferences(config.hash.clone())
+                .await,
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

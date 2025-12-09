@@ -14,14 +14,15 @@ use tensorzero_core::{
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
+    function::FunctionConfig,
     http::TensorzeroHttpClient,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationStats, EvaluationVariant, EvaluatorStats, OutputFormat,
-    stats::EvaluationInfo,
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationStats,
+    EvaluationVariant, EvaluatorStats, OutputFormat, stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering
@@ -131,7 +132,7 @@ impl EvaluationResults {
 pub struct EvaluateVariantParams {
     pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
-    pub tensorzero_config: Arc<Config>,
+    pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: String,
     pub variant_name: String,
@@ -160,11 +161,21 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         timeouts: None,
     };
 
+    // Get function name from evaluation config and look up function
+    // Build function configs table from all functions
+    let function_configs: EvaluationFunctionConfigTable = params
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
+
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
         tensorzero_client: params.gateway_client.clone(),
         clickhouse_client: params.clickhouse_connection_info.clone(),
-        config: params.tensorzero_config,
+        evaluation_config: params.evaluation_config.clone(),
+        function_configs,
         evaluation_name: params.evaluation_name,
         evaluation_run_id,
         dataset_name: Some(params.dataset_name),

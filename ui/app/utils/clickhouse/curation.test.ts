@@ -4,10 +4,7 @@ import {
 } from "./curation.server";
 
 import { describe, expect, it, test } from "vitest";
-import {
-  countCuratedInferences,
-  getCuratedInferences,
-} from "./curation.server";
+import { countCuratedInferences } from "./curation.server";
 import type { FunctionConfig } from "~/types/tensorzero";
 
 // Test boolean metrics
@@ -231,110 +228,6 @@ test("countCuratedInferences for demonstration metrics", async () => {
   expect(chatResult).toBe(493);
 }, 10000);
 
-// Test getCuratedInferences
-test("getCuratedInferences retrieves correct data", async () => {
-  // Test with boolean metric
-  const booleanResults = await getCuratedInferences(
-    "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      json_mode_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        openai_custom_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: { tools: [], choice: "function_default" },
-      },
-      experimentation: { type: "uniform" },
-    },
-    "exact_match",
-    { type: "boolean", optimize: "max", level: "inference" },
-    0,
-    undefined,
-  );
-  expect(booleanResults.length).toBe(41);
-
-  // Test with float metric
-  const floatResults = await getCuratedInferences(
-    "write_haiku",
-    {
-      type: "chat",
-      variants: {},
-      tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      schemas: {},
-      description: "",
-      experimentation: { type: "uniform" },
-    },
-    "haiku_rating",
-    { type: "float", optimize: "max", level: "inference" },
-    0.8,
-    undefined,
-  );
-  expect(floatResults.length).toBe(67);
-
-  // Test with demonstration
-  const demoResults = await getCuratedInferences(
-    "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      json_mode_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        openai_custom_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: { tools: [], choice: "function_default" },
-      },
-      experimentation: { type: "uniform" },
-    },
-    "unused_metric_name",
-    { type: "demonstration", level: "inference" },
-    0,
-    20,
-  );
-  expect(demoResults.length).toBe(20);
-
-  // Test without metric (should return all inferences)
-  const allResults = await getCuratedInferences(
-    "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      json_mode_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        openai_custom_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: { tools: [], choice: "function_default" },
-      },
-      experimentation: { type: "uniform" },
-    },
-    null,
-    null,
-    0,
-    undefined,
-  );
-  expect(allResults.length).toBe(604);
-}, 10000);
-
 // Test countFeedbacksForMetric
 test("countFeedbacksForMetric returns correct counts", async () => {
   // Test boolean metrics
@@ -404,7 +297,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
     { type: "demonstration", level: "inference" },
   );
   expect(demoCount).toBe(100);
-});
+}, 10000);
 
 describe("handle_llm_judge_output", () => {
   it("should remove the thinking field from the output", () => {

@@ -43,6 +43,18 @@ export default [
       route("inference", "routes/api/tensorzero/inference.ts"),
       route("status", "routes/api/tensorzero/status.ts"),
     ]),
+
+    route(
+      "inference/:inference_id",
+      "routes/api/inference/$inference_id/route.ts",
+    ),
+
+    route(
+      "datasets/datapoints/from-inference",
+      "routes/api/datasets/datapoints/from-inference/route.ts",
+    ),
+
+    route("feedback", "routes/api/feedback/route.ts"),
   ]),
 
   // Datasets

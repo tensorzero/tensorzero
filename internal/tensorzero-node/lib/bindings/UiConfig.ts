@@ -16,4 +16,5 @@ export type UiConfig = {
   tools: { [key in string]?: StaticToolConfig };
   evaluations: { [key in string]?: EvaluationConfig };
   model_names: Array<string>;
+  config_hash: string;
 };

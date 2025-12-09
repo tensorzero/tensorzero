@@ -32,6 +32,7 @@ const config: UiConfig = {
   tools: {},
   evaluations: {},
   model_names: [],
+  config_hash: "test-config-hash",
 };
 
 const meta = {

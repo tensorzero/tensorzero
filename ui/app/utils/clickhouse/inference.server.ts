@@ -3,17 +3,13 @@ import {
   modelInferenceInputMessageSchema,
   ZodJsonValueSchema,
 } from "./common";
-import {
-  contentBlockOutputSchema,
-  getInferenceTableName,
-  inputSchema,
-} from "./common";
+import { contentBlockOutputSchema, inputSchema } from "./common";
 import { data } from "react-router";
 import type {
-  FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
   StoredInference,
+  InferenceFilter,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -56,9 +52,19 @@ export async function listInferencesWithPagination(params: {
   function_name?: string;
   variant_name?: string;
   episode_id?: string;
+  filter?: InferenceFilter;
+  search_query?: string;
 }): Promise<ListInferencesResult> {
-  const { limit, before, after, function_name, variant_name, episode_id } =
-    params;
+  const {
+    limit,
+    before,
+    after,
+    function_name,
+    variant_name,
+    episode_id,
+    filter,
+    search_query,
+  } = params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
@@ -76,6 +82,8 @@ export async function listInferencesWithPagination(params: {
       function_name,
       variant_name,
       episode_id,
+      filter,
+      search_query_experimental: search_query,
     });
 
     // Determine if there are more pages based on whether we got more than limit results
@@ -140,35 +148,19 @@ export async function listInferencesWithPagination(params: {
 
 export async function countInferencesForFunction(
   function_name: string,
-  function_config: FunctionConfig,
 ): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
+  const client = getTensorZeroClient();
+  const result = await client.getInferenceStats(function_name);
+  return Number(result.inference_count);
 }
 
 export async function countInferencesForVariant(
   function_name: string,
-  function_config: FunctionConfig,
   variant_name: string,
 ): Promise<number> {
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name, variant_name },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
+  const client = getTensorZeroClient();
+  const result = await client.getInferenceStats(function_name, variant_name);
+  return Number(result.inference_count);
 }
 
 export async function countInferencesForEpisode(

@@ -612,6 +612,7 @@ pub async fn test_render_datapoints_no_function() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client
@@ -653,6 +654,7 @@ pub async fn test_render_datapoints_no_variant() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let error = client
@@ -707,6 +709,7 @@ pub async fn test_render_datapoints_missing_variable() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client
@@ -753,6 +756,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -788,6 +792,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -838,6 +843,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -888,6 +894,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
     ];
 
@@ -1072,6 +1079,7 @@ pub async fn test_render_datapoints_template_no_schema() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client

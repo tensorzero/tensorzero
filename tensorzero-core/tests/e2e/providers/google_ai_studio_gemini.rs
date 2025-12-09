@@ -248,7 +248,7 @@ async fn test_gemini_multi_turn_thought_non_streaming() {
             "type": "thought",
             "text": null,
             "signature": signature,
-            "_internal_provider_type": "google_ai_studio_gemini",
+            "provider_type": "google_ai_studio_gemini",
         })
     );
     assert_eq!(content_blocks[1]["type"], "tool_call");
@@ -384,7 +384,7 @@ async fn test_gemini_multi_turn_thought_streaming() {
             "type": "thought",
             "text": null,
             "signature": signature,
-            "_internal_provider_type": "google_ai_studio_gemini",
+            "provider_type": "google_ai_studio_gemini",
         })
     );
     assert_eq!(clickhouse_content_blocks[1]["type"], "tool_call");

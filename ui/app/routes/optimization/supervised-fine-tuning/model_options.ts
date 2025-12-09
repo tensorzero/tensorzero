@@ -32,8 +32,8 @@ export const models: ModelOption[] = [
   },
   // Fireworks
   {
-    displayName: "llama-3.1-8b-instruct",
-    name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+    displayName: "llama-3.3-70b-instruct",
+    name: "accounts/fireworks/models/llama-v3p3-70b-instruct",
     provider: "fireworks",
   },
   {

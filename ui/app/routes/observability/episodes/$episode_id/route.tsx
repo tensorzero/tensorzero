@@ -13,6 +13,7 @@ import {
   isRouteErrorResponse,
   useNavigate,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
@@ -24,20 +25,40 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
-import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
-import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
 };
+
+/**
+ * Prevent revalidation of this route when actions are submitted to API routes.
+ * This is needed because:
+ * 1. The InferencePreviewSheet submits feedback to /api/feedback
+ * 2. The AddToDatasetButton submits to /api/datasets/datapoints/from-inference
+ * 3. By default, React Router revalidates all active loaders after any action
+ * 4. We don't want to reload the entire episode page when these actions complete
+ *    because the sheet handles its own data refresh
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    formAction?.startsWith("/api/feedback") ||
+    formAction?.startsWith("/api/datasets/datapoints/from-inference")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -145,33 +166,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
+/** Response type from /api/feedback endpoint */
+type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
-
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-
-  try {
-    const response = await addHumanFeedback(formData);
-    const url = new URL(request.url);
-    url.searchParams.delete("beforeFeedback");
-    url.searchParams.delete("afterFeedback");
-    url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.pathname + url.search });
-  } catch (error) {
-    if (isTensorZeroServerError(error)) {
-      return data<ActionData>(
-        { error: error.message },
-        { status: error.status },
-      );
-    }
-    return data<ActionData>(
-      { error: "Unknown server error. Try again." },
-      { status: 500 },
-    );
-  }
-}
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
@@ -188,6 +186,17 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
+    string | null
+  >(null);
+
+  const handleOpenSheet = useCallback((inferenceId: string) => {
+    setOpenSheetInferenceId(inferenceId);
+  }, []);
+
+  const handleCloseSheet = useCallback(() => {
+    setOpenSheetInferenceId(null);
+  }, []);
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -247,7 +256,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !feedbackBounds.first_id ||
     feedbackBounds.first_id === bottomFeedback.id;
 
-  const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
+  const humanFeedbackFetcher = useFetcherWithReset<FeedbackActionData>();
   const formError =
     humanFeedbackFetcher.state === "idle"
       ? (humanFeedbackFetcher.data?.error ?? null)
@@ -279,7 +288,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             }}
             trigger={<HumanFeedbackButton />}
           >
-            <humanFeedbackFetcher.Form method="post">
+            <humanFeedbackFetcher.Form method="post" action="/api/feedback">
               <HumanFeedbackForm
                 episodeId={episode_id}
                 formError={formError}
@@ -296,7 +305,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Inferences" count={num_inferences} />
-          <EpisodeInferenceTable inferences={inferences} />
+          <EpisodeInferenceTable
+            inferences={inferences}
+            onOpenSheet={handleOpenSheet}
+            onCloseSheet={handleCloseSheet}
+            openSheetInferenceId={openSheetInferenceId}
+          />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}

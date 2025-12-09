@@ -1028,9 +1028,17 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
     // Both candidates should be present (but not the fuser, since it failed)
     println!("results: {results:#?}");
     assert_eq!(results.len(), 2);
+    let mut first_result = results[0].clone();
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = first_result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     assert_eq!(
-        results[0],
+        first_result,
         serde_json::json!({
           "id": results[0].get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
@@ -1048,12 +1056,20 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 
+    let mut second_result = results[1].clone();
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = second_result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
+
     assert_eq!(
-        results[1],
+        second_result,
         serde_json::json!({
           "id": results[1].get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
@@ -1070,7 +1086,6 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }
@@ -1189,9 +1204,16 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
     println!("results: {results:#?}");
     assert_eq!(results.len(), 1);
 
-    let result = results[0].clone();
+    let mut result = results[0].clone();
 
     println!("result: {result}");
+    // Pop the snapshot hash because it's not easy to assert on
+    let snapshot_hash = result
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     assert_eq!(
         result,
@@ -1211,7 +1233,6 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
           "cached": false,
           "finish_reason": "stop",
-          "snapshot_hash": null,
         })
     );
 }

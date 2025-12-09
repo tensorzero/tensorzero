@@ -153,7 +153,7 @@ class Thought(ContentBlock):
     type: str = "thought"
     signature: Optional[str] = None
     summary: Optional[List["ThoughtSummaryBlock"]] = None
-    _internal_provider_type: Optional[str] = None
+    provider_type: Optional[str] = None
 
 
 @dataclass
@@ -288,7 +288,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             signature=block.get("signature"),
             summary=summary,
             type=block_type,
-            _internal_provider_type=block.get("_internal_provider_type"),
+            provider_type=block.get("provider_type"),
         )
     elif block_type == "unknown":
         return UnknownContentBlock(
@@ -335,7 +335,7 @@ class ThoughtChunk(ContentBlockChunk):
     signature: Optional[str] = None
     summary_id: Optional[str] = None
     summary_text: Optional[str] = None
-    _internal_provider_type: Optional[str] = None
+    provider_type: Optional[str] = None
 
 
 @dataclass
