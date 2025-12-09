@@ -724,7 +724,7 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-8x16' }}
+    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'ubuntu-latest' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -773,7 +773,21 @@ jobs:
         if: matrix.replicated == true
         run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
 
+      - name: Install Namespace CLI
+        if: matrix.replicated == false
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        if: matrix.replicated == false
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        with:
+          wait-for-builder: true
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      # We only run the replicated job on a namespace runner
       - name: Setup Namespace caching for Clickhouse fixtures
+        if: matrix.replicated == true
         uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
         with:
           path: |
