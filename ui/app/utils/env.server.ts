@@ -26,6 +26,7 @@ interface Env {
 
 let _env: Env | undefined;
 let hasLoggedEvaluationsPathDeprecation = false;
+let hasLoggedConfigPathDeprecation = false;
 
 /**
  * Use this function to retrieve the environment variables instead of accessing
@@ -55,6 +56,18 @@ export function getEnv(): Env {
     throw new EnvironmentVariableError(
       "The environment variable `TENSORZERO_GATEWAY_URL` is not set.",
     );
+  }
+
+  // Deprecated in 2025.12; can remove in 2026.02+.
+  if (
+    (process.env.TENSORZERO_UI_CONFIG_PATH ||
+      process.env.TENSORZERO_UI_DEFAULT_CONFIG) &&
+    !hasLoggedConfigPathDeprecation
+  ) {
+    logger.warn(
+      "Deprecation Warning: The TensorZero UI now reads the configuration from the gateway. The environment variables `TENSORZERO_UI_CONFIG_PATH` and `TENSORZERO_UI_DEFAULT_CONFIG` are deprecated and ignored. You no longer need to mount the configuration onto the UI container.",
+    );
+    hasLoggedConfigPathDeprecation = true;
   }
 
   _env = {
