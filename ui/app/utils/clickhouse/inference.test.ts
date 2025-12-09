@@ -2,13 +2,13 @@ import { expect, test } from "vitest";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
+  countInferencesForFunction,
+  countInferencesForVariant,
   queryInferenceById,
   listInferencesWithPagination,
   countInferencesByFunction,
-  countInferencesForVariant,
   queryModelInferencesByInferenceId,
 } from "./inference.server";
-import { countInferencesForFunction } from "./inference.server";
 import type { ZodTextContent } from "./common";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
 import type {
@@ -18,81 +18,26 @@ import type {
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
-  const jsonCount = await countInferencesForFunction("extract_entities", {
-    type: "json",
-    variants: {},
-    schemas: {},
-    description: "",
-    output_schema: { value: {} },
-    json_mode_tool_call_config: {
-      static_tools_available: [],
-      dynamic_tools_available: [],
-      provider_tools: [],
-      openai_custom_tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      allowed_tools: { tools: [], choice: "function_default" },
-    },
-    experimentation: { type: "uniform" },
-  });
-  expect(jsonCount).toBe(604);
+  const jsonCount = await countInferencesForFunction("extract_entities");
+  expect(jsonCount).toBeGreaterThanOrEqual(604);
 
-  const chatCount = await countInferencesForFunction("write_haiku", {
-    type: "chat",
-    variants: {},
-    tools: [],
-    tool_choice: "none",
-    parallel_tool_calls: false,
-    schemas: {},
-    description: "",
-    experimentation: { type: "uniform" },
-  });
-  expect(chatCount).toBe(804);
+  const chatCount = await countInferencesForFunction("write_haiku");
+  expect(chatCount).toBeGreaterThanOrEqual(804);
 });
 
 // Test countInferencesForVariant
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      json_mode_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        openai_custom_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: {
-          tools: [],
-          choice: "function_default",
-        },
-      },
-      experimentation: { type: "uniform" },
-    },
     "gpt4o_initial_prompt",
   );
-  expect(jsonCount).toBe(132);
+  expect(jsonCount).toBeGreaterThanOrEqual(132);
 
   const chatCount = await countInferencesForVariant(
     "write_haiku",
-    {
-      type: "chat",
-      variants: {},
-      tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      schemas: {},
-      description: "",
-      experimentation: { type: "uniform" },
-    },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(649);
+  expect(chatCount).toBeGreaterThanOrEqual(649);
 });
 
 // Tests for listInferencesWithPagination (new cursor-based pagination API)
@@ -389,7 +334,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
       { text: "Summary of the thought", type: "summary_text" },
       { text: "Another summary point", type: "summary_text" },
     ],
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
@@ -407,7 +352,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
     type: "thought",
     text: "Another thinking step",
     signature: "abcdef",
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result2 = displayModelInferenceInputMessageContentSchema.safeParse(

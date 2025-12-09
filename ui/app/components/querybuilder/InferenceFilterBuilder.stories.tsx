@@ -99,6 +99,7 @@ const mockConfig: UiConfig = {
   tools: {},
   evaluations: {},
   model_names: [],
+  config_hash: "test-config-hash",
 };
 
 export const Default: Story = {

@@ -560,6 +560,7 @@ mod tests {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());

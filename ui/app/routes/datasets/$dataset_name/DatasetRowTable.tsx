@@ -285,7 +285,7 @@ export default function DatasetRowTable({
               <SheetTitle>Filter</SheetTitle>
             </SheetHeader>
 
-            <div className="mt-4 flex-1 space-y-4">
+            <div className="mt-4 flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
               <div>
                 <label className="text-sm font-medium">Function</label>
                 <div className="mt-1 flex items-center gap-2">
@@ -338,7 +338,7 @@ export default function DatasetRowTable({
               </div>
             </div>
 
-            <SheetFooter className="mt-4">
+            <SheetFooter className="mt-4 shrink-0">
               <Button onClick={handleFilterSubmit}>Apply Filters</Button>
             </SheetFooter>
           </Form>

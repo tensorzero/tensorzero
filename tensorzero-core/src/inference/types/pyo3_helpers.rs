@@ -17,6 +17,7 @@ use crate::optimization::UninitializedOptimizerConfig;
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
+use crate::optimization::gepa::UninitializedGEPAConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
@@ -375,6 +376,7 @@ pub fn deserialize_from_stored_sample<'a>(
     // Try deserializing into named types first
     let generated_types_module = py.import("tensorzero.generated_types")?;
     let stored_inference_type = generated_types_module.getattr("StoredInference")?;
+    // TODO: add the config hash to the StoredSample type
 
     if obj.is_instance(&stored_inference_type)? {
         let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
@@ -394,9 +396,11 @@ pub fn deserialize_from_stored_sample<'a>(
                     Ok(f) => f,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
-                let datapoint = match chat_wire
-                    .into_storage_without_file_handling(&function_config, &config.tools)
-                {
+                let datapoint = match chat_wire.into_storage_without_file_handling(
+                    &function_config,
+                    &config.tools,
+                    &config.hash,
+                ) {
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
@@ -405,10 +409,11 @@ pub fn deserialize_from_stored_sample<'a>(
                 )))
             }
             Datapoint::Json(json_wire) => {
-                let datapoint = match json_wire.into_storage_without_file_handling() {
-                    Ok(d) => d,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-                };
+                let datapoint =
+                    match json_wire.into_storage_without_file_handling(config.hash.clone()) {
+                        Ok(d) => d,
+                        Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                    };
                 Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
                     datapoint,
                 )))
@@ -453,11 +458,13 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
             obj.extract()?,
         ))
+    } else if obj.is_instance_of::<UninitializedGEPAConfig>() {
+        Ok(UninitializedOptimizerConfig::GEPA(obj.extract()?))
     } else {
         // Fall back to deserializing from a dictionary
         deserialize_from_pyobj(obj.py(), obj).map_err(|e| {
             PyValueError::new_err(format!(
-                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, or DICLOptimizationConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
+                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, DICLOptimizationConfig, or GEPAConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
             ))
         })
     }

@@ -93,6 +93,7 @@ from .tensorzero import (
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
+    GEPAConfig,
     LegacyDatapoint,
     MixtureOfNConfig,
     OpenAIRFTConfig,
@@ -187,6 +188,7 @@ OptimizationConfig = t.Union[
     TogetherSFTConfig,
     DICLOptimizationConfig,
     OpenAIRFTConfig,
+    GEPAConfig,
     t.Dict[str, Any],
 ]
 ChatInferenceOutput = t.List[ContentBlock]
@@ -240,6 +242,7 @@ __all__ = [
     "FunctionsConfig",
     "FunctionTool",
     "GCPVertexGeminiSFTConfig",
+    "GEPAConfig",
     "GetDatapointsResponse",
     "GetInferencesRequest",
     "GetInferencesResponse",

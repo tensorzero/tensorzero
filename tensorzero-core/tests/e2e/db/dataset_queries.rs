@@ -565,6 +565,7 @@ async fn test_clickhouse_count_datasets() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     let datapoint2 = ChatInferenceDatapointInsert {
@@ -586,6 +587,7 @@ async fn test_clickhouse_count_datasets() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -647,6 +649,7 @@ async fn test_count_datapoints_for_dataset_function_chat() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -716,6 +719,7 @@ async fn test_count_datapoints_for_dataset_function_json() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -769,6 +773,7 @@ async fn test_insert_datapoint_chat() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Insert the datapoint
@@ -824,6 +829,7 @@ async fn test_insert_datapoint_json() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Insert the datapoint
@@ -874,6 +880,7 @@ async fn test_insert_datapoint_validates_dataset_name_builder() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     let result = clickhouse
@@ -906,6 +913,7 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     let result = clickhouse
@@ -1069,6 +1077,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         staled_at: None,
         source_inference_id: Some(source_inference_id),
         is_custom: false,
+        snapshot_hash: None,
     });
 
     // Test insertion
@@ -1177,6 +1186,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
         staled_at: None,
         source_inference_id: Some(source_inference_id),
         is_custom: false,
+        snapshot_hash: None,
     });
 
     // Test insertion
@@ -1299,6 +1309,7 @@ async fn test_handles_duplicate_insertions_gracefully() {
         staled_at: None,
         source_inference_id: Some(source_inference_id),
         is_custom: false,
+        snapshot_hash: None,
     });
     let datapoint_slice = [chat_datapoint];
 
@@ -1450,6 +1461,7 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let result = clickhouse.insert_datapoints(&[chat_datapoint]).await;
@@ -1507,6 +1519,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1571,6 +1584,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1638,6 +1652,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1666,6 +1681,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1693,6 +1709,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1771,6 +1788,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1837,6 +1855,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1865,6 +1884,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1892,6 +1912,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1957,6 +1978,7 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -2020,6 +2042,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -2105,6 +2128,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -2182,6 +2206,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -2258,6 +2283,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Insert the datapoint
@@ -2344,6 +2370,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Insert the datapoint
@@ -2451,6 +2478,7 @@ async fn test_datapoint_with_mixed_file_types() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     // Insert the datapoint
@@ -2560,6 +2588,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -2658,6 +2687,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -2746,6 +2776,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -2833,6 +2864,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -2909,6 +2941,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -2978,6 +3011,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -3055,6 +3089,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse
@@ -3140,6 +3175,7 @@ mod tool_call_storage_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
 
         clickhouse

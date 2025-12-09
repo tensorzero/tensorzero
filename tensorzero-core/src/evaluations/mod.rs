@@ -41,19 +41,19 @@ pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
 pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationConfig {
@@ -61,7 +61,7 @@ pub enum EvaluationConfig {
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluatorConfig {
@@ -69,6 +69,33 @@ pub enum EvaluatorConfig {
     #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
 }
+
+/// Minimal function configuration for evaluation purposes.
+/// Contains only the information needed to validate output schemas during evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum EvaluationFunctionConfig {
+    /// Chat function - no output schema validation needed
+    Chat,
+    /// JSON function - contains output schema for validation
+    Json { output_schema: StaticJSONSchema },
+}
+
+impl From<&FunctionConfig> for EvaluationFunctionConfig {
+    fn from(config: &FunctionConfig) -> Self {
+        match config {
+            FunctionConfig::Chat(_) => EvaluationFunctionConfig::Chat,
+            FunctionConfig::Json(json_config) => EvaluationFunctionConfig::Json {
+                output_schema: json_config.output_schema.clone(),
+            },
+        }
+    }
+}
+
+/// A map of function names to their evaluation configurations.
+/// Used to look up output schemas when running evaluations.
+pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfig>;
 
 impl EvaluatorConfig {
     pub fn cutoff(&self) -> Option<f32> {
@@ -96,7 +123,7 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -104,7 +131,7 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
@@ -118,7 +145,7 @@ pub struct LLMJudgeConfig {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
@@ -126,7 +153,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
@@ -177,7 +204,7 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
     format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedEvaluationConfig {
     Inference(UninitializedInferenceEvaluationConfig),
@@ -260,7 +287,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
@@ -353,7 +380,7 @@ impl UninitializedInferenceEvaluationConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
@@ -362,7 +389,7 @@ enum UninitializedEvaluatorConfig {
     LLMJudge(UninitializedLLMJudgeConfig),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
@@ -535,14 +562,14 @@ impl UninitializedEvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeVariantConfig,
     timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Debug, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum UninitializedLLMJudgeVariantConfig {
@@ -557,7 +584,7 @@ enum UninitializedLLMJudgeVariantConfig {
     ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
@@ -665,7 +692,7 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
@@ -677,7 +704,7 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
@@ -689,7 +716,7 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
@@ -714,7 +741,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     extra_headers: Option<ExtraHeadersConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]

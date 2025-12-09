@@ -1199,6 +1199,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1288,6 +1289,7 @@ async fn test_embedding_request() {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             },
         )
         .await
@@ -1363,6 +1365,7 @@ async fn test_embedding_sanity_check() {
             tags: Arc::new(HashMap::new()),
             api_key_public_id: None,
         },
+        relay: None,
     };
 
     // Compute all 3 embeddings concurrently
@@ -1464,7 +1467,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1491,7 +1494,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 
@@ -1659,7 +1662,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1681,7 +1684,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 
@@ -1736,7 +1739,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    Box::pin(test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -1764,7 +1767,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     "#
         ),
         &prefix,
-    )
+    ))
     .await;
 }
 

@@ -1200,7 +1200,7 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
-    _internal_provider_type: str | None = None
+    provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit

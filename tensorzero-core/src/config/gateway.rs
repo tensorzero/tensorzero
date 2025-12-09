@@ -2,15 +2,18 @@ use chrono::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
+    config::{
+        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess, UninitializedRelayConfig,
+    },
     error::Error,
     http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
+    relay::TensorzeroRelay,
 };
 
 use super::ObjectStoreInfo;
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
@@ -37,7 +40,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
@@ -46,7 +49,7 @@ pub struct AuthConfig {
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -78,6 +81,8 @@ pub struct UninitializedGatewayConfig {
     #[serde(default)]
     pub auth: AuthConfig,
     pub global_outbound_http_timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub relay: Option<UninitializedRelayConfig>,
 }
 
 impl UninitializedGatewayConfig {
@@ -96,6 +101,17 @@ impl UninitializedGatewayConfig {
             }
             false
         };
+
+        let relay = if let Some(relay_config) = self.relay {
+            if let Some(gateway_url) = relay_config.gateway_url {
+                Some(TensorzeroRelay::new(gateway_url)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(GatewayConfig {
             bind_address: self.bind_address,
             observability: self.observability,
@@ -113,11 +129,12 @@ impl UninitializedGatewayConfig {
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
+            relay,
         })
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
@@ -136,6 +153,8 @@ pub struct GatewayConfig {
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
     pub global_outbound_http_timeout: Duration,
+    #[serde(skip)]
+    pub relay: Option<TensorzeroRelay>,
 }
 
 impl Default for GatewayConfig {
@@ -153,6 +172,7 @@ impl Default for GatewayConfig {
             fetch_and_encode_input_files_before_inference: Default::default(),
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
+            relay: Default::default(),
         }
     }
 }
