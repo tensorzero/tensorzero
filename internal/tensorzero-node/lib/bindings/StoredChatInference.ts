@@ -4,6 +4,7 @@ import type { ProviderTool } from "./ProviderTool";
 import type { StoredInput } from "./StoredInput";
 import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
+import type { UnfilteredInferenceExtraBody } from "./UnfilteredInferenceExtraBody";
 
 /**
  * Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
@@ -18,6 +19,7 @@ export type StoredChatInference = {
   episode_id: string;
   inference_id: string;
   tags: { [key in string]?: string };
+  extra_body: UnfilteredInferenceExtraBody;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.
    * If not provided, all static tools are allowed.

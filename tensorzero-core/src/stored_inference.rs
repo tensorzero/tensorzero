@@ -10,6 +10,7 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -19,6 +20,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
     ResolvedRequestMessage, Text,
 };
+use crate::serde_util::deserialize_defaulted_json_string;
 use crate::tool::{
     DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
 };
@@ -214,6 +216,7 @@ impl StoredChatInference {
             inference_id: self.inference_id,
             tool_params,
             tags: self.tags,
+            extra_body: self.extra_body,
         })
     }
 }
@@ -261,6 +264,8 @@ pub struct StoredChatInference {
     pub tool_params: DynamicToolParams,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -284,6 +289,7 @@ impl StoredChatInferenceDatabase {
             inference_id: self.inference_id,
             tool_params: self.tool_params.into(),
             tags: self.tags,
+            extra_body: self.extra_body,
         }
     }
 }
@@ -304,6 +310,8 @@ pub struct StoredChatInferenceDatabase {
     pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatabase {
@@ -329,6 +337,8 @@ pub struct StoredJsonInference {
     pub output_schema: Value,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -826,6 +836,7 @@ mod tests {
                 tags.insert("key2".to_string(), "value2".to_string());
                 tags
             },
+            extra_body: UnfilteredInferenceExtraBody::default(),
         }
     }
 
@@ -862,6 +873,7 @@ mod tests {
                 tags.insert("json_key".to_string(), "json_value".to_string());
                 tags
             },
+            extra_body: UnfilteredInferenceExtraBody::default(),
         }
     }
 

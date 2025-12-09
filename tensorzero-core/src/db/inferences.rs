@@ -13,8 +13,9 @@ use mockall::automock;
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
@@ -38,6 +39,8 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
@@ -69,6 +72,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             tool_params: value.tool_params,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
         })
     }
 }
@@ -89,6 +93,8 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJsonInference {
@@ -119,6 +125,7 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
             output_schema: value.output_schema,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
         })
     }
 }

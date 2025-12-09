@@ -532,6 +532,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -580,6 +581,7 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     ChatInference AS i
@@ -634,6 +636,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -735,6 +738,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -790,6 +794,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -859,6 +864,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -944,6 +950,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1048,6 +1055,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1191,6 +1199,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1284,6 +1293,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1380,6 +1390,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1428,6 +1439,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1482,6 +1494,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1552,6 +1565,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1623,6 +1637,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1685,6 +1700,7 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     ChatInference AS i
@@ -1756,6 +1772,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1835,6 +1852,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -1925,6 +1943,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -2023,6 +2042,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -2091,6 +2111,7 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     ChatInference AS i
@@ -2164,6 +2185,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -2572,6 +2594,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -2629,6 +2652,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -2704,6 +2728,7 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output
 FROM
     JsonInference AS i
@@ -2773,6 +2798,7 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
     i.output as output,
     countSubstringsCaseInsensitiveUTF8(i.input, {p1:String}) as input_term_frequency,
     countSubstringsCaseInsensitiveUTF8(i.output, {p1:String}) as output_term_frequency,

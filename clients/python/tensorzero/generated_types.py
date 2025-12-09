@@ -840,6 +840,9 @@ class ToolResult:
     result: str
 
 
+UnfilteredInferenceExtraBody = list[ExtraBody]
+
+
 @dataclass(kw_only=True)
 class Unknown:
     """
@@ -1555,6 +1558,7 @@ class StoredJsonInference:
     timestamp: str
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
     tags: dict[str, str] | None = field(default_factory=lambda: {})
 
 
@@ -1899,6 +1903,7 @@ class StoredChatInference:
     If not provided, all static tools are allowed.
     """
     dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
     parallel_tool_calls: bool | None = None
     """
     Whether to use parallel tool calls in the inference. Optional.

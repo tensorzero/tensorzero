@@ -206,6 +206,7 @@ mod tests {
             inference_id: id,
             tool_params: ToolCallConfigDatabaseInsert::default(),
             tags: HashMap::new(),
+            extra_body: Default::default(),
         })
     }
 

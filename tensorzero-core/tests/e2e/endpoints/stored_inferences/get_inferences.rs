@@ -1167,3 +1167,66 @@ pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
         "Request with cursor and metric ordering should fail"
     );
 }
+
+// Tests for extra_body field
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_with_extra_body() {
+    let http_client = Client::new();
+
+    // Create an inference with a nontrivial extra_body
+    let extra_body_value = json!([
+        {"pointer": "/test_field", "value": "test_value"},
+        {"pointer": "/nested/field", "value": {"key": "nested_value"}}
+    ]);
+
+    let inference_payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}",
+        inference_response.status()
+    );
+
+    let inference_json: Value = inference_response.json().await.unwrap();
+    let inference_id = Uuid::parse_str(inference_json["inference_id"].as_str().unwrap()).unwrap();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    // Assert the extra_body is correctly returned
+    let extra_body = &res[0]["extra_body"];
+    assert!(extra_body.is_array(), "extra_body should be an array");
+
+    let extra_body_array = extra_body.as_array().unwrap();
+    assert_eq!(extra_body_array.len(), 2);
+
+    // Check the first extra_body entry
+    assert_eq!(extra_body_array[0]["pointer"], "/test_field");
+    assert_eq!(extra_body_array[0]["value"], "test_value");
+
+    // Check the second extra_body entry (nested value)
+    assert_eq!(extra_body_array[1]["pointer"], "/nested/field");
+    assert_eq!(extra_body_array[1]["value"]["key"], "nested_value");
+}
