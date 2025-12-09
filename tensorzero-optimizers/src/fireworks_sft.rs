@@ -290,6 +290,7 @@ impl JobHandle for FireworksSFTJobHandle {
                             routing: vec![model_path.clone().into()],
                             providers: HashMap::from([(model_path.into(), model_provider)]),
                             timeouts: TimeoutsConfig::default(),
+                            skip_relay: None,
                         }),
                     })
                 }

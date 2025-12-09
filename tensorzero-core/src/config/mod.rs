@@ -29,6 +29,7 @@ use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
+use url::Url;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -773,6 +774,7 @@ impl RuntimeOverlay {
             fetch_and_encode_input_files_before_inference,
             auth,
             global_outbound_http_timeout,
+            relay,
         } = &config.gateway;
 
         Self {
@@ -794,6 +796,7 @@ impl RuntimeOverlay {
                 global_outbound_http_timeout_ms: Some(
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
+                relay: relay.as_ref().map(UninitializedRelayConfig::from),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1684,6 +1687,12 @@ pub struct UninitializedConfig {
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UninitializedRelayConfig {
+    pub gateway_url: Option<Url>,
 }
 
 /// The result of parsing all of the globbed config files,

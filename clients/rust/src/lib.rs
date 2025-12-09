@@ -484,7 +484,7 @@ async fn create_datapoints_internal(
                 .into(),
             })?;
             let builder = http_client.http_client.post(url).json(&params);
-            http_client.send_and_parse_http_response(builder).await
+            Ok(http_client.send_and_parse_http_response(builder).await?.0)
         }
         ClientMode::EmbeddedGateway { gateway, timeout } => {
             Ok(with_embedded_timeout(*timeout, async {
@@ -595,7 +595,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&params);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -625,7 +625,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&params);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -721,7 +721,7 @@ impl ClientExt for Client {
                         .into(),
                     })?;
                 let builder = client.http_client.get(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -777,7 +777,7 @@ impl ClientExt for Client {
                         .into(),
                     })?;
                 let builder = client.http_client.delete(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
         }
     }
@@ -797,7 +797,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = http_client.http_client.post(url).json(&request);
-                http_client.send_and_parse_http_response(builder).await
+                Ok(http_client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -831,7 +831,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.patch(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -876,7 +876,7 @@ impl ClientExt for Client {
                     })?,
                 };
                 let builder = http_client.http_client.post(url).json(&request);
-                http_client.send_and_parse_http_response(builder).await
+                Ok(http_client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -907,7 +907,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -939,7 +939,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.patch(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -971,7 +971,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1001,7 +1001,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1036,7 +1036,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -1118,7 +1118,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1148,7 +1148,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1299,7 +1299,7 @@ impl ClientExt for Client {
                     })?;
                 let builder = client.http_client.get(url);
                 let resp: OptimizationJobInfo =
-                    client.send_and_parse_http_response(builder).await?;
+                    client.send_and_parse_http_response(builder).await?.0;
                 Ok(resp)
             }
         }
@@ -1340,7 +1340,7 @@ impl ClientExt for Client {
                     })?;
                 let builder = client.http_client.get(url);
                 let response: GetVariantSamplingProbabilitiesResponse =
-                    client.send_and_parse_http_response(builder).await?;
+                    client.send_and_parse_http_response(builder).await?.0;
                 Ok(response.probabilities)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
