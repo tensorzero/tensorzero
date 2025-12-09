@@ -80,19 +80,15 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                // TODO - include `raw_request`/`raw_response` here
-                Error::new(ErrorDetails::InferenceClient {
+                Error::new(ErrorDetails::Inference {
                     message: e.to_string(),
-                    status_code: None,
-                    provider_type: "tensorzero_relay".to_string(),
-                    raw_request: None,
-                    raw_response: None,
                 })
             })?;
 
         let InferenceOutput::Streaming(streaming) = res.response else {
-            return Err(Error::new(ErrorDetails::Inference {
-                message: "Expected streaming inference response".to_string(),
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Expected streaming inference response. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    .to_string(),
             }));
         };
 
@@ -150,12 +146,8 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                // TODO - fix raw_request/raw_response here
-                Error::new(ErrorDetails::InferenceServer {
+                Error::new(ErrorDetails::Inference {
                     message: e.to_string(),
-                    provider_type: "tensorzero_relay".to_string(),
-                    raw_request: None,
-                    raw_response: None,
                 })
             })?;
 
