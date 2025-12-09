@@ -22,62 +22,62 @@ type Story = StoryObj<typeof meta>;
 
 export const Empty: Story = {
   args: {
-    providerTools: [],
+    provider_tools: [],
   },
 };
 
 export const WithAllowedTools: Story = {
   args: {
-    allowedTools: ["search_wikipedia", "get_weather", "calculate"],
-    providerTools: [],
+    allowed_tools: ["search_wikipedia", "get_weather", "calculate"],
+    provider_tools: [],
   },
 };
 
 export const WithToolChoice: Story = {
   args: {
-    toolChoice: "auto",
-    providerTools: [],
+    tool_choice: "auto",
+    provider_tools: [],
   },
 };
 
 export const WithToolChoiceRequired: Story = {
   args: {
-    toolChoice: "required",
-    providerTools: [],
+    tool_choice: "required",
+    provider_tools: [],
   },
 };
 
 export const WithToolChoiceNone: Story = {
   args: {
-    toolChoice: "none",
-    providerTools: [],
+    tool_choice: "none",
+    provider_tools: [],
   },
 };
 
 export const WithToolChoiceSpecific: Story = {
   args: {
-    toolChoice: { specific: "search_wikipedia" },
-    providerTools: [],
+    tool_choice: { specific: "search_wikipedia" },
+    provider_tools: [],
   },
 };
 
 export const WithParallelToolCallsEnabled: Story = {
   args: {
-    parallelToolCalls: true,
-    providerTools: [],
+    parallel_tool_calls: true,
+    provider_tools: [],
   },
 };
 
 export const WithParallelToolCallsDisabled: Story = {
   args: {
-    parallelToolCalls: false,
-    providerTools: [],
+    parallel_tool_calls: false,
+    provider_tools: [],
   },
 };
 
 export const WithSingleFunctionTool: Story = {
   args: {
-    additionalTools: [
+    additional_tools: [
       {
         type: "function",
         name: "search_wikipedia",
@@ -99,13 +99,13 @@ export const WithSingleFunctionTool: Story = {
         strict: true,
       },
     ],
-    providerTools: [],
+    provider_tools: [],
   },
 };
 
 export const WithMultipleFunctionTools: Story = {
   args: {
-    additionalTools: [
+    additional_tools: [
       {
         type: "function",
         name: "search_wikipedia",
@@ -164,13 +164,13 @@ export const WithMultipleFunctionTools: Story = {
         strict: false,
       },
     ],
-    providerTools: [],
+    provider_tools: [],
   },
 };
 
 export const WithOpenAICustomTool: Story = {
   args: {
-    additionalTools: [
+    additional_tools: [
       {
         type: "openai_custom",
         name: "code_interpreter",
@@ -180,13 +180,13 @@ export const WithOpenAICustomTool: Story = {
         },
       },
     ],
-    providerTools: [],
+    provider_tools: [],
   },
 };
 
 export const WithSingleProviderTool: Story = {
   args: {
-    providerTools: [
+    provider_tools: [
       {
         scope: null,
         tool: {
@@ -200,7 +200,7 @@ export const WithSingleProviderTool: Story = {
 
 export const WithMultipleProviderTools: Story = {
   args: {
-    providerTools: [
+    provider_tools: [
       {
         scope: { model_name: "gpt-4o", provider_name: "openai" },
         tool: {
@@ -222,7 +222,7 @@ export const WithMultipleProviderTools: Story = {
 
 export const WithProviderToolScoped: Story = {
   args: {
-    providerTools: [
+    provider_tools: [
       {
         scope: { model_name: "gpt-4o" },
         tool: {
@@ -236,8 +236,8 @@ export const WithProviderToolScoped: Story = {
 
 export const Complete: Story = {
   args: {
-    allowedTools: ["search_wikipedia", "get_weather"],
-    additionalTools: [
+    allowed_tools: ["search_wikipedia", "get_weather"],
+    additional_tools: [
       {
         type: "function",
         name: "calculate",
@@ -255,9 +255,9 @@ export const Complete: Story = {
         strict: true,
       },
     ],
-    toolChoice: "auto",
-    parallelToolCalls: true,
-    providerTools: [
+    tool_choice: "auto",
+    parallel_tool_calls: true,
+    provider_tools: [
       {
         scope: null,
         tool: {

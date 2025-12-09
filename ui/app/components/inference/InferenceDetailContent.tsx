@@ -382,11 +382,11 @@ export function InferenceDetailContent({
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
             <ToolParametersSection
-              allowedTools={inference.allowed_tools}
-              additionalTools={inference.additional_tools}
-              toolChoice={inference.tool_choice}
-              parallelToolCalls={inference.parallel_tool_calls}
-              providerTools={inference.provider_tools}
+              allowed_tools={inference.allowed_tools}
+              additional_tools={inference.additional_tools}
+              tool_choice={inference.tool_choice}
+              parallel_tool_calls={inference.parallel_tool_calls}
+              provider_tools={inference.provider_tools}
             />
           </SectionLayout>
         )}

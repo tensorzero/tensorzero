@@ -22,8 +22,8 @@ export type StoredChatInference = {
   tags: { [key in string]?: string };
   extra_body: UnfilteredInferenceExtraBody;
   inference_params: InferenceParams;
-  processing_time_ms: bigint | null;
-  ttft_ms: bigint | null;
+  processing_time_ms?: bigint;
+  ttft_ms?: bigint;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.
    * If not provided, all static tools are allowed.

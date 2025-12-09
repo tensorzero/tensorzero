@@ -18,6 +18,6 @@ export type StoredJsonInference = {
   tags: { [key in string]?: string };
   extra_body: UnfilteredInferenceExtraBody;
   inference_params: InferenceParams;
-  processing_time_ms: bigint | null;
-  ttft_ms: bigint | null;
+  processing_time_ms?: bigint;
+  ttft_ms?: bigint;
 };

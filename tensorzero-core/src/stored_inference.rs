@@ -271,7 +271,9 @@ pub struct StoredChatInference {
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     pub inference_params: InferenceParams,
+    #[ts(optional)]
     pub processing_time_ms: Option<u64>,
+    #[ts(optional)]
     pub ttft_ms: Option<u64>,
 }
 
@@ -355,7 +357,9 @@ pub struct StoredJsonInference {
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
     pub inference_params: InferenceParams,
+    #[ts(optional)]
     pub processing_time_ms: Option<u64>,
+    #[ts(optional)]
     pub ttft_ms: Option<u64>,
 }
 

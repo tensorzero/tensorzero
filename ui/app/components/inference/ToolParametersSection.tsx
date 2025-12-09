@@ -4,6 +4,7 @@ import type {
   ProviderTool,
   FunctionTool,
   OpenAICustomTool,
+  DynamicToolParams,
 } from "~/types/tensorzero";
 import {
   SnippetLayout,
@@ -13,26 +14,18 @@ import {
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Badge } from "~/components/ui/badge";
 
-export interface ToolParametersProps {
-  allowedTools?: string[];
-  additionalTools?: Tool[];
-  toolChoice?: ToolChoice;
-  parallelToolCalls?: boolean;
-  providerTools: ProviderTool[];
-}
-
 export function ToolParametersSection({
-  allowedTools,
-  additionalTools,
-  toolChoice,
-  parallelToolCalls,
-  providerTools,
-}: ToolParametersProps) {
-  const hasAllowedTools = allowedTools && allowedTools.length > 0;
-  const hasAdditionalTools = additionalTools && additionalTools.length > 0;
-  const hasProviderTools = providerTools && providerTools.length > 0;
-  const hasToolChoice = toolChoice !== undefined;
-  const hasParallelToolCalls = parallelToolCalls !== undefined;
+  allowed_tools,
+  additional_tools,
+  tool_choice,
+  parallel_tool_calls,
+  provider_tools,
+}: DynamicToolParams) {
+  const hasAllowedTools = allowed_tools && allowed_tools.length > 0;
+  const hasAdditionalTools = additional_tools && additional_tools.length > 0;
+  const hasProviderTools = provider_tools && provider_tools.length > 0;
+  const hasToolChoice = tool_choice !== undefined;
+  const hasParallelToolCalls = parallel_tool_calls !== undefined;
 
   const hasAnyToolParameters =
     hasAllowedTools ||
@@ -65,7 +58,7 @@ export function ToolParametersSection({
                   <span className="text-fg-muted text-xs font-medium uppercase">
                     Tool Choice
                   </span>
-                  <ToolChoiceBadge toolChoice={toolChoice} />
+                  <ToolChoiceBadge toolChoice={tool_choice} />
                 </div>
               )}
               {hasParallelToolCalls && (
@@ -73,8 +66,10 @@ export function ToolParametersSection({
                   <span className="text-fg-muted text-xs font-medium uppercase">
                     Parallel Tool Calls
                   </span>
-                  <Badge variant={parallelToolCalls ? "default" : "secondary"}>
-                    {parallelToolCalls ? "enabled" : "disabled"}
+                  <Badge
+                    variant={parallel_tool_calls ? "default" : "secondary"}
+                  >
+                    {parallel_tool_calls ? "enabled" : "disabled"}
                   </Badge>
                 </div>
               )}
@@ -85,10 +80,10 @@ export function ToolParametersSection({
           {hasAllowedTools && (
             <div className="flex flex-col gap-2">
               <span className="text-fg-muted text-xs font-medium uppercase">
-                Allowed Tools ({allowedTools.length})
+                Allowed Tools ({allowed_tools.length})
               </span>
               <div className="flex flex-wrap gap-2">
-                {allowedTools.map((toolName) => (
+                {allowed_tools.map((toolName) => (
                   <Badge key={toolName} variant="outline">
                     {toolName}
                   </Badge>
@@ -101,9 +96,13 @@ export function ToolParametersSection({
           {hasAdditionalTools && (
             <div className="flex flex-col gap-2">
               <span className="text-fg-muted text-xs font-medium uppercase">
-                Additional Tools ({additionalTools.length})
+                Additional Tools ({additional_tools.length})
               </span>
-              <AdditionalToolsList tools={additionalTools} />
+              <ToolsList
+                tools={additional_tools}
+                getLabel={(tool) => getToolName(tool)}
+                renderCard={(tool) => <ToolCard tool={tool} />}
+              />
             </div>
           )}
 
@@ -111,9 +110,13 @@ export function ToolParametersSection({
           {hasProviderTools && (
             <div className="flex flex-col gap-2">
               <span className="text-fg-muted text-xs font-medium uppercase">
-                Provider Tools ({providerTools.length})
+                Provider Tools ({provider_tools.length})
               </span>
-              <ProviderToolsList tools={providerTools} />
+              <ToolsList
+                tools={provider_tools}
+                getLabel={getProviderToolLabel}
+                renderCard={(tool) => <ProviderToolCard tool={tool} />}
+              />
             </div>
           )}
         </div>
@@ -135,15 +138,21 @@ function ToolChoiceBadge({ toolChoice }: { toolChoice: ToolChoice }) {
   );
 }
 
-function AdditionalToolsList({ tools }: { tools: Tool[] }) {
+interface ToolsListProps<T> {
+  tools: T[];
+  getLabel: (tool: T, index: number) => string;
+  renderCard: (tool: T) => React.ReactNode;
+}
+
+function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
   if (tools.length === 1) {
-    return <ToolCard tool={tools[0]} />;
+    return <>{renderCard(tools[0])}</>;
   }
 
   const tabs = tools.map((tool, index) => ({
     id: String(index),
-    label: getToolName(tool),
-    content: <ToolCard tool={tool} />,
+    label: getLabel(tool, index),
+    content: renderCard(tool),
   }));
 
   return <SnippetTabs tabs={tabs} />;
@@ -167,10 +176,7 @@ function ToolCard({ tool }: { tool: Tool }) {
   return null;
 }
 
-type FunctionToolWithType = { type: "function" } & FunctionTool;
-type OpenAICustomToolWithType = { type: "openai_custom" } & OpenAICustomTool;
-
-function FunctionToolCard({ tool }: { tool: FunctionToolWithType }) {
+function FunctionToolCard({ tool }: { tool: FunctionTool }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -199,7 +205,7 @@ function FunctionToolCard({ tool }: { tool: FunctionToolWithType }) {
   );
 }
 
-function OpenAICustomToolCard({ tool }: { tool: OpenAICustomToolWithType }) {
+function OpenAICustomToolCard({ tool }: { tool: OpenAICustomTool }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -223,20 +229,6 @@ function OpenAICustomToolCard({ tool }: { tool: OpenAICustomToolWithType }) {
       )}
     </div>
   );
-}
-
-function ProviderToolsList({ tools }: { tools: ProviderTool[] }) {
-  if (tools.length === 1) {
-    return <ProviderToolCard tool={tools[0]} />;
-  }
-
-  const tabs = tools.map((tool, index) => ({
-    id: String(index),
-    label: getProviderToolLabel(tool, index),
-    content: <ProviderToolCard tool={tool} />,
-  }));
-
-  return <SnippetTabs tabs={tabs} />;
 }
 
 function getProviderToolLabel(tool: ProviderTool, index: number): string {

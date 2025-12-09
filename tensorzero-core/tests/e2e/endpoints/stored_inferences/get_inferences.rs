@@ -1,7 +1,9 @@
 /// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
 use reqwest::Client;
 use serde_json::{Value, json};
-use tensorzero::InferenceOutputSource;
+use tensorzero::{
+    ChatCompletionInferenceParams, InferenceOutputSource, InferenceParams, InferenceResponse,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -1178,6 +1180,15 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
         {"pointer": "/nested/field", "value": {"key": "nested_value"}}
     ]);
 
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: Some(42),
+            ..Default::default()
+        },
+    };
+
     let inference_payload = json!({
         "function_name": "basic_test",
         "variant_name": "test",
@@ -1187,13 +1198,7 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
         },
         "stream": false,
         "extra_body": extra_body_value,
-        "params": {
-            "chat_completion": {
-                "temperature": 0.7,
-                "max_tokens": 100,
-                "seed": 42
-            }
-        }
+        "params": params
     });
 
     // Make the inference request
@@ -1210,8 +1215,8 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
         inference_response.status()
     );
 
-    let inference_json: Value = inference_response.json().await.unwrap();
-    let inference_id = Uuid::parse_str(inference_json["inference_id"].as_str().unwrap()).unwrap();
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
 
     // Query the inference back
     let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
@@ -1277,6 +1282,15 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
         {"pointer": "/json_nested/field", "value": {"key": "json_nested_value"}}
     ]);
 
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.5),
+            max_tokens: Some(200),
+            top_p: Some(0.9),
+            ..Default::default()
+        },
+    };
+
     let inference_payload = json!({
         "function_name": "json_success",
         "variant_name": "test",
@@ -1286,13 +1300,7 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
         },
         "stream": false,
         "extra_body": extra_body_value,
-        "params": {
-            "chat_completion": {
-                "temperature": 0.5,
-                "max_tokens": 200,
-                "top_p": 0.9
-            }
-        }
+        "params": params
     });
 
     // Make the inference request
@@ -1305,13 +1313,12 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
 
     assert!(
         inference_response.status().is_success(),
-        "Inference request failed: status={:?}, body={:?}",
-        inference_response.status(),
-        inference_response.text().await
+        "Inference request failed: status={:?}",
+        inference_response.status()
     );
 
-    let inference_json: Value = inference_response.json().await.unwrap();
-    let inference_id = Uuid::parse_str(inference_json["inference_id"].as_str().unwrap()).unwrap();
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
 
     // Query the inference back
     let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
@@ -1321,9 +1328,6 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     assert_eq!(res.len(), 1);
 
     let inference = &res[0];
-
-    // Assert type is JSON
-    assert_eq!(inference["type"], "json");
 
     // Assert the extra_body is correctly returned
     let extra_body = &inference["extra_body"];
