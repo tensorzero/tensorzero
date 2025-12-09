@@ -26,13 +26,14 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
+import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -190,6 +191,17 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     string | null
   >(null);
 
+  const inferenceIds = useMemo(
+    () => inferences.map((inference) => inference.inference_id),
+    [inferences],
+  );
+  const currentSheetIndex = openSheetInferenceId
+    ? inferenceIds.indexOf(openSheetInferenceId)
+    : -1;
+  const hasPrevInference = currentSheetIndex > 0;
+  const hasNextInference =
+    currentSheetIndex > -1 && currentSheetIndex < inferenceIds.length - 1;
+
   const handleOpenSheet = useCallback((inferenceId: string) => {
     setOpenSheetInferenceId(inferenceId);
   }, []);
@@ -197,6 +209,21 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
   }, []);
+
+  const goToPrevInference = useCallback(() => {
+    if (currentSheetIndex <= 0) return;
+    setOpenSheetInferenceId(inferenceIds[currentSheetIndex - 1]);
+  }, [currentSheetIndex, inferenceIds]);
+
+  const goToNextInference = useCallback(() => {
+    if (
+      currentSheetIndex === -1 ||
+      currentSheetIndex >= inferenceIds.length - 1
+    ) {
+      return;
+    }
+    setOpenSheetInferenceId(inferenceIds[currentSheetIndex + 1]);
+  }, [currentSheetIndex, inferenceIds]);
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -215,6 +242,47 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
+  useEffect(() => {
+    if (!openSheetInferenceId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        if (!hasPrevInference) return;
+        event.preventDefault();
+        goToPrevInference();
+      } else {
+        if (!hasNextInference) return;
+        event.preventDefault();
+        goToNextInference();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    goToNextInference,
+    goToPrevInference,
+    hasNextInference,
+    hasPrevInference,
+    openSheetInferenceId,
+  ]);
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as
@@ -308,14 +376,19 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <EpisodeInferenceTable
             inferences={inferences}
             onOpenSheet={handleOpenSheet}
-            onCloseSheet={handleCloseSheet}
-            openSheetInferenceId={openSheetInferenceId}
           />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
             disablePrevious={!hasPreviousInferencePage}
             disableNext={!hasNextInferencePage}
+          />
+          <InferencePreviewSheet
+            inferenceId={openSheetInferenceId}
+            isOpen={!!openSheetInferenceId}
+            onClose={handleCloseSheet}
+            onPrev={hasPrevInference ? goToPrevInference : undefined}
+            onNext={hasNextInference ? goToNextInference : undefined}
           />
         </SectionLayout>
 
