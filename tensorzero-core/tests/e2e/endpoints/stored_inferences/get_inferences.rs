@@ -2,8 +2,10 @@
 use reqwest::Client;
 use serde_json::{Value, json};
 use tensorzero::{
-    ChatCompletionInferenceParams, InferenceOutputSource, InferenceParams, InferenceResponse,
+    ChatCompletionInferenceParams, GetInferencesResponse, InferenceOutputSource, InferenceParams,
+    InferenceResponse, StoredInference,
 };
+use tensorzero_core::inference::types::extra_body::DynamicExtraBody;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -37,7 +39,7 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 async fn get_inferences_by_ids(
     ids: Vec<Uuid>,
     output_source: InferenceOutputSource,
-) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+) -> Result<Vec<StoredInference>, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let id_strings: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
 
@@ -57,13 +59,8 @@ async fn get_inferences_by_ids(
         resp.text().await
     );
 
-    let resp_json: Value = resp.json().await?;
-    let inferences = resp_json["inferences"]
-        .as_array()
-        .expect("Expected 'inferences' array in response")
-        .clone();
-
-    Ok(inferences)
+    let resp_json: GetInferencesResponse = resp.json().await?;
+    Ok(resp_json.inferences)
 }
 
 // Tests for list_inferences endpoint
@@ -480,10 +477,11 @@ pub async fn test_get_by_ids_json_only() {
     assert_eq!(res.len(), 3);
 
     for inference in &res {
-        assert_eq!(inference["type"], "json");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "extract_entities");
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected Json inference");
+        };
+        assert!(ids.contains(&json_inference.inference_id));
+        assert_eq!(json_inference.function_name, "extract_entities");
     }
 }
 
@@ -514,10 +512,11 @@ pub async fn test_get_by_ids_chat_only() {
     assert_eq!(res.len(), 2);
 
     for inference in &res {
-        assert_eq!(inference["type"], "chat");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "write_haiku");
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected Chat inference");
+        };
+        assert!(ids.contains(&chat_inference.inference_id));
+        assert_eq!(chat_inference.function_name, "write_haiku");
     }
 }
 
@@ -573,19 +572,17 @@ pub async fn test_get_by_ids_mixed_types() {
     let mut chat_count = 0;
 
     for inference in &res {
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-
-        match inference["type"].as_str().unwrap() {
-            "json" => {
-                assert_eq!(inference["function_name"], "extract_entities");
+        match inference {
+            StoredInference::Json(json_inference) => {
+                assert!(ids.contains(&json_inference.inference_id));
+                assert_eq!(json_inference.function_name, "extract_entities");
                 json_count += 1;
             }
-            "chat" => {
-                assert_eq!(inference["function_name"], "write_haiku");
+            StoredInference::Chat(chat_inference) => {
+                assert!(ids.contains(&chat_inference.inference_id));
+                assert_eq!(chat_inference.function_name, "write_haiku");
                 chat_count += 1;
             }
-            other => panic!("Unexpected inference type: {other}"),
         }
     }
 
@@ -624,9 +621,10 @@ pub async fn test_get_by_ids_duplicate_ids() {
 
     // Should still only get back 1 inference (deduplicated by ClickHouse)
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0]["type"], "json");
-    let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
-    assert_eq!(returned_id, id);
+    let StoredInference::Json(json_inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
+    assert_eq!(json_inference.inference_id, id);
 }
 
 // Tests for search_query_experimental
@@ -1225,50 +1223,42 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
 
     assert_eq!(res.len(), 1);
 
-    let inference = &res[0];
+    let StoredInference::Chat(inference) = &res[0] else {
+        panic!("Expected Chat inference");
+    };
 
     // Assert the extra_body is correctly returned
-    let extra_body = &inference["extra_body"];
-    assert!(extra_body.is_array(), "extra_body should be an array");
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
 
-    let extra_body_array = extra_body.as_array().unwrap();
-    assert_eq!(extra_body_array.len(), 2);
-
-    // Check the first extra_body entry
-    assert_eq!(extra_body_array[0]["pointer"], "/test_field");
-    assert_eq!(extra_body_array[0]["value"], "test_value");
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/test_field");
+            assert_eq!(*value, json!("test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
 
     // Check the second extra_body entry (nested value)
-    assert_eq!(extra_body_array[1]["pointer"], "/nested/field");
-    assert_eq!(extra_body_array[1]["value"]["key"], "nested_value");
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/nested/field");
+            assert_eq!(*value, json!({"key": "nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
 
     // Assert the inference_params are correctly returned
-    let inference_params = &inference["inference_params"];
-    assert!(
-        inference_params.is_object(),
-        "inference_params should be an object"
-    );
-
-    let chat_completion_params = &inference_params["chat_completion"];
-    assert!(
-        chat_completion_params.is_object(),
-        "chat_completion should be an object"
-    );
-    assert_eq!(chat_completion_params["temperature"], 0.7);
-    assert_eq!(chat_completion_params["max_tokens"], 100);
-    assert_eq!(chat_completion_params["seed"], 42);
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.7));
+    assert_eq!(chat_completion_params.max_tokens, Some(100));
+    assert_eq!(chat_completion_params.seed, Some(42));
 
     // Assert processing_time_ms is present (should be non-null for a completed inference)
-    let processing_time_ms = &inference["processing_time_ms"];
     assert!(
-        processing_time_ms.is_u64(),
-        "processing_time_ms should be a positive integer, but got: {processing_time_ms}"
-    );
-
-    // ttft_ms can be null for non-streaming requests, but we still check it's present
-    assert!(
-        inference.get("ttft_ms").is_some(),
-        "ttft_ms field should be present"
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
     );
 }
 
@@ -1327,49 +1317,41 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
 
     assert_eq!(res.len(), 1);
 
-    let inference = &res[0];
+    let StoredInference::Json(inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
 
     // Assert the extra_body is correctly returned
-    let extra_body = &inference["extra_body"];
-    assert!(extra_body.is_array(), "extra_body should be an array");
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
 
-    let extra_body_array = extra_body.as_array().unwrap();
-    assert_eq!(extra_body_array.len(), 2);
-
-    // Check the first extra_body entry
-    assert_eq!(extra_body_array[0]["pointer"], "/json_test_field");
-    assert_eq!(extra_body_array[0]["value"], "json_test_value");
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_test_field");
+            assert_eq!(*value, json!("json_test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
 
     // Check the second extra_body entry (nested value)
-    assert_eq!(extra_body_array[1]["pointer"], "/json_nested/field");
-    assert_eq!(extra_body_array[1]["value"]["key"], "json_nested_value");
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_nested/field");
+            assert_eq!(*value, json!({"key": "json_nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
 
     // Assert the inference_params are correctly returned
-    let inference_params = &inference["inference_params"];
-    assert!(
-        inference_params.is_object(),
-        "inference_params should be an object"
-    );
-
-    let chat_completion_params = &inference_params["chat_completion"];
-    assert!(
-        chat_completion_params.is_object(),
-        "chat_completion should be an object"
-    );
-    assert_eq!(chat_completion_params["temperature"], 0.5);
-    assert_eq!(chat_completion_params["max_tokens"], 200);
-    assert_eq!(chat_completion_params["top_p"], 0.9);
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.5));
+    assert_eq!(chat_completion_params.max_tokens, Some(200));
+    assert_eq!(chat_completion_params.top_p, Some(0.9));
 
     // Assert processing_time_ms is present
-    let processing_time_ms = &inference["processing_time_ms"];
     assert!(
-        processing_time_ms.is_u64(),
-        "processing_time_ms should be a positive integer, but got: {processing_time_ms}"
-    );
-
-    // ttft_ms can be null for non-streaming requests
-    assert!(
-        inference.get("ttft_ms").is_some(),
-        "ttft_ms field should be present"
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
     );
 }
