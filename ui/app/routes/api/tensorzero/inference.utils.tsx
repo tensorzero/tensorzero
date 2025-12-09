@@ -29,7 +29,6 @@ import type {
   ZodInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { v7 } from "uuid";
-import { loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 interface InferenceActionError {
   message: string;
@@ -338,6 +337,7 @@ export function prepareInferenceActionRequest(
   if (isDefaultFunctionArgs(args)) {
     const defaultRequest = prepareDefaultFunctionRequest(
       args.resource,
+      args.input,
       args.model_name,
     );
     return { ...baseParams, ...defaultRequest };
@@ -377,9 +377,9 @@ export function prepareInferenceActionRequest(
 
 async function prepareDefaultFunctionRequest(
   inference: StoredInference,
+  input: Input,
   selectedVariant: string,
 ): Promise<Partial<ClientInferenceParams>> {
-  const input = await loadFileDataForStoredInput(inference.input);
   if (inference.type === "chat") {
     const tool_choice = inference.tool_choice;
     const parallel_tool_calls = inference.parallel_tool_calls;
