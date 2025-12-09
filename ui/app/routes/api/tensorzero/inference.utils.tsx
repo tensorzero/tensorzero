@@ -282,12 +282,14 @@ function inputMessageContentToZodInputMessageContent(
 interface InferenceActionArgs {
   source: "inference";
   resource: StoredInference;
+  input: Input;
   variant: string;
 }
 
 interface InferenceDefaultFunctionActionArgs {
   source: "inference";
   resource: StoredInference;
+  input: Input;
   variant?: undefined;
   model_name: string;
 }
@@ -295,7 +297,8 @@ interface InferenceDefaultFunctionActionArgs {
 interface T0DatapointActionArgs {
   source: "t0_datapoint";
   resource: ChatInferenceDatapoint | JsonInferenceDatapoint;
-  variant: string;
+  variant?: string;
+  editedVariantInfo?: VariantInfo;
 }
 
 type ActionArgs =
@@ -312,9 +315,9 @@ function isDefaultFunctionArgs(
   );
 }
 
-export async function prepareInferenceActionRequest(
+export function prepareInferenceActionRequest(
   args: ActionArgs,
-): Promise<ClientInferenceParams> {
+): ClientInferenceParams {
   // Create base ClientInferenceParams with default values
   const baseParams: ClientInferenceParams = {
     function_name: null,
@@ -360,11 +363,15 @@ export async function prepareInferenceActionRequest(
     return { ...baseParams, ...defaultRequest };
   } else if (args.source === "t0_datapoint") {
     // Handle datapoints from tensorzero-node (with StoredInput)
+    const dynamicVariantInfo = args.editedVariantInfo
+      ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
+      : null;
     return {
       ...baseParams,
       function_name: args.resource.function_name,
       input: args.resource.input,
-      variant_name: args.variant,
+      variant_name: args.variant || null,
+      internal_dynamic_variant_config: dynamicVariantInfo,
     };
   } else {
     // For other sources, the input is already a DisplayInput
@@ -375,7 +382,6 @@ export async function prepareInferenceActionRequest(
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
-    const input = await loadFileDataForStoredInput(args.resource.input);
     // TODO: this is unsupported in Node bindings for now
     // const extra_body =
     //   args.source === "inference" ? args.resource.extra_body : undefined;
@@ -383,7 +389,7 @@ export async function prepareInferenceActionRequest(
     return {
       ...baseParams,
       function_name: args.resource.function_name,
-      input,
+      input: args.input,
       variant_name: args.variant,
     };
   }

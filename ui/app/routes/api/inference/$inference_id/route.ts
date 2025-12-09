@@ -1,6 +1,5 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import {
-  queryInferenceById,
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference.server";
 import {

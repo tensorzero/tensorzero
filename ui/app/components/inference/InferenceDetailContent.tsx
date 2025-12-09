@@ -1,6 +1,5 @@
 import {
   isJsonOutput,
-  type ParsedInferenceRow,
   type ParsedModelInferenceRow,
 } from "~/utils/clickhouse/inference";
 import type {
@@ -193,6 +192,7 @@ export function InferenceDetailContent({
   const onVariantSelect = (variant: string) => {
     processRequest(variant, {
       resource: inference,
+      input,
       source: variantSource,
       variant,
     });
@@ -201,6 +201,7 @@ export function InferenceDetailContent({
   const onModelSelect = (model: string) => {
     processRequest(model, {
       resource: inference,
+      input,
       source: variantSource,
       model_name: model,
     });
