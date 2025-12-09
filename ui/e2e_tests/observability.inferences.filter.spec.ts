@@ -1,4 +1,33 @@
 import { test, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+/**
+ * Helper to apply filters and wait for results.
+ * Returns after the filter sheet closes and data reloads.
+ */
+async function applyFiltersAndWait(page: Page) {
+  // Click Apply Filters and wait for navigation to complete
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/observability/inferences") &&
+      response.status() === 200,
+  );
+  await page.getByRole("button", { name: "Apply Filters" }).click();
+  await responsePromise;
+
+  // Wait for sheet to close - use Apply Filters button as the indicator
+  await expect(
+    page.getByRole("button", { name: "Apply Filters" }),
+  ).not.toBeVisible();
+
+  // Wait for table to load: either table has data rows (with cells) OR the empty state message cell
+  await expect(
+    page
+      .locator("tbody tr td:nth-child(2)")
+      .first()
+      .or(page.locator("tbody tr td").getByText("No inferences found")),
+  ).toBeVisible();
+}
 
 test.describe("Inference Filtering", () => {
   test("should open and close filter sheet", async ({ page }) => {
@@ -32,8 +61,8 @@ test.describe("Inference Filtering", () => {
     await page.getByRole("combobox").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains the filter parameter
     await expect(page).toHaveURL(/function_name=write_haiku/, {
@@ -63,8 +92,8 @@ test.describe("Inference Filtering", () => {
     const variantInput = page.getByPlaceholder("Enter variant name");
     await variantInput.fill("openai_promptA");
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains the variant filter parameter
     await expect(page).toHaveURL(/variant_name=openai_promptA/, {
@@ -84,8 +113,8 @@ test.describe("Inference Filtering", () => {
     const episodeInput = page.getByPlaceholder("Enter episode ID");
     await episodeInput.fill("0196367a-842d-74c2-9e62-67f07369b6ad");
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains the episode_id filter parameter
     await expect(page).toHaveURL(
@@ -106,8 +135,8 @@ test.describe("Inference Filtering", () => {
     const searchInput = page.getByPlaceholder("Search in input and output");
     await searchInput.fill("haiku");
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains the search query
     await expect(page).toHaveURL(/search_query=haiku/, { timeout: 10_000 });
@@ -134,8 +163,8 @@ test.describe("Inference Filtering", () => {
     await tagKeyInput.fill("test_key");
     await tagValueInput.fill("test_value");
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains filter parameter with JSON
     await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
@@ -158,8 +187,8 @@ test.describe("Inference Filtering", () => {
     if (await metricOption.isVisible()) {
       await metricOption.click();
 
-      // Apply filters
-      await page.getByRole("button", { name: "Apply Filters" }).click();
+      // Apply filters and wait for results
+      await applyFiltersAndWait(page);
 
       // Verify URL contains filter parameter with JSON
       await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
@@ -188,8 +217,8 @@ test.describe("Inference Filtering", () => {
     // Click Clear button next to function selector
     await page.getByRole("button", { name: "Clear" }).first().click();
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL no longer contains function_name
     await expect(page).not.toHaveURL(/function_name/, { timeout: 10_000 });
@@ -234,8 +263,8 @@ test.describe("Inference Filtering", () => {
     const variantInput = page.getByPlaceholder("Enter variant name");
     await variantInput.fill("openai_promptA");
 
-    // Apply filters
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    // Apply filters and wait for results
+    await applyFiltersAndWait(page);
 
     // Verify URL contains both parameters
     await expect(page).toHaveURL(/function_name=write_haiku/, {
@@ -267,9 +296,7 @@ test.describe("Inference Filtering", () => {
       if (!isDisabled) {
         await nextButton.click();
         // Verify filter is preserved in the URL
-        await expect(page).toHaveURL(/function_name=write_haiku/, {
-          timeout: 10_000,
-        });
+        await expect(page).toHaveURL(/function_name=write_haiku/);
 
         // Verify filter is preserved - all function cells still show write_haiku
         const newFunctionCells = page.locator("tbody tr td:nth-child(3)");
