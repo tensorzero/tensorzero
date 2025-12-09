@@ -306,7 +306,7 @@ jobs:
         working-directory: clients/python
         run: |
           # Start the test in background and capture its PID
-          bash ./test.sh --verbose &
+          bash ./test.sh --verbose -n 8 &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
