@@ -680,7 +680,10 @@ Overrides the `temperature` setting for any chat completion variants being used.
 
 Allows the user to dynamically specify tools at inference time in addition to those that are specified in the configuration.
 
-Each `tool` object has the following structure:
+##### Function Tools
+
+Function tools are the typical tools used with LLMs.
+Each function tool object has the following structure:
 
 - **`type`**: Must be `"function"`
 - **`function`**: An object containing:
@@ -688,6 +691,58 @@ Each `tool` object has the following structure:
   - **`description`**: A description of what the function does (string, optional)
   - **`parameters`**: A JSON Schema object describing the function's parameters (required)
   - **`strict`**: Whether to enforce strict schema validation (boolean, defaults to false)
+
+##### OpenAI Custom Tools
+
+<Warning>
+
+OpenAI custom tools are only supported by OpenAI models (both Chat Completions and Responses APIs).
+Using custom tools with other providers will result in an error.
+
+</Warning>
+
+OpenAI custom tools support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output.
+
+Each custom tool object has the following structure:
+
+- **`type`**: Must be `"custom"`
+- **`custom`**: An object containing:
+  - **`name`**: The name of the tool (string, required)
+  - **`description`**: A description of what the tool does (string, optional)
+  - **`format`**: The output format for the tool (object, optional):
+    - `{"type": "text"}`: Freeform text output
+    - `{"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}`: Output constrained by a [Lark grammar](https://lark-parser.readthedocs.io/)
+    - `{"type": "grammar", "grammar": {"syntax": "regex", "definition": "..."}}`: Output constrained by a regular expression
+
+<Accordion title="Example: OpenAI Custom Tool">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+    api_key="your_api_key",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {"role": "user", "content": "Generate Python code to print 'Hello, World!'"}
+    ],
+    tools=[
+        {
+            "type": "custom",
+            "custom": {
+                "name": "code_generator",
+                "description": "Generates Python code snippets",
+                "format": {"type": "text"}
+            }
+        }
+    ],
+)
+```
+
+</Accordion>
 
 #### `tool_choice`
 
