@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::client::InferenceParams;
 use crate::config::Config;
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
@@ -20,7 +21,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
     ResolvedRequestMessage, Text,
 };
-use crate::serde_util::deserialize_defaulted_json_string;
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
     DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
 };
@@ -217,6 +218,9 @@ impl StoredChatInference {
             tool_params,
             tags: self.tags,
             extra_body: self.extra_body,
+            inference_params: self.inference_params,
+            processing_time_ms: self.processing_time_ms,
+            ttft_ms: self.ttft_ms,
         })
     }
 }
@@ -264,8 +268,11 @@ pub struct StoredChatInference {
     pub tool_params: DynamicToolParams,
     #[serde(default)]
     pub tags: HashMap<String, String>,
-    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -290,6 +297,9 @@ impl StoredChatInferenceDatabase {
             tool_params: self.tool_params.into(),
             tags: self.tags,
             extra_body: self.extra_body,
+            inference_params: self.inference_params,
+            processing_time_ms: self.processing_time_ms,
+            ttft_ms: self.ttft_ms,
         }
     }
 }
@@ -312,6 +322,10 @@ pub struct StoredChatInferenceDatabase {
     pub tags: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatabase {
@@ -337,8 +351,12 @@ pub struct StoredJsonInference {
     pub output_schema: Value,
     #[serde(default)]
     pub tags: HashMap<String, String>,
-    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -759,6 +777,7 @@ mod tests {
     use crate::config::{Config, SchemaData};
     use crate::db::datasets::DatapointInsert;
     use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+    use crate::endpoints::inference::InferenceParams;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
@@ -837,6 +856,9 @@ mod tests {
                 tags
             },
             extra_body: UnfilteredInferenceExtraBody::default(),
+            inference_params: InferenceParams::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }
     }
 
@@ -874,6 +896,9 @@ mod tests {
                 tags
             },
             extra_body: UnfilteredInferenceExtraBody::default(),
+            inference_params: InferenceParams::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }
     }
 

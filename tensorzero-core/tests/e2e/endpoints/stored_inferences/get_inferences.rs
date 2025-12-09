@@ -1168,13 +1168,11 @@ pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
     );
 }
 
-// Tests for extra_body field
-
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_get_by_ids_with_extra_body() {
+pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     let http_client = Client::new();
 
-    // Create an inference with a nontrivial extra_body
+    // Create an inference with a nontrivial extra_body and inference params
     let extra_body_value = json!([
         {"pointer": "/test_field", "value": "test_value"},
         {"pointer": "/nested/field", "value": {"key": "nested_value"}}
@@ -1188,7 +1186,14 @@ pub async fn test_get_by_ids_with_extra_body() {
             "messages": [{"role": "user", "content": "Hello"}]
         },
         "stream": false,
-        "extra_body": extra_body_value
+        "extra_body": extra_body_value,
+        "params": {
+            "chat_completion": {
+                "temperature": 0.7,
+                "max_tokens": 100,
+                "seed": 42
+            }
+        }
     });
 
     // Make the inference request
@@ -1215,8 +1220,10 @@ pub async fn test_get_by_ids_with_extra_body() {
 
     assert_eq!(res.len(), 1);
 
+    let inference = &res[0];
+
     // Assert the extra_body is correctly returned
-    let extra_body = &res[0]["extra_body"];
+    let extra_body = &inference["extra_body"];
     assert!(extra_body.is_array(), "extra_body should be an array");
 
     let extra_body_array = extra_body.as_array().unwrap();
@@ -1229,4 +1236,136 @@ pub async fn test_get_by_ids_with_extra_body() {
     // Check the second extra_body entry (nested value)
     assert_eq!(extra_body_array[1]["pointer"], "/nested/field");
     assert_eq!(extra_body_array[1]["value"]["key"], "nested_value");
+
+    // Assert the inference_params are correctly returned
+    let inference_params = &inference["inference_params"];
+    assert!(
+        inference_params.is_object(),
+        "inference_params should be an object"
+    );
+
+    let chat_completion_params = &inference_params["chat_completion"];
+    assert!(
+        chat_completion_params.is_object(),
+        "chat_completion should be an object"
+    );
+    assert_eq!(chat_completion_params["temperature"], 0.7);
+    assert_eq!(chat_completion_params["max_tokens"], 100);
+    assert_eq!(chat_completion_params["seed"], 42);
+
+    // Assert processing_time_ms is present (should be non-null for a completed inference)
+    let processing_time_ms = &inference["processing_time_ms"];
+    assert!(
+        processing_time_ms.is_u64(),
+        "processing_time_ms should be a positive integer, but got: {processing_time_ms}"
+    );
+
+    // ttft_ms can be null for non-streaming requests, but we still check it's present
+    assert!(
+        inference.get("ttft_ms").is_some(),
+        "ttft_ms field should be present"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_json_function_with_inference_params() {
+    let http_client = Client::new();
+
+    // Create a JSON inference with extra_body and inference params
+    let extra_body_value = json!([
+        {"pointer": "/json_test_field", "value": "json_test_value"},
+        {"pointer": "/json_nested/field", "value": {"key": "json_nested_value"}}
+    ]);
+
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value,
+        "params": {
+            "chat_completion": {
+                "temperature": 0.5,
+                "max_tokens": 200,
+                "top_p": 0.9
+            }
+        }
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}, body={:?}",
+        inference_response.status(),
+        inference_response.text().await
+    );
+
+    let inference_json: Value = inference_response.json().await.unwrap();
+    let inference_id = Uuid::parse_str(inference_json["inference_id"].as_str().unwrap()).unwrap();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    let inference = &res[0];
+
+    // Assert type is JSON
+    assert_eq!(inference["type"], "json");
+
+    // Assert the extra_body is correctly returned
+    let extra_body = &inference["extra_body"];
+    assert!(extra_body.is_array(), "extra_body should be an array");
+
+    let extra_body_array = extra_body.as_array().unwrap();
+    assert_eq!(extra_body_array.len(), 2);
+
+    // Check the first extra_body entry
+    assert_eq!(extra_body_array[0]["pointer"], "/json_test_field");
+    assert_eq!(extra_body_array[0]["value"], "json_test_value");
+
+    // Check the second extra_body entry (nested value)
+    assert_eq!(extra_body_array[1]["pointer"], "/json_nested/field");
+    assert_eq!(extra_body_array[1]["value"]["key"], "json_nested_value");
+
+    // Assert the inference_params are correctly returned
+    let inference_params = &inference["inference_params"];
+    assert!(
+        inference_params.is_object(),
+        "inference_params should be an object"
+    );
+
+    let chat_completion_params = &inference_params["chat_completion"];
+    assert!(
+        chat_completion_params.is_object(),
+        "chat_completion should be an object"
+    );
+    assert_eq!(chat_completion_params["temperature"], 0.5);
+    assert_eq!(chat_completion_params["max_tokens"], 200);
+    assert_eq!(chat_completion_params["top_p"], 0.9);
+
+    // Assert processing_time_ms is present
+    let processing_time_ms = &inference["processing_time_ms"];
+    assert!(
+        processing_time_ms.is_u64(),
+        "processing_time_ms should be a positive integer, but got: {processing_time_ms}"
+    );
+
+    // ttft_ms can be null for non-streaming requests
+    assert!(
+        inference.get("ttft_ms").is_some(),
+        "ttft_ms field should be present"
+    );
 }
