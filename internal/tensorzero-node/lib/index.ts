@@ -63,21 +63,6 @@ export class TensorZeroClient {
     this.nativeClient = client;
   }
 
-  static async buildEmbedded(
-    configPath: string,
-    clickhouseUrl?: string | undefined | null,
-    postgresUrl?: string | undefined | null,
-    timeout?: number | undefined | null,
-  ): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.buildEmbedded(
-      configPath,
-      clickhouseUrl,
-      postgresUrl,
-      timeout,
-    );
-    return new TensorZeroClient(nativeClient);
-  }
-
   static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
     const nativeClient = await NativeTensorZeroClient.buildHttp(gatewayUrl);
     return new TensorZeroClient(nativeClient);

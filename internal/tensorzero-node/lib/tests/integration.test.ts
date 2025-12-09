@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { TensorZeroClient, DatabaseClient } from "../index.js";
 
-const UI_FIXTURES_CONFIG_PATH = "../../ui/fixtures/config/tensorzero.toml";
+async function buildClient() {
+  if (!process.env.TENSORZERO_GATEWAY_URL) {
+    throw new Error("TENSORZERO_GATEWAY_URL is not set");
+  }
+  process.env.OPENAI_API_KEY = undefined;
+  return await TensorZeroClient.buildHttp(process.env.TENSORZERO_GATEWAY_URL);
+}
 
 describe("TensorZeroClient Integration Tests", () => {
   it("should be able to import TensorZeroClient", () => {
@@ -33,16 +39,6 @@ describe("TensorZeroClient Integration Tests", () => {
     expect(staleDatasetResponse.num_staled_datapoints).toBe(0);
   });
 });
-
-async function buildClient() {
-  process.env.OPENAI_API_KEY = undefined;
-  return await TensorZeroClient.buildEmbedded(
-    UI_FIXTURES_CONFIG_PATH,
-    undefined,
-    process.env.TENSORZERO_POSTGRES_URL,
-    undefined,
-  );
-}
 
 describe("DatabaseClient", () => {
   it("should be able to import DatabaseClient", () => {
