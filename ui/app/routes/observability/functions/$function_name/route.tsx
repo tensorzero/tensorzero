@@ -75,10 +75,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     after: afterInference || undefined,
     limit,
   });
-  const numInferencesPromise = countInferencesForFunction(
-    function_name,
-    function_config,
-  );
+  const numInferencesPromise = countInferencesForFunction(function_name);
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
     function_name,
     inference_table: getInferenceTableName(function_config),
