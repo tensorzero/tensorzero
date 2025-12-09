@@ -15,6 +15,8 @@ import type {
   ToolChoice,
   Tool,
   ResolvedTomlPathData,
+  StoredInference,
+  StoredInput,
 } from "~/types/tensorzero";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -47,6 +49,7 @@ import type {
   ZodInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { v7 } from "uuid";
+import { loadFileDataForInput, loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 interface InferenceActionError {
   message: string;
@@ -278,13 +281,13 @@ function inputMessageContentToZodInputMessageContent(
 
 interface InferenceActionArgs {
   source: "inference";
-  resource: ParsedInferenceRow;
+  resource: StoredInference;
   variant: string;
 }
 
 interface InferenceDefaultFunctionActionArgs {
   source: "inference";
-  resource: ParsedInferenceRow;
+  resource: StoredInference;
   variant?: undefined;
   model_name: string;
 }
@@ -295,27 +298,10 @@ interface T0DatapointActionArgs {
   variant: string;
 }
 
-interface ClickHouseDatapointActionArgs {
-  source: "clickhouse_datapoint";
-  input: ZodDisplayInput;
-  functionName: string;
-  allowed_tools?: string[];
-  additional_tools?: Array<Tool> | null;
-  tool_choice?: ToolChoice | null;
-  parallel_tool_calls?: boolean | null;
-  output_schema?: JsonValue;
-  variant?: string;
-  cache_options: CacheParamsOptions;
-  editedVariantInfo?: VariantInfo;
-  functionConfig: FunctionConfig;
-  toolsConfig: { [key in string]?: StaticToolConfig };
-}
-
 type ActionArgs =
   | InferenceActionArgs
   | InferenceDefaultFunctionActionArgs
-  | T0DatapointActionArgs
-  | ClickHouseDatapointActionArgs;
+  | T0DatapointActionArgs;
 
 function isDefaultFunctionArgs(
   args: ActionArgs,
@@ -326,9 +312,9 @@ function isDefaultFunctionArgs(
   );
 }
 
-export function prepareInferenceActionRequest(
+export async function prepareInferenceActionRequest(
   args: ActionArgs,
-): ClientInferenceParams {
+): Promise<ClientInferenceParams> {
   // Create base ClientInferenceParams with default values
   const baseParams: ClientInferenceParams = {
     function_name: null,
@@ -372,25 +358,6 @@ export function prepareInferenceActionRequest(
       args.model_name,
     );
     return { ...baseParams, ...defaultRequest };
-  } else if (args.source === "clickhouse_datapoint") {
-    // Extract tool parameters from the ClickHouse datapoint args
-    const dynamicVariantInfo = args.editedVariantInfo
-      ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
-      : null;
-
-    return {
-      ...baseParams,
-      function_name: args.functionName,
-      input: resolvedInputToInput(args.input),
-      variant_name: args.variant || null,
-      output_schema: args.output_schema || null,
-      tool_choice: args.tool_choice || undefined,
-      parallel_tool_calls: args.parallel_tool_calls || undefined,
-      additional_tools: args.additional_tools || undefined,
-      allowed_tools: args.allowed_tools || undefined,
-      cache_options: args.cache_options,
-      internal_dynamic_variant_config: dynamicVariantInfo,
-    };
   } else if (args.source === "t0_datapoint") {
     // Handle datapoints from tensorzero-node (with StoredInput)
     return {
@@ -404,11 +371,11 @@ export function prepareInferenceActionRequest(
     if (
       args.source === "inference" &&
       args.resource.extra_body &&
-      args.resource.extra_body.length > 0
+      args.resource.extra_body.extra_body.length > 0
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
-    const input = resolvedInputToInput(args.resource.input);
+    const input = await loadFileDataForStoredInput(args.resource.input);
     // TODO: this is unsupported in Node bindings for now
     // const extra_body =
     //   args.source === "inference" ? args.resource.extra_body : undefined;
@@ -422,24 +389,25 @@ export function prepareInferenceActionRequest(
   }
 }
 
-function prepareDefaultFunctionRequest(
-  inference: ParsedInferenceRow,
+async function prepareDefaultFunctionRequest(
+  inference: StoredInference,
   selectedVariant: string,
-): Partial<ClientInferenceParams> {
-  const input = resolvedInputToInput(inference.input);
-  if (inference.function_type === "chat") {
-    const tool_choice = inference.tool_params?.tool_choice;
-    const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
-    const tools_available = inference.tool_params?.tools_available;
+): Promise<Partial<ClientInferenceParams>> {
+  const input =await  loadFileDataForStoredInput(inference.input);
+  if (inference.type === "chat") {
+    const tool_choice = inference.tool_choice;
+    const parallel_tool_calls = inference.parallel_tool_calls;
+    const allowed_tools = inference.allowed_tools;
     return {
       model_name: selectedVariant,
       input,
       tool_choice: tool_choice,
-      parallel_tool_calls: parallel_tool_calls || undefined,
+      parallel_tool_calls: parallel_tool_calls,
+      allowed_tools,
       // We need to add all tools as additional for the default function
-      additional_tools: tools_available,
+      additional_tools: inference.additional_tools,
     };
-  } else if (inference.function_type === "json") {
+  } else if (inference.type === "json") {
     // This should never happen, just in case and for type safety
     const output_schema = inference.output_schema;
     return {
@@ -468,14 +436,14 @@ export type VariantResponseInfo =
       usage?: InferenceUsage;
     };
 
-export function resolvedInputToInput(input: ZodDisplayInput): Input {
+function resolvedInputToInput(input: StoredInput): Input {
   return {
-    system: input.system || null,
-    messages: input.messages.map(resolvedInputMessageToInputMessage),
+    system: input.system,
+    messages: input.messages.map(),
   };
 }
 
-export function resolvedInputToTensorZeroInput(
+function resolvedInputToTensorZeroInput(
   input: ZodDisplayInput,
 ): TensorZeroInput {
   return {
@@ -535,7 +503,7 @@ function resolvedFileContentToTensorZeroFile(
 }
 
 function resolvedInputMessageToInputMessage(
-  message: ZodDisplayInputMessage,
+  message: InputMessage,
 ): InputMessage {
   return {
     role: message.role,
@@ -546,7 +514,7 @@ function resolvedInputMessageToInputMessage(
 }
 
 function resolvedInputMessageContentToInputMessageContent(
-  content: ZodDisplayInputMessageContent,
+  content: InputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
     case "template":
@@ -556,30 +524,20 @@ function resolvedInputMessageContentToInputMessageContent(
         type: "text",
         text: content.text,
       };
-    case "missing_function_text":
-      return {
-        type: "text",
-        text: content.value,
-      };
     case "raw_text":
       return {
         type: "raw_text",
         value: content.value,
       };
     case "tool_call": {
-      let parsedArguments;
-      try {
-        parsedArguments = JSON.parse(content.arguments);
-      } catch {
-        parsedArguments = content.arguments;
-      }
+      // TODO: handle both types of tool here
       return {
         type: "tool_call",
         id: content.id,
         name: content.name,
-        arguments: parsedArguments,
-        raw_arguments: content.arguments,
-        raw_name: content.name,
+        arguments: content.arguments,
+        raw_arguments: JSON.stringify(content.arguments),
+        raw_name: content.raw_name,
       };
     }
     case "tool_result":
@@ -604,9 +562,7 @@ function resolvedInputMessageContentToInputMessageContent(
         provider_name: content.provider_name,
       };
     case "file":
-      return resolvedFileContentToClientFile(content);
-    case "file_error":
-      throw new Error("Can't convert image error to client content");
+      return loadFileDataForInput(content);
   }
 }
 
