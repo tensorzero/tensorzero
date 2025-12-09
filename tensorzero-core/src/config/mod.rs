@@ -2121,10 +2121,11 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub fn load(self, name: String) -> Result<StaticToolConfig, Error> {
+    pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
         let parameters = StaticJSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
-            name: self.name.unwrap_or(name),
+            name: self.name.unwrap_or_else(|| key.clone()),
+            key,
             description: self.description,
             parameters,
             strict: self.strict,

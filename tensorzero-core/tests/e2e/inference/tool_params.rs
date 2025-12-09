@@ -706,3 +706,120 @@ async fn test_allowed_tools_restriction() {
                 .is_empty()
     );
 }
+
+/// Test 8: allowed_tools uses tool config key, not display name
+///
+/// Tests that when a tool has a custom `name` field (display name) different from
+/// its config key, allowed_tools filtering uses the KEY for validation and filtering,
+/// but the display name is sent to the LLM.
+///
+/// Config setup:
+/// - Tool config key: "get_temperature_with_name"
+/// - Tool display name: "get_temperature"
+/// - Function: "weather_helper_aliased_tool" uses this tool
+#[tokio::test(flavor = "multi_thread")]
+async fn test_allowed_tools_uses_key_not_display_name() {
+    let episode_id = Uuid::now_v7();
+
+    // Test 1: Using the config KEY should work
+    let payload = json!({
+        "function_name": "weather_helper_aliased_tool",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Tokyo?"
+                }
+            ]
+        },
+        "stream": false,
+        // Use the config KEY (not the display name)
+        "allowed_tools": ["get_temperature_with_name"],
+        "tool_choice": "auto",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    if status != StatusCode::OK {
+        let error_text = response.text().await.unwrap();
+        panic!("Expected 200 OK when using config key, got {status}: {error_text}");
+    }
+
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify the tool was available and stored correctly
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+
+    // The tool should be in tools_available with the DISPLAY NAME (what's sent to LLM)
+    let tools_available = tool_params
+        .get("tools_available")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(tools_available.len(), 1);
+    // The name stored/sent to LLM is the display name "get_temperature", not the key
+    assert_eq!(
+        tools_available[0].get("name").unwrap().as_str().unwrap(),
+        "get_temperature",
+        "Tool should be stored with display name, not config key"
+    );
+
+    // Test 2: Using the DISPLAY NAME should fail validation
+    // (because allowed_tools validates against config keys)
+    let episode_id_2 = Uuid::now_v7();
+    let payload_with_display_name = json!({
+        "function_name": "weather_helper_aliased_tool",
+        "episode_id": episode_id_2,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Paris?"
+                }
+            ]
+        },
+        "stream": false,
+        // Try to use the display name - this should FAIL
+        "allowed_tools": ["get_temperature"],
+        "tool_choice": "auto",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload_with_display_name)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail because "get_temperature" is not a valid tool KEY
+    // (it's only the display name of "get_temperature_with_name")
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Using display name instead of config key should fail validation"
+    );
+
+    let error_response = response.json::<Value>().await.unwrap();
+    let error_message = error_response.get("error").unwrap().as_str().unwrap();
+    assert!(
+        error_message.contains("get_temperature"),
+        "Error should mention the tool name: {error_message}"
+    );
+}
