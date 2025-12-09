@@ -2,8 +2,6 @@ import type {
   Tool,
   ToolChoice,
   ProviderTool,
-  FunctionTool,
-  OpenAICustomTool,
   DynamicToolParams,
 } from "~/types/tensorzero";
 import {
@@ -168,21 +166,16 @@ function getToolName(tool: Tool): string {
 }
 
 function ToolCard({ tool }: { tool: Tool }) {
-  if (tool.type === "function") {
-    return <FunctionToolCard tool={tool} />;
-  } else if (tool.type === "openai_custom") {
-    return <OpenAICustomToolCard tool={tool} />;
-  }
-  return null;
-}
+  const isFunctionTool = tool.type === "function";
+  const schemaData = isFunctionTool ? tool.parameters : tool.format;
+  const schemaLabel = isFunctionTool ? "Parameters" : "Format";
 
-function FunctionToolCard({ tool }: { tool: FunctionTool }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">function</Badge>
+        <Badge variant="secondary">{tool.type}</Badge>
         <span className="font-mono text-sm font-medium">{tool.name}</span>
-        {tool.strict && (
+        {isFunctionTool && tool.strict && (
           <Badge variant="outline" className="text-xs">
             strict
           </Badge>
@@ -191,38 +184,14 @@ function FunctionToolCard({ tool }: { tool: FunctionTool }) {
       {tool.description && (
         <p className="text-fg-muted text-sm">{tool.description}</p>
       )}
-      <div className="mt-1">
-        <span className="text-fg-muted mb-1 block text-xs font-medium uppercase">
-          Parameters
-        </span>
-        <CodeEditor
-          allowedLanguages={["json"]}
-          value={JSON.stringify(tool.parameters, null, 2)}
-          readOnly
-        />
-      </div>
-    </div>
-  );
-}
-
-function OpenAICustomToolCard({ tool }: { tool: OpenAICustomTool }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">openai_custom</Badge>
-        <span className="font-mono text-sm font-medium">{tool.name}</span>
-      </div>
-      {tool.description && (
-        <p className="text-fg-muted text-sm">{tool.description}</p>
-      )}
-      {tool.format && (
+      {schemaData && (
         <div className="mt-1">
           <span className="text-fg-muted mb-1 block text-xs font-medium uppercase">
-            Format
+            {schemaLabel}
           </span>
           <CodeEditor
             allowedLanguages={["json"]}
-            value={JSON.stringify(tool.format, null, 2)}
+            value={JSON.stringify(schemaData, null, 2)}
             readOnly
           />
         </div>
