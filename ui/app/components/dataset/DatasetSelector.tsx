@@ -23,7 +23,7 @@ interface DatasetSelectorProps {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  label?: string;
+  label: string;
   labelClassName?: string;
   inputPlaceholder?: string;
   className?: string;
@@ -36,7 +36,7 @@ export function DatasetSelector({
   selected,
   onSelect,
   functionName,
-  label = "Add to dataset",
+  label,
   labelClassName,
   inputPlaceholder,
   allowCreation = true,

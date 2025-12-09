@@ -152,6 +152,7 @@ export function NewDatapointForm() {
           <div className="space-y-2" data-testid="dataset-selector">
             <Label htmlFor="dataset">Dataset</Label>
             <DatasetSelector
+              label="Select a dataset"
               selected={selectedDataset ?? undefined}
               onSelect={(dataset) => setSelectedDataset(dataset)}
               allowCreation

@@ -7,7 +7,7 @@ interface DatasetFormFieldProps<T extends FieldValues> {
   name: FieldPath<T>;
   label?: string;
   onSelect?: (value: string, isNew: boolean) => void;
-  placeholder?: string;
+  placeholder: string;
   allowCreation?: boolean;
 }
 
