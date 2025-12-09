@@ -20,7 +20,7 @@ impl OptimizationTestCase for FireworksSFTTestCase {
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::FireworksSFT(UninitializedFireworksSFTConfig {
-                model: "accounts/fireworks/models/llama-v3p1-8b-instruct".to_string(),
+                model: "accounts/fireworks/models/llama-v3p3-70b-instruct".to_string(),
                 account_id: "viraj-ebfe5a".to_string(),
                 early_stop: None,
                 epochs: Some(1),

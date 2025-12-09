@@ -1,7 +1,7 @@
-[models.llama3_1_8b_instruct_turbo]
+[models.llama3_3_70b_instruct_turbo]
 routing = ["together"]
 
-[models.llama3_1_8b_instruct_turbo.providers.together]
+[models.llama3_3_70b_instruct_turbo.providers.together]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
@@ -10,4 +10,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "llama3_1_8b_instruct_turbo"
+model = "llama3_3_70b_instruct_turbo"
