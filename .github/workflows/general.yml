@@ -856,6 +856,8 @@ jobs:
 
       - name: Launch the gateway for E2E tests (configured for replication)
         if: matrix.replicated == true
+        env:
+          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests
         run: |
           cargo run-e2e --run-clickhouse-migrations &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
