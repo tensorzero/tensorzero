@@ -165,13 +165,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap()
         .to_string();
 
-    // We use a small runner on CI, so only insert one at a time in order to prevent
-    // ClickHouse from OOMing
-    let concurrency_limit = if std::env::var("TENSORZERO_CI").is_ok() {
-        1
-    } else {
-        4
-    };
+    // Only insert a few at a time in order to prevent ClickHouse from OOMing
+    let concurrency_limit = 4;
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
 

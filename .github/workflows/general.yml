@@ -20,6 +20,7 @@ env:
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   RUST_MSRV: 1.88.0
+  TENSORZERO_CI: 1
 
 jobs:
   check-version-consistency:
@@ -869,7 +870,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-clickhouse ${{ matrix.replicated && '' || '-j 1' }}
+        run: cargo test-clickhouse
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
