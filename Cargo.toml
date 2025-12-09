@@ -36,7 +36,6 @@ serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
-serde_with = "3.16.1"
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"

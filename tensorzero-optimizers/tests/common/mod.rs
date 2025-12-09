@@ -199,6 +199,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

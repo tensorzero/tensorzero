@@ -5,7 +5,10 @@ use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
-use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
@@ -14,9 +17,8 @@ use tensorzero::{
     OptimizationJobHandle, QUANTILES,
 };
 use tensorzero_core::{
-    cache::CacheEnabledMode,
-    config::{Config, ConfigFileGlob},
-    db::clickhouse::ClickHouseConnectionInfo,
+    cache::CacheEnabledMode, config::BatchWritesConfig, db::clickhouse::ClickHouseConnectionInfo,
+    evaluations::EvaluationConfig,
 };
 use uuid::Uuid;
 
@@ -111,7 +113,10 @@ fn send_event(
 pub struct RunEvaluationStreamingParams {
     pub gateway_url: String,
     pub clickhouse_url: String,
-    pub config_path: String,
+    /// JSON-serialized EvaluationConfig
+    pub evaluation_config: String,
+    /// JSON-serialized EvaluationFunctionConfig
+    pub function_config: String,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
     pub datapoint_ids: Option<Vec<String>>,
@@ -132,33 +137,33 @@ pub async fn run_evaluation_streaming(
     let url = Url::parse(&params.gateway_url)
         .map_err(|e| napi::Error::from_reason(format!("Invalid gateway URL: {e}")))?;
 
-    let config_glob =
-        ConfigFileGlob::new_from_path(Path::new(&params.config_path)).map_err(|e| {
-            napi::Error::from_reason(format!(
-                "Failed to resolve config glob from {}: {e}",
-                params.config_path
-            ))
-        })?;
-
-    let unwritten_config = Config::load_from_path_optional_verify_credentials(&config_glob, false)
-        .await
+    // Deserialize configs from JSON strings
+    let evaluation_config: EvaluationConfig = serde_json::from_str(&params.evaluation_config)
         .map_err(|e| {
-            napi::Error::from_reason(format!(
-                "Failed to load configuration from {}: {e}",
-                params.config_path
-            ))
+            napi::Error::from_reason(format!("Failed to deserialize evaluation_config: {e}"))
         })?;
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &params.clickhouse_url,
-        unwritten_config.gateway.observability.batch_writes.clone(),
-    )
-    .await
-    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
-    let config = unwritten_config
-        .into_config(&clickhouse_client)
-        .await
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    let config = Arc::new(config);
+    let evaluation_config = Arc::new(evaluation_config);
+
+    // Extract function name from evaluation config
+    let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
+    let function_name = inference_eval_config.function_name.clone();
+
+    // Deserialize function config and create a single-entry table
+    let function_config: EvaluationFunctionConfig = serde_json::from_str(&params.function_config)
+        .map_err(|e| {
+        napi::Error::from_reason(format!("Failed to deserialize function_config: {e}"))
+    })?;
+    let mut function_configs = EvaluationFunctionConfigTable::new();
+    function_configs.insert(function_name, function_config);
+    let function_configs = Arc::new(function_configs);
+
+    // Create ClickHouse client with default batch writes config (no config file available)
+    let clickhouse_client =
+        ClickHouseConnectionInfo::new(&params.clickhouse_url, BatchWritesConfig::default())
+            .await
+            .map_err(|e| {
+                napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}"))
+            })?;
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()
@@ -213,7 +218,8 @@ pub async fn run_evaluation_streaming(
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
-        config: config.clone(),
+        evaluation_config,
+        function_configs,
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),

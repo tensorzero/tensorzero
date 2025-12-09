@@ -29,6 +29,7 @@ use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
+use url::Url;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -36,11 +37,10 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
-use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
-use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, get_function};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::Usage;
@@ -774,6 +774,7 @@ impl RuntimeOverlay {
             fetch_and_encode_input_files_before_inference,
             auth,
             global_outbound_http_timeout,
+            relay,
         } = &config.gateway;
 
         Self {
@@ -795,6 +796,7 @@ impl RuntimeOverlay {
                 global_outbound_http_timeout_ms: Some(
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
+                relay: relay.as_ref().map(UninitializedRelayConfig::from),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1437,28 +1439,7 @@ impl Config {
         &'a self,
         function_name: &str,
     ) -> Result<Cow<'a, Arc<FunctionConfig>>, Error> {
-        if function_name == DEFAULT_FUNCTION_NAME {
-            Ok(Cow::Owned(Arc::new(FunctionConfig::Chat(
-                FunctionConfigChat {
-                    variants: HashMap::new(),
-                    schemas: SchemaData::default(),
-                    tools: vec![],
-                    tool_choice: ToolChoice::None,
-                    parallel_tool_calls: None,
-                    description: None,
-                    all_explicit_templates_names: HashSet::new(),
-                    experimentation: ExperimentationConfig::default(),
-                },
-            ))))
-        } else {
-            Ok(Cow::Borrowed(
-                self.functions.get(function_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::UnknownFunction {
-                        name: function_name.to_string(),
-                    })
-                })?,
-            ))
-        }
+        get_function(&self.functions, function_name)
     }
 
     /// Get a metric by name, producing an error if it's not found
@@ -1706,6 +1687,12 @@ pub struct UninitializedConfig {
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UninitializedRelayConfig {
+    pub gateway_url: Option<Url>,
 }
 
 /// The result of parsing all of the globbed config files,

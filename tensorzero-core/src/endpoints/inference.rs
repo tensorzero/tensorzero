@@ -31,7 +31,7 @@ use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
-use crate::function::{FunctionConfig, FunctionConfigChat};
+use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
@@ -52,6 +52,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -209,8 +210,6 @@ impl std::fmt::Debug for InferenceOutput {
         }
     }
 }
-
-pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
 pub struct InferenceIds {
@@ -383,6 +382,7 @@ pub async fn inference(
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
+        relay: config.gateway.relay.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -1146,6 +1146,20 @@ impl InferenceResponse {
         }
     }
 
+    pub fn usage(&self) -> Usage {
+        match self {
+            InferenceResponse::Chat(c) => c.usage,
+            InferenceResponse::Json(j) => j.usage,
+        }
+    }
+
+    pub fn finish_reason(&self) -> Option<FinishReason> {
+        match self {
+            InferenceResponse::Chat(c) => c.finish_reason,
+            InferenceResponse::Json(j) => j.finish_reason,
+        }
+    }
+
     pub fn variant_name(&self) -> &str {
         match self {
             InferenceResponse::Chat(c) => &c.variant_name,
@@ -1356,6 +1370,7 @@ pub struct InferenceClients {
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
     pub scope_info: ScopeInfo,
+    pub relay: Option<TensorzeroRelay>,
 }
 
 // Carryall struct for models used in inference

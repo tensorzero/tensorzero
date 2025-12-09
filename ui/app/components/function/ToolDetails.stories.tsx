@@ -50,6 +50,7 @@ const mockConfig: UiConfig = {
   },
   evaluations: {},
   model_names: [],
+  config_hash: "test-config-hash",
 };
 
 export const Default: Story = {

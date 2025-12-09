@@ -373,6 +373,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
                 }),
             }
         }

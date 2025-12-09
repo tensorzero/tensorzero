@@ -40,6 +40,8 @@ use crate::tool::{
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
+pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]

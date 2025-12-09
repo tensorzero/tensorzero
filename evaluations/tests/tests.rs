@@ -25,8 +25,8 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
-    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat, run_evaluation,
-    run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
+    EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
@@ -453,12 +453,30 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     let tensorzero_client = get_tensorzero_client().await;
     let evaluation_run_id = Uuid::now_v7();
 
+    let evaluation_name = "entity_extraction".to_string();
+
+    // Extract evaluation config from config
+    let evaluation_config = config
+        .evaluations
+        .get(&evaluation_name)
+        .expect("evaluation 'entity_extraction' not found")
+        .clone();
+
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
+
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse,
-        config,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_config,
+        function_configs,
+        evaluation_name,
         evaluation_run_id,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
@@ -2657,15 +2675,31 @@ async fn test_evaluation_with_dynamic_variant() {
     };
 
     let evaluation_run_id = Uuid::now_v7();
+    let evaluation_name = "haiku_with_outputs".to_string();
+
+    // Extract evaluation config and function config
+    let evaluation_config = config
+        .evaluations
+        .get(&evaluation_name)
+        .expect("evaluation config should exist")
+        .clone();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse,
-        config,
+        evaluation_config,
+        function_configs,
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
-        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2702,16 +2736,32 @@ async fn test_max_datapoints_parameter() {
     let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
+    let evaluation_name = "entity_extraction".to_string();
+
+    // Extract evaluation config and function config
+    let evaluation_config = config
+        .evaluations
+        .get(&evaluation_name)
+        .expect("evaluation config should exist")
+        .clone();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
-        config: config.clone(),
+        evaluation_config,
+        function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2765,6 +2815,21 @@ async fn test_precision_targets_parameter() {
     let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
+    let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
+
+    // Extract evaluation config and function configs table
+    let evaluation_config = config
+        .evaluations
+        .get(&evaluation_name)
+        .expect("evaluation config should exist")
+        .clone();
+    // Build function configs table from all functions in config
+    let function_configs: EvaluationFunctionConfigTable = config
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
 
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
@@ -2776,11 +2841,12 @@ async fn test_precision_targets_parameter() {
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
-        config: config.clone(),
+        evaluation_config,
+        function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name: "haiku_without_outputs".to_string(), // Has both exact_match and topic_starts_with_f
+        evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,

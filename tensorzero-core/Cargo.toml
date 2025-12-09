@@ -132,7 +132,7 @@ http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true }
 schemars = { workspace = true, features = ["uuid1"] }
-serde_with = { workspace = true }
+opentelemetry-http = "0.31.0"
 
 [dev-dependencies]
 tempfile = "3.21.0"
