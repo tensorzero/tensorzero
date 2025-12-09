@@ -59,7 +59,7 @@ NUM_EPOCHS = 1
 MAX_SAMPLES = 100_000
 
 # The name of the model to fine-tune (supported models: https://docs.fireworks.ai/fine-tuning/fine-tuning-models#supported-base-models)
-MODEL_NAME = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+MODEL_NAME = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
 # At the time of writing, Fireworks does not support tool call content blocks in assistant messages. Or the tool role.
 # We will drop these invalid messages from the dataset by default.

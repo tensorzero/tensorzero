@@ -1181,6 +1181,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1260,6 +1261,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1372,6 +1374,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1438,6 +1441,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1487,6 +1491,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1584,6 +1589,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1657,6 +1663,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1698,6 +1705,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
 
         // Prepare the model inference request
@@ -1815,6 +1823,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let inference_params = InferenceParams::default();
 
@@ -1896,6 +1905,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
         let retry_config = RetryConfig::default();
 

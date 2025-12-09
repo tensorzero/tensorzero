@@ -9,7 +9,7 @@ use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
     },
-    endpoints::status::TENSORZERO_VERSION,
+    endpoints::status::{StatusResponse, TENSORZERO_VERSION},
 };
 use tokio::process::Command;
 use uuid::Uuid;
@@ -217,6 +217,8 @@ async fn test_tensorzero_unauthenticated_routes() {
     let status = health_response.status();
     let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
+
+    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
     assert_eq!(
         text,
         "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
@@ -230,10 +232,16 @@ async fn test_tensorzero_unauthenticated_routes() {
 
     let status = status_response.status();
     let text = status_response.text().await.unwrap();
+    let parsed_status_response: StatusResponse = serde_json::from_str(&text).unwrap();
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(parsed_status_response.status, "ok", "Status should be ok");
     assert_eq!(
-        text,
-        format!("{{\"status\":\"ok\",\"version\":\"{TENSORZERO_VERSION}\"}}")
+        parsed_status_response.version, TENSORZERO_VERSION,
+        "Version should match $TENSORZERO_VERSION"
+    );
+    assert_ne!(
+        parsed_status_response.config_hash, "",
+        "There should be a config hash"
     );
 }
 

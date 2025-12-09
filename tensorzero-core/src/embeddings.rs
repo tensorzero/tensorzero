@@ -849,6 +849,7 @@ mod tests {
                         tags: Arc::new(HashMap::new()),
                         api_key_public_id: None,
                     },
+                    relay: None,
                 },
             )
             .await;

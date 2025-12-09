@@ -358,6 +358,7 @@ async fn process_embedding_batch(
         deferred_tasks: deferred_tasks.clone(),
         // We don't currently use API keys for optimization workflows
         scope_info: ScopeInfo::new(tags.clone(), None),
+        relay: None,
     };
 
     let response = embedding_model_config

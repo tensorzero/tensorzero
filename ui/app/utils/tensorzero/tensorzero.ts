@@ -11,7 +11,7 @@ import {
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
-import { TensorZeroServerError } from "./errors";
+import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   Datapoint,
@@ -21,9 +21,11 @@ import type {
   GetDatapointsResponse,
   GetInferencesRequest,
   GetInferencesResponse,
+  InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
+  StatusResponse,
   UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
@@ -328,15 +330,6 @@ export const DatapointResponseSchema = z.object({
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
 
 /**
- * Schema for status response
- */
-export const StatusResponseSchema = z.object({
-  status: z.string(),
-  version: z.string(),
-});
-export type StatusResponse = z.infer<typeof StatusResponseSchema>;
-
-/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -610,7 +603,7 @@ export class TensorZeroClient {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return StatusResponseSchema.parse(await response.json());
+    return (await response.json()) as StatusResponse;
   }
 
   /**
@@ -669,6 +662,32 @@ export class TensorZeroClient {
     return (await response.json()) as UiConfig;
   }
 
+  /**
+   * Fetches inference statistics for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get stats for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with the inference count
+   * @throws Error if the request fails
+   */
+  async getInferenceStats(
+    functionName: string,
+    variantName?: string,
+  ): Promise<InferenceStatsResponse> {
+    const searchParams = new URLSearchParams();
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InferenceStatsResponse;
+  }
+
   private async fetch(
     path: string,
     init: {
@@ -695,7 +714,12 @@ export class TensorZeroClient {
       headers.set("authorization", `Bearer ${this.apiKey}`);
     }
 
-    return await fetch(url, { method, headers, body });
+    try {
+      return await fetch(url, { method, headers, body });
+    } catch (error) {
+      // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
+      throw new GatewayConnectionError(error);
+    }
   }
 
   private async getErrorText(response: Response): Promise<string> {
