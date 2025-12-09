@@ -37,9 +37,7 @@ export async function loader({
   // Run all fetches concurrently
   const [inferenceCount, feedbackCount, curatedInferenceCount] =
     await Promise.all([
-      functionConfig && functionName
-        ? countInferencesForFunction(functionName, functionConfig)
-        : Promise.resolve(null),
+      functionName ? countInferencesForFunction(functionName) : null,
 
       functionName && functionConfig && metricName && metricConfig
         ? countFeedbacksForMetric(

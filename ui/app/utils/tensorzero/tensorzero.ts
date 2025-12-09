@@ -20,6 +20,7 @@ import type {
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetInferencesResponse,
+  InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
@@ -637,6 +638,32 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as UiConfig;
+  }
+
+  /**
+   * Fetches inference statistics for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get stats for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with the inference count
+   * @throws Error if the request fails
+   */
+  async getInferenceStats(
+    functionName: string,
+    variantName?: string,
+  ): Promise<InferenceStatsResponse> {
+    const searchParams = new URLSearchParams();
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InferenceStatsResponse;
   }
 
   private async fetch(

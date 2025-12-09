@@ -70,7 +70,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const numInferencesPromise = countInferencesForVariant(
     function_name,
-    function_config,
     variant_name,
   );
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
