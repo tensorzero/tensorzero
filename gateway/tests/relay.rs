@@ -696,9 +696,9 @@ async fn test_relay_with_env_api_key() {
 
 #[tokio::test]
 async fn test_relay_with_dynamic_api_key() {
-    // Test that a relay configured with a env var API key can successfully
+    // Test that a relay configured with a dynamic API key can successfully
     // forward requests to the downstream gateway.
-    // The API key will be sent in the Authorization header to the downstream.
+    // The dynamic API key will be sent in the Authorization header to the downstream.
 
     let pool = get_postgres_pool_for_testing().await;
 
