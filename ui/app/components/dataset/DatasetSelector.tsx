@@ -16,13 +16,16 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
+import { cn } from "~/utils/common";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 
 interface DatasetSelectorProps {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  placeholder?: string;
+  label?: string;
+  labelClassName?: string;
+  inputPlaceholder?: string;
   className?: string;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
@@ -33,7 +36,9 @@ export function DatasetSelector({
   selected,
   onSelect,
   functionName,
-  placeholder,
+  label = "Add to dataset",
+  labelClassName,
+  inputPlaceholder,
   allowCreation = true,
   className,
   buttonProps,
@@ -59,15 +64,15 @@ export function DatasetSelector({
     [datasets],
   );
 
-  if (placeholder === undefined) {
+  if (inputPlaceholder === undefined) {
     if (allowCreation) {
       if (recentlyUpdatedDatasets.length > 0) {
-        placeholder = "Create or find a dataset";
+        inputPlaceholder = "Create or find a dataset";
       } else {
-        placeholder = "Create a new dataset";
+        inputPlaceholder = "Create a dataset";
       }
     } else {
-      placeholder = "Select a dataset";
+      inputPlaceholder = "Select a dataset";
     }
   }
 
@@ -106,8 +111,13 @@ export function DatasetSelector({
             ) : (
               <span className="flex flex-row items-center gap-2">
                 <ButtonIcon as={Table} variant="tertiary" />
-                <span className="text-fg-secondary flex text-sm">
-                  {placeholder}
+                <span
+                  className={cn(
+                    "text-fg-secondary flex text-sm",
+                    labelClassName,
+                  )}
+                >
+                  {label}
                 </span>
               </span>
             )}
@@ -130,7 +140,7 @@ export function DatasetSelector({
           <Command>
             {/* TODO Naming/character constraints/disallow typing certain characters? */}
             <CommandInput
-              placeholder={placeholder}
+              placeholder={inputPlaceholder}
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"

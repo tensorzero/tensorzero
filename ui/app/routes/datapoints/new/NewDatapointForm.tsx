@@ -23,6 +23,7 @@ import type {
   JsonInferenceOutput,
   JsonValue,
 } from "~/types/tensorzero";
+import { isJsonOutput } from "~/utils/clickhouse/inference";
 import { validateJsonSchema } from "~/utils/jsonschema";
 import { serializeCreateDatapointToFormData } from "./formDataUtils";
 
@@ -36,20 +37,6 @@ const DEFAULT_JSON_OUTPUT: JsonInferenceOutput = {
   raw: "{}",
   parsed: {},
 };
-
-// Type guard to check if output is a JsonInferenceOutput
-function isJsonOutput(
-  output: ContentBlockChatOutput[] | JsonInferenceOutput | undefined,
-): output is JsonInferenceOutput {
-  return output !== undefined && "raw" in output && "parsed" in output;
-}
-
-// Type guard to check if output is a ContentBlockChatOutput[]
-function isChatOutput(
-  output: ContentBlockChatOutput[] | JsonInferenceOutput | undefined,
-): output is ContentBlockChatOutput[] {
-  return output !== undefined && Array.isArray(output);
-}
 
 export function NewDatapointForm() {
   const functions = useAllFunctionConfigs();
@@ -198,7 +185,7 @@ export function NewDatapointForm() {
             <SectionHeader heading="Output" />
             {functionType === "json" ? (
               <JsonOutputElement
-                output={isJsonOutput(output) ? output : undefined}
+                output={output && isJsonOutput(output) ? output : undefined}
                 outputSchema={outputSchema}
                 isEditing={true}
                 onOutputChange={(newOutput) => {
@@ -212,7 +199,7 @@ export function NewDatapointForm() {
               />
             ) : (
               <ChatOutputElement
-                output={isChatOutput(output) ? output : undefined}
+                output={output && !isJsonOutput(output) ? output : undefined}
                 isEditing={true}
                 onOutputChange={(newOutput) => setOutput(newOutput)}
               />
