@@ -11661,6 +11661,11 @@ async fn check_short_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content = content
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
