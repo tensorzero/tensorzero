@@ -70,6 +70,11 @@ export default [
     ]),
   ]),
 
+  // Datapoints
+  route("datapoints", "routes/datapoints/layout.tsx", [
+    route("new", "routes/datapoints/new/route.tsx"),
+  ]),
+
   // Evaluations
   route("evaluations", "routes/evaluations/layout.tsx", [
     index("routes/evaluations/route.tsx"),

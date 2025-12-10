@@ -1,19 +1,15 @@
 /**
  * Configuration loader for TensorZero UI.
  *
- * The config for TensorZero UI can be loaded from the gateway or from
- * disk (legacy behavior), and is used by a large number of UI components.
- * This is the server component that loads the config and keeps it fresh.
- *
- * The server periodically polls the gateway's status endpoint to check if the
- * config hash has changed. If it has, the cache is invalidated so the next
- * request will load fresh config. This polling happens once for the entire
- * server process, shared across all browser clients.
+ * The config is loaded from the gateway and cached. The server periodically
+ * polls the gateway's status endpoint to check if the config hash has changed.
+ * If it has, the cache is invalidated so the next request will load fresh config.
+ * This polling happens once for the entire server process, shared across all
+ * browser clients.
  */
 
-import type { Config, FunctionConfig, UiConfig } from "~/types/tensorzero";
+import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
-import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { logger } from "../logger";
 
@@ -24,54 +20,11 @@ const CONFIG_HASH_POLL_INTERVAL_MS = 30_000;
 let pollingStarted = false;
 
 /**
- * Converts a full Config (from disk) to a UiConfig (for the UI context).
- * Note: When loading from disk, we don't have a config_hash, so we use an empty string.
- * This is only used in legacy mode (when not using the gateway).
+ * Loads config from the gateway.
  */
-function configToUiConfig(config: Config): UiConfig {
-  return {
-    // eslint-disable-next-line no-restricted-syntax
-    functions: config.functions,
-    metrics: config.metrics,
-    tools: config.tools,
-    evaluations: config.evaluations,
-    model_names: Object.keys(config.models.table),
-    config_hash: "", // Not available when loading from disk
-  };
-}
-
 export async function loadConfig(): Promise<UiConfig> {
-  const env = getEnv();
-
-  // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
-  if (env.TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY) {
-    const client = getTensorZeroClient();
-    return await client.getUiConfig();
-  }
-
-  // Otherwise use disk loading via tensorzero-node (legacy behavior)
-  const { getConfig: getConfigNative } = await import("tensorzero-node");
-  let fullConfig: Config;
-  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    fullConfig = await getConfigNative(null);
-  } else {
-    fullConfig = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
-  }
-  return configToUiConfig(fullConfig);
-}
-
-/**
- * Helper function to get the config path used by the UI.
- * Returns null if using default config, otherwise returns the config path.
- * @deprecated This function is deprecated and will be removed in a future version.
- * Config is now loaded from the gateway, not from disk.
- */
-export function getConfigPath(): string | null {
-  const env = getEnv();
-  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    return null;
-  }
-  return env.TENSORZERO_UI_CONFIG_PATH;
+  const client = getTensorZeroClient();
+  return await client.getUiConfig();
 }
 
 let configCache: UiConfig | undefined = undefined;
