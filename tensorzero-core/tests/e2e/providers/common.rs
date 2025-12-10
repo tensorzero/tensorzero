@@ -168,6 +168,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_image_url_inference_with_provider_filesystem;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_empty_message_content_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
         use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
@@ -273,6 +274,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_empty_message_content() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_empty_message_content_with_provider(provider).await;
             }
         }
 
@@ -2622,6 +2631,51 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     );
 
     // We don't check clickhouse, since we do this in lots of places
+}
+
+pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": []
+                },
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    // Don't bother checking anything else - this is just to make sure that the provider
+    // doesn't choke on an empty 'content' array
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
