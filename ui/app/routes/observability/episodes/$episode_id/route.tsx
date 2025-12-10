@@ -208,7 +208,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   }, []);
 
   const handlePreviousInference = useCallback(() => {
-    if (currentSheetIndex === 0) return;
+    if (currentSheetIndex <= 0) return;
     setOpenSheetInferenceId(inferenceIds[currentSheetIndex - 1]);
   }, [currentSheetIndex, inferenceIds]);
 
