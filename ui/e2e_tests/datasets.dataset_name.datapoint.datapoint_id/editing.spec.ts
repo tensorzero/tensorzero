@@ -165,7 +165,7 @@ test.describe("System Message - Template", () => {
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-    templateEditor = templateEditor = page
+    templateEditor = page
       .getByLabel("System template editor")
       .locator("div[contenteditable='true']");
 
