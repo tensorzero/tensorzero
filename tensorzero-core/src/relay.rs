@@ -5,17 +5,20 @@ use std::{collections::HashMap, time::Instant};
 
 use futures::StreamExt;
 use futures::future::try_join_all;
+use secrecy::SecretString;
 use url::Url;
 
 use crate::client::{
     ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk, InferenceResponseChunk,
 };
 use crate::config::UninitializedRelayConfig;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::endpoints::inference::InferenceCredentials;
+use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     TextChunk,
 };
+use crate::model::Credential;
 use crate::{
     cache::CacheParamsOptions,
     client::{
@@ -35,21 +38,83 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct TensorzeroRelay {
-    client: Client,
-    pub url: Url,
+pub enum RelayCredentials {
+    Static(SecretString),
+    Dynamic(String),
+    None,
+    WithFallback {
+        default: Box<RelayCredentials>,
+        fallback: Box<RelayCredentials>,
+    },
 }
 
-impl From<&TensorzeroRelay> for UninitializedRelayConfig {
-    fn from(relay: &TensorzeroRelay) -> Self {
-        UninitializedRelayConfig {
-            gateway_url: Some(relay.url.clone()),
+impl RelayCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
+        match self {
+            RelayCredentials::Static(api_key) => Ok(Some(api_key)),
+            RelayCredentials::Dynamic(key_name) => {
+                Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "tensorzero::relay".to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
+                    })
+                }))
+                .transpose()
+            }
+            RelayCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
+            }
+            RelayCredentials::None => Ok(None),
         }
     }
 }
 
+impl TryFrom<Credential> for RelayCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(RelayCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(RelayCredentials::Dynamic(key_name)),
+            Credential::None => Ok(RelayCredentials::None),
+            Credential::Missing => Ok(RelayCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(RelayCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Tensorzero Relay mode".to_string(),
+            })),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TensorzeroRelay {
+    client: Client,
+    credentials: RelayCredentials,
+    pub original_config: UninitializedRelayConfig,
+}
+
 impl TensorzeroRelay {
-    pub fn new(gateway_url: Url) -> Result<Self, Error> {
+    pub fn new(
+        gateway_url: Url,
+        credentials: RelayCredentials,
+        original_config: UninitializedRelayConfig,
+    ) -> Result<Self, Error> {
         Ok(Self {
             client: ClientBuilder::new(ClientBuilderMode::HTTPGateway {
                 url: gateway_url.clone(),
@@ -60,7 +125,8 @@ impl TensorzeroRelay {
                     message: e.to_string(),
                 })
             })?,
-            url: gateway_url,
+            credentials,
+            original_config,
         })
     }
 }
@@ -302,6 +368,12 @@ impl TensorzeroRelay {
             system: request.system.clone().map(System::Text),
         };
 
+        let api_key = self
+            .credentials
+            .get_api_key(&clients.credentials)
+            .map_err(|e| e.log())?
+            .cloned();
+
         let res = ClientInferenceParams {
             function_name: None,
             variant_name: None,
@@ -385,6 +457,7 @@ impl TensorzeroRelay {
             tags: (*clients.tags).clone(),
             otlp_traces_extra_headers: HashMap::new(),
             include_original_response: false,
+            api_key,
         };
         Ok(res)
     }

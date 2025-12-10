@@ -13,8 +13,11 @@ mod common;
 
 use common::{ChildData, start_gateway_on_random_port};
 use reqwest::Client;
+use secrecy::ExposeSecret;
 use serde_json::json;
 use uuid::Uuid;
+
+use crate::common::get_postgres_pool_for_testing;
 
 /// Test environment with both downstream and relay gateways.
 #[expect(dead_code)]
@@ -709,5 +712,157 @@ model_name = "good"
     assert!(
         status_relay.is_server_error(),
         "Model with skip_relay=false should fail when downstream unreachable. Got status: {status_relay}"
+    );
+}
+
+// ============================================================================
+// API Key Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_relay_with_env_api_key() {
+    // Test that a relay configured with a env var API key can successfully
+    // forward requests to the downstream gateway.
+    // The API key will be sent in the Authorization header to the downstream.
+
+    let pool = get_postgres_pool_for_testing().await;
+
+    // Create a key
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let downstream_config = "
+    [gateway.auth]
+    enabled = true";
+
+    let relay_config = r#"
+    api_key_location = "env::RELAY_API_KEY"
+"#;
+
+    tensorzero_unsafe_helpers::set_env_var_tests_only("RELAY_API_KEY", key.expose_secret());
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make a request through the relay
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello with static API key"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        200,
+        "Request with env API key should succeed"
+    );
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    assert!(body.get("inference_id").is_some());
+    let content = body["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+}
+
+#[tokio::test]
+async fn test_relay_with_dynamic_api_key() {
+    // Test that a relay configured with a dynamic API key can successfully
+    // forward requests to the downstream gateway.
+    // The dynamic API key will be sent in the Authorization header to the downstream.
+
+    let pool = get_postgres_pool_for_testing().await;
+
+    // Create a key
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let downstream_config = "
+    [gateway.auth]
+    enabled = true";
+
+    let relay_config = r#"
+    api_key_location = "dynamic::my_dynamic_api_key"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make a request through the relay
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello with static API key"
+                    }
+                ]
+            },
+            "stream": false,
+            "credentials": {
+                "my_dynamic_api_key": key.expose_secret()
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        200,
+        "Request with dynamic API key should succeed"
+    );
+    let body: serde_json::Value = response.json().await.unwrap();
+
+    assert!(body.get("inference_id").is_some());
+    let content = body["content"].as_array().unwrap();
+    assert!(!content.is_empty());
+
+    // Using an incorrect API key should fail
+
+    let new_response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello with static API key"
+                    }
+                ]
+            },
+            "stream": false,
+            "credentials": {
+                "my_dynamic_api_key": "bad_api_key"
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(new_response.status(), http::StatusCode::BAD_GATEWAY);
+    let body = new_response.text().await.unwrap();
+    assert!(
+        body.contains("Invalid format for TensorZero API key"),
+        "Unexpected response body: {body}"
     );
 }
