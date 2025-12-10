@@ -181,7 +181,6 @@ pub fn prepare_relay_extra_headers(
                 | DynamicExtraHeader::Always { .. }
                 | DynamicExtraHeader::AlwaysDelete { .. } => header.clone(),
             })
-            .collect::<Vec<_>>(),
     );
     UnfilteredInferenceExtraHeaders {
         extra_headers: new_extra_headers,
