@@ -17,22 +17,25 @@ export function detectProviderFromModelName(
 ): ModelOption["provider"] {
   const lower = modelName.toLowerCase();
 
-  if ("gemini".startsWith(lower) || lower.startsWith("gemini")) {
+  // GCP Vertex Gemini
+  if (lower.startsWith("gemini")) {
     return "gcp_vertex_gemini";
   }
 
+  // Together AI
   if (
-    lower.startsWith("gemm") ||
-    lower.startsWith("qw") ||
-    lower.startsWith("de")
+    lower.startsWith("gemma") ||
+    lower.startsWith("qwen") ||
+    lower.startsWith("deepseek")
   ) {
     return "together";
   }
 
+  // Fireworks
   if (
-    lower.startsWith("ll") ||
-    lower.startsWith("mix") ||
-    lower.startsWith("mis") ||
+    lower.startsWith("llama") ||
+    lower.startsWith("mixtral") ||
+    lower.startsWith("mistral") ||
     lower.startsWith("yi")
   ) {
     return "fireworks";
