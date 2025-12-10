@@ -261,7 +261,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         if (!hasPrevInference) return;
         event.preventDefault();
         handlePreviousInference();
-
       } else if (event.key === "ArrowRight") {
         if (!hasNextInference) return;
         event.preventDefault();
