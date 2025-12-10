@@ -19,6 +19,7 @@ import type {
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetInferencesResponse,
@@ -689,6 +690,34 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InferenceStatsResponse;
+  }
+
+  /**
+   * Fetches feedback statistics for a function and metric.
+   * @param functionName - The name of the function to get stats for
+   * @param metricName - The name of the metric to get stats for (or "demonstration")
+   * @param threshold - Optional threshold for float metrics (defaults to 0)
+   * @returns A promise that resolves with the feedback and curated inference counts
+   * @throws Error if the request fails
+   */
+  async getFeedbackStats(
+    functionName: string,
+    metricName: string,
+    threshold?: number,
+  ): Promise<InferenceWithFeedbackStatsResponse> {
+    const searchParams = new URLSearchParams();
+    if (threshold !== undefined) {
+      searchParams.append("threshold", threshold.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InferenceWithFeedbackStatsResponse;
   }
 
   private async fetch(
