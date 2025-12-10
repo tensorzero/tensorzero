@@ -7,14 +7,11 @@ use serde::Deserialize;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
-    JsonInferenceDatapointInsert,
+use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
+use crate::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
-use crate::endpoints::datasets::{
-    CLICKHOUSE_DATETIME_FORMAT, StoredChatInferenceDatapoint, StoredDatapoint,
-    StoredJsonInferenceDatapoint, validate_dataset_name,
-};
+use crate::endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, validate_dataset_name};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
@@ -106,12 +103,12 @@ pub async fn update_datapoints(
         })
         .await?;
 
-    // Build a HashMap to construct new DatapointInserts
+    // Build a HashMap to construct new StoredDatapoints
     let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
-    // Each update will produce two DatapointInserts: one stale and one updated
-    let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len() * 2);
+    // Each update will produce two StoredDatapoints: one stale and one updated
+    let mut datapoints: Vec<StoredDatapoint> = Vec::with_capacity(request.datapoints.len() * 2);
     let mut new_ids: Vec<Uuid> = Vec::with_capacity(request.datapoints.len());
 
     // Create a timestamp for all the staled_at fields in the query.
@@ -179,8 +176,8 @@ pub async fn update_datapoints(
 
 #[derive(Debug)]
 struct PreparedUpdate {
-    stale: DatapointInsert,
-    updated: DatapointInsert,
+    stale: StoredDatapoint,
+    updated: StoredDatapoint,
     new_id: Uuid,
 }
 
@@ -217,12 +214,11 @@ async fn prepare_chat_update(
     let updated_datapoint_id = Uuid::now_v7();
 
     // Update old datapoint as staled, and create new datapoint.
-    let mut staled_existing_datapoint: ChatInferenceDatapointInsert =
-        existing_datapoint.clone().into();
+    let mut staled_existing_datapoint = existing_datapoint.clone();
     staled_existing_datapoint.staled_at = Some(now_timestamp.to_owned());
 
     // Update the datapoint with new data
-    let mut updated_datapoint: ChatInferenceDatapointInsert = existing_datapoint.into();
+    let mut updated_datapoint = existing_datapoint;
     updated_datapoint.id = updated_datapoint_id;
     updated_datapoint.is_custom = true;
 
@@ -254,8 +250,8 @@ async fn prepare_chat_update(
 
     Ok(PreparedUpdate {
         new_id: updated_datapoint_id,
-        stale: DatapointInsert::Chat(staled_existing_datapoint),
-        updated: DatapointInsert::Chat(updated_datapoint),
+        stale: StoredDatapoint::Chat(staled_existing_datapoint),
+        updated: StoredDatapoint::Chat(updated_datapoint),
     })
 }
 
@@ -292,12 +288,11 @@ async fn prepare_json_update(
     let updated_datapoint_id = Uuid::now_v7();
 
     // Update old datapoint as staled, and create new datapoint.
-    let mut staled_existing_datapoint: JsonInferenceDatapointInsert =
-        existing_datapoint.clone().into();
+    let mut staled_existing_datapoint = existing_datapoint.clone();
     staled_existing_datapoint.staled_at = Some(now_timestamp.to_owned());
 
     // Update the datapoint with new data
-    let mut updated_datapoint: JsonInferenceDatapointInsert = existing_datapoint.into();
+    let mut updated_datapoint = existing_datapoint;
     updated_datapoint.id = updated_datapoint_id;
     updated_datapoint.is_custom = true;
 
@@ -356,8 +351,8 @@ async fn prepare_json_update(
 
     Ok(PreparedUpdate {
         new_id: updated_datapoint_id,
-        stale: DatapointInsert::Json(staled_existing_datapoint),
-        updated: DatapointInsert::Json(updated_datapoint),
+        stale: StoredDatapoint::Json(staled_existing_datapoint),
+        updated: StoredDatapoint::Json(updated_datapoint),
     })
 }
 
@@ -460,7 +455,7 @@ pub async fn update_datapoints_metadata(
     let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
-    let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
+    let mut datapoints: Vec<StoredDatapoint> = Vec::with_capacity(request.datapoints.len());
 
     for update in request.datapoints {
         let datapoint_id = update.id;
@@ -486,7 +481,7 @@ pub async fn update_datapoints_metadata(
                     existing_datapoint.name = new_name;
                 }
 
-                datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
+                datapoints.push(StoredDatapoint::Chat(existing_datapoint));
             }
             StoredDatapoint::Json(mut existing_datapoint) => {
                 if existing_datapoint.dataset_name != dataset_name {
@@ -502,7 +497,7 @@ pub async fn update_datapoints_metadata(
                     existing_datapoint.name = new_name;
                 }
 
-                datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
+                datapoints.push(StoredDatapoint::Json(existing_datapoint));
             }
         }
     }
@@ -518,7 +513,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
+    use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
     };
@@ -977,14 +972,14 @@ mod tests {
             .unwrap();
 
             // Verify stale datapoint
-            let DatapointInsert::Chat(stale) = result.stale else {
+            let StoredDatapoint::Chat(stale) = result.stale else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(stale.id, original_id);
             assert_eq!(stale.staled_at, Some("2025-01-01 00:00:00".to_string()));
 
             // Verify updated datapoint - should have new ID but all fields unchanged
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_ne!(updated.id, original_id);
@@ -1039,7 +1034,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -1094,7 +1089,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -1133,7 +1128,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -1173,7 +1168,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -1226,7 +1221,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             let Some(tool_params) = updated.tool_params else {
@@ -1297,7 +1292,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.tags, original_tags);
@@ -1326,7 +1321,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.tags, Some(HashMap::new()));
@@ -1356,7 +1351,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.tags, Some(new_tags));
@@ -1393,7 +1388,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.name, original_name);
@@ -1422,7 +1417,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.name, None);
@@ -1453,7 +1448,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
             assert_eq!(updated.name, Some("new_name".to_string()));
@@ -1514,7 +1509,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -1560,14 +1555,14 @@ mod tests {
             .unwrap();
 
             // Verify stale datapoint
-            let DatapointInsert::Json(stale) = result.stale else {
+            let StoredDatapoint::Json(stale) = result.stale else {
                 panic!("Expected Json insert");
             };
             assert_eq!(stale.id, original_id);
             assert_eq!(stale.staled_at, Some("2025-01-01 00:00:00".to_string()));
 
             // Verify updated datapoint
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
             assert_ne!(updated.id, original_id);
@@ -1608,7 +1603,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1644,7 +1639,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1684,7 +1679,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1731,7 +1726,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1773,7 +1768,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1815,7 +1810,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1897,7 +1892,7 @@ mod tests {
             )
             .await
             .unwrap();
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
             assert_eq!(updated.tags, original_tags);
@@ -1950,7 +1945,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -1998,7 +1993,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -2045,7 +2040,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Chat(updated) = result.updated else {
+            let StoredDatapoint::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
 
@@ -2092,7 +2087,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -2138,7 +2133,7 @@ mod tests {
             .await
             .unwrap();
 
-            let DatapointInsert::Json(updated) = result.updated else {
+            let StoredDatapoint::Json(updated) = result.updated else {
                 panic!("Expected Json insert");
             };
 
@@ -2174,7 +2169,7 @@ mod tests {
                     let datapoint_insert = &datapoints_inserts[0];
                     // ID should stay the same.
                     assert_eq!(datapoint_insert.id(), datapoint_id);
-                    let DatapointInsert::Chat(dp) = datapoint_insert else {
+                    let StoredDatapoint::Chat(dp) = datapoint_insert else {
                         panic!("Expected Chat insert");
                     };
                     // Name should be updated.
@@ -2228,7 +2223,7 @@ mod tests {
                     let datapoint_insert = &datapoints_inserts[0];
                     // ID should stay the same.
                     assert_eq!(datapoint_insert.id(), datapoint_id);
-                    let DatapointInsert::Json(dp) = datapoint_insert else {
+                    let StoredDatapoint::Json(dp) = datapoint_insert else {
                         panic!("Expected Json insert");
                     };
                     // Name should be updated.
@@ -2279,7 +2274,7 @@ mod tests {
                 .expect_insert_datapoints()
                 .withf(|datapoints| {
                     datapoints.len() == 1
-                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name.is_none())
+                        && matches!(&datapoints[0], StoredDatapoint::Chat(dp) if dp.name.is_none())
                 })
                 .returning(|_| Box::pin(async move { Ok(1) }));
 
@@ -2391,8 +2386,8 @@ mod tests {
                 .expect_insert_datapoints()
                 .withf(|datapoints| {
                     datapoints.len() == 2
-                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name == Some("updated_name1".to_string()))
-                        && matches!(&datapoints[1], DatapointInsert::Json(dp) if dp.name == Some("updated_name2".to_string()))
+                        && matches!(&datapoints[0], StoredDatapoint::Chat(dp) if dp.name == Some("updated_name1".to_string()))
+                        && matches!(&datapoints[1], StoredDatapoint::Json(dp) if dp.name == Some("updated_name2".to_string()))
                 })
                 .returning(|_| Box::pin(async move { Ok(2) }));
 

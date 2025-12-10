@@ -47,7 +47,9 @@ use crate::inference::types::Usage;
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
+use crate::model::{
+    CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
+};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
@@ -88,11 +90,10 @@ pub fn skip_credential_validation() -> bool {
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
+#[derive(Debug)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
@@ -102,16 +103,13 @@ pub struct Config {
     pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
-    #[serde(skip)]
     pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
-    #[serde(skip)]
     pub http_client: TensorzeroHttpClient,
-    #[serde(skip)]
     pub hash: SnapshotHash,
 }
 
@@ -179,8 +177,6 @@ impl TimeoutsConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
@@ -189,11 +185,9 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPathDirectory>,
 }
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
-    #[serde(skip)]
     pub object_store: Option<Arc<dyn ObjectStore>>,
     pub kind: StorageKind,
 }
@@ -349,8 +343,6 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -371,8 +363,6 @@ fn default_max_rows() -> usize {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
@@ -398,8 +388,6 @@ impl Default for BatchWritesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
@@ -407,8 +395,6 @@ pub struct ExportConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
@@ -463,8 +449,6 @@ impl OtlpConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -478,8 +462,6 @@ pub struct OtlpTracesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
-#[derive(ts_rs::TS)]
-#[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
     /// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
@@ -796,7 +778,7 @@ impl RuntimeOverlay {
                 global_outbound_http_timeout_ms: Some(
                     global_outbound_http_timeout.num_milliseconds() as u64,
                 ),
-                relay: relay.as_ref().map(UninitializedRelayConfig::from),
+                relay: relay.as_ref().map(|relay| relay.original_config.clone()),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1692,7 +1674,12 @@ pub struct UninitializedConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedRelayConfig {
+    /// If set, all models will be forwarded to this gateway URL
+    /// (instead of calling the providers defined in our config)
     pub gateway_url: Option<Url>,
+    /// If set, provides a TensorZero API key when invoking `gateway_url`.
+    /// If unset, no API key will be sent.
+    pub api_key_location: Option<CredentialLocationWithFallback>,
 }
 
 /// The result of parsing all of the globbed config files,
@@ -2148,9 +2135,8 @@ impl PathWithContents {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-#[ts(export, optional_fields)]
 pub struct PostgresConfig {
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]

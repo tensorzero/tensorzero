@@ -1,19 +1,12 @@
 import { useEffect } from "react";
 import { data, useFetcher, type LoaderFunctionArgs } from "react-router";
-import {
-  countCuratedInferences,
-  countFeedbacksForMetric,
-} from "~/utils/clickhouse/curation.server";
-import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
-import { getFeedbackConfig } from "~/utils/config/feedback";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric
 /// This is used to determine the number of inferences to display in the UI
 /// Call this route with optional function and metric parameters to get the counts
 /// If only a function is provided, it will count all inferences for that function
-/// If only a metric is provided, it will count all feedbacks for that metric
-/// If both a function and metric are provided, it will count all curated inferences for that function and metric
+/// If both a function and metric are provided, it will count all feedback stats for that function and metric
 export async function loader({
   request,
 }: LoaderFunctionArgs): Promise<Response> {
@@ -22,47 +15,36 @@ export async function loader({
   const metricName = url.searchParams.get("metric");
   const threshold = parseFloat(url.searchParams.get("threshold") || "0");
 
-  const config = await getConfig();
-  const functionConfig = functionName
-    ? await getFunctionConfig(functionName, config)
-    : null;
-  if (functionName && !functionConfig) {
-    throw data(`Function ${functionName} not found in config`, { status: 404 });
-  }
-  const metricConfig = getFeedbackConfig(metricName || "", config);
-  if (metricName && !metricConfig) {
-    throw data(`Metric ${metricName} not found in config`, { status: 404 });
+  if (!functionName) {
+    throw data("Function name is required", { status: 400 });
   }
 
-  // Run all fetches concurrently
-  const [inferenceCount, feedbackCount, curatedInferenceCount] =
-    await Promise.all([
-      functionName ? countInferencesForFunction(functionName) : null,
+  const client = getTensorZeroClient();
 
-      functionName && functionConfig && metricName && metricConfig
-        ? countFeedbacksForMetric(
-            functionName,
-            functionConfig,
-            metricName,
-            metricConfig,
-          )
-        : Promise.resolve(null),
+  // Get inference stats
+  const inferenceStatsPromise = client.getInferenceStats(functionName);
 
-      functionName && functionConfig && metricName && metricConfig
-        ? countCuratedInferences(
-            functionName,
-            functionConfig,
-            metricName,
-            metricConfig,
-            threshold,
-          )
-        : Promise.resolve(null),
-    ]);
+  // Get feedback stats if metric is provided
+  const feedbackStatsPromise =
+    metricName !== null
+      ? client.getFeedbackStats(functionName, metricName, threshold)
+      : Promise.resolve(null);
+
+  const [inferenceStats, feedbackStats] = await Promise.all([
+    inferenceStatsPromise,
+    feedbackStatsPromise,
+  ]);
 
   return Response.json({
-    inferenceCount,
-    feedbackCount,
-    curatedInferenceCount,
+    inferenceCount: Number(inferenceStats.inference_count),
+    feedbackCount:
+      feedbackStats?.feedback_count === undefined
+        ? undefined
+        : Number(feedbackStats?.feedback_count),
+    curatedInferenceCount:
+      feedbackStats?.inference_count === undefined
+        ? undefined
+        : Number(feedbackStats?.inference_count),
   } as CountsData);
 }
 
