@@ -1,153 +1,397 @@
 import type { Control } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import type { SFTFormValues } from "./types";
-import { ModelOptionSchema, type ModelOption } from "./model_options";
-import { useState } from "react";
+import {
+  ModelOptionSchema,
+  type ModelOption,
+  detectProviderFromModelName,
+} from "./model_options";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from "~/components/ui/popover";
-import { Button } from "~/components/ui/button";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronDown, Info } from "lucide-react";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "~/components/ui/command";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Input } from "~/components/ui/input";
 import clsx from "clsx";
 import { ModelBadge } from "~/components/model/ModelBadge";
+import { formatProvider } from "~/utils/providers";
+
+const providers = ModelOptionSchema.shape.provider.options;
+
+// Allows click events on dropdown items to fire before blur creates custom model
+const BLUR_CONFIRM_DELAY_MS = 150;
+
+type ModelSelectorProps = {
+  control: Control<SFTFormValues>;
+  models: ModelOption[];
+};
+
+function createCustomModel(
+  name: string,
+  provider: ModelOption["provider"],
+): ModelOption {
+  return { displayName: name, name, provider };
+}
+
+function filterModelsByName(
+  models: ModelOption[],
+  query: string,
+): ModelOption[] {
+  if (!query) return models;
+  const lowerQuery = query.toLowerCase();
+  return models.filter((m) =>
+    m.displayName.toLowerCase().includes(lowerQuery),
+  );
+}
+
+function isCustomModel(
+  value: ModelOption | undefined,
+  predefinedModels: ModelOption[],
+): boolean {
+  if (!value) return false;
+  return !predefinedModels.some((m) => m.name === value.name);
+}
 
 export function ModelSelector({
   control,
-  models: initialModels,
-}: {
-  control: Control<SFTFormValues>;
-  models: ModelOption[];
-}) {
+  models: predefinedModels,
+}: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
-  const [inputValue, setInputValue] = useState("");
-  const [currentModels, setCurrentModels] = useState(initialModels);
+  const [providerSelectOpen, setProviderSelectOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState<string | null>(null);
+  const [customProvider, setCustomProvider] =
+    useState<ModelOption["provider"]>("openai");
+  const commandRef = useRef<HTMLDivElement>(null);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleInputChange = (input: string) => {
-    setInputValue(input);
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
 
-    if (input) {
-      const newModels = [...initialModels];
+  const detectedProvider = useMemo(
+    () => detectProviderFromModelName(searchValue ?? ""),
+    [searchValue],
+  );
 
-      // Pick all providers from the schema
-      const providers = ModelOptionSchema.shape.provider
-        .options as ModelOption["provider"][];
+  useEffect(() => {
+    setCustomProvider(detectedProvider);
+  }, [detectedProvider]);
 
-      providers.forEach((provider) => {
-        const modelExists = initialModels.some(
-          (m) =>
-            m.displayName.toLowerCase() === input.toLowerCase() &&
-            m.provider === provider,
-        );
+  const filteredModels = useMemo(
+    () => filterModelsByName(predefinedModels, searchValue ?? ""),
+    [searchValue, predefinedModels],
+  );
 
-        if (!modelExists) {
-          newModels.push({
-            displayName: `Other: ${input}`,
-            name: input,
-            provider: provider,
-          });
-        }
-      });
+  const hasExactMatch = useMemo(
+    () =>
+      searchValue !== null &&
+      predefinedModels.some(
+        (m) => m.displayName.toLowerCase() === searchValue.toLowerCase(),
+      ),
+    [predefinedModels, searchValue],
+  );
+  const showCreateOption = searchValue !== null && searchValue.length > 0 && !hasExactMatch;
 
-      if (newModels.length > initialModels.length) {
-        setCurrentModels(newModels);
-      } else {
-        setCurrentModels(initialModels);
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      // Don't close popover when provider Select is open
+      if (!newOpen && providerSelectOpen) return;
+      setOpen(newOpen);
+    },
+    [providerSelectOpen],
+  );
+
+  const handleKeyDown = useCallback(
+    (
+      e: React.KeyboardEvent<HTMLInputElement>,
+      onChange: (value: ModelOption) => void,
+    ) => {
+      if (e.key === "Escape") {
+        setSearchValue(null);
+        setOpen(false);
+        return;
       }
-    } else {
-      setCurrentModels(initialModels);
-    }
-  };
+
+      if (
+        e.key === "Enter" &&
+        searchValue &&
+        showCreateOption &&
+        filteredModels.length === 0
+      ) {
+        e.preventDefault();
+        onChange(createCustomModel(searchValue, customProvider));
+        setSearchValue(null);
+        setOpen(false);
+        return;
+      }
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+        e.preventDefault();
+        commandRef.current?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: e.key, bubbles: true }),
+        );
+      }
+    },
+    [showCreateOption, filteredModels.length, searchValue, customProvider],
+  );
 
   return (
     <FormField
       control={control}
       name="model"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Model</FormLabel>
-          <div className="grid gap-x-8 md:grid-cols-2">
-            <div className="w-full space-y-2">
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger className="border-gray-200" asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between font-normal shadow-none"
-                  >
-                    <div>
-                      {field.value?.displayName ?? "Select a model..."}
-                      {field.value?.provider && (
-                        <span className="ml-2">
+      render={({ field }) => {
+        const selectedIsCustom = isCustomModel(field.value, predefinedModels);
+        const displayQuery = searchValue ?? (selectedIsCustom ? field.value?.displayName ?? "" : "");
+        const displayModels = filterModelsByName(predefinedModels, displayQuery);
+
+        const handleSelect = (model: ModelOption) => {
+          field.onChange(model);
+          setSearchValue(null);
+          setOpen(false);
+        };
+
+        const handleSelectCustom = () => {
+          if (!searchValue) return;
+          field.onChange(createCustomModel(searchValue, customProvider));
+          setSearchValue(null);
+          setOpen(false);
+        };
+
+        const handleBlur = (e: React.FocusEvent) => {
+          const relatedTarget = e.relatedTarget as Element | null;
+          if (
+            relatedTarget?.closest("[data-radix-popper-content-wrapper]") ||
+            relatedTarget?.closest("[data-radix-select-content]")
+          ) {
+            return;
+          }
+
+          if (!showCreateOption || !searchValue) return;
+
+          if (blurTimeoutRef.current) {
+            clearTimeout(blurTimeoutRef.current);
+          }
+
+          const valueToCreate = searchValue;
+          const providerToUse = customProvider;
+
+          blurTimeoutRef.current = setTimeout(() => {
+            field.onChange(createCustomModel(valueToCreate, providerToUse));
+            setSearchValue(null);
+          }, BLUR_CONFIRM_DELAY_MS);
+        };
+
+        return (
+          <FormItem>
+            <FormLabel>Model</FormLabel>
+            <div className="grid gap-x-8 md:grid-cols-2">
+              <div className="w-full space-y-2">
+                <Popover open={open} onOpenChange={handleOpenChange}>
+                  <PopoverAnchor asChild>
+                    <div className="group relative">
+                      <Input
+                        placeholder="Select model..."
+                        value={searchValue !== null ? searchValue : (field.value?.displayName ?? "")}
+                        onChange={(e) => {
+                          setSearchValue(e.target.value);
+                          if (!open) setOpen(true);
+                        }}
+                        onFocus={() => setOpen(true)}
+                        onBlur={handleBlur}
+                        onKeyDown={(e) => handleKeyDown(e, field.onChange)}
+                        className={clsx(
+                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent pr-16 focus-visible:ring-0",
+                          open && "border-border-accent",
+                        )}
+                      />
+                      <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                        {field.value && searchValue === null && (
                           <ModelBadge provider={field.value.provider} />
-                        </span>
-                      )}
+                        )}
+                        <ChevronDown
+                          className={clsx(
+                            "text-fg-muted group-hover:text-fg-tertiary h-4 w-4 shrink-0",
+                            open && "-rotate-180",
+                          )}
+                        />
+                      </div>
                     </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[var(--radix-popover-trigger-width)] p-0"
-                  align="start"
-                >
-                  <Command>
-                    <CommandInput
-                      placeholder="Search models..."
-                      value={inputValue}
-                      onValueChange={handleInputChange}
-                      className="h-9"
-                    />
-                    <CommandList>
-                      <CommandEmpty className="px-4 py-2 text-sm">
-                        No model found.
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {currentModels.map((model) => (
-                          <CommandItem
-                            key={`${model.provider}::${model.displayName}`}
-                            value={`${model.provider}::${model.displayName}`}
-                            onSelect={() => {
-                              field.onChange(model);
-                              setInputValue("");
-                              setOpen(false);
-                            }}
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={clsx(
-                                  "mr-2 h-4 w-4",
-                                  field.value?.displayName ===
-                                    model.displayName &&
-                                    field.value?.provider === model.provider
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              <span>{model.displayName}</span>
-                            </div>
-                            <ModelBadge provider={model.provider} />
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                  </PopoverAnchor>
+
+                  <PopoverContent
+                    className="flex w-[var(--radix-popover-trigger-width)] flex-col p-0"
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onInteractOutside={(e) => {
+                      const target = e.target as Element | null;
+                      if (target?.closest("[data-radix-select-content]")) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
+                    <Command ref={commandRef} shouldFilter={false}>
+                      <CommandList className="max-h-[250px] overflow-y-auto overflow-x-hidden">
+                        {displayModels.length === 0 &&
+                          !showCreateOption &&
+                          !selectedIsCustom && (
+                            <CommandEmpty>No models found</CommandEmpty>
+                          )}
+
+                        {providers.map((provider) => {
+                          const providerModels = displayModels.filter(
+                            (m) => m.provider === provider,
+                          );
+                          if (providerModels.length === 0) return null;
+                          return (
+                            <CommandGroup
+                              key={provider}
+                              heading={formatProvider(provider).name}
+                            >
+                              {providerModels.map((model) => (
+                                <CommandItem
+                                  key={`${model.provider}::${model.name}`}
+                                  value={`${model.provider}::${model.name}`}
+                                  onSelect={() => handleSelect(model)}
+                                  className="flex items-center justify-between"
+                                >
+                                  <span className="font-mono text-sm">
+                                    {model.displayName}
+                                  </span>
+                                  <Check
+                                    className={clsx(
+                                      "h-4 w-4",
+                                      field.value?.name === model.name &&
+                                        field.value?.provider === model.provider
+                                        ? "opacity-100"
+                                        : "opacity-0",
+                                    )}
+                                  />
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          );
+                        })}
+
+                        {selectedIsCustom && !searchValue && field.value && (
+                          <>
+                            {displayModels.length > 0 && <CommandSeparator />}
+                            <CommandGroup heading="Custom">
+                              <CommandItem
+                                value={`custom::${field.value.name}`}
+                                onSelect={() => setOpen(false)}
+                                className="flex items-center justify-between"
+                              >
+                                <span className="font-mono text-sm">
+                                  {field.value.displayName}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <Select
+                                    value={field.value.provider}
+                                    onOpenChange={setProviderSelectOpen}
+                                    onValueChange={(
+                                      newProvider: ModelOption["provider"],
+                                    ) => {
+                                      field.onChange({
+                                        ...field.value,
+                                        provider: newProvider,
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger
+                                      className="border-border data-[state=open]:border-border-accent h-6 w-auto gap-1 pr-1 pl-2 text-xs focus:ring-0"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {providers.map((p) => (
+                                        <SelectItem key={p} value={p}>
+                                          {formatProvider(p).name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Check className="h-4 w-4" />
+                                </div>
+                              </CommandItem>
+                            </CommandGroup>
+                          </>
+                        )}
+
+                        {showCreateOption && (
+                          <>
+                            {filteredModels.length > 0 && <CommandSeparator />}
+                            <CommandGroup heading="Custom">
+                              <CommandItem
+                                value={`custom::${searchValue}`}
+                                onSelect={handleSelectCustom}
+                                className="flex items-center justify-between"
+                              >
+                                <span className="font-mono text-sm">
+                                  {searchValue}
+                                </span>
+                                <Select
+                                  value={customProvider}
+                                  onOpenChange={setProviderSelectOpen}
+                                  onValueChange={(
+                                    value: ModelOption["provider"],
+                                  ) => setCustomProvider(value)}
+                                >
+                                  <SelectTrigger
+                                    className="border-border data-[state=open]:border-border-accent h-6 w-auto gap-1 pr-1 pl-2 text-xs focus:ring-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {providers.map((p) => (
+                                      <SelectItem key={p} value={p}>
+                                        {formatProvider(p).name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </CommandItem>
+                            </CommandGroup>
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+
+                    {!showCreateOption && !selectedIsCustom && (
+                      <div className="shrink-0 border-t px-3 py-2">
+                        <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                          <Info className="h-3 w-3 shrink-0" />
+                          Type to enter a custom model ID
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-          </div>
-        </FormItem>
-      )}
+          </FormItem>
+        );
+      }}
     />
   );
 }
