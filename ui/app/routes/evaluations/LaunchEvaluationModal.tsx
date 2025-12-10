@@ -25,7 +25,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
@@ -86,10 +85,12 @@ function EvaluationForm({
     function_name ?? undefined,
   );
 
-  const { count: datasetCount, isLoading: datasetLoading } =
-    useDatasetCountFetcher(selectedDatasetName, function_name);
-  count = datasetCount;
-  isLoading = datasetLoading;
+  // Get the count for the selected dataset from the datasets array
+  const selectedDataset = selectedDatasetName
+    ? datasets.find((d) => d.name === selectedDatasetName)
+    : undefined;
+  count = selectedDataset?.count ?? null;
+  isLoading = datasetsLoading;
 
   // Validate that stored values still exist in the current config/datasets
   useEffect(() => {
@@ -174,8 +175,8 @@ function EvaluationForm({
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
     selectedDatasetName !== null &&
-    datasetCount !== null &&
-    datasetCount > 0 &&
+    count !== null &&
+    count > 0 &&
     inferenceCache !== null &&
     concurrencyLimit !== "" &&
     isMaxDatapointsValid &&

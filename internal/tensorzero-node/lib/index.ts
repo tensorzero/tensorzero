@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
@@ -329,15 +328,6 @@ export class DatabaseClient {
 
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async countDatapointsForDatasetFunction(
-    params: CountDatapointsForDatasetFunctionParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
-      paramsString,
-    );
   }
 
   async getFeedbackByVariant(
