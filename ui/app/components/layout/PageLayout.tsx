@@ -85,14 +85,14 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   );
 };
 
-const SectionsGroup: React.FC<React.ComponentProps<"section">> = ({
+const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
   className,
   ...props
 }) => (
-  <section className={cn("flex flex-col gap-12", className)} {...props}>
+  <div className={cn("flex flex-col gap-12", className)} {...props}>
     {children}
-  </section>
+  </div>
 );
 
 const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
