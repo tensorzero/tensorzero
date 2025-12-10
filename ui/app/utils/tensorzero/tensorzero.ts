@@ -14,6 +14,8 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CreateDatapointsRequest,
+  CreateDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -584,6 +586,29 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as CloneDatapointsResponse;
+  }
+
+  /**
+   * Creates new datapoints in a dataset manually.
+   * @param datasetName - The name of the dataset to create datapoints in
+   * @param request - The request containing the datapoints to create
+   * @returns A promise that resolves with the response containing the new datapoint IDs
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async createDatapoints(
+    datasetName: string,
+    request: CreateDatapointsRequest,
+  ): Promise<CreateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CreateDatapointsResponse;
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {

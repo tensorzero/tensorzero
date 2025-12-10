@@ -4246,7 +4246,7 @@ If `true`, the gateway will throw an error on startup if it fails to connect to 
 If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
 If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
 
-If you have features that require PostgreSQL (rate limiting or Track-and-Stop experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require PostgreSQL (e.g. rate limiting, adaptive experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 

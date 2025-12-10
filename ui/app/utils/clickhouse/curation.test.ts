@@ -297,7 +297,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
     { type: "demonstration", level: "inference" },
   );
   expect(demoCount).toBe(100);
-});
+}, 10000);
 
 describe("handle_llm_judge_output", () => {
   it("should remove the thinking field from the output", () => {

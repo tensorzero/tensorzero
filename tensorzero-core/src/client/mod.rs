@@ -192,7 +192,7 @@ impl HTTPGateway {
         Ok((response, raw_response))
     }
 
-    async fn http_inference_stream(
+    async fn send_http_stream_inference(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
@@ -970,6 +970,13 @@ impl Client {
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body.clone());
 
+                if let Some(api_key) = params.api_key {
+                    builder = builder.header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", api_key.expose_secret()),
+                    );
+                }
+
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
                     let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
@@ -979,7 +986,7 @@ impl Client {
                 if params.stream.unwrap_or(false) {
                     Ok(HttpResponse {
                         response: InferenceOutput::Streaming(
-                            client.http_inference_stream(builder).await?,
+                            client.send_http_stream_inference(builder).await?,
                         ),
                         raw_request: body,
                         raw_response: None,
