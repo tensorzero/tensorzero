@@ -17,8 +17,10 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 pub mod clickhouse;
 pub mod datasets;
 pub mod feedback;
+pub mod inference_stats;
 pub mod inferences;
 pub mod postgres;
+pub mod stored_datapoint;
 
 #[async_trait]
 pub trait ClickHouseConnection:

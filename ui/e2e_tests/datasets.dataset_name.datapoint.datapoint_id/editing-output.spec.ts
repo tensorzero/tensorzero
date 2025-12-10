@@ -27,6 +27,7 @@ test.describe("Output - Text Blocks", () => {
     const outputSection = page
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Output" }) });
+    await outputSection.waitFor({ state: "visible" });
 
     // Add text block to output
     const addTextButton = outputSection
@@ -555,6 +556,10 @@ test.describe("JSON Output - Schema Editing", () => {
     // Step 2: Edit schema again to verify edits continue to work
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    // Click on Schema tab (entering edit mode switches to raw tab by default)
+    const schemaTabForEdit = outputSection.getByRole("tab", { name: "Schema" });
+    await schemaTabForEdit.click();
 
     const schemaEditor2 = outputSection
       .locator("div[contenteditable='true']")

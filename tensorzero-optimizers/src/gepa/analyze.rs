@@ -407,8 +407,9 @@ mod tests {
     use std::collections::HashMap;
     use tensorzero_core::{
         config::{SchemaData, path::ResolvedTomlPathData},
+        db::stored_datapoint::StoredChatInferenceDatapoint,
         endpoints::{
-            datasets::{Datapoint, StoredChatInferenceDatapoint},
+            datasets::Datapoint,
             inference::{ChatInferenceResponse, InferenceResponse},
         },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
