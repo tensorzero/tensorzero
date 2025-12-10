@@ -139,7 +139,6 @@ test.describe("System Message - Template", () => {
     let templateEditor = page.getByRole("textbox", {
       name: "System template editor",
     });
-    await templateEditor.waitFor({ state: "visible" });
 
     const templateValue1 = v7();
     const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
@@ -169,7 +168,6 @@ test.describe("System Message - Template", () => {
     templateEditor = page.getByRole("textbox", {
       name: "System template editor",
     });
-    await templateEditor.waitFor({ state: "visible" });
 
     const templateValue2 = v7();
     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
