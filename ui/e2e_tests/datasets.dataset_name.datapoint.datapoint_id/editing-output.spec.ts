@@ -550,6 +550,10 @@ test.describe("JSON Output - Schema Editing", () => {
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
+    // Click on Schema tab (entering edit mode switches to raw tab by default)
+    const schemaTabForEdit = outputSection.getByRole("tab", { name: "Schema" });
+    await schemaTabForEdit.click();
+
     const schemaEditor2 = outputSection
       .locator("div[contenteditable='true']")
       .last();
