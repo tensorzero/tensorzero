@@ -19,6 +19,7 @@ import type {
   CreateDatapointsRequest,
   CreateDatapointsResponse,
   Datapoint,
+  GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetModelLatencyResponse,
@@ -281,58 +282,6 @@ export const FeedbackResponseSchema = z.object({
   feedback_id: z.string(),
 });
 export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
-
-/**
- * Schema for tool parameters in a datapoint
- */
-export const ToolParamsSchema = z.record(ZodJsonValueSchema);
-export type ToolParams = z.infer<typeof ToolParamsSchema>;
-
-/**
- * Base schema for datapoints with common fields
- */
-const BaseDatapointSchema = z.object({
-  function_name: z.string(),
-  id: z.string().uuid(),
-  episode_id: z.string().uuid().nullish(),
-  input: InputSchema,
-  output: ZodJsonValueSchema,
-  tags: z.record(z.string()).optional(),
-  auxiliary: z.string().optional(),
-  is_custom: z.boolean(),
-  source_inference_id: z.string().uuid().nullish(),
-  name: z.string().nullish(),
-  staled_at: z.string().datetime().nullish(),
-});
-
-/**
- * Schema for chat inference datapoints
- */
-export const ChatInferenceDatapointSchema = BaseDatapointSchema.extend({
-  tool_params: ToolParamsSchema.optional(),
-});
-export type ChatInferenceDatapoint = z.infer<
-  typeof ChatInferenceDatapointSchema
->;
-
-/**
- * Schema for JSON inference datapoints
- */
-export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
-  output_schema: ZodJsonValueSchema,
-});
-export type JsonInferenceDatapoint = z.infer<
-  typeof JsonInferenceDatapointSchema
->;
-
-/**
- * Combined schema for any type of datapoint
- */
-export const DatapointSchema = z.union([
-  ChatInferenceDatapointSchema,
-  JsonInferenceDatapointSchema,
-]);
-export type ZodDatapoint = z.infer<typeof DatapointSchema>;
 
 /**
  * Schema for datapoint response
@@ -674,6 +623,33 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as CreateDatapointsResponse;
+  }
+
+  /**
+   * Fetches datapoint count for a dataset, optionally filtered by function name.
+   * @param datasetName - The name of the dataset to get count for
+   * @param options - Optional parameters for filtering
+   * @param options.functionName - Optional function name to filter by
+   * @returns A promise that resolves with the datapoint count
+   * @throws Error if the request fails
+   */
+  async getDatapointCount(
+    datasetName: string,
+    options?: { functionName?: string },
+  ): Promise<GetDatapointCountResponse> {
+    const searchParams = new URLSearchParams();
+    if (options?.functionName) {
+      searchParams.append("function_name", options.functionName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/count${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetDatapointCountResponse;
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {
