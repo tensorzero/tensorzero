@@ -168,12 +168,13 @@ export function ModelSelector({
 
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
         e.preventDefault();
+        if (!open) setOpen(true);
         commandRef.current?.dispatchEvent(
           new KeyboardEvent("keydown", { key: e.key, bubbles: true }),
         );
       }
     },
-    [showCreateOption, filteredModels.length, searchValue, customProvider, closeDropdown],
+    [showCreateOption, filteredModels.length, searchValue, customProvider, closeDropdown, open],
   );
 
   return (
