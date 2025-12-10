@@ -27,6 +27,7 @@ test.describe("Output - Text Blocks", () => {
     const outputSection = page
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Output" }) });
+    await outputSection.waitFor({ state: "visible" });
 
     // Add text block to output
     const addTextButton = outputSection
@@ -35,9 +36,12 @@ test.describe("Output - Text Blocks", () => {
     await expect(addTextButton).toBeVisible();
     await addTextButton.click();
 
-    const textEditor = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
+    const textEditorBlocks = outputSection.locator(
+      "div[contenteditable='true']",
+    );
+
+    await expect(textEditorBlocks).toHaveCount(2);
+    const textEditor = textEditorBlocks.last();
     await textEditor.waitFor({ state: "visible" });
 
     const textContent = v7();
@@ -242,9 +246,12 @@ test.describe("Output - Thought Blocks", () => {
     await expect(addThoughtButton).toBeVisible();
     await addThoughtButton.click();
 
-    const thoughtEditor = outputSection
-      .locator("div[contenteditable='true']")
-      .last();
+    const thoughtEditorBlocks = outputSection.locator(
+      "div[contenteditable='true']",
+    );
+    await expect(thoughtEditorBlocks).toHaveCount(2);
+
+    const thoughtEditor = thoughtEditorBlocks.last();
     await thoughtEditor.waitFor({ state: "visible" });
 
     const thoughtContent = v7();
