@@ -68,7 +68,7 @@ pub struct ModelInference {
     pub system: Option<String>,
 
     // TODO(shuyangli): Figure out if this should be a different message type, since we should not send Stored* types in API.
-    /// Input messages sent to the model.   
+    /// Input messages sent to the model.
     pub input_messages: Vec<StoredRequestMessage>,
 
     /// Output content blocks from the model.

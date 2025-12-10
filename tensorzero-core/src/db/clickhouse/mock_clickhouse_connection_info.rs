@@ -9,9 +9,11 @@ use crate::db::datasets::{
     GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::error::Error;
+use crate::inference::types::StoredModelInference;
 use crate::stored_inference::StoredInferenceDatabase;
 
 /// Mock struct that implements all traits on ClickHouseConnectionInfo.
@@ -28,6 +30,7 @@ pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) inference_queries: MockInferenceQueries,
     pub(crate) dataset_queries: MockDatasetQueries,
     pub(crate) config_queries: MockConfigQueries,
+    pub(crate) model_inference_queries: MockModelInferenceQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -36,6 +39,7 @@ impl MockClickHouseConnectionInfo {
             inference_queries: MockInferenceQueries::new(),
             dataset_queries: MockDatasetQueries::new(),
             config_queries: MockConfigQueries::new(),
+            model_inference_queries: MockModelInferenceQueries::new(),
         }
     }
 }
@@ -114,5 +118,17 @@ impl ConfigQueries for MockClickHouseConnectionInfo {
         snapshot_hash: SnapshotHash,
     ) -> Result<ConfigSnapshot, Error> {
         self.config_queries.get_config_snapshot(snapshot_hash).await
+    }
+}
+
+#[async_trait]
+impl ModelInferenceQueries for MockClickHouseConnectionInfo {
+    async fn get_model_inferences_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<Vec<StoredModelInference>, Error> {
+        self.model_inference_queries
+            .get_model_inferences_by_inference_id(inference_id)
+            .await
     }
 }
