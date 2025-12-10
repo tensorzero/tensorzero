@@ -69,7 +69,9 @@ export function TemplateContentBlock({
         allowedLanguages={["json"]}
         value={formattedJson}
         readOnly={!isEditing}
-        ariaLabel={block.name === "system" ? "System template editor" : undefined}
+        ariaLabel={
+          block.name === "system" ? "System template editor" : undefined
+        }
         // TODO (GabrielBianconi): DANGER! This does not prevent form submission!
         // The user can submit a stale value if an error is present.
         onChange={(updatedArgumentsString) => {
