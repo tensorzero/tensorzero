@@ -307,7 +307,7 @@ export function ModelSelector({
                     }}
                   >
                     <Command ref={commandRef} shouldFilter={false}>
-                      <CommandList className="max-h-[250px] overflow-x-hidden overflow-y-auto">
+                      <CommandList>
                         {filteredModels.length === 0 &&
                           !showCreateOption &&
                           !selectedIsCustom && (
