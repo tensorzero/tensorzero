@@ -49,4 +49,3 @@ ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
 CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e", "-j", "32"]
-
