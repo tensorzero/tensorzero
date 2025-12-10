@@ -245,7 +245,7 @@ async fn test_tensorzero_missing_auth() {
     [gateway.auth.cache]
     enabled = false
     ",
-        None,
+        Some("gateway=debug,tensorzero_core=debug,warn"),
     )
     .await;
 
