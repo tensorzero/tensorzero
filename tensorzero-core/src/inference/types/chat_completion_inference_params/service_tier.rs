@@ -1,10 +1,11 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Service tier for inference requests.
 ///
 /// Controls the priority and latency characteristics of the request.
 /// Different providers map these values differently to their own service tiers.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceTier {

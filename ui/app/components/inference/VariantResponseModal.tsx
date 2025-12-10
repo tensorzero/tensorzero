@@ -16,6 +16,7 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
+  StoredInference,
 } from "~/types/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
@@ -112,7 +113,7 @@ interface VariantResponseModalProps {
   isLoading: boolean;
   onClose: () => void;
   // Use a union type to accept either inference or datapoint
-  item: ParsedInferenceRow | Datapoint;
+  item: StoredInference | Datapoint;
   // Make inferenceUsage optional since datasets don't have it by default
   inferenceUsage?: InferenceUsage;
   selectedVariant: string;
@@ -160,9 +161,7 @@ export function VariantResponseModal({
 
   // Get original variant name if available (only for inferences)
   const originalVariant =
-    source === "inference"
-      ? (item as ParsedInferenceRow).variant_name
-      : undefined;
+    source === "inference" ? (item as StoredInference).variant_name : undefined;
 
   const refreshButton = onRefresh && (
     <Button

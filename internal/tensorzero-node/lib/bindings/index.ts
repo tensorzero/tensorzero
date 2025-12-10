@@ -79,6 +79,7 @@ export * from "./EvaluationRunSuccessEvent";
 export * from "./EvaluatorConfig";
 export * from "./ExactMatchConfig";
 export * from "./ExperimentationConfig";
+export * from "./ExtraBody";
 export * from "./ExtraHeaderKind";
 export * from "./FeedbackBounds";
 export * from "./FeedbackBoundsByType";

@@ -22,6 +22,7 @@ import type {
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
+  GetInferencesRequest,
   GetInferencesResponse,
   InferenceStatsResponse,
   ListDatapointsRequest,
@@ -642,6 +643,27 @@ export class TensorZeroClient {
     request: ListInferencesRequest,
   ): Promise<GetInferencesResponse> {
     const response = await this.fetch("/v1/inferences/list_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetInferencesResponse;
+  }
+
+  /**
+   * Retrieves specific inferences by their IDs.
+   * Uses the public v1 API endpoint.
+   * @param request - The get inferences request containing IDs and optional filters
+   * @returns A promise that resolves with the inferences response
+   * @throws Error if the request fails
+   */
+  async getInferences(
+    request: GetInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/get_inferences", {
       method: "POST",
       body: JSON.stringify(request),
     });

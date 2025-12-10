@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::client::InferenceParams;
 use crate::config::Config;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
@@ -10,6 +11,8 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+use crate::inference::types::extra_body::DynamicExtraBody;
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -19,6 +22,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
     ResolvedRequestMessage, Text,
 };
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
     DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
 };
@@ -218,6 +222,10 @@ impl StoredChatInference {
             inference_id: self.inference_id,
             tool_params,
             tags: self.tags,
+            extra_body: self.extra_body,
+            inference_params: self.inference_params,
+            processing_time_ms: self.processing_time_ms,
+            ttft_ms: self.ttft_ms,
         })
     }
 }
@@ -265,6 +273,14 @@ pub struct StoredChatInference {
     pub tool_params: DynamicToolParams,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default)]
+    #[ts(as = "Vec<DynamicExtraBody>")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    pub inference_params: InferenceParams,
+    #[ts(optional)]
+    pub processing_time_ms: Option<u64>,
+    #[ts(optional)]
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -288,6 +304,10 @@ impl StoredChatInferenceDatabase {
             inference_id: self.inference_id,
             tool_params: self.tool_params.into(),
             tags: self.tags,
+            extra_body: self.extra_body,
+            inference_params: self.inference_params,
+            processing_time_ms: self.processing_time_ms,
+            ttft_ms: self.ttft_ms,
         }
     }
 }
@@ -308,6 +328,12 @@ pub struct StoredChatInferenceDatabase {
     pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatabase {
@@ -333,6 +359,16 @@ pub struct StoredJsonInference {
     pub output_schema: Value,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    #[serde(default)]
+    #[ts(as = "Vec<DynamicExtraBody>")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default)]
+    #[schemars(!default)]
+    pub inference_params: InferenceParams,
+    #[ts(optional)]
+    pub processing_time_ms: Option<u64>,
+    #[ts(optional)]
+    pub ttft_ms: Option<u64>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -753,6 +789,7 @@ mod tests {
     use crate::config::{Config, SchemaData};
     use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+    use crate::endpoints::inference::InferenceParams;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
@@ -830,6 +867,10 @@ mod tests {
                 tags.insert("key2".to_string(), "value2".to_string());
                 tags
             },
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            inference_params: InferenceParams::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }
     }
 
@@ -866,6 +907,10 @@ mod tests {
                 tags.insert("json_key".to_string(), "json_value".to_string());
                 tags
             },
+            extra_body: UnfilteredInferenceExtraBody::default(),
+            inference_params: InferenceParams::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }
     }
 
