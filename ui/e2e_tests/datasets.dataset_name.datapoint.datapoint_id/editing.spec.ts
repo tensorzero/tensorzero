@@ -136,9 +136,7 @@ test.describe("System Message - Template", () => {
     // Step 2: Re-add system template (still in same edit session)
     await addTemplateButton.click();
 
-    const templateEditorBlocks = systemSection.locator(
-      "div[contenteditable='true']",
-    );
+    const templateEditorBlocks = page.locator("div[contenteditable='true']");
     await expect(templateEditorBlocks).toHaveCount(2);
     let templateEditor = templateEditorBlocks.first();
     await templateEditor.waitFor({ state: "visible" });
