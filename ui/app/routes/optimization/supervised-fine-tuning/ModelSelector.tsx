@@ -39,6 +39,9 @@ const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 const RADIX_SELECT_SELECTOR = "[data-radix-select-content]";
 const COMMAND_MENU_KEYS = ["ArrowDown", "ArrowUp", "Enter"];
 
+// Extra padding around the badge/chevron area (right-3 = 12px on each side)
+const INPUT_RIGHT_CONTENT_PADDING_PX = 24;
+
 function createCustomModel(
   name: string,
   provider: ModelOption["provider"],
@@ -123,7 +126,9 @@ export function ModelSelector({
   const [searchValue, setSearchValue] = useState<string | null>(null);
   const [customProvider, setCustomProvider] =
     useState<ModelOption["provider"]>("openai");
+  const [rightPadding, setRightPadding] = useState(32);
   const commandRef = useRef<HTMLDivElement>(null);
+  const inputSuffixRef = useRef<HTMLDivElement>(null);
 
   const closeDropdown = useCallback(() => {
     setOpen(false);
@@ -138,6 +143,13 @@ export function ModelSelector({
   useEffect(() => {
     setCustomProvider(detectedProvider);
   }, [detectedProvider]);
+
+  useEffect(() => {
+    if (inputSuffixRef.current) {
+      const width = inputSuffixRef.current.offsetWidth;
+      setRightPadding(width + INPUT_RIGHT_CONTENT_PADDING_PX);
+    }
+  }, [searchValue]);
 
   const filteredModels = useMemo(
     () => filterModelsByName(predefinedModels, searchValue ?? ""),
@@ -260,12 +272,16 @@ export function ModelSelector({
                         onClick={() => setOpen(true)}
                         onBlur={handleBlur}
                         onKeyDown={(e) => handleKeyDown(e, field.onChange)}
+                        style={{ paddingRight: rightPadding }}
                         className={clsx(
-                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent pr-16 focus-visible:ring-0",
+                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent focus-visible:ring-0",
                           open && "border-border-accent",
                         )}
                       />
-                      <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
+                      <div
+                        ref={inputSuffixRef}
+                        className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2"
+                      >
                         {field.value && searchValue === null && (
                           <ModelBadge provider={field.value.provider} />
                         )}
@@ -325,6 +341,37 @@ export function ModelSelector({
                           </>
                         )}
 
+                        {selectedIsCustom && !searchValue && (
+                          <>
+                            <CommandGroup heading="Custom">
+                              <CommandItem
+                                value={`custom::${field.value.name}`}
+                                onSelect={() => setOpen(false)}
+                                className="flex items-center justify-between gap-2"
+                              >
+                                <span className="min-w-0 truncate font-mono text-sm">
+                                  {field.value.displayName}
+                                </span>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <ModelProviderSelect
+                                    value={field.value.provider}
+                                    onChange={(p) => {
+                                      if (!field.value) return;
+                                      field.onChange({
+                                        ...field.value,
+                                        provider: p,
+                                      });
+                                    }}
+                                    onOpenChange={setProviderSelectOpen}
+                                  />
+                                  <Check className="h-4 w-4" />
+                                </div>
+                              </CommandItem>
+                            </CommandGroup>
+                            {filteredModels.length > 0 && <CommandSeparator />}
+                          </>
+                        )}
+
                         {providers.map((provider) => {
                           const providerModels = filteredModels.filter(
                             (m) => m.provider === provider,
@@ -358,37 +405,6 @@ export function ModelSelector({
                             </CommandGroup>
                           );
                         })}
-
-                        {selectedIsCustom && !searchValue && (
-                          <>
-                            {filteredModels.length > 0 && <CommandSeparator />}
-                            <CommandGroup heading="Custom">
-                              <CommandItem
-                                value={`custom::${field.value.name}`}
-                                onSelect={() => setOpen(false)}
-                                className="flex items-center justify-between"
-                              >
-                                <span className="font-mono text-sm">
-                                  {field.value.displayName}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <ModelProviderSelect
-                                    value={field.value.provider}
-                                    onChange={(p) => {
-                                      if (!field.value) return;
-                                      field.onChange({
-                                        ...field.value,
-                                        provider: p,
-                                      });
-                                    }}
-                                    onOpenChange={setProviderSelectOpen}
-                                  />
-                                  <Check className="h-4 w-4" />
-                                </div>
-                              </CommandItem>
-                            </CommandGroup>
-                          </>
-                        )}
                       </CommandList>
                     </Command>
 
