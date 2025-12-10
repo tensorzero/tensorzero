@@ -37,6 +37,7 @@ const providers = ModelOptionSchema.shape.provider.options;
 
 const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 const RADIX_SELECT_SELECTOR = "[data-radix-select-content]";
+const COMMAND_MENU_KEYS = ["ArrowDown", "ArrowUp", "Enter"];
 
 function createCustomModel(
   name: string,
@@ -62,6 +63,20 @@ function isCustomModel(
 ): boolean {
   if (!value) return false;
   return !predefinedModels.some((m) => m.name === value.name);
+}
+
+function isModelSelected(
+  fieldValue: ModelOption | undefined,
+  model: ModelOption,
+): boolean {
+  return fieldValue?.name === model.name && fieldValue?.provider === model.provider;
+}
+
+function isFocusWithinPopover(relatedTarget: Element | null): boolean {
+  return Boolean(
+    relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
+    relatedTarget?.closest(RADIX_SELECT_SELECTOR)
+  );
 }
 
 type ModelProviderSelectProps = {
@@ -166,7 +181,7 @@ export function ModelSelector({
         return;
       }
 
-      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+      if (COMMAND_MENU_KEYS.includes(e.key)) {
         e.preventDefault();
         if (!open) setOpen(true);
         commandRef.current?.dispatchEvent(
@@ -183,8 +198,8 @@ export function ModelSelector({
       name="model"
       render={({ field }) => {
         const selectedIsCustom = isCustomModel(field.value, predefinedModels);
-        const displayQuery = searchValue ?? (selectedIsCustom ? field.value?.displayName ?? "" : "");
-        const displayModels = filterModelsByName(predefinedModels, displayQuery);
+        const inputValue = searchValue ?? field.value?.displayName ?? "";
+        const displayModels = filterModelsByName(predefinedModels, inputValue);
 
         const handleSelect = (model: ModelOption) => {
           field.onChange(model);
@@ -198,11 +213,7 @@ export function ModelSelector({
         };
 
         const handleBlur = (e: React.FocusEvent) => {
-          const relatedTarget = e.relatedTarget as Element | null;
-          if (
-            relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
-            relatedTarget?.closest(RADIX_SELECT_SELECTOR)
-          ) {
+          if (isFocusWithinPopover(e.relatedTarget as Element | null)) {
             return;
           }
 
@@ -229,7 +240,7 @@ export function ModelSelector({
                     <div className="group relative">
                       <Input
                         placeholder="Select model..."
-                        value={searchValue !== null ? searchValue : (field.value?.displayName ?? "")}
+                        value={inputValue}
                         onChange={(e) => {
                           setSearchValue(e.target.value);
                           if (!open) setOpen(true);
@@ -298,8 +309,7 @@ export function ModelSelector({
                                   <Check
                                     className={clsx(
                                       "h-4 w-4",
-                                      field.value?.name === model.name &&
-                                        field.value?.provider === model.provider
+                                      isModelSelected(field.value, model)
                                         ? "opacity-100"
                                         : "opacity-0",
                                     )}
@@ -310,7 +320,7 @@ export function ModelSelector({
                           );
                         })}
 
-                        {selectedIsCustom && !searchValue && field.value && (
+                        {selectedIsCustom && !searchValue && (
                           <>
                             {displayModels.length > 0 && <CommandSeparator />}
                             <CommandGroup heading="Custom">
@@ -325,7 +335,10 @@ export function ModelSelector({
                                 <div className="flex items-center gap-2">
                                   <ModelProviderSelect
                                     value={field.value.provider}
-                                    onChange={(p) => field.onChange({ ...field.value, provider: p })}
+                                    onChange={(p) => {
+                                      if (!field.value) return;
+                                      field.onChange({ ...field.value, provider: p });
+                                    }}
                                     onOpenChange={setProviderSelectOpen}
                                   />
                                   <Check className="h-4 w-4" />
