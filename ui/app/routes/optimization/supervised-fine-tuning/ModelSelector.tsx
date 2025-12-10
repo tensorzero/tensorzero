@@ -35,13 +35,9 @@ import { formatProvider } from "~/utils/providers";
 
 const providers = ModelOptionSchema.shape.provider.options;
 
-// Allows click events on dropdown items to fire before blur creates custom model
 const BLUR_CONFIRM_DELAY_MS = 150;
-
-type ModelSelectorProps = {
-  control: Control<SFTFormValues>;
-  models: ModelOption[];
-};
+const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
+const RADIX_SELECT_SELECTOR = "[data-radix-select-content]";
 
 function createCustomModel(
   name: string,
@@ -69,6 +65,37 @@ function isCustomModel(
   return !predefinedModels.some((m) => m.name === value.name);
 }
 
+type ModelProviderSelectProps = {
+  value: ModelOption["provider"];
+  onChange: (value: ModelOption["provider"]) => void;
+  onOpenChange: (open: boolean) => void;
+};
+
+function ModelProviderSelect({ value, onChange, onOpenChange }: ModelProviderSelectProps) {
+  return (
+    <Select value={value} onOpenChange={onOpenChange} onValueChange={onChange}>
+      <SelectTrigger
+        className="border-border data-[state=open]:border-border-accent h-6 w-auto gap-1 pr-1 pl-2 text-xs focus:ring-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {providers.map((p) => (
+          <SelectItem key={p} value={p}>
+            {formatProvider(p).name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+type ModelSelectorProps = {
+  control: Control<SFTFormValues>;
+  models: ModelOption[];
+};
+
 export function ModelSelector({
   control,
   models: predefinedModels,
@@ -80,6 +107,11 @@ export function ModelSelector({
     useState<ModelOption["provider"]>("openai");
   const commandRef = useRef<HTMLDivElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const closeDropdown = useCallback(() => {
+    setSearchValue(null);
+    setOpen(false);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -126,8 +158,7 @@ export function ModelSelector({
       onChange: (value: ModelOption) => void,
     ) => {
       if (e.key === "Escape") {
-        setSearchValue(null);
-        setOpen(false);
+        closeDropdown();
         return;
       }
 
@@ -139,8 +170,7 @@ export function ModelSelector({
       ) {
         e.preventDefault();
         onChange(createCustomModel(searchValue, customProvider));
-        setSearchValue(null);
-        setOpen(false);
+        closeDropdown();
         return;
       }
 
@@ -151,7 +181,7 @@ export function ModelSelector({
         );
       }
     },
-    [showCreateOption, filteredModels.length, searchValue, customProvider],
+    [showCreateOption, filteredModels.length, searchValue, customProvider, closeDropdown],
   );
 
   return (
@@ -165,22 +195,20 @@ export function ModelSelector({
 
         const handleSelect = (model: ModelOption) => {
           field.onChange(model);
-          setSearchValue(null);
-          setOpen(false);
+          closeDropdown();
         };
 
         const handleSelectCustom = () => {
           if (!searchValue) return;
           field.onChange(createCustomModel(searchValue, customProvider));
-          setSearchValue(null);
-          setOpen(false);
+          closeDropdown();
         };
 
         const handleBlur = (e: React.FocusEvent) => {
           const relatedTarget = e.relatedTarget as Element | null;
           if (
-            relatedTarget?.closest("[data-radix-popper-content-wrapper]") ||
-            relatedTarget?.closest("[data-radix-select-content]")
+            relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
+            relatedTarget?.closest(RADIX_SELECT_SELECTOR)
           ) {
             return;
           }
@@ -243,7 +271,7 @@ export function ModelSelector({
                     onOpenAutoFocus={(e) => e.preventDefault()}
                     onInteractOutside={(e) => {
                       const target = e.target as Element | null;
-                      if (target?.closest("[data-radix-select-content]")) {
+                      if (target?.closest(RADIX_SELECT_SELECTOR)) {
                         e.preventDefault();
                       }
                     }}
@@ -304,32 +332,11 @@ export function ModelSelector({
                                   {field.value.displayName}
                                 </span>
                                 <div className="flex items-center gap-2">
-                                  <Select
+                                  <ModelProviderSelect
                                     value={field.value.provider}
+                                    onChange={(p) => field.onChange({ ...field.value, provider: p })}
                                     onOpenChange={setProviderSelectOpen}
-                                    onValueChange={(
-                                      newProvider: ModelOption["provider"],
-                                    ) => {
-                                      field.onChange({
-                                        ...field.value,
-                                        provider: newProvider,
-                                      });
-                                    }}
-                                  >
-                                    <SelectTrigger
-                                      className="border-border data-[state=open]:border-border-accent h-6 w-auto gap-1 pr-1 pl-2 text-xs focus:ring-0"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {providers.map((p) => (
-                                        <SelectItem key={p} value={p}>
-                                          {formatProvider(p).name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                  />
                                   <Check className="h-4 w-4" />
                                 </div>
                               </CommandItem>
@@ -349,27 +356,11 @@ export function ModelSelector({
                                 <span className="font-mono text-sm">
                                   {searchValue}
                                 </span>
-                                <Select
+                                <ModelProviderSelect
                                   value={customProvider}
+                                  onChange={setCustomProvider}
                                   onOpenChange={setProviderSelectOpen}
-                                  onValueChange={(
-                                    value: ModelOption["provider"],
-                                  ) => setCustomProvider(value)}
-                                >
-                                  <SelectTrigger
-                                    className="border-border data-[state=open]:border-border-accent h-6 w-auto gap-1 pr-1 pl-2 text-xs focus:ring-0"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {providers.map((p) => (
-                                      <SelectItem key={p} value={p}>
-                                        {formatProvider(p).name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                />
                               </CommandItem>
                             </CommandGroup>
                           </>

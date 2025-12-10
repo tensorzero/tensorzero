@@ -38,17 +38,6 @@ export function detectProviderFromModelName(
     return "fireworks";
   }
 
-  if (
-    lower.startsWith("gp") ||
-    lower.startsWith("o1") ||
-    lower.startsWith("o3") ||
-    lower.startsWith("ch") ||
-    lower.startsWith("da") ||
-    lower.startsWith("ba")
-  ) {
-    return "openai";
-  }
-
   return "openai";
 }
 
