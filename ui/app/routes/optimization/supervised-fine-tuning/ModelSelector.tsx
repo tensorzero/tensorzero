@@ -199,7 +199,8 @@ export function ModelSelector({
       render={({ field }) => {
         const selectedIsCustom = isCustomModel(field.value, predefinedModels);
         const inputValue = searchValue ?? field.value?.displayName ?? "";
-        const displayModels = filterModelsByName(predefinedModels, inputValue);
+        const filterQuery = searchValue ?? "";
+        const displayModels = filterModelsByName(predefinedModels, filterQuery);
 
         const handleSelect = (model: ModelOption) => {
           field.onChange(model);
