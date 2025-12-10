@@ -14,6 +14,7 @@ use crate::client::{
 use crate::config::UninitializedRelayConfig;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     TextChunk,
@@ -438,9 +439,8 @@ impl TensorzeroRelay {
                     .unwrap_or_default(),
             },
             output_schema: request.output_schema.cloned(),
-            // TODO - implement extra_body and extra_headers
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: prepare_relay_extra_body(request),
+            extra_headers: prepare_relay_extra_headers(request),
             credentials: clients
                 .credentials
                 .iter()

@@ -4,6 +4,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{DynamicExtraBody, UnfilteredInferenceExtraBody};
 use crate::inference::types::extra_headers::{DynamicExtraHeader, UnfilteredInferenceExtraHeaders};
 use crate::model::ModelTable;
+use crate::relay::TensorzeroRelay;
 
 /// Validate all filters in extra_body and extra_headers
 pub async fn validate_inference_filters(
@@ -11,6 +12,7 @@ pub async fn validate_inference_filters(
     extra_headers: &UnfilteredInferenceExtraHeaders,
     function: Option<&FunctionConfig>,
     models: &ModelTable,
+    relay: &Option<TensorzeroRelay>,
 ) -> Result<(), Error> {
     // Validate extra_body filters
     for filter in extra_body.as_slice() {
@@ -30,7 +32,12 @@ pub async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name)?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_body objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_provider_filter(model_provider_name)?;
+                }
             }
             DynamicExtraBody::ModelProvider {
                 model_name,
@@ -42,8 +49,13 @@ pub async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                    .await?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_body objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
+                        .await?;
+                }
             }
             DynamicExtraBody::Always { .. } | DynamicExtraBody::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
@@ -69,7 +81,12 @@ pub async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name)?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_header objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_provider_filter(model_provider_name)?;
+                }
             }
             DynamicExtraHeader::ModelProvider {
                 model_name,
@@ -81,8 +98,10 @@ pub async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                    .await?;
+                if relay.is_none() {
+                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
+                        .await?;
+                }
             }
             DynamicExtraHeader::Always { .. } | DynamicExtraHeader::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
@@ -281,6 +300,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());
@@ -305,6 +325,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -329,6 +350,7 @@ mod tests {
             &extra_headers,
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -352,6 +374,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             None,
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -376,6 +399,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());
@@ -391,6 +415,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());

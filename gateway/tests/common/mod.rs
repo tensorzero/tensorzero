@@ -13,6 +13,8 @@ use tokio::{
     process::{Child, ChildStdout, Command},
 };
 
+pub mod relay;
+
 /// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
 #[allow(dead_code)]
 pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {

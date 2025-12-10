@@ -317,6 +317,7 @@ pub async fn inference(
         &params.extra_headers,
         Some(&function),
         &config.models,
+        &config.gateway.relay,
     )
     .await?;
 
@@ -747,6 +748,7 @@ async fn find_function(
                 &params.extra_headers,
                 None,
                 &config.models,
+                &config.gateway.relay,
             )
             .await?;
 
