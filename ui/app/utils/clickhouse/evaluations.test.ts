@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
   countDatapointsForEvaluation,
-  countTotalEvaluationRuns,
   getEvaluationRunInfo,
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
@@ -409,13 +408,6 @@ describe("countDatapointsForEvaluation", () => {
       ["0196368f-19bd-7082-a677-1c0bf346ff24"],
     );
     expect(datapoints).toBe(41);
-  });
-});
-
-describe("countTotalEvaluationRuns", () => {
-  test("should return correct number of evaluation runs", async () => {
-    const runs = await countTotalEvaluationRuns();
-    expect(runs).toBe(9);
   });
 });
 

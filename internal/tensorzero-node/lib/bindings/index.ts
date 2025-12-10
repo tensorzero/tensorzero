@@ -77,6 +77,7 @@ export * from "./EvaluationRunErrorEvent";
 export * from "./EvaluationRunEvent";
 export * from "./EvaluationRunFatalErrorEvent";
 export * from "./EvaluationRunStartEvent";
+export * from "./EvaluationRunStatsResponse";
 export * from "./EvaluationRunSuccessEvent";
 export * from "./EvaluatorConfig";
 export * from "./ExactMatchConfig";
