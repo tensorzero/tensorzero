@@ -6,11 +6,10 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
-    JsonInferenceDatapointInsert,
+use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
@@ -27,7 +26,7 @@ async fn test_delete_dataset_with_single_datapoint() {
 
     // Create a single datapoint
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("Test Datapoint".to_string()),
@@ -51,6 +50,8 @@ async fn test_delete_dataset_with_single_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -151,7 +152,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
     let mut inserts = vec![];
 
     for i in 0..3 {
-        inserts.push(DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "basic_test".to_string(),
             name: Some(format!("Chat Datapoint {i}")),
@@ -175,12 +176,14 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
             snapshot_hash: None,
         }));
     }
 
     for i in 0..2 {
-        inserts.push(DatapointInsert::Json(JsonInferenceDatapointInsert {
+        inserts.push(StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "json_success".to_string(),
             name: Some(format!("JSON Datapoint {i}")),
@@ -205,6 +208,8 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
             snapshot_hash: None,
         }));
     }
@@ -333,7 +338,7 @@ async fn test_delete_dataset_twice() {
 
     // Create a datapoint
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -357,6 +362,8 @@ async fn test_delete_dataset_twice() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -403,7 +410,7 @@ async fn test_delete_dataset_with_different_function_names() {
     let dataset_name = format!("test-delete-dataset-functions-{}", Uuid::now_v7());
 
     // Create datapoints with different function names in the same dataset
-    let function1_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let function1_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "function_one".to_string(),
         name: None,
@@ -427,10 +434,12 @@ async fn test_delete_dataset_with_different_function_names() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
-    let function2_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let function2_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "function_two".to_string(),
         name: None,
@@ -454,6 +463,8 @@ async fn test_delete_dataset_with_different_function_names() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 

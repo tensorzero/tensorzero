@@ -5,8 +5,6 @@ use url::Url;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct ProviderTypesConfig {
     #[serde(default)]
     pub anthropic: AnthropicProviderTypeConfig,
@@ -46,17 +44,14 @@ pub struct ProviderTypesConfig {
 
 // Anthropic
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: AnthropicDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AnthropicDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -72,17 +67,14 @@ impl Default for AnthropicDefaults {
 
 // Azure
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct AzureProviderTypeConfig {
     #[serde(default)]
     pub defaults: AzureDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AzureDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -98,17 +90,14 @@ impl Default for AzureDefaults {
 
 // DeepSeek
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct DeepSeekProviderTypeConfig {
     #[serde(default)]
     pub defaults: DeepSeekDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeepSeekDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -124,17 +113,14 @@ impl Default for DeepSeekDefaults {
 
 // Fireworks
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FireworksProviderTypeConfig {
     #[serde(default)]
     pub defaults: FireworksDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FireworksDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -153,13 +139,10 @@ impl Default for FireworksDefaults {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
     #[cfg(feature = "e2e_tests")]
-    #[ts(skip)]
     pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
     pub defaults: GCPDefaults,
@@ -167,8 +150,6 @@ pub struct GCPProviderTypeConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
@@ -180,17 +161,13 @@ pub enum GCPBatchConfigType {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
 pub struct GCPBatchConfigCloudStorage {
     pub input_uri_prefix: String,
     pub output_uri_prefix: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GCPDefaults {
-    #[ts(type = "string")]
     pub credential_location: CredentialLocationWithFallback,
 }
 
@@ -206,17 +183,14 @@ impl Default for GCPDefaults {
 
 // Google AI Studio
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
     #[serde(default)]
     pub defaults: GoogleAIStudioGeminiDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GoogleAIStudioGeminiDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -232,17 +206,14 @@ impl Default for GoogleAIStudioGeminiDefaults {
 
 // Groq
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct GroqProviderTypeConfig {
     #[serde(default)]
     pub defaults: GroqDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroqDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -258,17 +229,14 @@ impl Default for GroqDefaults {
 
 // Hyperbolic
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct HyperbolicProviderTypeConfig {
     #[serde(default)]
     pub defaults: HyperbolicDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HyperbolicDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -284,17 +252,14 @@ impl Default for HyperbolicDefaults {
 
 // Mistral
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct MistralProviderTypeConfig {
     #[serde(default)]
     pub defaults: MistralDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MistralDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -310,20 +275,16 @@ impl Default for MistralDefaults {
 
 // OpenAI
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
     #[cfg(feature = "e2e_tests")]
-    #[ts(skip)]
     pub batch_inference_api_base: Option<Url>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OpenAIDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -339,16 +300,13 @@ impl Default for OpenAIDefaults {
 
 // Openrouter
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct OpenRouterProviderTypeConfig {
     pub defaults: OpenRouterDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OpenRouterDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -364,17 +322,14 @@ impl Default for OpenRouterDefaults {
 
 // SGLang
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SGLangProviderTypeConfig {
     #[serde(default)]
     pub defaults: SGLangDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SGLangDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -390,16 +345,13 @@ impl Default for SGLangDefaults {
 
 // TGI
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TGIProviderTypeConfig {
     pub defaults: TGIDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TGIDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -415,16 +367,13 @@ impl Default for TGIDefaults {
 
 // Together
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TogetherProviderTypeConfig {
     pub defaults: TogetherDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TogetherDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -440,17 +389,14 @@ impl Default for TogetherDefaults {
 
 // vLLM
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct VLLMProviderTypeConfig {
     #[serde(default)]
     pub defaults: VLLMDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VLLMDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
@@ -466,17 +412,14 @@ impl Default for VLLMDefaults {
 
 // xAI
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct XAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: XAIDefaults,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct XAIDefaults {
-    #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
 }
 
