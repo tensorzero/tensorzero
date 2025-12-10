@@ -485,6 +485,89 @@ gateway_url = "http://0.0.0.0:19999"
 }
 
 #[tokio::test]
+async fn test_relay_dynamic_api_key() {
+    let downstream_config = r#"
+    [models.my_dummy]
+    routing = ["good"]
+
+    [models.my_dummy.providers.good]
+    type = "dummy"
+    model_name = "test_key"
+    api_key_location = "dynamic::my_api_key"
+    "#;
+    let relay_config = r#"
+    [models.my_dummy]
+    routing = ["error"]
+
+    [models.my_dummy.providers.error]
+    type = "dummy"
+    model_name = "error"
+    "#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "my_dummy",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "credentials": {
+                "my_api_key": "good_key"
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response = response.text().await.unwrap();
+    println!("Response: {response}");
+    assert_eq!(status, http::StatusCode::OK);
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "my_dummy",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "credentials": {
+                "my_api_key": "bad_key"
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response = response.text().await.unwrap();
+    println!("New response: {response}");
+    assert_eq!(status, http::StatusCode::BAD_GATEWAY);
+    assert!(
+        response.contains("Invalid API key for Dummy provider"),
+        "Unexpected response: {response}"
+    );
+}
+
+#[tokio::test]
 async fn test_relay_downstream_error_model() {
     let downstream_config = "";
     let relay_config = "";
