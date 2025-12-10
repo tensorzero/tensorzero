@@ -35,7 +35,7 @@ export function VirtualizedCodeEditor(props: CodeEditorProps) {
   return (
     <div ref={containerRef}>
       {isVisible ? (
-        <CodeEditor {...props} />
+        <CodeEditor {...props} ariaLabel={props.ariaLabel} />
       ) : (
         <LightweightPlaceholder
           value={props.value}

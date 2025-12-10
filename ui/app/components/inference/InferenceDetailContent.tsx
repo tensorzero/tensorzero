@@ -1,18 +1,21 @@
 import {
   isJsonOutput,
-  type ParsedInferenceRow,
   type ParsedModelInferenceRow,
 } from "~/utils/clickhouse/inference";
-import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
+import type {
+  FeedbackRow,
+  FeedbackBounds,
+  StoredInference,
+} from "~/types/tensorzero";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import BasicInfo from "~/routes/observability/inferences/$inference_id/InferenceBasicInfo";
-import Input from "~/components/inference/Input";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
+import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesTable } from "~/routes/observability/inferences/$inference_id/ModelInferencesTable";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
@@ -38,9 +41,13 @@ import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
+import { InputElement } from "../input_output/InputElement";
+import type { Input } from "~/types/tensorzero";
 
 export interface InferenceDetailData {
-  inference: ParsedInferenceRow;
+  inference: StoredInference;
+  // TODO: remove
+  input: Input;
   model_inferences: ParsedModelInferenceRow[];
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
@@ -85,6 +92,7 @@ export function InferenceDetailContent({
 }: InferenceDetailContentProps) {
   const {
     inference,
+    input,
     model_inferences,
     feedback,
     feedback_bounds,
@@ -185,6 +193,7 @@ export function InferenceDetailContent({
   const onVariantSelect = (variant: string) => {
     processRequest(variant, {
       resource: inference,
+      input,
       source: variantSource,
       variant,
     });
@@ -193,6 +202,7 @@ export function InferenceDetailContent({
   const onModelSelect = (model: string) => {
     processRequest(model, {
       resource: inference,
+      input,
       source: variantSource,
       model_name: model,
     });
@@ -273,7 +283,7 @@ export function InferenceDetailContent({
         isDefaultFunction={isDefault}
       />
       <AddToDatasetButton
-        inferenceId={inference.id}
+        inferenceId={inference.inference_id}
         functionName={inference.function_name}
         variantName={inference.variant_name}
         episodeId={inference.episode_id}
@@ -295,7 +305,7 @@ export function InferenceDetailContent({
       >
         <humanFeedbackFetcher.Form method="post" action="/api/feedback">
           <HumanFeedbackForm
-            inferenceId={inference.id}
+            inferenceId={inference.inference_id}
             inferenceOutput={inference.output}
             formError={humanFeedbackFormError}
             isSubmitting={
@@ -325,15 +335,12 @@ export function InferenceDetailContent({
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input
-            system={inference.input.system}
-            messages={inference.input.messages}
-          />
+          <InputElement input={input} />
         </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          {inference.function_type === "json" ? (
+          {inference.type === "json" ? (
             <JsonOutputElement
               output={inference.output}
               outputSchema={inference.output_schema}
@@ -371,20 +378,29 @@ export function InferenceDetailContent({
           />
         </SectionLayout>
 
-        {inference.function_type === "chat" && (
+        {inference.type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
-            {inference.tool_params && (
-              <ParameterCard
-                parameters={JSON.stringify(inference.tool_params, null, 2)}
-              />
-            )}
+            <ToolParametersSection
+              allowed_tools={inference.allowed_tools}
+              additional_tools={inference.additional_tools}
+              tool_choice={inference.tool_choice}
+              parallel_tool_calls={inference.parallel_tool_calls}
+              provider_tools={inference.provider_tools}
+            />
           </SectionLayout>
         )}
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsTable tags={inference.tags} isEditing={false} />
+          <TagsTable
+            tags={Object.fromEntries(
+              Object.entries(inference.tags).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            )}
+            isEditing={false}
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -417,7 +433,11 @@ export function InferenceDetailContent({
               action="/api/feedback"
             >
               <input type="hidden" name="metricName" value="demonstration" />
-              <input type="hidden" name="inferenceId" value={inference.id} />
+              <input
+                type="hidden"
+                name="inferenceId"
+                value={inference.inference_id}
+              />
               <input
                 type="hidden"
                 name="value"

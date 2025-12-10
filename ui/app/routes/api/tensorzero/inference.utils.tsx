@@ -1,34 +1,16 @@
 import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
-import type { ZodDisplayInputMessage } from "~/utils/clickhouse/common";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
-  CacheParamsOptions,
-  FunctionConfig,
-  JsonValue,
   PathWithContents,
   UninitializedVariantInfo,
   VariantInfo,
   ChatTemplates,
-  StaticToolConfig,
-  ToolChoice,
-  Tool,
   ResolvedTomlPathData,
+  StoredInference,
 } from "~/types/tensorzero";
-import type {
-  InputMessageContent as TensorZeroContent,
-  ImageContent as TensorZeroImage,
-  InputMessage as TensorZeroMessage,
-  Input as TensorZeroInput,
-} from "~/utils/tensorzero";
-import type {
-  ZodResolvedFileContent,
-  ZodDisplayInputMessageContent,
-  ZodDisplayInput,
-} from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
@@ -278,13 +260,15 @@ function inputMessageContentToZodInputMessageContent(
 
 interface InferenceActionArgs {
   source: "inference";
-  resource: ParsedInferenceRow;
+  resource: StoredInference;
+  input: Input;
   variant: string;
 }
 
 interface InferenceDefaultFunctionActionArgs {
   source: "inference";
-  resource: ParsedInferenceRow;
+  resource: StoredInference;
+  input: Input;
   variant?: undefined;
   model_name: string;
 }
@@ -292,30 +276,14 @@ interface InferenceDefaultFunctionActionArgs {
 interface T0DatapointActionArgs {
   source: "t0_datapoint";
   resource: ChatInferenceDatapoint | JsonInferenceDatapoint;
-  variant: string;
-}
-
-interface ClickHouseDatapointActionArgs {
-  source: "clickhouse_datapoint";
-  input: ZodDisplayInput;
-  functionName: string;
-  allowed_tools?: string[];
-  additional_tools?: Array<Tool> | null;
-  tool_choice?: ToolChoice | null;
-  parallel_tool_calls?: boolean | null;
-  output_schema?: JsonValue;
   variant?: string;
-  cache_options: CacheParamsOptions;
   editedVariantInfo?: VariantInfo;
-  functionConfig: FunctionConfig;
-  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 type ActionArgs =
   | InferenceActionArgs
   | InferenceDefaultFunctionActionArgs
-  | T0DatapointActionArgs
-  | ClickHouseDatapointActionArgs;
+  | T0DatapointActionArgs;
 
 function isDefaultFunctionArgs(
   args: ActionArgs,
@@ -369,35 +337,21 @@ export function prepareInferenceActionRequest(
   if (isDefaultFunctionArgs(args)) {
     const defaultRequest = prepareDefaultFunctionRequest(
       args.resource,
+      args.input,
       args.model_name,
     );
     return { ...baseParams, ...defaultRequest };
-  } else if (args.source === "clickhouse_datapoint") {
-    // Extract tool parameters from the ClickHouse datapoint args
+  } else if (args.source === "t0_datapoint") {
+    // Handle datapoints from tensorzero-node (with StoredInput)
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
       : null;
-
-    return {
-      ...baseParams,
-      function_name: args.functionName,
-      input: resolvedInputToInput(args.input),
-      variant_name: args.variant || null,
-      output_schema: args.output_schema || null,
-      tool_choice: args.tool_choice || undefined,
-      parallel_tool_calls: args.parallel_tool_calls || undefined,
-      additional_tools: args.additional_tools || undefined,
-      allowed_tools: args.allowed_tools || undefined,
-      cache_options: args.cache_options,
-      internal_dynamic_variant_config: dynamicVariantInfo,
-    };
-  } else if (args.source === "t0_datapoint") {
-    // Handle datapoints from tensorzero-node (with StoredInput)
     return {
       ...baseParams,
       function_name: args.resource.function_name,
       input: args.resource.input,
-      variant_name: args.variant,
+      variant_name: args.variant || null,
+      internal_dynamic_variant_config: dynamicVariantInfo,
     };
   } else {
     // For other sources, the input is already a DisplayInput
@@ -408,7 +362,6 @@ export function prepareInferenceActionRequest(
     ) {
       throw new Error("Extra body is not supported for inference in UI.");
     }
-    const input = resolvedInputToInput(args.resource.input);
     // TODO: this is unsupported in Node bindings for now
     // const extra_body =
     //   args.source === "inference" ? args.resource.extra_body : undefined;
@@ -416,30 +369,31 @@ export function prepareInferenceActionRequest(
     return {
       ...baseParams,
       function_name: args.resource.function_name,
-      input,
+      input: args.input,
       variant_name: args.variant,
     };
   }
 }
 
 function prepareDefaultFunctionRequest(
-  inference: ParsedInferenceRow,
+  inference: StoredInference,
+  input: Input,
   selectedVariant: string,
 ): Partial<ClientInferenceParams> {
-  const input = resolvedInputToInput(inference.input);
-  if (inference.function_type === "chat") {
-    const tool_choice = inference.tool_params?.tool_choice;
-    const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
-    const tools_available = inference.tool_params?.tools_available;
+  if (inference.type === "chat") {
+    const tool_choice = inference.tool_choice;
+    const parallel_tool_calls = inference.parallel_tool_calls;
+    const allowed_tools = inference.allowed_tools;
     return {
       model_name: selectedVariant,
       input,
       tool_choice: tool_choice,
-      parallel_tool_calls: parallel_tool_calls || undefined,
+      parallel_tool_calls: parallel_tool_calls,
+      allowed_tools,
       // We need to add all tools as additional for the default function
-      additional_tools: tools_available,
+      additional_tools: inference.additional_tools,
     };
-  } else if (inference.function_type === "json") {
+  } else if (inference.type === "json") {
     // This should never happen, just in case and for type safety
     const output_schema = inference.output_schema;
     return {
@@ -467,160 +421,6 @@ export type VariantResponseInfo =
       output?: JsonInferenceOutput;
       usage?: InferenceUsage;
     };
-
-export function resolvedInputToInput(input: ZodDisplayInput): Input {
-  return {
-    system: input.system || null,
-    messages: input.messages.map(resolvedInputMessageToInputMessage),
-  };
-}
-
-export function resolvedInputToTensorZeroInput(
-  input: ZodDisplayInput,
-): TensorZeroInput {
-  return {
-    ...input,
-    messages: input.messages.map(resolvedInputMessageToTensorZeroMessage),
-  };
-}
-
-function resolvedInputMessageToTensorZeroMessage(
-  message: ZodDisplayInputMessage,
-): TensorZeroMessage {
-  return {
-    ...message,
-    content: message.content.map(
-      resolvedInputMessageContentToTensorZeroContent,
-    ),
-  };
-}
-
-function resolvedInputMessageContentToTensorZeroContent(
-  content: ZodDisplayInputMessageContent,
-): TensorZeroContent {
-  switch (content.type) {
-    case "text":
-      return {
-        type: "text",
-        text: content.text,
-      };
-    case "missing_function_text":
-      return {
-        type: "text",
-        text: content.value,
-      };
-    case "raw_text":
-    case "tool_call":
-    case "tool_result":
-    case "thought":
-    case "template":
-    case "unknown":
-      return content;
-    case "file":
-      return resolvedFileContentToTensorZeroFile(content);
-    case "file_error":
-      throw new Error("Can't convert image error to tensorzero content");
-  }
-}
-
-function resolvedFileContentToTensorZeroFile(
-  content: ZodResolvedFileContent,
-): TensorZeroImage {
-  const data = content.file.data.split(",")[1];
-  return {
-    type: "image",
-    mime_type: content.file.mime_type,
-    data,
-  };
-}
-
-function resolvedInputMessageToInputMessage(
-  message: ZodDisplayInputMessage,
-): InputMessage {
-  return {
-    role: message.role,
-    content: message.content.map(
-      resolvedInputMessageContentToInputMessageContent,
-    ),
-  };
-}
-
-function resolvedInputMessageContentToInputMessageContent(
-  content: ZodDisplayInputMessageContent,
-): InputMessageContent {
-  switch (content.type) {
-    case "template":
-      return content;
-    case "text":
-      return {
-        type: "text",
-        text: content.text,
-      };
-    case "missing_function_text":
-      return {
-        type: "text",
-        text: content.value,
-      };
-    case "raw_text":
-      return {
-        type: "raw_text",
-        value: content.value,
-      };
-    case "tool_call": {
-      let parsedArguments;
-      try {
-        parsedArguments = JSON.parse(content.arguments);
-      } catch {
-        parsedArguments = content.arguments;
-      }
-      return {
-        type: "tool_call",
-        id: content.id,
-        name: content.name,
-        arguments: parsedArguments,
-        raw_arguments: content.arguments,
-        raw_name: content.name,
-      };
-    }
-    case "tool_result":
-      return {
-        type: "tool_result",
-        id: content.id,
-        name: content.name,
-        result: content.result,
-      };
-    case "thought":
-      return {
-        type: "thought",
-        text: content.text,
-        signature: content.signature,
-        provider_type: content.provider_type,
-      };
-    case "unknown":
-      return {
-        type: "unknown",
-        data: content.data,
-        model_name: content.model_name,
-        provider_name: content.provider_name,
-      };
-    case "file":
-      return resolvedFileContentToClientFile(content);
-    case "file_error":
-      throw new Error("Can't convert image error to client content");
-  }
-}
-
-function resolvedFileContentToClientFile(
-  content: ZodResolvedFileContent,
-): InputMessageContent {
-  const data = content.file.data.split(",")[1];
-  return {
-    type: "file",
-    file_type: "base64",
-    mime_type: content.file.mime_type,
-    data,
-  };
-}
 
 function convertTemplate(
   template: PathWithContents | null,

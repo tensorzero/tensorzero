@@ -28,9 +28,12 @@ test.describe("System Message - Text", () => {
     await expect(addTextButton).toBeVisible();
     await addTextButton.click();
 
-    const systemMessageEditor = page
-      .locator("div[contenteditable='true']")
-      .first();
+    const systemMessageEditorBlocks = systemSection.locator(
+      "div[contenteditable='true']",
+    );
+    await expect(systemMessageEditorBlocks).toHaveCount(1);
+
+    const systemMessageEditor = systemMessageEditorBlocks.first();
     await systemMessageEditor.waitFor({ state: "visible" });
 
     const systemMessageText1 = v7();
@@ -133,8 +136,9 @@ test.describe("System Message - Template", () => {
     // Step 2: Re-add system template (still in same edit session)
     await addTemplateButton.click();
 
-    let templateEditor = page.locator("div[contenteditable='true']").first();
-    await templateEditor.waitFor({ state: "visible" });
+    let templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
     const templateValue1 = v7();
     const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
@@ -161,8 +165,9 @@ test.describe("System Message - Template", () => {
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-    templateEditor = page.locator("div[contenteditable='true']").first();
-    await templateEditor.waitFor({ state: "visible" });
+    templateEditor = templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
     const templateValue2 = v7();
     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
@@ -219,10 +224,11 @@ test.describe("User Message - Text Blocks", () => {
     await expect(addTextButton).toBeVisible();
     await addTextButton.click();
 
+    const textEditorBlocks = userSection.locator("div[contenteditable='true']");
+    await expect(textEditorBlocks).toHaveCount(2);
+
     // Find the newly added text editor (last contenteditable in user section)
-    const textEditor = userSection
-      .locator("div[contenteditable='true']")
-      .last();
+    const textEditor = textEditorBlocks.last();
     await textEditor.waitFor({ state: "visible" });
 
     // Fill with content
@@ -588,10 +594,13 @@ test.describe("User Message - Thought Blocks", () => {
     await expect(addThoughtButton).toBeVisible();
     await addThoughtButton.click();
 
+    const thoughtEditorBlocks = userSection.locator(
+      "div[contenteditable='true']",
+    );
+    await expect(thoughtEditorBlocks).toHaveCount(2);
+
     // Find the newly added thought editor (last contenteditable in user section)
-    const thoughtEditor = userSection
-      .locator("div[contenteditable='true']")
-      .last();
+    const thoughtEditor = thoughtEditorBlocks.last();
     await thoughtEditor.waitFor({ state: "visible" });
 
     // Fill with content

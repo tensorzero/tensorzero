@@ -1,7 +1,4 @@
-import type {
-  ParsedInferenceRow,
-  ParsedModelInferenceRow,
-} from "~/utils/clickhouse/inference";
+import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -21,6 +18,7 @@ import {
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import type { StoredInference } from "~/types/tensorzero";
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -37,7 +35,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 };
 
 interface BasicInfoProps {
-  inference: ParsedInferenceRow;
+  inference: StoredInference;
   inferenceUsage?: InferenceUsage;
   modelInferences?: ParsedModelInferenceRow[];
 }
@@ -58,7 +56,7 @@ export default function BasicInfo({
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
 
   // Get function icon and background
-  const functionIconConfig = getFunctionTypeIcon(inference.function_type);
+  const functionIconConfig = getFunctionTypeIcon(inference.type);
 
   // Determine cache status from model inferences
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);
@@ -79,7 +77,7 @@ export default function BasicInfo({
             icon={functionIconConfig.icon}
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
-            secondaryLabel={`· ${inference.function_type}`}
+            secondaryLabel={`· ${inference.type}`}
             link={toFunctionUrl(inference.function_name)}
             font="mono"
           />

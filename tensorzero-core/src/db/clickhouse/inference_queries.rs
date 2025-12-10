@@ -435,6 +435,10 @@ fn generate_single_table_query_for_type(
     }
 
     select_clauses.push("i.variant_name as variant_name".to_string());
+    select_clauses.push("i.extra_body as extra_body".to_string());
+    select_clauses.push("i.inference_params as inference_params".to_string());
+    select_clauses.push("i.processing_time_ms as processing_time_ms".to_string());
+    select_clauses.push("i.ttft_ms as ttft_ms".to_string());
 
     let mut where_clauses: Vec<String> = Vec::new();
 
@@ -684,6 +688,10 @@ mod tests {
             i.tool_choice as tool_choice,
             i.parallel_tool_calls as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             ChatInference AS i
@@ -708,6 +716,10 @@ mod tests {
             NULL as tool_choice,
             NULL as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             JsonInference AS i
@@ -754,6 +766,10 @@ mod tests {
             NULL as tool_choice,
             NULL as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             JsonInference AS i
