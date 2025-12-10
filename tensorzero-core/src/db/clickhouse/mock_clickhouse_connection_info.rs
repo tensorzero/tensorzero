@@ -3,13 +3,14 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
-    MockDatasetQueries,
+    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetQueries, DatasetQueryParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
-use crate::endpoints::datasets::StoredDatapoint;
+use crate::db::stored_datapoint::StoredDatapoint;
+use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
 
@@ -26,6 +27,7 @@ use crate::stored_inference::StoredInferenceDatabase;
 pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) inference_queries: MockInferenceQueries,
     pub(crate) dataset_queries: MockDatasetQueries,
+    pub(crate) config_queries: MockConfigQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -33,6 +35,7 @@ impl MockClickHouseConnectionInfo {
         Self {
             inference_queries: MockInferenceQueries::new(),
             dataset_queries: MockDatasetQueries::new(),
+            config_queries: MockConfigQueries::new(),
         }
     }
 }
@@ -69,7 +72,7 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.count_datasets().await
     }
 
-    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
+    async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
 
@@ -101,5 +104,15 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries
             .delete_datapoints(dataset_name, datapoint_ids)
             .await
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for MockClickHouseConnectionInfo {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.config_queries.get_config_snapshot(snapshot_hash).await
     }
 }

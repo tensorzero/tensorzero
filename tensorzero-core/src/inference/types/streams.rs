@@ -61,7 +61,8 @@ pub struct ThoughtChunk {
 
     /// See `Thought.provider_type`
     #[serde(
-        rename = "_internal_provider_type",
+        // This alias is written to the database, so we cannot remove it.
+        alias = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,

@@ -4,16 +4,16 @@ use std::sync::Arc;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_optimizers::gepa::evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
+    EvaluateVariantParams, create_evaluation_dataset, evaluate_variant,
 };
 use tensorzero_optimizers::gepa::validate::get_uninitialized_variant_configs;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use super::{
-    assert_evaluation_results_valid, build_gateway_client, cleanup_dataset,
-    create_gepa_config_chat, create_gepa_config_json, create_test_chat_rendered_sample,
-    create_test_json_rendered_sample, get_e2e_config, get_function_context,
-    TEST_CLICKHOUSE_WAIT_MS,
+    TEST_CLICKHOUSE_WAIT_MS, assert_evaluation_results_valid, build_gateway_client,
+    cleanup_dataset, create_gepa_config_chat, create_gepa_config_json,
+    create_test_chat_rendered_sample, create_test_json_rendered_sample, get_e2e_config,
+    get_function_context,
 };
 
 #[tokio::test(flavor = "multi_thread")]
@@ -58,7 +58,7 @@ async fn test_evaluate_variant_chat() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),
@@ -130,7 +130,7 @@ async fn test_evaluate_variant_json() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),
@@ -203,7 +203,7 @@ async fn test_evaluate_variant_per_datapoint_scores() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config,
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: variant_name.to_string(),

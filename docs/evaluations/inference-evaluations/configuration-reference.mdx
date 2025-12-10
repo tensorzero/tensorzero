@@ -36,6 +36,14 @@ For example, periods are not allowed in basic strings, so you can define an eval
 This should be the name of a function defined in the `[functions]` section of the gateway config.
 This value sets which function this evaluation should evaluate when run.
 
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description for this evaluation.
+This can be used to document the purpose of the evaluation for automated workflows.
+
 ### `[evaluations.evaluation_name.evaluators.evaluator_name]`
 
 The `evaluators` sub-section defines the behavior of a particular evaluator that will be run as part of its parent evaluation.
@@ -191,6 +199,14 @@ optimize = "max" # Example: Maximize score
 cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 # ...
 ```
+
+###### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description for this evaluator.
+This can be used to document the purpose of the evaluator for automated workflows.
 
 ###### `[evaluations.evaluation_name.evaluators.evaluator_name.variants.variant_name]`
 

@@ -210,6 +210,20 @@ async fn test_write_poll_batch_inference() {
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
     assert_eq!(batch_request.status, BatchStatus::Failed);
+
+    // Assert BatchRequest has snapshot_hash
+    let batch_request_query = format!(
+        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(batch_request_query)
+        .await
+        .unwrap();
+    let batch_request_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !batch_request_row["snapshot_hash"].is_null(),
+        "BatchRequest should have snapshot_hash"
+    );
 }
 
 /// Helper function to write 2 rows to the BatchModelInference table
@@ -421,11 +435,21 @@ async fn test_write_read_completed_batch_inference_chat() {
     assert_eq!(retrieved_function_name, function_name);
     let retrieved_variant_name = chat_inference_1["variant_name"].as_str().unwrap();
     assert_eq!(retrieved_variant_name, variant_name);
+    // Assert ChatInference has snapshot_hash
+    assert!(
+        !chat_inference_1["snapshot_hash"].is_null(),
+        "ChatInference should have snapshot_hash"
+    );
     let chat_inference_2 = select_chat_inference_clickhouse(&clickhouse, inference_id2)
         .await
         .unwrap();
     let retrieved_inference_id2 = chat_inference_2["id"].as_str().unwrap();
     assert_eq!(retrieved_inference_id2, inference_id2.to_string());
+    // Assert ChatInference has snapshot_hash
+    assert!(
+        !chat_inference_2["snapshot_hash"].is_null(),
+        "ChatInference should have snapshot_hash"
+    );
     let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id1)
         .await
         .unwrap();
@@ -434,6 +458,11 @@ async fn test_write_read_completed_batch_inference_chat() {
     assert_eq!(model_inference["inference_id"], inference_id1.to_string());
     assert_eq!(model_inference["model_name"], model_name);
     assert_eq!(model_inference["model_provider_name"], model_provider_name);
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !model_inference["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
+    );
 
     let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id2)
         .await
@@ -443,6 +472,26 @@ async fn test_write_read_completed_batch_inference_chat() {
     assert_eq!(model_inference["inference_id"], inference_id2.to_string());
     assert_eq!(model_inference["model_name"], model_name);
     assert_eq!(model_inference["model_provider_name"], model_provider_name);
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !model_inference["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
+    );
+
+    // Assert BatchModelInference has snapshot_hash
+    let batch_model_inference_query = format!(
+        "SELECT snapshot_hash FROM BatchModelInference WHERE batch_id = '{batch_id}' AND inference_id = '{inference_id1}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(batch_model_inference_query)
+        .await
+        .unwrap();
+    let batch_model_inference_row: serde_json::Value =
+        serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !batch_model_inference_row["snapshot_hash"].is_null(),
+        "BatchModelInference should have snapshot_hash"
+    );
 
     // Now, let's read this using `get_completed_batch_inference_response`
     let query = PollPathParams {
@@ -648,6 +697,11 @@ async fn test_write_read_completed_batch_inference_json() {
         retrieved_output_1_json.raw,
         Some("{\"answer\": \"hello world\"}".to_string())
     );
+    // Assert JsonInference has snapshot_hash
+    assert!(
+        !json_inference_1["snapshot_hash"].is_null(),
+        "JsonInference should have snapshot_hash"
+    );
     let json_inference_2 = select_json_inference_clickhouse(&clickhouse, inference_id2)
         .await
         .unwrap();
@@ -661,6 +715,11 @@ async fn test_write_read_completed_batch_inference_json() {
         retrieved_output_2_json.raw,
         Some("{\"response\": \"goodbye world\"}".to_string())
     );
+    // Assert JsonInference has snapshot_hash
+    assert!(
+        !json_inference_2["snapshot_hash"].is_null(),
+        "JsonInference should have snapshot_hash"
+    );
     let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id1)
         .await
         .unwrap();
@@ -672,6 +731,11 @@ async fn test_write_read_completed_batch_inference_json() {
     assert_eq!(
         model_inference["output"],
         "[{\"type\":\"text\",\"text\":\"{\\\"answer\\\": \\\"hello world\\\"}\"}]"
+    );
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !model_inference["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
     );
 
     let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id2)
@@ -685,6 +749,11 @@ async fn test_write_read_completed_batch_inference_json() {
     assert_eq!(
         model_inference["output"],
         "[{\"type\":\"text\",\"text\":\"{\\\"response\\\": \\\"goodbye world\\\"}\"}]"
+    );
+    // Assert ModelInference has snapshot_hash
+    assert!(
+        !model_inference["snapshot_hash"].is_null(),
+        "ModelInference should have snapshot_hash"
     );
 
     // Now, let's read this using `get_completed_batch_inference_response`

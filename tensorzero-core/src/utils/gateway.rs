@@ -238,7 +238,7 @@ impl GatewayHandle {
             && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
             return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
+                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
             }));
         }
 
@@ -282,7 +282,12 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Box::pin(Config::new_empty()).await?,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
@@ -385,9 +390,7 @@ pub async fn setup_postgres(
     let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
         // Postgres disabled by config
         (Some(false), _) => {
-            tracing::info!(
-                "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
-            );
+            tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
             PostgresConnectionInfo::Disabled
         }
         // Postgres enabled but no URL
@@ -404,7 +407,7 @@ pub async fn setup_postgres(
         // Postgres default and no URL
         (None, None) => {
             tracing::debug!(
-                "Disabling Postgres: `gateway.postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
+                "Disabling Postgres: `postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
             );
             PostgresConnectionInfo::Disabled
         }
@@ -498,9 +501,12 @@ pub async fn start_openai_compatible_gateway(
         })
     })?;
     let config_load_info = if let Some(config_file) = config_file {
-        Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?
+        Box::pin(Config::load_and_verify_from_path(&ConfigFileGlob::new(
+            config_file,
+        )?))
+        .await?
     } else {
-        Config::new_empty().await?
+        Box::pin(Config::new_empty()).await?
     };
     let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
         config_load_info,
@@ -551,6 +557,7 @@ mod tests {
     use super::*;
     use crate::config::{
         ObservabilityConfig, PostgresConfig, gateway::GatewayConfig, snapshot::ConfigSnapshot,
+        unwritten::UnwrittenConfig,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
@@ -574,6 +581,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
         let config = Config {
@@ -644,6 +652,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
 
         let config = Config {
@@ -679,6 +688,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
         let config = Config {
             gateway: gateway_config,
@@ -713,6 +723,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
+            relay: None,
         };
         let config = Config {
             gateway: gateway_config,
@@ -752,7 +763,7 @@ mod tests {
             PostgresConnectionInfo::Disabled
         ));
         assert!(logs_contain(
-            "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
+            "Disabling Postgres: `postgres.enabled` is set to false in config."
         ));
 
         // Postgres disabled even with URL provided

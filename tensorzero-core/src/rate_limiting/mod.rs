@@ -33,19 +33,18 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
-    rules: Vec<RateLimitingConfigRule>,
-    enabled: bool,
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
+    pub(crate) enabled: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
-    rules: Vec<RateLimitingConfigRule>,
+    pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -64,6 +63,17 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             rules: config.rules,
             enabled: config.enabled,
         })
+    }
+}
+
+impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
+    fn from(config: &RateLimitingConfig) -> Self {
+        // Destructure to ensure all fields are handled (compile error if field added/removed)
+        let RateLimitingConfig { rules, enabled } = config;
+        Self {
+            rules: rules.clone(),
+            enabled: *enabled,
+        }
     }
 }
 

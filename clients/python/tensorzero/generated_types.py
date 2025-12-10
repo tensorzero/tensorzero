@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .unset_type import UNSET, UnsetType
+from .omit_type import OMIT, OmitType
 
 Model = Any
 
@@ -77,11 +77,11 @@ class DatapointMetadataUpdate:
     A request to update the metadata of a datapoint.
     """
 
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
 
@@ -570,6 +570,9 @@ class JsonInferenceOutput:
     """
 
 
+JsonMode = Literal["off", "on", "strict", "tool"]
+
+
 @dataclass(kw_only=True)
 class OpenAICustomToolFormatText:
     type: Literal["text"] = "text"
@@ -598,6 +601,9 @@ class RawText:
 
 
 Role = Literal["user", "assistant"]
+
+
+ServiceTier = Literal["auto", "default", "priority", "flex"]
 
 
 @dataclass(kw_only=True)
@@ -840,6 +846,9 @@ class ToolResult:
     result: str
 
 
+UnfilteredInferenceExtraBody = list[ExtraBody]
+
+
 @dataclass(kw_only=True)
 class Unknown:
     """
@@ -871,11 +880,11 @@ class UpdateDatapointMetadataRequest:
     """
     The ID of the datapoint to update. Required.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
 
@@ -929,6 +938,22 @@ class Base64File:
     detail: Detail | None = None
     filename: str | None = None
     source_url: str | None = None
+
+
+@dataclass(kw_only=True)
+class ChatCompletionInferenceParams:
+    frequency_penalty: float | None = None
+    json_mode: JsonMode | None = None
+    max_tokens: int | None = None
+    presence_penalty: float | None = None
+    reasoning_effort: str | None = None
+    seed: int | None = None
+    service_tier: ServiceTier | None = None
+    stop_sequences: list[str] | None = None
+    temperature: float | None = None
+    thinking_budget_tokens: int | None = None
+    top_p: float | None = None
+    verbosity: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -1059,6 +1084,16 @@ class InferenceFilterTime(TimeFilter):
     """
 
     type: Literal["time"] = "time"
+
+
+@dataclass(kw_only=True)
+class InferenceParams:
+    """
+    InferenceParams is the top-level struct for inference parameters.
+    We backfill these from the configs given in the variants used and ultimately write them to the database.
+    """
+
+    chat_completion: ChatCompletionInferenceParams
 
 
 @dataclass(kw_only=True)
@@ -1200,7 +1235,7 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
-    _internal_provider_type: str | None = None
+    provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
@@ -1348,18 +1383,18 @@ class UpdateDynamicToolParamsRequest:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
@@ -1367,11 +1402,11 @@ class UpdateDynamicToolParamsRequest:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
 
@@ -1549,13 +1584,17 @@ class StoredJsonInference:
     episode_id: str
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: JsonInferenceOutput
     output_schema: Any
     timestamp: str
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
+    processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)
@@ -1575,11 +1614,11 @@ class UpdateChatDatapointRequestInternal:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
     plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
     input: Input | None = None
@@ -1591,25 +1630,25 @@ class UpdateChatDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: list[ContentBlockChatOutput] | None | UnsetType = UNSET
+    output: list[ContentBlockChatOutput] | None | OmitType = OMIT
     """
     Chat datapoint output.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing output (and can be an empty list).
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
@@ -1621,14 +1660,14 @@ class UpdateChatDatapointRequestInternal:
     """
     Datapoint tags.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
     Otherwise, it will overwrite the existing tags.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
     tool_params: UpdateDynamicToolParamsRequest | None = None
@@ -1666,17 +1705,17 @@ class UpdateJsonDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
     Datapoint name.
 
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
     be set to the provided value.
     """
-    output: JsonDatapointOutputUpdate | None | UnsetType = UNSET
+    output: JsonDatapointOutputUpdate | None | OmitType = OMIT
     """
     JSON datapoint output.
-    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
     inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.
     """
     output_schema: Any | None = None
@@ -1884,6 +1923,7 @@ class StoredChatInference:
     episode_id: str
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: list[ContentBlockChatOutput]
     timestamp: str
@@ -1899,11 +1939,13 @@ class StoredChatInference:
     If not provided, all static tools are allowed.
     """
     dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
     parallel_tool_calls: bool | None = None
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
+    processing_time_ms: int | None = None
     provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
     Provider-specific tool configurations
@@ -1914,6 +1956,7 @@ class StoredChatInference:
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)

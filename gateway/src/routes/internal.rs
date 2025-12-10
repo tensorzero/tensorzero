@@ -4,8 +4,8 @@
 //! and do not export any OpenTelemetry spans.
 
 use axum::{
-    routing::{get, post, put},
     Router,
+    routing::{get, post, put},
 };
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
@@ -20,6 +20,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference-stats",
+            get(endpoints::internal::inference_stats::get_inference_stats_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference-stats/{metric_name}",
+            get(endpoints::internal::inference_stats::get_inference_with_feedback_stats_handler),
         )
         .route(
             "/internal/ui-config",

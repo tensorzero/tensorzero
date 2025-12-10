@@ -2,7 +2,7 @@ use futures::future::join_all;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::datasets::{ChatInferenceDatapointInsert, JsonInferenceDatapointInsert};
+use crate::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint};
 use crate::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
 };
@@ -13,13 +13,13 @@ use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::tool::ToolCallConfigDatabaseInsert;
 
 impl CreateChatDatapointRequest {
-    /// Validates and converts this request into a ChatInferenceDatapointInsert struct.
+    /// Validates and converts this request into a StoredChatInferenceDatapoint struct.
     pub async fn into_database_insert(
         self,
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
-    ) -> Result<ChatInferenceDatapointInsert, Error> {
+    ) -> Result<StoredChatInferenceDatapoint, Error> {
         // Validate function exists and is a chat function
         let function_config = config.get_function(&self.function_name)?;
         let FunctionConfig::Chat(_) = &**function_config else {
@@ -53,10 +53,9 @@ impl CreateChatDatapointRequest {
             None
         };
 
-        let insert = ChatInferenceDatapointInsert {
+        let insert = StoredChatInferenceDatapoint {
             dataset_name: dataset_name.to_string(),
             function_name: self.function_name,
-            name: self.name,
             id: Uuid::now_v7(),
             episode_id: self.episode_id,
             input: stored_input,
@@ -64,9 +63,13 @@ impl CreateChatDatapointRequest {
             tool_params: tool_config.map(ToolCallConfigDatabaseInsert::from),
             tags: self.tags,
             auxiliary: String::new(),
-            staled_at: None,
-            source_inference_id: None,
+            is_deleted: false,
             is_custom: true,
+            source_inference_id: None,
+            staled_at: None,
+            snapshot_hash: Some(config.hash.clone()),
+            updated_at: String::new(), // Will be set by ClickHouse
+            name: self.name,
         };
 
         Ok(insert)
@@ -74,13 +77,13 @@ impl CreateChatDatapointRequest {
 }
 
 impl CreateJsonDatapointRequest {
-    /// Validates and converts this request into a JsonInferenceDatapointInsert struct.
+    /// Validates and converts this request into a StoredJsonInferenceDatapoint struct.
     pub async fn into_database_insert(
         self,
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
-    ) -> Result<JsonInferenceDatapointInsert, Error> {
+    ) -> Result<StoredJsonInferenceDatapoint, Error> {
         // Validate function exists and is a JSON function
         let function_config = config.get_function(&self.function_name)?;
         let FunctionConfig::Json(json_function_config) = &**function_config else {
@@ -133,10 +136,9 @@ impl CreateJsonDatapointRequest {
             None => None,
         };
 
-        let insert = JsonInferenceDatapointInsert {
+        let insert = StoredJsonInferenceDatapoint {
             dataset_name: dataset_name.to_string(),
             function_name: self.function_name,
-            name: self.name,
             id: Uuid::now_v7(),
             episode_id: self.episode_id,
             input: stored_input,
@@ -144,9 +146,13 @@ impl CreateJsonDatapointRequest {
             output_schema,
             tags: self.tags,
             auxiliary: String::new(),
-            staled_at: None,
-            source_inference_id: None,
+            is_deleted: false,
             is_custom: true,
+            source_inference_id: None,
+            staled_at: None,
+            snapshot_hash: Some(config.hash.clone()),
+            updated_at: String::new(), // Will be set by ClickHouse
+            name: self.name,
         };
 
         Ok(insert)

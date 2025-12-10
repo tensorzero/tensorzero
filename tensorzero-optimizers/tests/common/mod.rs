@@ -3,7 +3,7 @@ use base64::Engine;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tensorzero_core::{rate_limiting::ScopeInfo, tool::InferenceResponseToolCall};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing_subscriber::{self, EnvFilter};
 use url::Url;
 use uuid::Uuid;
@@ -13,20 +13,20 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
+    config::{Config, ConfigFileGlob, provider_types::ProviderTypesConfig},
     db::{
-        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
+        clickhouse::{ClickHouseConnectionInfo, test_helpers::CLICKHOUSE_URL},
         postgres::PostgresConnectionInfo,
     },
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
-        storage::{StorageKind, StoragePath},
-        stored_input::StoredFile,
         ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
         ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
         ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
         Text,
+        storage::{StorageKind, StoragePath},
+        stored_input::StoredFile,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
@@ -199,6 +199,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     tags: Arc::new(HashMap::new()),
                     api_key_public_id: None,
                 },
+                relay: None,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

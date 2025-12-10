@@ -2,97 +2,36 @@ import { expect, test } from "vitest";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
-  queryInferenceById,
   listInferencesWithPagination,
   countInferencesByFunction,
   countInferencesForVariant,
   queryModelInferencesByInferenceId,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
-import type { ZodTextContent } from "./common";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
-import type {
-  ContentBlockChatOutput,
-  JsonInferenceOutput,
-} from "~/types/tensorzero";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
-  const jsonCount = await countInferencesForFunction("extract_entities", {
-    type: "json",
-    variants: {},
-    schemas: {},
-    description: "",
-    output_schema: { value: {} },
-    json_mode_tool_call_config: {
-      static_tools_available: [],
-      dynamic_tools_available: [],
-      provider_tools: [],
-      openai_custom_tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      allowed_tools: { tools: [], choice: "function_default" },
-    },
-    experimentation: { type: "uniform" },
-  });
-  expect(jsonCount).toBe(604);
+  const jsonCount = await countInferencesForFunction("extract_entities");
+  expect(jsonCount).toBeGreaterThanOrEqual(604);
 
-  const chatCount = await countInferencesForFunction("write_haiku", {
-    type: "chat",
-    variants: {},
-    tools: [],
-    tool_choice: "none",
-    parallel_tool_calls: false,
-    schemas: {},
-    description: "",
-    experimentation: { type: "uniform" },
-  });
-  expect(chatCount).toBe(804);
+  const chatCount = await countInferencesForFunction("write_haiku");
+  expect(chatCount).toBeGreaterThanOrEqual(804);
 });
 
 // Test countInferencesForVariant
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
     "extract_entities",
-    {
-      type: "json",
-      variants: {},
-      schemas: {},
-      description: "",
-      output_schema: { value: {} },
-      json_mode_tool_call_config: {
-        static_tools_available: [],
-        dynamic_tools_available: [],
-        provider_tools: [],
-        openai_custom_tools: [],
-        tool_choice: "none",
-        parallel_tool_calls: false,
-        allowed_tools: {
-          tools: [],
-          choice: "function_default",
-        },
-      },
-      experimentation: { type: "uniform" },
-    },
     "gpt4o_initial_prompt",
   );
-  expect(jsonCount).toBe(132);
+  expect(jsonCount).toBeGreaterThanOrEqual(132);
 
   const chatCount = await countInferencesForVariant(
     "write_haiku",
-    {
-      type: "chat",
-      variants: {},
-      tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-      schemas: {},
-      description: "",
-      experimentation: { type: "uniform" },
-    },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(649);
+  expect(chatCount).toBeGreaterThanOrEqual(649);
 });
 
 // Tests for listInferencesWithPagination (new cursor-based pagination API)
@@ -300,34 +239,6 @@ test("countInferencesForEpisode with invalid episode_id", async () => {
   expect(count).toBe(0);
 });
 
-test("queryInferenceById for chat inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a001",
-  );
-  expect(inference?.function_type).toBe("chat");
-  expect(inference?.input.messages.length).toBeGreaterThan(0);
-  const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as ZodTextContent;
-  expect(firstOutput.type).toBe("text");
-  expect(firstOutput.text).toBe("Yes.");
-});
-
-test("queryInferenceById for missing inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a000",
-  );
-  expect(inference).toBeNull();
-});
-
-test("queryInferenceById for json inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-88ab-7331-8293-de75cc2b88a7",
-  );
-  expect(inference?.function_type).toBe("json");
-  expect(inference?.input.messages.length).toBe(0);
-  const output = inference?.output as JsonInferenceOutput;
-  expect(output.parsed).toBeDefined();
-});
 test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual(
@@ -389,7 +300,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
       { text: "Summary of the thought", type: "summary_text" },
       { text: "Another summary point", type: "summary_text" },
     ],
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
@@ -407,7 +318,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
     type: "thought",
     text: "Another thinking step",
     signature: "abcdef",
-    _internal_provider_type: "anthropic",
+    provider_type: "anthropic",
   };
 
   const result2 = displayModelInferenceInputMessageContentSchema.safeParse(

@@ -13,7 +13,7 @@ use tensorzero_core::{
         Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{gepa::GEPAConfig, OptimizationJobInfo, OptimizerOutput},
+    optimization::{OptimizationJobInfo, OptimizerOutput, gepa::GEPAConfig},
     stored_inference::StoredOutput,
     utils::retries::RetryConfig,
 };
@@ -260,7 +260,9 @@ pub async fn test_gepa_optimization_json() {
 
                         // Log template names that were evolved
                         for template_name in json_config.templates.inner.keys() {
-                            println!("Evolved JSON template variant includes template: '{template_name}'");
+                            println!(
+                                "Evolved JSON template variant includes template: '{template_name}'"
+                            );
                         }
                     }
 

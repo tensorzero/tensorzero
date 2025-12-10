@@ -13,9 +13,8 @@ use std::time::Duration;
 use tensorzero_core::db::clickhouse::test_helpers::{
     clickhouse_flush_async_insert, get_clickhouse,
 };
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries,
-};
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
@@ -90,7 +89,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     ));
 
     // Create datapoint via ClickHouse
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: Some("Test Tool Params Round-Trip".to_string()),
@@ -119,6 +118,9 @@ async fn test_datapoint_full_tool_params_round_trip() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -222,7 +224,7 @@ async fn test_datapoint_update_tool_params() {
         Some(false),
     ));
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: Some("Update Test".to_string()),
@@ -244,6 +246,9 @@ async fn test_datapoint_update_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -390,7 +395,7 @@ async fn test_list_datapoints_with_tool_params() {
     };
 
     // Datapoint 1: Only static tool
-    let dp1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let dp1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: Some("DP1".to_string()),
@@ -421,10 +426,13 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     // Datapoint 2: Static + one dynamic tool
-    let dp2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let dp2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: Some("DP2".to_string()),
@@ -455,10 +463,13 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     // Datapoint 3: Static + different dynamic tool with strict
-    let dp3 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let dp3 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: Some("DP3".to_string()),
@@ -489,6 +500,9 @@ async fn test_list_datapoints_with_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -578,7 +592,7 @@ async fn test_datapoint_only_static_tools() {
         strict: false,
     };
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: None,
@@ -609,6 +623,9 @@ async fn test_datapoint_only_static_tools() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -679,7 +696,7 @@ async fn test_datapoint_only_dynamic_tools() {
         strict: true,
     };
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: None,
@@ -710,6 +727,9 @@ async fn test_datapoint_only_dynamic_tools() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -773,7 +793,7 @@ async fn test_datapoint_tool_params_three_states() {
         strict: false,
     };
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: None,
@@ -804,6 +824,9 @@ async fn test_datapoint_tool_params_three_states() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -998,7 +1021,7 @@ async fn test_datapoint_no_tool_params() {
     let dataset_name = format!("test-dp-no-tools-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
         name: None,
@@ -1020,6 +1043,9 @@ async fn test_datapoint_no_tool_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse

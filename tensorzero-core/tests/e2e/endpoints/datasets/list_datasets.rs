@@ -1,12 +1,12 @@
 /// Tests for the GET /internal/datasets endpoint (list_datasets).
 use reqwest::{Client, StatusCode};
 use std::time::Duration;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries,
-};
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::endpoints::datasets::v1::types::ListDatasetsResponse;
 use tensorzero_core::inference::types::{
     Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
@@ -23,7 +23,7 @@ async fn test_list_datasets_no_params() {
     let dataset_name = format!("test-list-datasets-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "test_function".to_string(),
         name: Some("Test Datapoint".to_string()),
@@ -49,6 +49,9 @@ async fn test_list_datasets_no_params() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
     clickhouse
@@ -112,7 +115,7 @@ async fn test_list_datasets_with_function_filter() {
     let function_name_1 = format!("test_function_filter_1_{}", Uuid::now_v7());
     let function_name_2 = format!("test_function_filter_2_{}", Uuid::now_v7());
 
-    let datapoint_1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name_1.clone(),
         function_name: function_name_1.clone(),
         name: None,
@@ -134,9 +137,12 @@ async fn test_list_datasets_with_function_filter() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
-    let datapoint_2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name_2.clone(),
         function_name: function_name_2.clone(),
         name: None,
@@ -158,6 +164,9 @@ async fn test_list_datasets_with_function_filter() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
     clickhouse
@@ -240,7 +249,7 @@ async fn test_list_datasets_with_pagination() {
         let dataset_name = format!("test-list-paginate-{}-{}", i, Uuid::now_v7());
         dataset_names.push(dataset_name.clone());
 
-        let datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
             function_name: "test_function".to_string(),
             name: None,
@@ -262,6 +271,9 @@ async fn test_list_datasets_with_pagination() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: Some(SnapshotHash::new_test()),
         });
 
         datapoints.push(datapoint);

@@ -7,9 +7,10 @@ use evaluations::EvaluationInfo;
 use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
-    config::{path::ResolvedTomlPathData, SchemaData},
+    config::{SchemaData, path::ResolvedTomlPathData},
+    db::stored_datapoint::StoredChatInferenceDatapoint,
     endpoints::{
-        datasets::{Datapoint, StoredChatInferenceDatapoint},
+        datasets::Datapoint,
         inference::{ChatInferenceResponse, InferenceResponse},
     },
     evaluations::{
@@ -340,6 +341,7 @@ pub fn create_test_evaluation_info(
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
+        snapshot_hash: None,
     };
 
     let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
@@ -822,7 +824,7 @@ async fn test_analyze_input_format_scenarios() {
             Some(false), // parallel_tool_calls
         );
 
-        let datapoint = tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: uuid::Uuid::now_v7(),
@@ -842,6 +844,7 @@ async fn test_analyze_input_format_scenarios() {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let response = InferenceResponse::Chat(

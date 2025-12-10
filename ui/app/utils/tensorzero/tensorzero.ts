@@ -11,18 +11,24 @@ import {
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
-import { TensorZeroServerError } from "./errors";
+import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CreateDatapointsRequest,
+  CreateDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
+  GetInferencesRequest,
   GetInferencesResponse,
+  InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
+  StatusResponse,
   UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
@@ -327,15 +333,6 @@ export const DatapointResponseSchema = z.object({
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
 
 /**
- * Schema for status response
- */
-export const StatusResponseSchema = z.object({
-  status: z.string(),
-  version: z.string(),
-});
-export type StatusResponse = z.infer<typeof StatusResponseSchema>;
-
-/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -593,6 +590,29 @@ export class TensorZeroClient {
     return (await response.json()) as CloneDatapointsResponse;
   }
 
+  /**
+   * Creates new datapoints in a dataset manually.
+   * @param datasetName - The name of the dataset to create datapoints in
+   * @param request - The request containing the datapoints to create
+   * @returns A promise that resolves with the response containing the new datapoint IDs
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async createDatapoints(
+    datasetName: string,
+    request: CreateDatapointsRequest,
+  ): Promise<CreateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CreateDatapointsResponse;
+  }
+
   async getObject(storagePath: ZodStoragePath): Promise<string> {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
@@ -609,7 +629,7 @@ export class TensorZeroClient {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return StatusResponseSchema.parse(await response.json());
+    return (await response.json()) as StatusResponse;
   }
 
   /**
@@ -634,6 +654,27 @@ export class TensorZeroClient {
   }
 
   /**
+   * Retrieves specific inferences by their IDs.
+   * Uses the public v1 API endpoint.
+   * @param request - The get inferences request containing IDs and optional filters
+   * @returns A promise that resolves with the inferences response
+   * @throws Error if the request fails
+   */
+  async getInferences(
+    request: GetInferencesRequest,
+  ): Promise<GetInferencesResponse> {
+    const response = await this.fetch("/v1/inferences/get_inferences", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetInferencesResponse;
+  }
+
+  /**
    * Fetches the gateway configuration for the UI.
    * @returns A promise that resolves with the UiConfig object
    * @throws Error if the request fails
@@ -645,6 +686,60 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as UiConfig;
+  }
+
+  /**
+   * Fetches inference statistics for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get stats for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with the inference count
+   * @throws Error if the request fails
+   */
+  async getInferenceStats(
+    functionName: string,
+    variantName?: string,
+  ): Promise<InferenceStatsResponse> {
+    const searchParams = new URLSearchParams();
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InferenceStatsResponse;
+  }
+
+  /**
+   * Fetches feedback statistics for a function and metric.
+   * @param functionName - The name of the function to get stats for
+   * @param metricName - The name of the metric to get stats for (or "demonstration")
+   * @param threshold - Optional threshold for float metrics (defaults to 0)
+   * @returns A promise that resolves with the feedback and curated inference counts
+   * @throws Error if the request fails
+   */
+  async getFeedbackStats(
+    functionName: string,
+    metricName: string,
+    threshold?: number,
+  ): Promise<InferenceWithFeedbackStatsResponse> {
+    const searchParams = new URLSearchParams();
+    if (threshold !== undefined) {
+      searchParams.append("threshold", threshold.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InferenceWithFeedbackStatsResponse;
   }
 
   private async fetch(
@@ -673,7 +768,12 @@ export class TensorZeroClient {
       headers.set("authorization", `Bearer ${this.apiKey}`);
     }
 
-    return await fetch(url, { method, headers, body });
+    try {
+      return await fetch(url, { method, headers, body });
+    } catch (error) {
+      // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
+      throw new GatewayConnectionError(error);
+    }
   }
 
   private async getErrorText(response: Response): Promise<string> {

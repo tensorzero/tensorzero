@@ -19,7 +19,7 @@ from tensorzero.generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
-    UnsetType,
+    OmitType,
 )
 
 
@@ -153,7 +153,7 @@ class Thought(ContentBlock):
     type: str = "thought"
     signature: Optional[str] = None
     summary: Optional[List["ThoughtSummaryBlock"]] = None
-    _internal_provider_type: Optional[str] = None
+    provider_type: Optional[str] = None
 
 
 @dataclass
@@ -288,7 +288,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             signature=block.get("signature"),
             summary=summary,
             type=block_type,
-            _internal_provider_type=block.get("_internal_provider_type"),
+            provider_type=block.get("provider_type"),
         )
     elif block_type == "unknown":
         return UnknownContentBlock(
@@ -335,7 +335,7 @@ class ThoughtChunk(ContentBlockChunk):
     signature: Optional[str] = None
     summary_id: Optional[str] = None
     summary_text: Optional[str] = None
-    _internal_provider_type: Optional[str] = None
+    provider_type: Optional[str] = None
 
 
 @dataclass
@@ -564,12 +564,12 @@ class TensorZeroTypeEncoder(JSONEncoder):
         elif hasattr(o, "to_dict"):
             return o.to_dict()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         elif is_dataclass(o) and not isinstance(o, type):
-            # Convert dataclass to dict, but filter out UNSET fields
+            # Convert dataclass to dict, but filter out OMIT fields
             result = {}
             for field in fields(o):
                 value = getattr(o, field.name)
-                # Skip UNSET fields entirely (they won't be in the JSON)
-                if not isinstance(value, UnsetType):
+                # Skip OMIT fields entirely (they won't be in the JSON)
+                if not isinstance(value, OmitType):
                     # Recursively handle nested dataclasses/lists/dicts
                     result[field.name] = self._convert_value(value)
             return result  # pyright: ignore[reportUnknownVariableType]
@@ -577,8 +577,8 @@ class TensorZeroTypeEncoder(JSONEncoder):
             super().default(o)
 
     def _convert_value(self, value: Any) -> Any:
-        """Recursively convert values, filtering out UNSET."""
-        if isinstance(value, UnsetType):
+        """Recursively convert values, filtering out OMIT."""
+        if isinstance(value, OmitType):
             # This shouldn't happen at top level, but handle it just in case
             return None
         elif hasattr(value, "to_dict"):
@@ -589,7 +589,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
             result: dict[str, Any] = {}
             for field in fields(value):
                 field_value = getattr(value, field.name)
-                if not isinstance(field_value, UnsetType):
+                if not isinstance(field_value, OmitType):
                     result[field.name] = self._convert_value(field_value)
             return result  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(value, (list, tuple)):

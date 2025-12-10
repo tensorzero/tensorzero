@@ -391,6 +391,43 @@ See [How to call the OpenAI Responses API](/gateway/call-the-openai-responses-ap
 
 </Tip>
 
+### Using OpenAI Custom Tools
+
+<Warning>
+
+OpenAI custom tools are only supported by OpenAI models.
+Using custom tools with other providers will result in an error.
+
+</Warning>
+
+OpenAI offers custom tools that support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output (using Lark or regex syntax).
+
+Custom tools are passed dynamically at inference time via `additional_tools` with `type: "openai_custom"`:
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate Python code to print 'Hello, World!'"
+      }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "code_generator",
+      "description": "Generates Python code snippets",
+      "format": { "type": "text" }
+    }
+  ]
+}
+```
+
+See the [API Reference](/gateway/api-reference/inference/#additional_tools) for full documentation on custom tool formats including grammar-based constraints.
+
 ## Learn More
 
 <Columns cols={2}>

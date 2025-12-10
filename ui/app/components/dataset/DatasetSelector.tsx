@@ -16,25 +16,29 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
+import { cn } from "~/utils/common";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 
 interface DatasetSelectorProps {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
-  placeholder?: string;
+  label: string;
+  labelClassName?: string;
+  inputPlaceholder?: string;
   className?: string;
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
   disabled?: boolean;
 }
 
-// TODO Create new datasets within this component
 export function DatasetSelector({
   selected,
   onSelect,
   functionName,
-  placeholder = "Select a dataset",
+  label,
+  labelClassName,
+  inputPlaceholder,
   allowCreation = true,
   className,
   buttonProps,
@@ -60,6 +64,18 @@ export function DatasetSelector({
     [datasets],
   );
 
+  if (inputPlaceholder === undefined) {
+    if (allowCreation) {
+      if (recentlyUpdatedDatasets.length > 0) {
+        inputPlaceholder = "Create or find a dataset";
+      } else {
+        inputPlaceholder = "Create a dataset";
+      }
+    } else {
+      inputPlaceholder = "Select a dataset";
+    }
+  }
+
   // Selected dataset, if an existing one was selected
   const existingSelectedDataset = useMemo(
     () => datasets?.find((dataset) => dataset.name === selected),
@@ -74,7 +90,7 @@ export function DatasetSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="group w-full justify-between border font-normal"
+            className="group w-full justify-between border"
             disabled={disabled}
             {...buttonProps}
           >
@@ -95,7 +111,14 @@ export function DatasetSelector({
             ) : (
               <span className="flex flex-row items-center gap-2">
                 <ButtonIcon as={Table} variant="tertiary" />
-                {placeholder}
+                <span
+                  className={cn(
+                    "text-fg-secondary flex text-sm",
+                    labelClassName,
+                  )}
+                >
+                  {label}
+                </span>
               </span>
             )}
 
@@ -117,13 +140,7 @@ export function DatasetSelector({
           <Command>
             {/* TODO Naming/character constraints/disallow typing certain characters? */}
             <CommandInput
-              placeholder={
-                allowCreation
-                  ? recentlyUpdatedDatasets.length > 0
-                    ? "Create or find a dataset..."
-                    : "Create a new dataset..."
-                  : "Find a dataset..."
-              }
+              placeholder={inputPlaceholder}
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"

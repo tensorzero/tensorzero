@@ -282,6 +282,10 @@ impl InferenceFilter {
                 ))
             }
             InferenceFilter::And { children } => {
+                // Empty AND is vacuously true - all zero conditions are met
+                if children.is_empty() {
+                    return Ok("TRUE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -303,6 +307,10 @@ impl InferenceFilter {
                 Ok(format!("({child_sqls_str})"))
             }
             InferenceFilter::Or { children } => {
+                // Empty OR is false - no conditions can be met
+                if children.is_empty() {
+                    return Ok("FALSE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -524,6 +532,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -572,6 +584,10 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
@@ -626,6 +642,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -727,6 +747,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -782,6 +806,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -851,6 +879,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -936,6 +968,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1040,6 +1076,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1113,6 +1153,36 @@ FORMAT JSONEachRow";
         assert_eq!(params, expected_params);
     }
 
+    /// Tests that an empty AND filter generates valid SQL (returns 1, meaning all rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_and_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::And { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty AND is vacuously true
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND TRUE");
+    }
+
+    /// Tests that an empty OR filter generates valid SQL (returns 0, meaning no rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_or_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::Or { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty OR is vacuously false
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND FALSE");
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_not_filter() {
         let config = get_e2e_config().await;
@@ -1153,6 +1223,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1246,6 +1320,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1342,6 +1420,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1390,6 +1472,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1444,6 +1530,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1514,6 +1604,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1585,6 +1679,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1647,6 +1745,10 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
@@ -1718,6 +1820,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1797,6 +1903,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -1887,6 +1997,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -1985,6 +2099,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -2053,6 +2171,10 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
@@ -2126,6 +2248,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -2534,6 +2660,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -2591,6 +2721,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -2666,6 +2800,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
@@ -2735,6 +2873,10 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output,
     countSubstringsCaseInsensitiveUTF8(i.input, {p1:String}) as input_term_frequency,
     countSubstringsCaseInsensitiveUTF8(i.output, {p1:String}) as output_term_frequency,

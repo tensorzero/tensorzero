@@ -6,11 +6,10 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
-    JsonInferenceDatapointInsert,
+use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
 use tensorzero_core::inference::types::{
     JsonInferenceOutput, Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
@@ -26,7 +25,7 @@ async fn test_delete_datapoints_single_chat() {
 
     // Create a chat datapoint
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("Test Datapoint".to_string()),
@@ -52,6 +51,9 @@ async fn test_delete_datapoints_single_chat() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -148,7 +150,7 @@ async fn test_delete_datapoints_multiple_mixed() {
     let chat_id2 = Uuid::now_v7();
     let json_id = Uuid::now_v7();
 
-    let chat_insert1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let chat_insert1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -174,9 +176,12 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
-    let chat_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let chat_insert2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -202,9 +207,12 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
-    let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let json_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: None,
@@ -229,6 +237,9 @@ async fn test_delete_datapoints_multiple_mixed() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -306,7 +317,7 @@ async fn test_delete_datapoints_non_existent_id() {
 
     // Create one datapoint
     let existing_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -332,6 +343,9 @@ async fn test_delete_datapoints_non_existent_id() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -430,7 +444,7 @@ async fn test_delete_datapoints_already_stale() {
 
     // Create a datapoint
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -456,6 +470,9 @@ async fn test_delete_datapoints_already_stale() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     });
 
     clickhouse

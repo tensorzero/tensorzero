@@ -2,7 +2,7 @@
 name = "provider-proxy"
 version = "0.1.0"
 rust-version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 
 [[test]]
@@ -18,7 +18,7 @@ http = "1.4.0"
 http-body-util = "0.1.2"
 http-serde-ext = "1.0.2"
 hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
-hyper-util = "0.1.15"
+hyper-util = "0.1.19"
 moka = { version = "0.12.10", features = ["sync"] }
 pin-project = "1.1.10"
 rcgen = "0.14.2"

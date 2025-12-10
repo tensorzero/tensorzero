@@ -1,7 +1,8 @@
 import { describe, expect, test, beforeAll } from "vitest";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { TensorZeroClient } from "~/utils/tensorzero/tensorzero";
 
-let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
+let tensorZeroClient: TensorZeroClient;
 
 describe("update datapoints", () => {
   beforeAll(() => {
@@ -79,5 +80,89 @@ describe("update datapoints", () => {
     for (const datapoint of datapoints.datapoints) {
       expect(datapoint.function_name).toBe("extract_entities");
     }
+  });
+});
+
+describe("getInferenceStats", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
+  test("should return inference count for a function", async () => {
+    const stats = await tensorZeroClient.getInferenceStats("extract_entities");
+    expect(stats.inference_count).toBeGreaterThanOrEqual(604);
+  });
+
+  test("should return inference count for a function and variant", async () => {
+    const stats = await tensorZeroClient.getInferenceStats(
+      "extract_entities",
+      "gpt4o_initial_prompt",
+    );
+    expect(stats.inference_count).toBeGreaterThanOrEqual(132);
+  });
+
+  test("should throw error for unknown function", async () => {
+    await expect(
+      tensorZeroClient.getInferenceStats("nonexistent_function"),
+    ).rejects.toThrow();
+  });
+
+  test("should throw error for unknown variant", async () => {
+    await expect(
+      tensorZeroClient.getInferenceStats(
+        "extract_entities",
+        "nonexistent_variant",
+      ),
+    ).rejects.toThrow();
+  });
+});
+
+describe("getFeedbackStats", () => {
+  beforeAll(() => {
+    tensorZeroClient = getTensorZeroClient();
+  });
+
+  test("should return feedback stats for boolean metric", async () => {
+    const stats = await tensorZeroClient.getFeedbackStats(
+      "extract_entities",
+      "exact_match",
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(99);
+    expect(stats.inference_count).toBeGreaterThanOrEqual(41);
+  });
+
+  test("should return feedback stats for float metric with threshold", async () => {
+    const stats = await tensorZeroClient.getFeedbackStats(
+      "extract_entities",
+      "jaccard_similarity",
+      0.8,
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(99);
+    expect(stats.inference_count).toBeGreaterThanOrEqual(54);
+  });
+
+  test("should return feedback stats for demonstration metric", async () => {
+    const stats = await tensorZeroClient.getFeedbackStats(
+      "extract_entities",
+      "demonstration",
+    );
+    expect(stats.feedback_count).toBeGreaterThanOrEqual(100);
+    // For demonstrations, feedback_count equals inference_count
+    expect(stats.inference_count).toBe(stats.feedback_count);
+  });
+
+  test("should throw error for unknown function", async () => {
+    await expect(
+      tensorZeroClient.getFeedbackStats("nonexistent_function", "exact_match"),
+    ).rejects.toThrow();
+  });
+
+  test("should throw error for unknown metric", async () => {
+    await expect(
+      tensorZeroClient.getFeedbackStats(
+        "extract_entities",
+        "nonexistent_metric",
+      ),
+    ).rejects.toThrow();
   });
 });

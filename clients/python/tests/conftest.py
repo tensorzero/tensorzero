@@ -13,9 +13,11 @@ from openai import AsyncOpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatCompletionInferenceParams,
     ChatDatapointInsert,
     ContentBlockChatOutputText,
     FunctionTool,
+    InferenceParams,
     JsonDatapointInsert,
     JsonInferenceOutput,
     RenderedSample,
@@ -23,6 +25,7 @@ from tensorzero import (
     StoredInferenceJson,
     StoredInput,
     StoredInputMessage,
+    StoredInputMessageContentTemplate,
     StoredInputMessageContentText,
     StoredInputMessageContentThought,
     TensorZeroGateway,
@@ -123,6 +126,7 @@ def mixed_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         additional_tools=[
             FunctionTool(
                 name="test",
@@ -156,6 +160,8 @@ def mixed_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+        extra_body=[],
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
@@ -191,6 +197,7 @@ def chat_function_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
         tool_choice="none",
         parallel_tool_calls=False,
         dispreferred_outputs=[],
@@ -217,7 +224,9 @@ def json_function_rendered_samples(
             messages=[
                 StoredInputMessage(
                     role="user",
-                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                    content=[
+                        StoredInputMessageContentTemplate(type="template", name="user", arguments={"country": "Japan"})
+                    ],
                 )
             ],
         ),
@@ -225,6 +234,8 @@ def json_function_rendered_samples(
         episode_id=str(uuid7()),
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
+        inference_params=InferenceParams(chat_completion=ChatCompletionInferenceParams()),
+        extra_body=[],
         output_schema={
             "type": "object",
             "properties": {"answer": {"type": "string"}},
