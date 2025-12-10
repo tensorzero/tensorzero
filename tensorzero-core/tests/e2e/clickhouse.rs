@@ -166,7 +166,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .to_string();
 
     // Only insert a few at a time in order to prevent ClickHouse from OOMing
-    let concurrency_limit = 4;
+    let concurrency_limit = 2;
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
 
