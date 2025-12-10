@@ -165,9 +165,9 @@ test.describe("System Message - Template", () => {
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-    templateEditor = page.getByRole("textbox", {
-      name: "System template editor",
-    });
+    templateEditor = templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
     const templateValue2 = v7();
     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
