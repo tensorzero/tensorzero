@@ -35,7 +35,6 @@ import { formatProvider } from "~/utils/providers";
 
 const providers = ModelOptionSchema.shape.provider.options;
 
-const BLUR_CONFIRM_DELAY_MS = 150;
 const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 const RADIX_SELECT_SELECTOR = "[data-radix-select-content]";
 
@@ -106,17 +105,10 @@ export function ModelSelector({
   const [customProvider, setCustomProvider] =
     useState<ModelOption["provider"]>("openai");
   const commandRef = useRef<HTMLDivElement>(null);
-  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeDropdown = useCallback(() => {
     setSearchValue(null);
     setOpen(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
-    };
   }, []);
 
   const detectedProvider = useMemo(
@@ -213,19 +205,17 @@ export function ModelSelector({
             return;
           }
 
-          if (!showCreateOption || !searchValue) return;
-
-          if (blurTimeoutRef.current) {
-            clearTimeout(blurTimeoutRef.current);
+          // User cleared the input - deselect
+          if (searchValue === "") {
+            field.onChange(undefined);
+            setSearchValue(null);
+            return;
           }
 
-          const valueToCreate = searchValue;
-          const providerToUse = customProvider;
+          if (!showCreateOption || !searchValue) return;
 
-          blurTimeoutRef.current = setTimeout(() => {
-            field.onChange(createCustomModel(valueToCreate, providerToUse));
-            setSearchValue(null);
-          }, BLUR_CONFIRM_DELAY_MS);
+          field.onChange(createCustomModel(searchValue, customProvider));
+          setSearchValue(null);
         };
 
         return (
