@@ -13,9 +13,7 @@ use crate::common::get_gateway_endpoint;
 async fn get_available_inference_id(request: ListInferencesRequest) -> Uuid {
     let http_client = Client::new();
     let resp = http_client
-        .post(get_gateway_endpoint(
-            "/v1/inferences/get_available_inference_id",
-        ))
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
         .json(&request)
         .send()
         .await
