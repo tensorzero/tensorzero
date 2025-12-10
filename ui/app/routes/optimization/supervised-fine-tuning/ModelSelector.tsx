@@ -52,9 +52,7 @@ function filterModelsByName(
 ): ModelOption[] {
   if (!query) return models;
   const lowerQuery = query.toLowerCase();
-  return models.filter((m) =>
-    m.displayName.toLowerCase().includes(lowerQuery),
-  );
+  return models.filter((m) => m.displayName.toLowerCase().includes(lowerQuery));
 }
 
 function isCustomModel(
@@ -69,13 +67,15 @@ function isModelSelected(
   fieldValue: ModelOption | undefined,
   model: ModelOption,
 ): boolean {
-  return fieldValue?.name === model.name && fieldValue?.provider === model.provider;
+  return (
+    fieldValue?.name === model.name && fieldValue?.provider === model.provider
+  );
 }
 
 function isFocusWithinPopover(relatedTarget: Element | null): boolean {
   return Boolean(
     relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
-    relatedTarget?.closest(RADIX_SELECT_SELECTOR)
+    relatedTarget?.closest(RADIX_SELECT_SELECTOR),
   );
 }
 
@@ -85,7 +85,11 @@ type ModelProviderSelectProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-function ModelProviderSelect({ value, onChange, onOpenChange }: ModelProviderSelectProps) {
+function ModelProviderSelect({
+  value,
+  onChange,
+  onOpenChange,
+}: ModelProviderSelectProps) {
   return (
     <Select value={value} onOpenChange={onOpenChange} onValueChange={onChange}>
       <SelectTrigger
@@ -122,8 +126,8 @@ export function ModelSelector({
   const commandRef = useRef<HTMLDivElement>(null);
 
   const closeDropdown = useCallback(() => {
-    setSearchValue(null);
     setOpen(false);
+    setSearchValue(null);
   }, []);
 
   const detectedProvider = useMemo(
@@ -148,7 +152,8 @@ export function ModelSelector({
       ),
     [predefinedModels, searchValue],
   );
-  const showCreateOption = searchValue !== null && searchValue.length > 0 && !hasExactMatch;
+  const showCreateOption =
+    searchValue !== null && searchValue.length > 0 && !hasExactMatch;
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
@@ -189,7 +194,14 @@ export function ModelSelector({
         );
       }
     },
-    [showCreateOption, filteredModels.length, searchValue, customProvider, closeDropdown, open],
+    [
+      showCreateOption,
+      filteredModels.length,
+      searchValue,
+      customProvider,
+      closeDropdown,
+      open,
+    ],
   );
 
   return (
@@ -199,8 +211,6 @@ export function ModelSelector({
       render={({ field }) => {
         const selectedIsCustom = isCustomModel(field.value, predefinedModels);
         const inputValue = searchValue ?? field.value?.displayName ?? "";
-        const filterQuery = searchValue ?? "";
-        const displayModels = filterModelsByName(predefinedModels, filterQuery);
 
         const handleSelect = (model: ModelOption) => {
           field.onChange(model);
@@ -221,14 +231,14 @@ export function ModelSelector({
           // User cleared the input - deselect
           if (searchValue === "") {
             field.onChange(undefined);
-            setSearchValue(null);
+            closeDropdown();
             return;
           }
 
           if (!showCreateOption || !searchValue) return;
 
           field.onChange(createCustomModel(searchValue, customProvider));
-          setSearchValue(null);
+          closeDropdown();
         };
 
         return (
@@ -247,6 +257,7 @@ export function ModelSelector({
                           if (!open) setOpen(true);
                         }}
                         onFocus={() => setOpen(true)}
+                        onClick={() => setOpen(true)}
                         onBlur={handleBlur}
                         onKeyDown={(e) => handleKeyDown(e, field.onChange)}
                         className={clsx(
@@ -280,15 +291,42 @@ export function ModelSelector({
                     }}
                   >
                     <Command ref={commandRef} shouldFilter={false}>
-                      <CommandList className="max-h-[250px] overflow-y-auto overflow-x-hidden">
-                        {displayModels.length === 0 &&
+                      <CommandList className="max-h-[250px] overflow-x-hidden overflow-y-auto">
+                        {filteredModels.length === 0 &&
                           !showCreateOption &&
                           !selectedIsCustom && (
                             <CommandEmpty>No models found</CommandEmpty>
                           )}
 
+                        {showCreateOption && (
+                          <>
+                            <CommandGroup heading="Custom">
+                              <CommandItem
+                                value={`custom::${searchValue}`}
+                                onSelect={handleSelectCustom}
+                                className="flex items-center justify-between gap-2"
+                              >
+                                <span className="min-w-0 truncate font-mono text-sm">
+                                  {searchValue}
+                                </span>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <span className="text-muted-foreground text-xs">
+                                    Select your provider:
+                                  </span>
+                                  <ModelProviderSelect
+                                    value={customProvider}
+                                    onChange={setCustomProvider}
+                                    onOpenChange={setProviderSelectOpen}
+                                  />
+                                </div>
+                              </CommandItem>
+                            </CommandGroup>
+                            {filteredModels.length > 0 && <CommandSeparator />}
+                          </>
+                        )}
+
                         {providers.map((provider) => {
-                          const providerModels = displayModels.filter(
+                          const providerModels = filteredModels.filter(
                             (m) => m.provider === provider,
                           );
                           if (providerModels.length === 0) return null;
@@ -323,7 +361,7 @@ export function ModelSelector({
 
                         {selectedIsCustom && !searchValue && (
                           <>
-                            {displayModels.length > 0 && <CommandSeparator />}
+                            {filteredModels.length > 0 && <CommandSeparator />}
                             <CommandGroup heading="Custom">
                               <CommandItem
                                 value={`custom::${field.value.name}`}
@@ -338,34 +376,15 @@ export function ModelSelector({
                                     value={field.value.provider}
                                     onChange={(p) => {
                                       if (!field.value) return;
-                                      field.onChange({ ...field.value, provider: p });
+                                      field.onChange({
+                                        ...field.value,
+                                        provider: p,
+                                      });
                                     }}
                                     onOpenChange={setProviderSelectOpen}
                                   />
                                   <Check className="h-4 w-4" />
                                 </div>
-                              </CommandItem>
-                            </CommandGroup>
-                          </>
-                        )}
-
-                        {showCreateOption && (
-                          <>
-                            {filteredModels.length > 0 && <CommandSeparator />}
-                            <CommandGroup heading="Custom">
-                              <CommandItem
-                                value={`custom::${searchValue}`}
-                                onSelect={handleSelectCustom}
-                                className="flex items-center justify-between"
-                              >
-                                <span className="font-mono text-sm">
-                                  {searchValue}
-                                </span>
-                                <ModelProviderSelect
-                                  value={customProvider}
-                                  onChange={setCustomProvider}
-                                  onOpenChange={setProviderSelectOpen}
-                                />
                               </CommandItem>
                             </CommandGroup>
                           </>
