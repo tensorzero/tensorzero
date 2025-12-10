@@ -25,16 +25,6 @@ pub fn update_betting_cs(
     // These represent the "time" index for each new observation
     let times: Vec<u64> = ((prev_count + 1)..=(prev_count + n as u64)).collect();
 
-    // Compute bets for each time step
-    let bets: Vec<f64> = times
-        .iter()
-        .map(|&t| {
-            let num = 2.0 * (2.0 / prev_results.alpha as f64).ln();
-            let denom = prev_results.variance_regularized * (t as f64) * ((t as f64) + 1.0).ln();
-            (num / denom).sqrt()
-        })
-        .collect();
-
     // Cumulative sum of new observations
     let cum_sums: Vec<f64> = new_observations
         .iter()
@@ -56,7 +46,7 @@ pub fn update_betting_cs(
         })
         .collect();
 
-    // Cumulative sum of squared deviations from the regularized means
+    // Cumulative sum of squared deviations of new observations from the regularized means
     let cum_sum_squares: Vec<f64> = new_observations
         .iter()
         .zip(means_reg.iter())
@@ -75,6 +65,20 @@ pub fn update_betting_cs(
             let numerator = prev_results.variance_regularized * (prev_count + 1) as f64 + cum_sq;
             let denominator = (t + 1) as f64;
             numerator / denominator
+        })
+        .collect();
+
+    // Compute predictable-plugin-Bernstein-type bets for each time step
+    // Bets must be predictable (F_{t-1}-measurable), so use the previous variance estimate
+    let lagged_variances = std::iter::once(prev_results.variance_regularized)
+        .chain(variances_reg.iter().take(n - 1).copied());
+    let bets: Vec<f64> = times
+        .iter()
+        .zip(lagged_variances)
+        .map(|(&t, prev_variance)| {
+            let num = 2.0 * (2.0 / prev_results.alpha as f64).ln();
+            let denom = prev_variance * (t as f64) * ((t as f64) + 1.0).ln();
+            (num / denom).sqrt()
         })
         .collect();
 
