@@ -59,7 +59,7 @@ pub fn prepare_relay_extra_body(
     } = &request.extra_body;
 
     // Forward any static extra_body options directly to the downstream gateway,
-    // which is what actually applies them when te model gets invoked
+    // which is what actually applies them when the model gets invoked
     let mut new_extra_body = extra_body
         .as_ref()
         .map(|b| {
