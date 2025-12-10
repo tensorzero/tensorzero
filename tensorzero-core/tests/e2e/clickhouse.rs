@@ -165,6 +165,11 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap()
         .to_string();
 
+    // Only insert a few at a time in order to prevent ClickHouse from OOMing
+    let concurrency_limit = 4;
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
+
     // We use our latest fixtures - new columns will get ignored when inserting.
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
@@ -195,7 +200,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     .into_iter()
     .map(|(file, table)| {
         let password = password.clone();
+        let semaphore = Arc::clone(&semaphore);
         async move {
+            let _permit = semaphore.acquire().await.unwrap();
             // If we are running in CI (TENSORZERO_CI=1), we should have the clickhouse client installed locally
             // so we should not use Docker
             let mut command = if std::env::var("TENSORZERO_CI").is_ok() {
