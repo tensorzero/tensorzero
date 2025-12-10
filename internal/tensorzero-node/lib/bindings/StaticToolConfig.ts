@@ -7,6 +7,13 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 export type StaticToolConfig = {
   description: string;
   parameters: StaticJSONSchema;
+  /**
+   * The display name sent to the LLM (can be overridden via config)
+   */
   name: string;
+  /**
+   * The key used to reference this tool in allowed_tools and function config
+   */
+  key: string;
   strict: boolean;
 };
