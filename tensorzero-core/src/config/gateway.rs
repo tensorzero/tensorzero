@@ -16,8 +16,7 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -43,8 +42,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -146,8 +144,7 @@ impl UninitializedGatewayConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Serialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
