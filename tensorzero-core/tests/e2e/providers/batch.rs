@@ -28,13 +28,14 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_batch_model_inference_clickhouse, select_latest_batch_request_clickhouse,
+    get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
+    select_latest_batch_request_clickhouse, select_model_inference_clickhouse,
 };
 
 use crate::providers::common::{
     check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-    check_json_mode_inference_response, check_multi_turn_parallel_tool_use_inference_response,
-    check_parallel_tool_use_inference_response, check_tool_use_multi_turn_inference_response,
+    check_json_mode_inference_response, check_parallel_tool_use_inference_response,
+    check_tool_use_multi_turn_inference_response,
     check_tool_use_tool_choice_allowed_tools_inference_response,
     check_tool_use_tool_choice_auto_unused_inference_response,
     check_tool_use_tool_choice_auto_used_inference_response,
@@ -4761,4 +4762,161 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     )
     .await;
     check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+}
+
+pub async fn check_multi_turn_parallel_tool_use_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
+    let hardcoded_function_name = "weather_helper_parallel";
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+
+    // Validate that the assistant message is correct
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_text.to_lowercase().contains("70"));
+    assert!(content_text.to_lowercase().contains("30"));
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Check if ClickHouse is correct - ChatInference table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, hardcoded_function_name);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let last_input_message = input["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last_input_message["role"], "user");
+    let last_input_message_content = last_input_message["content"].as_array().unwrap();
+    assert_eq!(last_input_message_content.len(), 2);
+    for tool_result in last_input_message_content {
+        assert_eq!(tool_result["type"], "tool_result");
+    }
+
+    let output_clickhouse: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    let output_content = serde_json::to_value(content).unwrap();
+    println!("Output clickhouse: {output_clickhouse:#?}");
+    println!("Output content: {output_content:#?}");
+    assert_eq!(output_clickhouse, *output_content.as_array().unwrap());
+
+    let tool_params: Value =
+        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(tool_params["parallel_tool_calls"], true);
+
+    // Check if ClickHouse is correct - ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("70"));
+    assert!(raw_response.to_lowercase().contains("30"));
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let last_input_message = input_messages.last().unwrap();
+    assert_eq!(last_input_message.role, Role::User);
+    let last_input_message_content = &last_input_message.content;
+    assert_eq!(last_input_message_content.len(), 2);
+    for tool_result in last_input_message_content {
+        match tool_result {
+            StoredContentBlock::ToolResult(tool_result) => {
+                assert!(
+                    tool_result.name == "get_temperature" || tool_result.name == "get_humidity"
+                );
+            }
+            _ => {
+                panic!("Expected a tool call, got {tool_result:?}");
+            }
+        }
+    }
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let output_content = output.first().unwrap();
+    match output_content {
+        StoredContentBlock::Text(text) => {
+            assert!(text.text.to_lowercase().contains("70"));
+            assert!(text.text.to_lowercase().contains("30"));
+        }
+        _ => {
+            panic!("Expected a text block, got {output_content:?}");
+        }
+    }
 }

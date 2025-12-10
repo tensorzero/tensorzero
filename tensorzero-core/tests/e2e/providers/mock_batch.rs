@@ -28,14 +28,15 @@ use uuid::Uuid;
 use crate::{
     common::get_gateway_endpoint,
     providers::{
-        batch::{check_clickhouse_batch_request_status, get_poll_batch_inference_url},
+        batch::{
+            check_clickhouse_batch_request_status,
+            check_multi_turn_parallel_tool_use_inference_response, get_poll_batch_inference_url,
+        },
         common::{
             E2ETestProvider, check_dynamic_json_mode_inference_response,
             check_dynamic_tool_use_inference_response, check_inference_params_response,
-            check_json_mode_inference_response,
-            check_multi_turn_parallel_tool_use_inference_response,
-            check_parallel_tool_use_inference_response, check_simple_image_inference_response,
-            check_tool_use_multi_turn_inference_response,
+            check_json_mode_inference_response, check_parallel_tool_use_inference_response,
+            check_simple_image_inference_response, check_tool_use_multi_turn_inference_response,
             check_tool_use_tool_choice_allowed_tools_inference_response,
             check_tool_use_tool_choice_auto_unused_inference_response,
             check_tool_use_tool_choice_auto_used_inference_response,

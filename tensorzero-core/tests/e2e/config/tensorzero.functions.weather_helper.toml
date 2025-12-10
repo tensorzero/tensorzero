@@ -157,7 +157,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.together-tool]
 type = "chat_completion"
-model = "llama3.1-405b-instruct-turbo-together"
+model = "together::zai-org/GLM-4.6"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 

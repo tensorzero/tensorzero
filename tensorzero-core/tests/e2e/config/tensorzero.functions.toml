@@ -328,7 +328,7 @@ system_template = "../../../fixtures/config/functions/weather_helper_parallel/pr
 [functions.weather_helper_parallel.variants.together-tool]
 type = "chat_completion"
 weight = 1
-model = "llama3.1-405b-instruct-turbo-together"
+model = "together::zai-org/GLM-4.6"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.vllm]

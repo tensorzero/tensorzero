@@ -384,12 +384,6 @@ type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 api_key_location = "dynamic::together_api_key"
 
-[models."llama3.1-405b-instruct-turbo-together"]
-routing = ["together"]
-
-[models."llama3.1-405b-instruct-turbo-together".providers.together]
-type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
 
 [models."Qwen/Qwen2.5-1.5B-Instruct"]
 routing = ["sglang"]
