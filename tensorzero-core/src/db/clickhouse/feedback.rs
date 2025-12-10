@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::{
+    config::MetricConfigType,
     db::{
         FeedbackQueries, TableBounds, TimeWindow,
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow,
+            FeedbackRow, FloatMetricFeedbackRow, MetricFeedbackRow,
         },
     },
     error::{Error, ErrorDetails},
@@ -809,6 +810,44 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &query_params).await?;
 
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_feedback_by_metric(
+        &self,
+        metric_name: &str,
+        metric_type: MetricConfigType,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<MetricFeedbackRow>, Error> {
+        let table_name = metric_type.to_clickhouse_table_name();
+
+        let query = format!(
+            r"
+            SELECT
+                target_id,
+                argMax(value, toUInt128(id)) as value,
+                argMax(tags, toUInt128(id)) as tags,
+                uint_to_uuid(max(toUInt128(id))) as feedback_id
+            FROM {table_name}
+            WHERE metric_name = {{metric_name:String}}
+            GROUP BY target_id
+            ORDER BY max(toUInt128(id)) DESC
+            LIMIT {{limit:UInt32}}
+            OFFSET {{offset:UInt32}}
+            FORMAT JSONEachRow
+            "
+        );
+
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let params = HashMap::from([
+            ("metric_name", metric_name),
+            ("limit", limit_str.as_str()),
+            ("offset", offset_str.as_str()),
+        ]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
         parse_json_rows(response.response.as_str())
     }
 }
@@ -1744,5 +1783,126 @@ mod tests {
         assert_eq!(result[0].mean, 0.85);
         assert_eq!(result[1].variant_name, "variant2");
         assert_eq!(result[1].mean, 0.90);
+    }
+
+    // get_feedback_by_metric tests
+
+    #[tokio::test]
+    async fn test_get_feedback_by_metric_boolean() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Verify the query structure
+                assert_query_contains(query, "SELECT target_id");
+                assert_query_contains(query, "argMax(value, toUInt128(id)) as value");
+                assert_query_contains(query, "argMax(tags, toUInt128(id)) as tags");
+                assert_query_contains(query, "uint_to_uuid(max(toUInt128(id))) as feedback_id");
+                assert_query_contains(query, "FROM BooleanMetricFeedback");
+                assert_query_contains(query, "WHERE metric_name = {metric_name:String}");
+                assert_query_contains(query, "GROUP BY target_id");
+                assert_query_contains(query, "ORDER BY max(toUInt128(id)) DESC");
+                assert_query_contains(query, "LIMIT {limit:UInt32}");
+                assert_query_contains(query, "OFFSET {offset:UInt32}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(params.get("metric_name"), Some(&"task_success"));
+                assert_eq!(params.get("limit"), Some(&"100"));
+                assert_eq!(params.get("offset"), Some(&"0"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"target_id":"0199cff5-3130-7e90-815c-91219e1a2dae","value":true,"tags":{"env":"prod"},"feedback_id":"0199cff5-3130-7e90-815c-91219e1a2daf"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_feedback_by_metric("task_success", MetricConfigType::Boolean, 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].target_id.to_string(),
+            "0199cff5-3130-7e90-815c-91219e1a2dae"
+        );
+        assert_eq!(result[0].value, serde_json::json!(true));
+        assert_eq!(result[0].tags.get("env"), Some(&"prod".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_feedback_by_metric_float() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Verify the query uses FloatMetricFeedback table
+                assert_query_contains(query, "FROM FloatMetricFeedback");
+                assert_query_contains(query, "WHERE metric_name = {metric_name:String}");
+                assert_query_contains(query, "GROUP BY target_id");
+
+                assert_eq!(params.get("metric_name"), Some(&"user_rating"));
+                assert_eq!(params.get("limit"), Some(&"50"));
+                assert_eq!(params.get("offset"), Some(&"10"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"target_id":"0199cff5-3130-7e90-815c-91219e1a2dae","value":4.5,"tags":{},"feedback_id":"0199cff5-3130-7e90-815c-91219e1a2daf"}
+{"target_id":"0199cff5-3130-7e90-815c-91219e1a2db0","value":3.8,"tags":{"source":"web"},"feedback_id":"0199cff5-3130-7e90-815c-91219e1a2db1"}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_feedback_by_metric("user_rating", MetricConfigType::Float, 50, 10)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].value, serde_json::json!(4.5));
+        assert_eq!(result[1].value, serde_json::json!(3.8));
+        assert_eq!(result[1].tags.get("source"), Some(&"web".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_feedback_by_metric_empty_result() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_feedback_by_metric("nonexistent_metric", MetricConfigType::Boolean, 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
     }
 }
