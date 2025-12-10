@@ -68,14 +68,11 @@ pub async fn start_gateway_on_random_port(
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
 
     let (line_tx, mut line_rx) = tokio::sync::mpsc::unbounded_channel();
-    let line_tx = Some(line_tx);
     #[allow(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(line) = stdout.next_line().await.unwrap() {
             println!("{line}");
-            if let Some(line_tx) = &line_tx {
-                let _ = line_tx.send(line.clone());
-            }
+            let _ = line_tx.send(line.clone());
         }
     });
 
