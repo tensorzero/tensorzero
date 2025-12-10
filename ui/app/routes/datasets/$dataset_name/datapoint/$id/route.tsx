@@ -700,7 +700,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Input" />
           <InputElement
-            key={datapoint.id}
             input={input}
             isEditing={isEditing}
             onSystemChange={(system) => setInput({ ...input, system })}
@@ -715,7 +714,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               case "chat":
                 return (
                   <ChatOutputElement
-                    key={datapoint.id}
                     output={output.value}
                     isEditing={isEditing}
                     onOutputChange={(value) => {
@@ -727,7 +725,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               case "json":
                 return (
                   <JsonOutputElement
-                    key={datapoint.id}
                     output={output.value}
                     outputSchema={output.outputSchema}
                     isEditing={isEditing}
