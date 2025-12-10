@@ -789,13 +789,21 @@ jobs:
           # Retag the images to what we expect the names to be
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/mock-inference-provider:sha-${{ github.sha }} tensorzero/mock-inference-provider:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
+        if: matrix.replicated == false
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (replicated)
+        if: matrix.replicated == true
+        run: |
+          # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Set Postgres database URL for tests
         run: |
@@ -849,6 +857,8 @@ jobs:
 
       - name: Launch the gateway for E2E tests (configured for replication)
         if: matrix.replicated == true
+        env:
+          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests
         run: |
           cargo run-e2e --run-clickhouse-migrations &&
           cargo run-e2e > e2e_logs.txt 2>&1 &

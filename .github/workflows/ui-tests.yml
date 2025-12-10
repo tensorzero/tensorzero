@@ -102,16 +102,19 @@ jobs:
         env:
           OPENAI_API_KEY: not_used
           FIREWORKS_API_KEY: not_used
-          TENSORZERO_UI_CONFIG_PATH: fixtures/config/tensorzero.toml
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
+          # The native SFT test passes api_base to the gateway, which runs in Docker.
+          # The gateway needs to reach the mock server via its Docker-internal hostname.
+          OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
         run: pnpm ui:test
 
       - name: Run `pnpm test` for tensorzero-node
         working-directory: internal/tensorzero-node
         env:
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
+          TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
       - name: Print Docker Compose logs

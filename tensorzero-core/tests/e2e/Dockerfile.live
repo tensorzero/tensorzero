@@ -2,35 +2,20 @@
 
 FROM rust:1.90.0-slim AS base
 
-# Install required system dependencies
-RUN apt-get update && \
-    apt-get install -y \
-        curl \
-        ca-certificates \
-        build-essential \
-        pkg-config \
-        libssl-dev \
-        # TODO remove
-        file \
-        git && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl
 
-# Install cargo-binstall for faster tool installation
+ # Install cargo-binstall for faster tool installation
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
-    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-
-# ========== build-env ==========
-
-FROM rust:1.90.0 AS builder
-
-# Install cargo-binstall for faster tool installation
-RUN curl -L --proto '=https' --tlsv1.2 -sSf \
-    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-
-WORKDIR /app
+  https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
+
+# ========== build-env ==========
+
+FROM base AS builder
+
+WORKDIR /app
 
 # Copy the entire project
 COPY . .
@@ -46,9 +31,6 @@ RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file test
 FROM base AS test-env
 
 WORKDIR /app
-
-# Install cargo-nextest in this stage too (for running tests)
-RUN cargo binstall -y cargo-nextest --secure
 
 # Copy workspace structure but exclude target directory
 COPY . ./
@@ -67,3 +49,4 @@ ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
 CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e", "-j", "32"]
+
