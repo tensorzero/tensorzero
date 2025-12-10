@@ -26,7 +26,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -191,10 +191,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     string | null
   >(null);
 
-  const inferenceIds = useMemo(
-    () => inferences.map((inference) => inference.inference_id),
-    [inferences],
-  );
+  const inferenceIds = inferences.map((inference) => inference.inference_id);
   const currentSheetIndex = openSheetInferenceId
     ? inferenceIds.indexOf(openSheetInferenceId)
     : -1;
@@ -210,16 +207,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     setOpenSheetInferenceId(null);
   }, []);
 
-  const goToPrevInference = useCallback(() => {
-    if (currentSheetIndex <= 0) return;
+  const handlePreviousInference = useCallback(() => {
+    if (currentSheetIndex === 0) return;
     setOpenSheetInferenceId(inferenceIds[currentSheetIndex - 1]);
   }, [currentSheetIndex, inferenceIds]);
 
-  const goToNextInference = useCallback(() => {
-    if (
-      currentSheetIndex === -1 ||
-      currentSheetIndex >= inferenceIds.length - 1
-    ) {
+  const handleNextInference = useCallback(() => {
+    if (currentSheetIndex >= inferenceIds.length - 1) {
       return;
     }
     setOpenSheetInferenceId(inferenceIds[currentSheetIndex + 1]);
@@ -248,7 +242,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyPress = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
         return;
       }
@@ -266,19 +260,20 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       if (event.key === "ArrowLeft") {
         if (!hasPrevInference) return;
         event.preventDefault();
-        goToPrevInference();
-      } else {
+        handlePreviousInference();
+
+      } else if (event.key === "ArrowRight") {
         if (!hasNextInference) return;
         event.preventDefault();
-        goToNextInference();
+        handleNextInference();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
   }, [
-    goToNextInference,
-    goToPrevInference,
+    handleNextInference,
+    handlePreviousInference,
     hasNextInference,
     hasPrevInference,
     openSheetInferenceId,
@@ -387,8 +382,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             inferenceId={openSheetInferenceId}
             isOpen={!!openSheetInferenceId}
             onClose={handleCloseSheet}
-            onPrev={hasPrevInference ? goToPrevInference : undefined}
-            onNext={hasNextInference ? goToNextInference : undefined}
+            onPrev={hasPrevInference ? handlePreviousInference : undefined}
+            onNext={hasNextInference ? handleNextInference : undefined}
           />
         </SectionLayout>
 

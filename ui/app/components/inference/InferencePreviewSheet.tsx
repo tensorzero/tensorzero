@@ -97,6 +97,7 @@ export function InferencePreviewSheet({
     !fetcher.data &&
     inferenceId !== null &&
     lastFetchedInferenceIdRef.current === inferenceId;
+    
   const showNavigation = Boolean(onPrev || onNext);
 
   return (
