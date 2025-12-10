@@ -180,7 +180,7 @@ pub fn prepare_relay_extra_headers(
                 | DynamicExtraHeader::ModelProviderDelete { .. }
                 | DynamicExtraHeader::Always { .. }
                 | DynamicExtraHeader::AlwaysDelete { .. } => header.clone(),
-            })
+            }),
     );
     UnfilteredInferenceExtraHeaders {
         extra_headers: new_extra_headers,
