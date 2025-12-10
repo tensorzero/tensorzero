@@ -136,7 +136,9 @@ test.describe("System Message - Template", () => {
     // Step 2: Re-add system template (still in same edit session)
     await addTemplateButton.click();
 
-    let templateEditor = page.getByLabel("System template editor");
+    let templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
     const templateValue1 = v7();
     const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
