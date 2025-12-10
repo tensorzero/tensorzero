@@ -22,6 +22,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
         )
         .route(
+            "/internal/functions/{function_name}/inference-stats",
+            get(endpoints::internal::inference_stats::get_inference_stats_handler),
+        )
+        .route(
             "/internal/ui-config",
             get(endpoints::ui::get_config::ui_config_handler),
         )

@@ -20,13 +20,13 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.6"
+version = "2025.12.0"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-reqwest = { version = "0.12.24", features = [
+reqwest = { version = "0.12.25", features = [
     "json",
     "multipart",
     "rustls-tls",
@@ -36,7 +36,6 @@ serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
-serde_with = "3.16.1"
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
@@ -77,7 +76,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.41", features = ["serde"] }
-git2 = { version = "0.20.2", default-features = false }
+git2 = { version = "0.20.3", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
     "tracing_level_info",
 ] }
@@ -94,7 +93,7 @@ sqlx = { version = "0.8.6", features = [
     "uuid",
 ] }
 rlt = "0.2.1"
-metrics-exporter-prometheus = { version = "0.18.0", features = [
+metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"

@@ -8,6 +8,7 @@ pub mod embeddings;
 pub mod fallback;
 pub mod feedback;
 pub mod inference;
+pub mod internal;
 pub mod object_storage;
 pub mod openai_compatible;
 pub mod shared_types;

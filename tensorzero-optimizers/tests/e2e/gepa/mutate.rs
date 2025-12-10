@@ -59,7 +59,7 @@ async fn test_mutate_variant_chat() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: parent_name.to_string(),
@@ -194,7 +194,7 @@ async fn test_mutate_variant_json() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: parent_name.to_string(),
@@ -303,7 +303,7 @@ async fn test_mutate_variant_preserves_variables() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: parent_name.to_string(),
@@ -400,7 +400,7 @@ async fn test_mutate_variant_preserves_schema_references() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: parent_name.to_string(),
@@ -515,7 +515,7 @@ async fn test_mutate_variant_naming() {
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
-        tensorzero_config: config.clone(),
+        functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
         variant_name: parent_name.to_string(),

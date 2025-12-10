@@ -11,7 +11,10 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use futures::StreamExt;
 use pyo3::{
     IntoPyObjectExt,
@@ -43,8 +46,8 @@ use tensorzero_core::{
         OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
-        openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        together_sft::UninitializedTogetherSFTConfig,
+        gepa::UninitializedGEPAConfig, openai_rft::UninitializedOpenAIRFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
     },
     tool::ProviderTool,
     variant::{
@@ -107,6 +110,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedGEPAConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
@@ -536,6 +540,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            api_key: None,
         })
     }
 }
@@ -1431,10 +1436,32 @@ impl TensorZeroGateway {
             })
             .transpose()?;
 
+        // Extract evaluation config from app_state
+        let evaluation_config = app_state
+            .config
+            .evaluations
+            .get(&evaluation_name)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "evaluation '{evaluation_name}' not found"
+                ))
+            })?
+            .clone();
+
+        // Build function configs table from all functions in the config
+        let function_configs: EvaluationFunctionConfigTable = app_state
+            .config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+        let function_configs = Arc::new(function_configs);
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
-            config: app_state.config.clone(),
+            evaluation_config,
+            function_configs,
             evaluation_name,
             evaluation_run_id,
             dataset_name,
@@ -2646,10 +2673,32 @@ impl AsyncTensorZeroGateway {
 
             let evaluation_run_id = uuid::Uuid::now_v7();
 
+            // Extract evaluation config from app_state
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "evaluation '{evaluation_name}' not found"
+                    ))
+                })?
+                .clone();
+
+            // Build function configs table from all functions in the config
+            let function_configs: EvaluationFunctionConfigTable = app_state
+                .config
+                .functions
+                .iter()
+                .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+                .collect();
+            let function_configs = Arc::new(function_configs);
+
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
-                config: app_state.config.clone(),
+                evaluation_config,
+                function_configs,
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,

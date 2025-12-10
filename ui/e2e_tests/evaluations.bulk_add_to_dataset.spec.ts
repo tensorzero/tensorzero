@@ -48,7 +48,7 @@ test("should be able to bulk add selected inferences to a new dataset from evalu
   await page.waitForTimeout(500);
 
   // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  const commandInput = page.getByPlaceholder("Create or find a dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -152,7 +152,7 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
   await page.waitForTimeout(500);
 
   // Find the CommandInput and fill in the dataset name
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  const commandInput = page.getByPlaceholder("Create or find a dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 

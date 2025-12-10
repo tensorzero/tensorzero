@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use crate::error::{Error, ErrorDetails};
 
+use crate::config::stored::StoredConfig;
+
 use super::UninitializedConfig;
-use super::stored::StoredConfig;
 
 /// A serializable snapshot of a config suitable for storage in the database.
 ///

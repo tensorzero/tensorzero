@@ -144,7 +144,7 @@ impl<'a> Migration for Migration0043<'a> {
         // Add snapshot_hash column to existing tables
         for table in SNAPSHOT_TRACKED_TABLES {
             let query = format!(
-                "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS snapshot_hash Nullable(UInt256)"
+                "ALTER TABLE {table}{on_cluster_name} ADD COLUMN IF NOT EXISTS snapshot_hash Nullable(UInt256)"
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query)

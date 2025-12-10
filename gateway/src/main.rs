@@ -286,6 +286,17 @@ async fn main() -> Result<(), ExitCode> {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
+    if let Some(gateway_url) = config
+        .gateway
+        .relay
+        .as_ref()
+        .and_then(|relay| relay.original_config.gateway_url.as_ref())
+    {
+        tracing::info!("├ Relay mode: enabled (gateway_url = {gateway_url})");
+    } else {
+        tracing::info!("├ Relay mode: disabled");
+    }
+
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
         tracing::info!("└ OpenTelemetry: enabled");

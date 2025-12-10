@@ -149,6 +149,13 @@ async fn check_cache<
         );
         sanitized_header = true;
     }
+    if args.sanitize_traceparent && request.headers().contains_key("traceparent") {
+        request.headers_mut().insert(
+            "traceparent",
+            HeaderValue::from_static("TENSORZERO_PROVIDER_PROXY_TOKEN"),
+        );
+        sanitized_header = true;
+    }
     if args.sanitize_aws_sigv4 {
         let header_names = [
             "authorization",
@@ -200,15 +207,19 @@ async fn check_cache<
     let path = args.cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
 
-    let use_cache = || match args.mode {
+    let mut file_mtime = None;
+
+    let mut use_cache = || match args.mode {
         CacheMode::ReadOnly => Ok::<_, anyhow::Error>(true),
         CacheMode::ReadWrite => Ok(true),
         CacheMode::ReadOldWriteNew => {
-            let file_mtime = std::fs::metadata(&path)
+            let current_file_mtime = std::fs::metadata(&path)
                 .with_context(|| format!("Failed to read cache file metadata for {path_str}"))?
                 .modified()
                 .with_context(|| format!("Failed to read cache file mtime for {path_str}"))?;
-            Ok(file_mtime <= start_time)
+            let use_cache = current_file_mtime <= start_time;
+            file_mtime = Some(current_file_mtime);
+            Ok(use_cache)
         }
     };
 
@@ -231,7 +242,12 @@ async fn check_cache<
         .with_context(|| format!("Failed to await tokio spawn_blocking for {path_str_clone}"))??;
         (resp, HEADER_TRUE)
     } else {
-        tracing::info!("Cache miss: {}", path_str);
+        tracing::info!(
+            file_mtime = ?file_mtime,
+            start_time = ?start_time,
+            "Cache miss: {}",
+            path_str,
+        );
         let response = match missing().await {
             Ok(response) => response,
             Err(e) => {
@@ -319,6 +335,10 @@ pub struct Args {
     /// Health check port
     #[arg(long, default_value = "3004")]
     pub health_port: u16,
+    /// If `true`, replaces `traceparent` header with `traceparent: TENSORZERO_PROVIDER_PROXY_TOKEN`
+    /// when constructing a cache key.
+    #[arg(long, default_value = "true")]
+    pub sanitize_traceparent: bool,
     /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]

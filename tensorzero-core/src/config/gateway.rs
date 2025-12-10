@@ -1,11 +1,17 @@
 use chrono::Duration;
 use serde::{Deserialize, Serialize};
 
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
+use crate::model_table::load_tensorzero_relay_credential;
+use crate::relay::RelayCredentials;
 use crate::{
-    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
+    config::{
+        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess, UninitializedRelayConfig,
+    },
     error::Error,
     http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
+    relay::TensorzeroRelay,
 };
 
 use super::ObjectStoreInfo;
@@ -78,6 +84,8 @@ pub struct UninitializedGatewayConfig {
     #[serde(default)]
     pub auth: AuthConfig,
     pub global_outbound_http_timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub relay: Option<UninitializedRelayConfig>,
 }
 
 impl UninitializedGatewayConfig {
@@ -96,6 +104,26 @@ impl UninitializedGatewayConfig {
             }
             false
         };
+
+        let relay = if let Some(relay_config) = self.relay {
+            if let Some(gateway_url) = &relay_config.gateway_url {
+                let location = relay_config.api_key_location.clone().unwrap_or(
+                    CredentialLocationWithFallback::Single(CredentialLocation::None),
+                );
+
+                let credential = load_tensorzero_relay_credential(&location)?;
+                Some(TensorzeroRelay::new(
+                    gateway_url.clone(),
+                    RelayCredentials::try_from(credential)?,
+                    relay_config,
+                )?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(GatewayConfig {
             bind_address: self.bind_address,
             observability: self.observability,
@@ -113,6 +141,7 @@ impl UninitializedGatewayConfig {
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
+            relay,
         })
     }
 }
@@ -136,6 +165,8 @@ pub struct GatewayConfig {
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
     pub global_outbound_http_timeout: Duration,
+    #[serde(skip)]
+    pub relay: Option<TensorzeroRelay>,
 }
 
 impl Default for GatewayConfig {
@@ -153,6 +184,7 @@ impl Default for GatewayConfig {
             fetch_and_encode_input_files_before_inference: Default::default(),
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
+            relay: Default::default(),
         }
     }
 }

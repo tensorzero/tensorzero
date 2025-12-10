@@ -1,81 +1,83 @@
-import type { Config, FunctionConfig, UiConfig } from "~/types/tensorzero";
+/**
+ * Configuration loader for TensorZero UI.
+ *
+ * The config is loaded from the gateway and cached. The server periodically
+ * polls the gateway's status endpoint to check if the config hash has changed.
+ * If it has, the cache is invalidated so the next request will load fresh config.
+ * This polling happens once for the entire server process, shared across all
+ * browser clients.
+ */
+
+import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
-import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";
+import { logger } from "../logger";
 
-/*
-Config Context provider:
+// Poll interval in milliseconds (30 seconds)
+const CONFIG_HASH_POLL_INTERVAL_MS = 30_000;
 
-In general, the config tree for TensorZero is static and can be loaded at startup and then used by any component.
-This is good so that we can avoid reading the config from the file system on every request.
-Since it is required for a very large number of components, it is also great to avoid drilling it down through nearly all components.
-
-So we implement a context provider that loads the config at the root of the app and makes it available to all components
-via the ConfigProvider and the useConfig hook.
-
-However, there is one exception to this static behavior: the default function `tensorzero::default`.
-Since the default function can be called with any model and since doing so with essentially creates a new variant,
-we must check what variants have been used in the past for this function.
-
-In order to avoid drilling the config through the entire application, we implement a caching mechanism here that is used for context.
-We only reload the config (file + database query) if the config is needed (via the hook or a backend helper function getConfig)
-and it has not been loaded in the past CACHE_TTL_MS.
-
-This introduces a small liveness issue where the list of variants for the default function is not updated for up toCACHE_TTL_MS
-after a new variant is used.
-
-We will likely address this with some form of query library down the line.
-*/
+// Track if polling has been started
+let pollingStarted = false;
 
 /**
- * Converts a full Config (from disk) to a UiConfig (for the UI context).
+ * Loads config from the gateway.
  */
-function configToUiConfig(config: Config): UiConfig {
-  return {
-    // eslint-disable-next-line no-restricted-syntax
-    functions: config.functions,
-    metrics: config.metrics,
-    tools: config.tools,
-    evaluations: config.evaluations,
-    model_names: Object.keys(config.models.table),
-  };
-}
-
 export async function loadConfig(): Promise<UiConfig> {
-  const env = getEnv();
-
-  // Use gateway if TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY is set
-  if (env.TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY) {
-    const client = getTensorZeroClient();
-    return await client.getUiConfig();
-  }
-
-  // Otherwise use disk loading via tensorzero-node (legacy behavior)
-  const { getConfig: getConfigNative } = await import("tensorzero-node");
-  let fullConfig: Config;
-  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    fullConfig = await getConfigNative(null);
-  } else {
-    fullConfig = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
-  }
-  return configToUiConfig(fullConfig);
-}
-
-/**
- * Helper function to get the config path used by the UI.
- * Returns null if using default config, otherwise returns the config path.
- * @deprecated This function is deprecated and will be removed in a future version.
- * Config is now loaded from the gateway, not from disk.
- */
-export function getConfigPath(): string | null {
-  const env = getEnv();
-  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
-    return null;
-  }
-  return env.TENSORZERO_UI_CONFIG_PATH;
+  const client = getTensorZeroClient();
+  return await client.getUiConfig();
 }
 
 let configCache: UiConfig | undefined = undefined;
+
+/**
+ * Checks if the config hash has changed by polling the gateway's status endpoint.
+ * If the hash has changed, invalidates the cache so the next getConfig() call
+ * will load fresh config.
+ */
+async function checkConfigHash(): Promise<void> {
+  // Skip if no cached config or no hash (legacy disk mode)
+  if (!configCache?.config_hash) {
+    return;
+  }
+
+  try {
+    const status = await getTensorZeroClient().status();
+    const gatewayHash = status.config_hash;
+
+    if (gatewayHash !== configCache.config_hash) {
+      logger.info(
+        `Config hash changed from ${configCache.config_hash} to ${gatewayHash}, invalidating cache`,
+      );
+      configCache = undefined;
+    }
+  } catch (error) {
+    // Log but don't throw - polling failures shouldn't crash the server
+    logger.warn("Failed to check config hash:", error);
+  }
+}
+
+/**
+ * Starts the periodic config hash polling.
+ * This is called automatically when getConfig() is first called.
+ * The polling runs once for the entire server process.
+ */
+function startConfigHashPolling(): void {
+  if (pollingStarted) {
+    return;
+  }
+  pollingStarted = true;
+
+  // Start polling in the background
+  setInterval(() => {
+    checkConfigHash().catch((error) => {
+      logger.error("Config hash polling error:", error);
+    });
+  }, CONFIG_HASH_POLL_INTERVAL_MS);
+
+  logger.info(
+    `Started config hash polling (interval: ${CONFIG_HASH_POLL_INTERVAL_MS}ms)`,
+  );
+}
 
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
@@ -89,12 +91,20 @@ const defaultFunctionConfig: FunctionConfig = {
   experimentation: { type: "uniform" },
 };
 
+/**
+ * Gets the config, using the cache if available.
+ * Also starts the background polling for config hash changes if not already started.
+ */
 export async function getConfig(): Promise<UiConfig> {
+  // Start polling for config hash changes (only starts once)
+  startConfigHashPolling();
+
+  // If we have a cached config, return it
   if (configCache) {
     return configCache;
   }
 
-  // Cache doesn't exist, load it.
+  // Cache doesn't exist or was invalidated, load it.
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
   freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
@@ -127,4 +137,41 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
   const cfg = config || (await getConfig());
 
   return cfg.functions;
+}
+
+// ============================================================================
+// Testing utilities - exported for testing only
+// ============================================================================
+
+/**
+ * Resets the module state for testing purposes.
+ * @internal This function is only exported for testing.
+ */
+export function _resetForTesting(): void {
+  configCache = undefined;
+  pollingStarted = false;
+}
+
+/**
+ * Manually triggers a config hash check for testing purposes.
+ * @internal This function is only exported for testing.
+ */
+export async function _checkConfigHashForTesting(): Promise<void> {
+  return checkConfigHash();
+}
+
+/**
+ * Gets the current cached config for testing purposes.
+ * @internal This function is only exported for testing.
+ */
+export function _getConfigCacheForTesting(): UiConfig | undefined {
+  return configCache;
+}
+
+/**
+ * Sets the config cache for testing purposes.
+ * @internal This function is only exported for testing.
+ */
+export function _setConfigCacheForTesting(config: UiConfig | undefined): void {
+  configCache = config;
 }

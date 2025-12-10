@@ -1,4 +1,9 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::print_stdout,
+    clippy::allow_attributes
+)]
 use std::{net::SocketAddr, process::Stdio};
 
 use reqwest::Response;
@@ -7,6 +12,17 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader, Lines},
     process::{Child, ChildStdout, Command},
 };
+
+/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
+#[allow(dead_code)]
+pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
+
+    sqlx::PgPool::connect(&postgres_url)
+        .await
+        .expect("Failed to connect to PostgreSQL")
+}
 
 pub fn gateway_path() -> String {
     // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable

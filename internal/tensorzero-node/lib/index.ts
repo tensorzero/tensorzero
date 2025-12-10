@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  Config,
   CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
   EpisodeByIdRow,
@@ -45,7 +44,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
@@ -63,21 +61,6 @@ export class TensorZeroClient {
 
   constructor(client: NativeTensorZeroClientType) {
     this.nativeClient = client;
-  }
-
-  static async buildEmbedded(
-    configPath: string,
-    clickhouseUrl?: string | undefined | null,
-    postgresUrl?: string | undefined | null,
-    timeout?: number | undefined | null,
-  ): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.buildEmbedded(
-      configPath,
-      clickhouseUrl,
-      postgresUrl,
-      timeout,
-    );
-    return new TensorZeroClient(nativeClient);
   }
 
   static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
@@ -128,18 +111,16 @@ export class TensorZeroClient {
 
 export default TensorZeroClient;
 
-export async function getConfig(configPath: string | null): Promise<Config> {
-  const configString = await nativeGetConfig(configPath);
-  return JSON.parse(configString) as Config;
-}
-
 // Export quantiles array from migration_0035
 export { getQuantiles };
 
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;
   clickhouseUrl: string;
-  configPath: string;
+  /** JSON-serialized EvaluationConfig */
+  evaluationConfig: string;
+  /** JSON-serialized EvaluationFunctionConfig */
+  functionConfig: string;
   evaluationName: string;
   datasetName: string;
   variantName: string;
