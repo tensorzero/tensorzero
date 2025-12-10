@@ -27,7 +27,6 @@ test.describe("Output - Text Blocks", () => {
     const outputSection = page
       .locator("section")
       .filter({ has: page.getByRole("heading", { name: "Output" }) });
-    await outputSection.waitFor({ state: "visible" });
 
     // Add text block to output
     const addTextButton = outputSection
@@ -235,9 +234,9 @@ test.describe("Output - Thought Blocks", () => {
     await expandShowMoreIfPresent(page);
 
     // Find Output section
-    const outputSection = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Output" }) });
+    const outputSection = page.locator(
+      "section:has([role='heading']:has-text('Output'))",
+    );
 
     // Add thought block to output
     const addThoughtButton = outputSection
