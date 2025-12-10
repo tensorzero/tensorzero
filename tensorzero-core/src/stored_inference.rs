@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::config::Config;
-use crate::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
+use crate::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use crate::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
@@ -88,14 +88,14 @@ impl StoredInference {
         }
     }
 
-    /// Convert a StoredInference to a DatapointInsert. Generates a new datapoint ID in the process.
+    /// Convert a StoredInference to a StoredDatapoint. Generates a new datapoint ID in the process.
     /// The output_source parameter allows overriding to None even if the inference has an output.
     pub fn into_datapoint_insert(
         self,
         dataset_name: &str,
         output_source: &CreateDatapointsFromInferenceOutputSource,
         config: &Config,
-    ) -> Result<DatapointInsert, Error> {
+    ) -> Result<StoredDatapoint, Error> {
         let datapoint_id = Uuid::now_v7();
 
         match self {
@@ -108,10 +108,9 @@ impl StoredInference {
                     }
                 };
 
-                let datapoint = JsonInferenceDatapointInsert {
+                let datapoint = StoredJsonInferenceDatapoint {
                     dataset_name: dataset_name.to_string(),
                     function_name: inference.function_name,
-                    name: None,
                     id: datapoint_id,
                     episode_id: Some(inference.episode_id),
                     input: inference.input,
@@ -119,13 +118,16 @@ impl StoredInference {
                     output_schema: inference.output_schema,
                     tags: Some(inference.tags),
                     auxiliary: String::new(),
-                    staled_at: None,
-                    source_inference_id: Some(inference.inference_id),
+                    is_deleted: false,
                     is_custom: false,
+                    source_inference_id: Some(inference.inference_id),
+                    staled_at: None,
+                    updated_at: String::new(), // Will be set by ClickHouse
+                    name: None,
                     snapshot_hash: Some(config.hash.clone()),
                 };
 
-                Ok(DatapointInsert::Json(datapoint))
+                Ok(StoredDatapoint::Json(datapoint))
             }
             StoredInference::Chat(inference) => {
                 let output = match output_source {
@@ -142,10 +144,9 @@ impl StoredInference {
                     .dynamic_tool_params_to_database_insert(inference.tool_params, &config.tools)?
                     .unwrap_or_default();
 
-                let datapoint = ChatInferenceDatapointInsert {
+                let datapoint = StoredChatInferenceDatapoint {
                     dataset_name: dataset_name.to_string(),
                     function_name: inference.function_name,
-                    name: None,
                     id: datapoint_id,
                     episode_id: Some(inference.episode_id),
                     input: inference.input,
@@ -153,13 +154,16 @@ impl StoredInference {
                     tool_params: Some(tool_params),
                     tags: Some(inference.tags),
                     auxiliary: String::new(),
-                    staled_at: None,
-                    source_inference_id: Some(inference.inference_id),
+                    is_deleted: false,
                     is_custom: false,
+                    source_inference_id: Some(inference.inference_id),
+                    staled_at: None,
+                    updated_at: String::new(), // Will be set by ClickHouse
+                    name: None,
                     snapshot_hash: Some(config.hash.clone()),
                 };
 
-                Ok(DatapointInsert::Chat(datapoint))
+                Ok(StoredDatapoint::Chat(datapoint))
             }
         }
     }
@@ -747,7 +751,7 @@ pub async fn render_stored_sample<T: StoredSample>(
 mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
-    use crate::db::datasets::DatapointInsert;
+    use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -968,7 +972,7 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Chat(dp) => {
+            StoredDatapoint::Chat(dp) => {
                 assert_eq!(dp.dataset_name, dataset_name);
                 assert_eq!(dp.function_name, original_function_name);
                 assert_eq!(dp.name, None);
@@ -984,7 +988,7 @@ mod tests {
                 assert_eq!(dp.source_inference_id, Some(original_inference_id));
                 assert!(!dp.is_custom);
             }
-            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
         }
     }
 
@@ -1001,7 +1005,7 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Chat(dp) => {
+            StoredDatapoint::Chat(dp) => {
                 // When output_source is None, output should be None
                 assert_eq!(dp.output, None);
 
@@ -1009,7 +1013,7 @@ mod tests {
                 assert_eq!(dp.dataset_name, dataset_name);
                 assert!(!dp.is_custom);
             }
-            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
         }
     }
 
@@ -1027,11 +1031,11 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Chat(dp) => {
+            StoredDatapoint::Chat(dp) => {
                 // Demonstration output is joined during the query; we just make sure it's present.
                 assert_eq!(dp.output, Some(original_output));
             }
-            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
         }
     }
 
@@ -1056,7 +1060,7 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Json(dp) => {
+            StoredDatapoint::Json(dp) => {
                 assert_eq!(dp.dataset_name, dataset_name);
                 assert_eq!(dp.function_name, original_function_name);
                 assert_eq!(dp.name, None);
@@ -1070,7 +1074,7 @@ mod tests {
                 assert_eq!(dp.source_inference_id, Some(original_inference_id));
                 assert!(!dp.is_custom);
             }
-            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
         }
     }
 
@@ -1087,7 +1091,7 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Json(dp) => {
+            StoredDatapoint::Json(dp) => {
                 // When output_source is None, output should be None
                 assert_eq!(dp.output, None);
 
@@ -1095,7 +1099,7 @@ mod tests {
                 assert_eq!(dp.dataset_name, dataset_name);
                 assert!(!dp.is_custom);
             }
-            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
         }
     }
 
@@ -1113,11 +1117,11 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Json(dp) => {
+            StoredDatapoint::Json(dp) => {
                 // Demonstration output is joined during the query; we just make sure it's present.
                 assert_eq!(dp.output, Some(original_output));
             }
-            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
         }
     }
 
@@ -1140,13 +1144,13 @@ mod tests {
 
         // Extract IDs
         let id1 = match datapoint1 {
-            DatapointInsert::Chat(dp) => dp.id,
-            DatapointInsert::Json(_) => panic!("Expected Chat"),
+            StoredDatapoint::Chat(dp) => dp.id,
+            StoredDatapoint::Json(_) => panic!("Expected Chat"),
         };
 
         let id2 = match datapoint2 {
-            DatapointInsert::Chat(dp) => dp.id,
-            DatapointInsert::Json(_) => panic!("Expected Chat"),
+            StoredDatapoint::Chat(dp) => dp.id,
+            StoredDatapoint::Json(_) => panic!("Expected Chat"),
         };
 
         // IDs should be different (each conversion generates a new UUID)
@@ -1171,11 +1175,11 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Chat(dp) => {
+            StoredDatapoint::Chat(dp) => {
                 // Empty HashMap should be converted to Some(empty HashMap)
                 assert_eq!(dp.tags, Some(HashMap::new()));
             }
-            DatapointInsert::Json(_) => panic!("Expected Chat datapoint"),
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint"),
         }
     }
 
@@ -1194,11 +1198,11 @@ mod tests {
             .unwrap();
 
         match datapoint {
-            DatapointInsert::Json(dp) => {
+            StoredDatapoint::Json(dp) => {
                 // Empty HashMap should be converted to Some(empty HashMap)
                 assert_eq!(dp.tags, Some(HashMap::new()));
             }
-            DatapointInsert::Chat(_) => panic!("Expected Json datapoint"),
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint"),
         }
     }
 

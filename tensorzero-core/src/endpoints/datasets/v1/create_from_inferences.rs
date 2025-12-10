@@ -141,7 +141,7 @@ mod tests {
     use crate::config::{Config, SchemaData};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
     use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
-    use crate::db::datasets::DatapointInsert;
+    use crate::db::stored_datapoint::StoredDatapoint;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
@@ -508,7 +508,7 @@ mod tests {
             .times(1)
             .withf(|datapoints| {
                 // Verify that the datapoint has no output when output_source is None
-                let Some(DatapointInsert::Chat(dp)) = datapoints.first() else {
+                let Some(StoredDatapoint::Chat(dp)) = datapoints.first() else {
                     panic!("Expected a chat datapoint")
                 };
                 assert!(dp.output.is_none(), "Datapoint output should be dropped");
@@ -557,7 +557,7 @@ mod tests {
             .times(1)
             .withf(|datapoints| {
                 // Verify that the datapoint has the output when output_source is Inference
-                let Some(DatapointInsert::Chat(dp)) = datapoints.first() else {
+                let Some(StoredDatapoint::Chat(dp)) = datapoints.first() else {
                     panic!("Expected a chat datapoint")
                 };
                 assert_eq!(

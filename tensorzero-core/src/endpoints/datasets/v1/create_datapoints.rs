@@ -4,7 +4,8 @@ use futures::future::try_join_all;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::datasets::{DatapointInsert, DatasetQueries};
+use crate::db::datasets::DatasetQueries;
+use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
@@ -62,7 +63,7 @@ pub async fn create_datapoints(
         .datapoints
         .into_iter()
         .map(|datapoint_request| async {
-            let result: Result<DatapointInsert, Error> = match datapoint_request {
+            let result: Result<StoredDatapoint, Error> = match datapoint_request {
                 CreateDatapointRequest::Chat(chat_request) => {
                     let insert = chat_request
                         .into_database_insert(config, &fetch_context, dataset_name)
@@ -74,7 +75,7 @@ pub async fn create_datapoints(
                                 ),
                             })
                         })?;
-                    Ok(DatapointInsert::Chat(insert))
+                    Ok(StoredDatapoint::Chat(insert))
                 }
                 CreateDatapointRequest::Json(json_request) => {
                     let insert = json_request
@@ -87,16 +88,16 @@ pub async fn create_datapoints(
                                 ),
                             })
                         })?;
-                    Ok(DatapointInsert::Json(insert))
+                    Ok(StoredDatapoint::Json(insert))
                 }
             };
             result
         });
 
-    let datapoints_to_insert: Vec<DatapointInsert> = try_join_all(datapoint_insert_futures).await?;
+    let datapoints_to_insert: Vec<StoredDatapoint> = try_join_all(datapoint_insert_futures).await?;
     let ids = datapoints_to_insert
         .iter()
-        .map(DatapointInsert::id)
+        .map(StoredDatapoint::id)
         .collect::<Vec<_>>();
 
     // Insert all datapoints
@@ -202,7 +203,7 @@ mod tests {
             .expect_insert_datapoints()
             .withf(move |datapoints| {
                 assert_eq!(datapoints.len(), 1, "Should insert exactly 1 datapoint");
-                let Some(DatapointInsert::Chat(insert)) = datapoints.first() else {
+                let Some(StoredDatapoint::Chat(insert)) = datapoints.first() else {
                     panic!("Expected chat datapoint");
                 };
 
@@ -273,7 +274,7 @@ mod tests {
             .expect_insert_datapoints()
             .withf(move |datapoints| {
                 assert_eq!(datapoints.len(), 1, "Should insert exactly 1 datapoint");
-                let Some(DatapointInsert::Json(insert)) = datapoints.first() else {
+                let Some(StoredDatapoint::Json(insert)) = datapoints.first() else {
                     panic!("Expected json datapoint");
                 };
 
@@ -349,15 +350,15 @@ mod tests {
             .withf(|datapoints| {
                 assert_eq!(datapoints.len(), 3, "Should insert exactly 3 datapoints");
 
-                let DatapointInsert::Chat(insert) = &datapoints[0] else {
+                let StoredDatapoint::Chat(insert) = &datapoints[0] else {
                     panic!("Expected chat datapoint");
                 };
                 assert_eq!(insert.name, Some("chat datapoint 1".to_string()));
-                let DatapointInsert::Chat(insert) = &datapoints[1] else {
+                let StoredDatapoint::Chat(insert) = &datapoints[1] else {
                     panic!("Expected chat datapoint");
                 };
                 assert_eq!(insert.name, Some("chat datapoint 2".to_string()));
-                let DatapointInsert::Json(insert) = &datapoints[2] else {
+                let StoredDatapoint::Json(insert) = &datapoints[2] else {
                     panic!("Expected json datapoint");
                 };
                 assert_eq!(insert.name, Some("json datapoint".to_string()));
@@ -583,7 +584,8 @@ mod tests {
             .withf(move |datapoints| {
                 assert_eq!(datapoints.len(), 1, "Should insert exactly 1 datapoint");
                 // Verify the datapoint has the expected episode_id and tags
-                if let Some(crate::db::datasets::DatapointInsert::Chat(insert)) = datapoints.first()
+                if let Some(crate::db::stored_datapoint::StoredDatapoint::Chat(insert)) =
+                    datapoints.first()
                 {
                     assert_eq!(insert.episode_id, Some(episode_id));
                     assert!(insert.tags.is_some());
