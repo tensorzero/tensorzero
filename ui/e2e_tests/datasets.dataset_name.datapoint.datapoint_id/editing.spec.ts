@@ -136,7 +136,8 @@ test.describe("System Message - Template", () => {
     // Step 2: Re-add system template (still in same edit session)
     await addTemplateButton.click();
 
-    let templateEditor = page.getByLabel("System template editor");
+    let templateEditor = page.locator("div[contenteditable='true']").first();
+    await templateEditor.waitFor({ state: "visible" });
 
     const templateValue1 = v7();
     const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
@@ -163,9 +164,8 @@ test.describe("System Message - Template", () => {
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-    templateEditor = page.getByRole("textbox", {
-      name: "System template editor",
-    });
+    templateEditor = page.locator("div[contenteditable='true']").first();
+    await templateEditor.waitFor({ state: "visible" });
 
     const templateValue2 = v7();
     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
