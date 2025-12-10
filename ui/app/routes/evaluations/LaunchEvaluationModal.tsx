@@ -232,6 +232,7 @@ function EvaluationForm({
       />
 
       <DatasetSelector
+        label="Select a dataset"
         functionName={function_name ?? undefined}
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}

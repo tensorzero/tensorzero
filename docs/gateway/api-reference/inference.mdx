@@ -31,10 +31,98 @@ This field allows for dynamic tool use, i.e. defining tools at runtime.
 You should prefer to define tools in the configuration file if possible.
 Only use this field if dynamic tool use is necessary for your use case.
 
-Each tool is an object with the following fields: `description`, `name`, `parameters`, and `strict`.
+##### Function Tools
 
-The fields are identical to those in the configuration file, except that the `parameters` field should contain the JSON schema itself rather than a path to it.
+Function tools are the typical tools used with LLMs.
+
+Function tools use JSON Schema to define their parameters.
+Each function tool is an object with the following fields:
+
+- `name` (string, required): The name of the tool
+- `description` (string, required): A description of what the tool does
+- `parameters` (object, required): A JSON Schema defining the tool's parameters
+- `strict` (boolean, optional): Whether to enforce strict schema validation (defaults to `false`)
+
 See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+
+##### OpenAI Custom Tools
+
+<Warning>
+
+OpenAI custom tools are only supported by OpenAI models (both Chat Completions and Responses APIs).
+Using custom tools with other providers will result in an error.
+
+</Warning>
+
+OpenAI custom tools support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output.
+
+Each custom tool is an object with the following fields:
+
+- `type` (string, required): Must be `"openai_custom"`
+- `name` (string, required): The name of the tool
+- `description` (string, optional): A description of what the tool does
+- `format` (object, optional): The output format for the tool (see below)
+
+The `format` field can be one of:
+
+- `{"type": "text"}`: Freeform text output
+- `{"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}`: Output constrained by a [Lark grammar](https://lark-parser.readthedocs.io/)
+- `{"type": "grammar", "grammar": {"syntax": "regex", "definition": "..."}}`: Output constrained by a regular expression
+
+<Accordion title="Example: OpenAI Custom Tool with Text Format">
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate Python code to print 'Hello, World!'"
+      }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "code_generator",
+      "description": "Generates Python code snippets",
+      "format": { "type": "text" }
+    }
+  ]
+}
+```
+
+</Accordion>
+
+<Accordion title="Example: OpenAI Custom Tool with Regex Grammar">
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      { "role": "user", "content": "Format the phone number 4155550123" }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "phone_formatter",
+      "description": "Formats phone numbers in XXX-XXX-XXXX format",
+      "format": {
+        "type": "grammar",
+        "grammar": {
+          "syntax": "regex",
+          "definition": "^\\d{3}-\\d{3}-\\d{4}$"
+        }
+      }
+    }
+  ]
+}
+```
+
+</Accordion>
 
 #### `allowed_tools`
 
