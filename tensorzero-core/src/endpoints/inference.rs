@@ -8,6 +8,7 @@ use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::counter;
+use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1382,14 +1383,14 @@ pub struct InferenceModels {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParams {

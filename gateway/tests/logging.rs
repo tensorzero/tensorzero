@@ -16,7 +16,7 @@ async fn test_logging_no_rust_log_default_debug() {
     let health_response = child_data.call_health_endpoint().await;
     assert!(health_response.status().is_success());
     let _err: tokio::time::error::Elapsed =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
+        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
             .await
             .expect_err("Gateway wrote to stdout after /health endpoint in non-debug mode");
 }
@@ -28,12 +28,10 @@ async fn test_logging_no_rust_log_debug_on() {
     let health_response = child_data.call_health_endpoint().await;
     assert!(health_response.status().is_success());
 
-    let gateway_log_line =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
-            .await
-            .expect("Gateway didn't write to stdout after /health endpoint in debug mode")
-            .expect("Error reading gateway log line")
-            .expect("Gateway stdout was closed");
+    let gateway_log_line = tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
+        .await
+        .expect("Gateway didn't write to stdout after /health endpoint in debug mode")
+        .expect("Error reading gateway log line");
     println!("gateway log line: {gateway_log_line}");
     assert!(
         gateway_log_line.contains("/health"),
@@ -53,7 +51,7 @@ async fn test_logging_rust_log_debug_on() {
     assert!(health_response.status().is_success());
 
     let _err: tokio::time::error::Elapsed =
-        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
+        tokio::time::timeout(Duration::from_secs(1), child_data.stdout.recv())
             .await
             .expect_err("Gateway wrote to stdout after /health endpoint in non-debug mode");
 }
@@ -104,9 +102,8 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
 
     let start_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
     assert!(
         start_line.contains("started processing request"),
@@ -116,9 +113,8 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
 
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
     println!("Got next line: {next_line}");
     assert!(
@@ -136,9 +132,8 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
         // when request processing got far enough to produce a status code
         let finish_line = child_data
             .stdout
-            .next_line()
+            .recv()
             .await
-            .unwrap()
             .expect("Didn't find a log line after cancelling the request");
         assert!(
             finish_line.contains("finished processing request"),
@@ -186,9 +181,8 @@ async fn test_log_early_drop_non_streaming() {
 
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after cancelling the request");
     assert!(
         next_line.contains("Client closed the connection before the response was sent"),
@@ -224,9 +218,8 @@ async fn test_no_early_drop_warning_on_head() {
 
     let start_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after sending HEAD request");
     assert!(
         start_line.contains("started processing request"),
@@ -237,9 +230,8 @@ async fn test_no_early_drop_warning_on_head() {
 
     let next_line = child_data
         .stdout
-        .next_line()
+        .recv()
         .await
-        .unwrap()
         .expect("Didn't find a log line after HEAD request finished");
     assert!(
         next_line.contains("finished processing request"),
@@ -249,8 +241,7 @@ async fn test_no_early_drop_warning_on_head() {
     println!("Got finish line");
 
     // We should not get any more lines
-    let _: Elapsed =
-        tokio::time::timeout(Duration::from_millis(100), child_data.stdout.next_line())
-            .await
-            .unwrap_err();
+    let _: Elapsed = tokio::time::timeout(Duration::from_millis(100), child_data.stdout.recv())
+        .await
+        .unwrap_err();
 }

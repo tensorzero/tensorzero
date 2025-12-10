@@ -1,4 +1,4 @@
-#![expect(clippy::print_stdout, clippy::expect_used)]
+#![expect(clippy::print_stdout)]
 use std::process::Stdio;
 use std::str::FromStr;
 
@@ -14,20 +14,10 @@ use tensorzero_core::{
 use tokio::process::Command;
 use uuid::Uuid;
 
-use crate::common::start_gateway_on_random_port;
+use crate::common::{get_postgres_pool_for_testing, start_gateway_on_random_port};
 use secrecy::ExposeSecret;
 
 mod common;
-
-/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
-async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
-
-    sqlx::PgPool::connect(&postgres_url)
-        .await
-        .expect("Failed to connect to PostgreSQL")
-}
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
@@ -255,7 +245,7 @@ async fn test_tensorzero_missing_auth() {
     [gateway.auth.cache]
     enabled = false
     ",
-        None,
+        Some("gateway=debug,tensorzero_core=debug,warn"),
     )
     .await;
 

@@ -73,6 +73,8 @@ export interface CodeEditorProps {
   className?: string;
   /** We should generally set a maxHeight to improve performance for large documents. */
   maxHeight?: string;
+  /** Aria label for accessibility */
+  ariaLabel?: string;
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -223,6 +225,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   placeholder,
   className,
   maxHeight = "400px",
+  ariaLabel,
 }) => {
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
@@ -400,6 +403,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           basicSetup={basicSetup}
           maxHeight={maxHeight}
           className="min-h-9 overflow-auto"
+          aria-label={ariaLabel}
         />
       </div>
     </div>
