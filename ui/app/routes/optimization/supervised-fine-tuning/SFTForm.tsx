@@ -7,9 +7,10 @@ import { FunctionFormField } from "~/components/function/FunctionFormField";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
-import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import { AdvancedParametersAccordion } from "~/components/ui/AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
-import { Form } from "~/components/ui/form";
+import { Form, FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { NumberInputWithButtons } from "~/components/utils/NumberInputWithButtons";
 import type {
   ChatCompletionConfig,
   UiConfig,
@@ -215,9 +216,65 @@ export function SFTForm({
               )}
             </div>
             <AdvancedParametersAccordion
-              control={form.control}
-              maxSamplesLimit={counts.inferenceCount ?? undefined}
-            />
+              label="Advanced Parameters"
+              hasErrors={Boolean(
+                errors.validationSplitPercent || errors.maxSamples,
+              )}
+            >
+              <FormField
+                control={form.control}
+                name="validationSplitPercent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Validation Split (%)</FormLabel>
+                    <div className="grid grid-cols-2 gap-x-8">
+                      <div className="flex flex-col gap-2">
+                        <NumberInputWithButtons
+                          value={field.value}
+                          onChange={field.onChange}
+                          min={0}
+                          max={100}
+                          aria-label-increase="Increase validation split percentage by 1"
+                          aria-label-decrease="Decrease validation split percentage by 1"
+                        />
+                        {errors.validationSplitPercent && (
+                          <p className="text-xs text-red-500">
+                            {errors.validationSplitPercent.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="maxSamples"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max. Samples</FormLabel>
+                    <div className="grid grid-cols-2 gap-x-8">
+                      <div className="flex flex-col gap-1">
+                        <NumberInputWithButtons
+                          value={field.value || null}
+                          onChange={field.onChange}
+                          min={10}
+                          max={counts.inferenceCount ?? undefined}
+                          aria-label-increase="Increase max samples by 1"
+                          aria-label-decrease="Decrease max samples by 1"
+                        />
+                        {errors.maxSamples && (
+                          <p className="text-xs text-red-500">
+                            {errors.maxSamples.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </AdvancedParametersAccordion>
           </div>
 
           <Button

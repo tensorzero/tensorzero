@@ -28,7 +28,10 @@ import {
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
-import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import { AdvancedParametersAccordion } from "~/components/ui/AdvancedParametersAccordion";
+import { Label } from "~/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import { AdaptiveStoppingPrecision } from "./AdaptiveStoppingPrecision";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
@@ -364,14 +367,42 @@ function EvaluationForm({
       </div>
       <div className="mt-4">
         <AdvancedParametersAccordion
-          inferenceCache={inferenceCache}
-          setInferenceCache={setInferenceCache}
-          precisionTargets={precisionTargets}
-          setPrecisionTargets={setPrecisionTargets}
-          arePrecisionTargetsValid={arePrecisionTargetsValid}
-          evaluatorNames={evaluatorNames}
+          label="Advanced Parameters"
           defaultOpen={inferenceCache !== "on"}
-        />
+        >
+          <div>
+            <Label>Inference Cache</Label>
+            <RadioGroup
+              value={inferenceCache}
+              onValueChange={(value) =>
+                setInferenceCache(value as InferenceCacheSetting)
+              }
+              className="mt-2 flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="on" id="on" />
+                <Label htmlFor="on">On</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="off" id="off" />
+                <Label htmlFor="off">Off</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="read_only" id="read_only" />
+                <Label htmlFor="read_only">Read Only</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="write_only" id="write_only" />
+                <Label htmlFor="write_only">Write Only</Label>
+              </div>
+            </RadioGroup>
+          </div>
+          <AdaptiveStoppingPrecision
+            precisionTargets={precisionTargets}
+            setPrecisionTargets={setPrecisionTargets}
+            evaluatorNames={evaluatorNames}
+          />
+        </AdvancedParametersAccordion>
         <input type="hidden" name="inference_cache" value={inferenceCache} />
         <input
           type="hidden"
