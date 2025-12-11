@@ -191,10 +191,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -286,10 +286,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.streaming_request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.streaming_request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
