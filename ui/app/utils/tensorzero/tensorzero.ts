@@ -21,6 +21,8 @@ import type {
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetModelLatencyResponse,
+  GetModelUsageResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -32,6 +34,7 @@ import type {
   ListDatasetsResponse,
   ListInferencesRequest,
   StatusResponse,
+  TimeWindow,
   UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
@@ -367,6 +370,59 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as FeedbackResponse;
+  }
+
+  /**
+   * Gets model usage timeseries data.
+   * @param timeWindow The time window granularity for grouping data
+   * @param maxPeriods Maximum number of time periods to return
+   * @returns A promise that resolves with the model usage timeseries data
+   * @throws Error if the request fails
+   */
+  async getModelUsageTimeseries(
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetModelUsageResponse> {
+    const params = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const response = await this.fetch(
+      `/internal/models/usage?${params.toString()}`,
+      {
+        method: "GET",
+      },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetModelUsageResponse;
+  }
+
+  /**
+   * Gets model latency quantile distributions.
+   * @param timeWindow The time window for aggregating latency data
+   * @returns A promise that resolves with the model latency quantiles
+   * @throws Error if the request fails
+   */
+  async getModelLatencyQuantiles(
+    timeWindow: TimeWindow,
+  ): Promise<GetModelLatencyResponse> {
+    const params = new URLSearchParams({
+      time_window: timeWindow,
+    });
+    const response = await this.fetch(
+      `/internal/models/latency?${params.toString()}`,
+      {
+        method: "GET",
+      },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetModelLatencyResponse;
   }
 
   /**
