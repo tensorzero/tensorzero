@@ -34,6 +34,7 @@ import type {
   GetInferencesResponse,
   GetModelInferencesResponse,
   InferenceStatsResponse,
+  LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListEvaluationRunsResponse,
@@ -1058,6 +1059,30 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetEpisodeInferenceCountResponse;
+  }
+
+  /**
+   * Queries the latest feedback ID for each metric for a given target.
+   * @param targetId - The target ID (inference_id or episode_id) to query feedback for
+   * @returns A promise that resolves with a mapping of metric names to their latest feedback IDs
+   * @throws Error if the request fails
+   */
+  async getLatestFeedbackIdByMetric(
+    targetId: string,
+  ): Promise<Record<string, string>> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest-id-by-metric`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as LatestFeedbackIdByMetricResponse;
+    // Convert optional values to non-optional (ts-rs generates HashMap as optional, but values are always present)
+    return Object.fromEntries(
+      Object.entries(body.feedback_id_by_metric).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
   }
 
   private async fetch(
