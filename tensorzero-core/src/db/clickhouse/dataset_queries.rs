@@ -108,7 +108,8 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 null as staled_at,
                 subquery.id as source_inference_id,
                 false as is_custom,
-                subquery.name as name
+                subquery.name as name,
+                snapshot_hash
             FROM (
                 {source_query}
             ) AS subquery
@@ -1600,7 +1601,8 @@ mod tests {
                     null as staled_at,
                     subquery.id as source_inference_id,
                     false as is_custom,
-                    subquery.name as name
+                    subquery.name as name,
+                    snapshot_hash
                 FROM (",
                 );
                 assert_query_contains(
