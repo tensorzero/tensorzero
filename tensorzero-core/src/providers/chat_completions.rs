@@ -248,6 +248,7 @@ mod tests {
 
         FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "test_tool".to_string(),
+            key: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",
@@ -789,6 +790,7 @@ mod tests {
 
         let tool1 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool1".to_string(),
+            key: "tool1".to_string(),
             description: "First tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: true,
@@ -796,6 +798,7 @@ mod tests {
 
         let tool2 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool2".to_string(),
+            key: "tool2".to_string(),
             description: "Second tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: false,

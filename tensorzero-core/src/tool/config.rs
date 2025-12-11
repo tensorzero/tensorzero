@@ -47,7 +47,10 @@ pub enum FunctionToolConfig {
 pub struct StaticToolConfig {
     pub description: String,
     pub parameters: StaticJSONSchema,
+    /// The display name sent to the LLM (can be overridden via config)
     pub name: String,
+    /// The key used to reference this tool in allowed_tools and function config
+    pub key: String,
     pub strict: bool,
 }
 
@@ -452,12 +455,12 @@ impl ToolCallConfig {
                 self.tools_available()
             }
             AllowedToolsChoice::Explicit => {
-                // Filter by allowed_tools list, then apply type filter
+                // Filter by allowed_tools list (using key, not display name), then apply type filter
                 Ok(Box::new(
                     self.static_tools_available
                         .iter()
                         .chain(self.dynamic_tools_available.iter())
-                        .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.name())),
+                        .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.key())),
                 ))
             }
         }
@@ -537,6 +540,17 @@ impl FunctionToolConfig {
     pub fn name(&self) -> &str {
         match self {
             FunctionToolConfig::Static(config) => &config.name,
+            FunctionToolConfig::Dynamic(config) => &config.name,
+            FunctionToolConfig::Implicit(_config) => super::IMPLICIT_TOOL_NAME,
+            FunctionToolConfig::DynamicImplicit(_config) => super::IMPLICIT_TOOL_NAME,
+        }
+    }
+
+    /// Returns the key used to reference this tool in allowed_tools and function config.
+    /// For static tools, this is the TOML table key. For dynamic tools, this is the same as the name.
+    pub fn key(&self) -> &str {
+        match self {
+            FunctionToolConfig::Static(config) => &config.key,
             FunctionToolConfig::Dynamic(config) => &config.name,
             FunctionToolConfig::Implicit(_config) => super::IMPLICIT_TOOL_NAME,
             FunctionToolConfig::DynamicImplicit(_config) => super::IMPLICIT_TOOL_NAME,

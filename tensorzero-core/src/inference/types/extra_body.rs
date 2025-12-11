@@ -183,7 +183,7 @@ pub fn prepare_relay_extra_headers(
 
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
     extra_body: Vec<DynamicExtraBody>,

@@ -11,7 +11,7 @@ pub struct SpanLeakDetector {
 }
 
 impl SpanLeakDetector {
-    #[expect(clippy::new_without_default)]
+    #[allow(clippy::new_without_default, clippy::allow_attributes)]
     pub fn new() -> Self {
         Self {
             spans: Cache::builder().build(),

@@ -17,8 +17,11 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 pub mod clickhouse;
 pub mod datasets;
 pub mod feedback;
+pub mod inference_stats;
 pub mod inferences;
+pub mod model_inferences;
 pub mod postgres;
+pub mod stored_datapoint;
 
 #[async_trait]
 pub trait ClickHouseConnection:
@@ -36,6 +39,8 @@ pub trait HealthCheckable {
 
 #[async_trait]
 pub trait SelectQueries {
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
     async fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
@@ -46,8 +51,6 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
-
-    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 
     async fn query_episode_table(
         &self,

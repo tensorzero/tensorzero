@@ -32,6 +32,7 @@ pub mod feedback;
 pub mod inference_queries;
 pub mod inference_stats;
 pub mod migration_manager;
+pub mod model_inferences;
 pub mod query_builder;
 mod select_queries;
 mod table_name;
