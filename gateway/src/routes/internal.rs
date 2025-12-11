@@ -57,4 +57,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/datasets",
             get(endpoints::datasets::v1::list_datasets_handler),
         )
+        // Model statistics endpoints
+        .route(
+            "/internal/models/count",
+            get(endpoints::internal::models::count_models_handler),
+        )
 }

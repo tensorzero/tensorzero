@@ -314,25 +314,42 @@ pub struct ClientBuilder {
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP Error (status code {status_code}): {text:?}")]
     Http {
         status_code: u16,
         text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("{source}")] // the `source` has already been formatted (below)
     Other {
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("HTTP Error: request timed out")]
     RequestTimeout,
-    #[error("Failed to get git info: {source}")]
     Git {
         #[source]
         source: git2::Error,
     },
+}
+
+impl Display for TensorZeroError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorZeroError::Http {
+                status_code,
+                text,
+                source: _,
+            } => {
+                if let Some(text) = text {
+                    write!(f, "HTTP Error (status code {status_code}): {text}")
+                } else {
+                    write!(f, "HTTP Error (status code {status_code})")
+                }
+            }
+            TensorZeroError::Other { source } => write!(f, "{source}"),
+            TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
+            TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

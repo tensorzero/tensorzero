@@ -137,7 +137,9 @@ export async function countInferencesForVariant(
   variant_name: string,
 ): Promise<number> {
   const client = getTensorZeroClient();
-  const result = await client.getInferenceStats(function_name, variant_name);
+  const result = await client.getInferenceStats(function_name, {
+    variantName: variant_name,
+  });
   return Number(result.inference_count);
 }
 
