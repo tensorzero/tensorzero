@@ -1,39 +1,28 @@
 /* eslint-disable no-console */
 import { isErrorLike } from "~/utils/common";
+import { getEnv, type LogLevel } from "~/utils/env.server";
 
-const LOG_LEVELS = {
+const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 1,
   info: 2,
   warn: 3,
   error: 4,
-} as const;
-
-type LogLevel = keyof typeof LOG_LEVELS;
-
-let hasLoggedInvalidLogLevel = false;
-
-const getLogLevel = (): LogLevel => {
-  if (typeof process !== "undefined") {
-    const level = process.env.TENSORZERO_UI_LOG_LEVEL?.toLowerCase();
-    if (level) {
-      if (level in LOG_LEVELS) {
-        return level as LogLevel;
-      }
-      if (!hasLoggedInvalidLogLevel) {
-        console.warn(
-          `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${process.env.TENSORZERO_UI_LOG_LEVEL}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
-        );
-        hasLoggedInvalidLogLevel = true;
-      }
-    }
-  }
-  return "info";
 };
 
-const currentLevel = getLogLevel();
+let cachedLogLevel: LogLevel | null = null;
+
+const getLogLevel = (): LogLevel => {
+  if (cachedLogLevel !== null) {
+    return cachedLogLevel;
+  }
+  // getEnv() is called lazily at runtime, not at module load time,
+  // so the circular import (env.server -> logger -> env.server) is safe
+  cachedLogLevel = getEnv().TENSORZERO_UI_LOG_LEVEL;
+  return cachedLogLevel;
+};
 
 const shouldLog = (level: LogLevel): boolean => {
-  return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
+  return LOG_LEVELS[level] >= LOG_LEVELS[getLogLevel()];
 };
 
 const APP_VERSION = (() => {

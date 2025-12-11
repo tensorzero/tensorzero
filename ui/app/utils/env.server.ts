@@ -12,6 +12,9 @@ class EnvironmentVariableError extends Error {
   }
 }
 
+const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_POSTGRES_URL: string | null;
@@ -22,11 +25,12 @@ interface Env {
   FIREWORKS_BASE_URL: string | null;
   FIREWORKS_ACCOUNT_ID: string | null;
   TOGETHER_BASE_URL: string | null;
+  TENSORZERO_UI_LOG_LEVEL: LogLevel;
 }
 
 let _env: Env | undefined;
-let hasLoggedEvaluationsPathDeprecation = false;
 let hasLoggedConfigPathDeprecation = false;
+let hasLoggedInvalidLogLevel = false;
 
 /**
  * Use this function to retrieve the environment variables instead of accessing
@@ -39,18 +43,9 @@ export function getEnv(): Env {
     return _env;
   }
 
-  if (
-    process.env.TENSORZERO_EVALUATIONS_PATH &&
-    !hasLoggedEvaluationsPathDeprecation
-  ) {
-    logger.warn(
-      "Deprecation Warning: The TensorZero Evaluations binary is now built into the UI itself. The environment variable `TENSORZERO_EVALUATIONS_PATH` is no longer needed and will be ignored moving forward.",
-    );
-    hasLoggedEvaluationsPathDeprecation = true;
-  }
-
   const TENSORZERO_CLICKHOUSE_URL = getClickhouseUrl();
   const TENSORZERO_GATEWAY_URL = process.env.TENSORZERO_GATEWAY_URL;
+
   // This error is thrown on startup in tensorzero.server.ts
   if (!TENSORZERO_GATEWAY_URL) {
     throw new EnvironmentVariableError(
@@ -80,6 +75,7 @@ export function getEnv(): Env {
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL || null,
     TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY || null,
+    TENSORZERO_UI_LOG_LEVEL: getLogLevel(),
   };
 
   return _env;
@@ -94,4 +90,22 @@ function getClickhouseUrl() {
   throw new EnvironmentVariableError(
     "The environment variable `TENSORZERO_CLICKHOUSE_URL` is not set.",
   );
+}
+
+function getLogLevel(): LogLevel {
+  const level = process.env.TENSORZERO_UI_LOG_LEVEL?.toLowerCase();
+  if (level) {
+    if ((LOG_LEVELS as readonly string[]).includes(level)) {
+      return level as LogLevel;
+    }
+    if (!hasLoggedInvalidLogLevel) {
+      // Use console.warn directly to avoid circular dependency with logger
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${process.env.TENSORZERO_UI_LOG_LEVEL}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
+      );
+      hasLoggedInvalidLogLevel = true;
+    }
+  }
+  return "info";
 }
