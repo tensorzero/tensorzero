@@ -12,6 +12,8 @@
 //! The confidence set at time t is the set of all m values for which the wealth process
 //! has not exceeded the threshold 1/α, where α is the confidence level.
 
+use anyhow::{Result, bail};
+
 const DEFAULT_M_RESOLUTION: usize = 1001;
 const BET_TRUNCATION_LEVEL: f64 = 0.5;
 
@@ -103,6 +105,7 @@ fn find_cs_upper(
 /// The confidence set is defined as {m : wealth_hedged(m) < 1/α}, where
 /// wealth_hedged is a combination of the upper and lower wealth processes.
 /// These processes are evaluated on a grid of candidate mean values.
+#[derive(Debug)]
 pub struct WealthProcesses {
     /// Grid of candidate mean values. If None, defaults to linspace(0, 1, resolution).
     pub m_values: Option<Vec<f64>>,
@@ -115,19 +118,24 @@ pub struct WealthProcesses {
 }
 
 impl WealthProcesses {
-    fn resolution(&self) -> usize {
+    fn resolution(&self) -> Result<usize> {
         let res = self.resolution.unwrap_or(DEFAULT_M_RESOLUTION);
-        assert!(res >= 2, "resolution must be at least 2, got {res}");
-        res
+        if res < 2 {
+            bail!("resolution must be at least 2, got {res}");
+        }
+        Ok(res)
     }
 
-    pub fn m_values(&self) -> Vec<f64> {
-        self.m_values.clone().unwrap_or_else(|| {
-            let resolution = self.resolution();
-            (0..resolution)
-                .map(|i| i as f64 / (resolution - 1) as f64)
-                .collect()
-        })
+    pub fn m_values(&self) -> Result<Vec<f64>> {
+        match &self.m_values {
+            Some(v) => Ok(v.clone()),
+            None => {
+                let resolution = self.resolution()?;
+                Ok((0..resolution)
+                    .map(|i| i as f64 / (resolution - 1) as f64)
+                    .collect())
+            }
+        }
     }
 }
 
@@ -136,6 +144,7 @@ impl WealthProcesses {
 /// This struct maintains the state needed to incrementally update a confidence
 /// sequence as new observations arrive. The confidence interval [cs_lower, cs_upper]
 /// is valid at any stopping time with coverage probability at least 1 - α.
+#[derive(Debug)]
 pub struct MeanBettingConfidenceSequence {
     /// Identifier for this sequence (e.g., variant or evaluator name).
     pub name: String,
@@ -179,27 +188,34 @@ pub struct MeanBettingConfidenceSequence {
 ///
 /// # Returns
 /// Updated `MeanBettingConfidenceSequence` with new bounds and wealth process values.
+///
+/// # Errors
+/// Returns an error if:
+/// - Any observation is outside [0, 1]
+/// - `hedge_weight_upper` is outside [0, 1]
+/// - The wealth process resolution is less than 2
 pub fn update_betting_cs(
     prev_results: MeanBettingConfidenceSequence,
     new_observations: Vec<f64>,
     hedge_weight_upper: Option<f64>,
-) -> MeanBettingConfidenceSequence {
+) -> Result<MeanBettingConfidenceSequence> {
     // Handle empty observations - return unchanged
     if new_observations.is_empty() {
         tracing::warn!("update_betting_cs called with empty observations, returning unchanged");
-        return prev_results;
+        return Ok(prev_results);
     }
 
     // Validate inputs
-    assert!(
-        new_observations.iter().all(|&x| (0.0..=1.0).contains(&x)),
-        "All observations must be in [0, 1]"
-    );
-    if let Some(hw) = hedge_weight_upper {
-        assert!(
-            (0.0..=1.0).contains(&hw),
-            "hedge_weight_upper must be in [0, 1]"
-        );
+    if let Some(invalid) = new_observations
+        .iter()
+        .find(|&&x| !(0.0..=1.0).contains(&x))
+    {
+        bail!("All observations must be in [0, 1], got {invalid}");
+    }
+    if let Some(hw) = hedge_weight_upper
+        && !(0.0..=1.0).contains(&hw)
+    {
+        bail!("hedge_weight_upper must be in [0, 1], got {hw}");
     }
 
     let hedge_weight_upper = hedge_weight_upper.unwrap_or(0.5);
@@ -266,7 +282,7 @@ pub fn update_betting_cs(
     // Update upper and lower wealth processes for each candidate mean m
     // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
     // Truncate bets to c/m (upper) or c/(1-m) (lower) to ensure wealth processes stay non-negative
-    let m_values = prev_results.wealth.m_values();
+    let m_values = prev_results.wealth.m_values()?;
     let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = m_values
         .iter()
         .zip(prev_results.wealth.wealth_upper.iter())
@@ -354,7 +370,7 @@ pub fn update_betting_cs(
 
     let mean_reg_final = *means_reg.last().unwrap_or(&prev_results.mean_regularized);
 
-    MeanBettingConfidenceSequence {
+    Ok(MeanBettingConfidenceSequence {
         name: prev_results.name,
         mean_regularized: mean_reg_final,
         variance_regularized: variance_reg_final,
@@ -369,7 +385,7 @@ pub fn update_betting_cs(
             wealth_upper: new_wealth_upper,
             wealth_lower: new_wealth_lower,
         },
-    }
+    })
 }
 
 #[cfg(test)]
@@ -404,16 +420,21 @@ mod tests {
     // Tests for resolution validation
 
     #[test]
-    #[should_panic(expected = "resolution must be at least 2")]
-    fn test_resolution_one_panics() {
+    fn test_resolution_one_returns_error() {
         let wealth = WealthProcesses {
             m_values: None,
             resolution: Some(1), // Invalid!
             wealth_upper: vec![1.0],
             wealth_lower: vec![1.0],
         };
-        // This should panic when trying to access the resolution
-        let _ = wealth.m_values();
+        let result = wealth.m_values();
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("resolution must be at least 2")
+        );
     }
 
     // Tests for find_cs_lower
@@ -584,7 +605,7 @@ mod tests {
             wealth_upper: vec![1.0; DEFAULT_M_RESOLUTION],
             wealth_lower: vec![1.0; DEFAULT_M_RESOLUTION],
         };
-        assert_eq!(wp.resolution(), DEFAULT_M_RESOLUTION);
+        assert_eq!(wp.resolution().unwrap(), DEFAULT_M_RESOLUTION);
     }
 
     #[test]
@@ -595,7 +616,7 @@ mod tests {
             wealth_upper: vec![1.0; 101],
             wealth_lower: vec![1.0; 101],
         };
-        assert_eq!(wp.resolution(), 101);
+        assert_eq!(wp.resolution().unwrap(), 101);
     }
 
     #[test]
@@ -606,7 +627,7 @@ mod tests {
             wealth_upper: vec![1.0; 11],
             wealth_lower: vec![1.0; 11],
         };
-        let m_values = wp.m_values();
+        let m_values = wp.m_values().unwrap();
         assert_eq!(m_values.len(), 11);
         assert!(approx_eq(m_values[0], 0.0));
         assert!(approx_eq(m_values[5], 0.5));
@@ -622,7 +643,7 @@ mod tests {
             wealth_upper: vec![1.0; 5],
             wealth_lower: vec![1.0; 5],
         };
-        let m_values = wp.m_values();
+        let m_values = wp.m_values().unwrap();
         assert_eq!(m_values, custom_m);
     }
 
@@ -637,7 +658,7 @@ mod tests {
         let initial_cs_lower = initial.cs_lower;
         let initial_cs_upper = initial.cs_upper;
 
-        let updated = update_betting_cs(initial, vec![], None);
+        let updated = update_betting_cs(initial, vec![], None).unwrap();
 
         // Should return unchanged
         assert_eq!(updated.count, initial_count);
@@ -647,31 +668,55 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "All observations must be in [0, 1]")]
-    fn test_observation_below_zero_panics() {
+    fn test_observation_below_zero_returns_error() {
         let initial = create_initial_cs(101, 0.05);
-        let _ = update_betting_cs(initial, vec![0.5, -0.1, 0.6], None);
+        let result = update_betting_cs(initial, vec![0.5, -0.1, 0.6], None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("All observations must be in [0, 1]")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "All observations must be in [0, 1]")]
-    fn test_observation_above_one_panics() {
+    fn test_observation_above_one_returns_error() {
         let initial = create_initial_cs(101, 0.05);
-        let _ = update_betting_cs(initial, vec![0.5, 1.1, 0.6], None);
+        let result = update_betting_cs(initial, vec![0.5, 1.1, 0.6], None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("All observations must be in [0, 1]")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "hedge_weight_upper must be in [0, 1]")]
-    fn test_hedge_weight_below_zero_panics() {
+    fn test_hedge_weight_below_zero_returns_error() {
         let initial = create_initial_cs(101, 0.05);
-        let _ = update_betting_cs(initial, vec![0.5], Some(-0.1));
+        let result = update_betting_cs(initial, vec![0.5], Some(-0.1));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("hedge_weight_upper must be in [0, 1]")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "hedge_weight_upper must be in [0, 1]")]
-    fn test_hedge_weight_above_one_panics() {
+    fn test_hedge_weight_above_one_returns_error() {
         let initial = create_initial_cs(101, 0.05);
-        let _ = update_betting_cs(initial, vec![0.5], Some(1.1));
+        let result = update_betting_cs(initial, vec![0.5], Some(1.1));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("hedge_weight_upper must be in [0, 1]")
+        );
     }
 
     // Tests for update_betting_cs
@@ -680,17 +725,17 @@ mod tests {
     fn test_update_betting_cs_count_increments() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.6, 0.7, 0.5];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
         assert_eq!(updated.count, 3);
     }
 
     #[test]
     fn test_update_betting_cs_multiple_updates() {
         let initial = create_initial_cs(101, 0.05);
-        let updated1 = update_betting_cs(initial, vec![0.6, 0.7], None);
+        let updated1 = update_betting_cs(initial, vec![0.6, 0.7], None).unwrap();
         assert_eq!(updated1.count, 2);
 
-        let updated2 = update_betting_cs(updated1, vec![0.5, 0.8, 0.6], None);
+        let updated2 = update_betting_cs(updated1, vec![0.5, 0.8, 0.6], None).unwrap();
         assert_eq!(updated2.count, 5);
     }
 
@@ -698,7 +743,7 @@ mod tests {
     fn test_update_betting_cs_bounds_valid() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.6, 0.7, 0.5, 0.6, 0.7];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert!(
             updated.cs_lower >= 0.0,
@@ -722,7 +767,7 @@ mod tests {
     fn test_update_betting_cs_mean_est_in_interval() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.6, 0.7, 0.5, 0.6, 0.7, 0.65, 0.55];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert!(
             updated.mean_est >= updated.cs_lower,
@@ -742,7 +787,7 @@ mod tests {
     fn test_update_betting_cs_wealth_processes_updated() {
         let initial = create_initial_cs(11, 0.05);
         let observations = vec![0.6];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         // Wealth processes should no longer all be 1.0 after an update
         let all_ones_upper = updated
@@ -765,7 +810,7 @@ mod tests {
     fn test_update_betting_cs_preserves_resolution() {
         let initial = create_initial_cs(51, 0.05);
         let observations = vec![0.5, 0.6];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert_eq!(updated.wealth.resolution, Some(51));
         assert_eq!(updated.wealth.wealth_upper.len(), 51);
@@ -776,7 +821,7 @@ mod tests {
     fn test_update_betting_cs_preserves_alpha() {
         let initial = create_initial_cs(101, 0.10);
         let observations = vec![0.5, 0.6];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         // Use exact f32 comparison since alpha is stored as f32
         assert_eq!(updated.alpha, 0.10f32, "Alpha should be preserved");
@@ -788,8 +833,8 @@ mod tests {
         let initial2 = create_initial_cs(101, 0.05);
         let observations = vec![0.6, 0.7, 0.5];
 
-        let updated_default = update_betting_cs(initial1, observations.clone(), None);
-        let updated_explicit = update_betting_cs(initial2, observations, Some(0.5));
+        let updated_default = update_betting_cs(initial1, observations.clone(), None).unwrap();
+        let updated_explicit = update_betting_cs(initial2, observations, Some(0.5)).unwrap();
 
         assert!(
             approx_eq(updated_default.mean_est, updated_explicit.mean_est),
@@ -803,8 +848,8 @@ mod tests {
         let initial2 = create_initial_cs(101, 0.05);
         let observations = vec![0.9, 0.85, 0.8, 0.75, 0.7];
 
-        let updated_low = update_betting_cs(initial1, observations.clone(), Some(0.3));
-        let updated_high = update_betting_cs(initial2, observations, Some(0.7));
+        let updated_low = update_betting_cs(initial1, observations.clone(), Some(0.3)).unwrap();
+        let updated_high = update_betting_cs(initial2, observations, Some(0.7)).unwrap();
 
         // wealth_upper and wealth_lower are independent of hedge_weight,
         // but the hedged combination affects cs_lower, cs_upper, and mean_est
@@ -836,7 +881,7 @@ mod tests {
 
         // Add observations centered around 0.5 with some variance
         let obs_batch1 = vec![0.4, 0.6, 0.45, 0.55, 0.5, 0.48, 0.52, 0.47, 0.53, 0.5];
-        let updated1 = update_betting_cs(initial, obs_batch1, None);
+        let updated1 = update_betting_cs(initial, obs_batch1, None).unwrap();
         let width1 = updated1.cs_upper - updated1.cs_lower;
 
         // Add more observations centered around 0.5
@@ -846,7 +891,7 @@ mod tests {
             0.41, 0.59, 0.45, 0.55, 0.5, 0.44, 0.56, 0.49, 0.51, 0.5, 0.42, 0.58, 0.46, 0.54, 0.5,
             0.47, 0.53, 0.48, 0.52, 0.5,
         ];
-        let updated2 = update_betting_cs(updated1, obs_batch2, None);
+        let updated2 = update_betting_cs(updated1, obs_batch2, None).unwrap();
         let width2 = updated2.cs_upper - updated2.cs_lower;
 
         assert!(
@@ -865,7 +910,7 @@ mod tests {
         let observations: Vec<f64> = (0..20)
             .flat_map(|_| vec![0.6, 0.8, 0.65, 0.75, 0.7])
             .collect();
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         let error = (updated.mean_est - true_mean).abs();
         assert!(
@@ -881,7 +926,7 @@ mod tests {
     fn test_update_betting_cs_all_zeros() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.0; 10];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert!(updated.cs_lower >= 0.0);
         assert!(updated.cs_upper <= 1.0);
@@ -895,12 +940,8 @@ mod tests {
     fn test_update_betting_cs_all_ones() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![1.0; 10];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
-        println!(
-            "CS all ones: [{:.3}, {:.3}]",
-            updated.cs_lower, updated.cs_upper
-        );
         assert!(updated.cs_lower >= 0.0);
         assert!(updated.cs_upper <= 1.0);
         assert!(
@@ -913,7 +954,7 @@ mod tests {
     fn test_update_betting_cs_single_observation() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.75];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert_eq!(updated.count, 1);
         assert!(updated.cs_lower >= 0.0);
@@ -925,11 +966,11 @@ mod tests {
         // Very strict alpha
         let initial_strict = create_initial_cs(101, 0.001);
         let observations = vec![0.5; 10];
-        let updated_strict = update_betting_cs(initial_strict, observations.clone(), None);
+        let updated_strict = update_betting_cs(initial_strict, observations.clone(), None).unwrap();
 
         // Very loose alpha
         let initial_loose = create_initial_cs(101, 0.5);
-        let updated_loose = update_betting_cs(initial_loose, observations, None);
+        let updated_loose = update_betting_cs(initial_loose, observations, None).unwrap();
 
         let width_strict = updated_strict.cs_upper - updated_strict.cs_lower;
         let width_loose = updated_loose.cs_upper - updated_loose.cs_lower;
@@ -946,7 +987,7 @@ mod tests {
     fn test_wealth_processes_non_negative() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.1, 0.9, 0.0, 1.0, 0.5];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         for (i, &w) in updated.wealth.wealth_upper.iter().enumerate() {
             assert!(
@@ -966,7 +1007,7 @@ mod tests {
     fn test_wealth_processes_finite() {
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.5; 50];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         for (i, &w) in updated.wealth.wealth_upper.iter().enumerate() {
             assert!(
@@ -990,7 +1031,7 @@ mod tests {
         let observations: Vec<f64> = (0..100)
             .flat_map(|_| vec![0.3, 0.7, 0.4, 0.6, 0.5])
             .collect();
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         assert!(updated.cs_lower.is_finite());
         assert!(updated.cs_upper.is_finite());
@@ -1005,12 +1046,12 @@ mod tests {
 
         // Batch processing
         let initial_batch = create_initial_cs(101, 0.05);
-        let batch_result = update_betting_cs(initial_batch, observations.clone(), None);
+        let batch_result = update_betting_cs(initial_batch, observations.clone(), None).unwrap();
 
         // Incremental processing
         let mut incremental = create_initial_cs(101, 0.05);
         for obs in observations {
-            incremental = update_betting_cs(incremental, vec![obs], None);
+            incremental = update_betting_cs(incremental, vec![obs], None).unwrap();
         }
 
         // Results should match
@@ -1079,10 +1120,10 @@ mod tests {
         // At m=0.5: wealth_upper = 1 + bet*(0.5-0.5) = 1.0
         //           wealth_lower = 1 - bet*(0.5-0.5) = 1.0
         let initial = create_initial_cs(101, 0.05);
-        let updated = update_betting_cs(initial, vec![0.5], None);
+        let updated = update_betting_cs(initial, vec![0.5], None).unwrap();
 
         // Find the index closest to m=0.5
-        let m_values = updated.wealth.m_values();
+        let m_values = updated.wealth.m_values().unwrap();
         let idx_half = m_values
             .iter()
             .position(|&m| (m - 0.5).abs() < 1e-10)
@@ -1114,7 +1155,7 @@ mod tests {
         //   wealth_upper = 1 + 0.5*(0.5-1) = 0.75
         //   wealth_lower = 1 - 6.52*(0.5-1) = 4.262492
         let initial = create_initial_cs(101, 0.05);
-        let updated = update_betting_cs(initial, vec![0.5], None);
+        let updated = update_betting_cs(initial, vec![0.5], None).unwrap();
 
         // First element is m=0.0
         // Use 1e-6 tolerance due to log-sum-exp numerical differences
@@ -1149,7 +1190,7 @@ mod tests {
         // After both: mean_reg = (0.5 + 0.6 + 0.4) / 3 = 0.5
         //             var_reg = (0.25 + (0.6-0.55)^2 + (0.4-0.5)^2) / 3 = 0.0875
         let initial = create_initial_cs(101, 0.05);
-        let updated = update_betting_cs(initial, vec![0.6, 0.4], None);
+        let updated = update_betting_cs(initial, vec![0.6, 0.4], None).unwrap();
 
         assert_eq!(updated.count, 2);
 
@@ -1174,9 +1215,9 @@ mod tests {
         // wealth_upper = 1.0 * 1.1 * 0.9 = 0.99
         // wealth_lower = 1.0 * 0.9 * 1.1 = 0.99
         let initial = create_initial_cs(101, 0.05);
-        let updated = update_betting_cs(initial, vec![0.6, 0.4], None);
+        let updated = update_betting_cs(initial, vec![0.6, 0.4], None).unwrap();
 
-        let m_values = updated.wealth.m_values();
+        let m_values = updated.wealth.m_values().unwrap();
         let idx_half = m_values
             .iter()
             .position(|&m| (m - 0.5).abs() < 1e-10)
@@ -1200,9 +1241,9 @@ mod tests {
         // and increase as m moves away from the true mean
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.7; 20]; // 20 observations at true mean 0.7
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
-        let m_values = updated.wealth.m_values();
+        let m_values = updated.wealth.m_values().unwrap();
         let n = m_values.len();
 
         // Find index closest to 0.7
@@ -1246,7 +1287,7 @@ mod tests {
         //   mean_regularized ≈ 0.6818
         let initial = create_initial_cs(101, 0.05);
         let observations = vec![0.5, 0.9, 0.6, 0.8, 0.7, 0.75, 0.65, 0.72, 0.68, 0.7];
-        let updated = update_betting_cs(initial, observations, None);
+        let updated = update_betting_cs(initial, observations, None).unwrap();
 
         // Check count
         assert_eq!(updated.count, 10);
