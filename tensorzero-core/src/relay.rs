@@ -439,8 +439,8 @@ impl TensorzeroRelay {
                     .unwrap_or_default(),
             },
             output_schema: request.output_schema.cloned(),
-            extra_body: prepare_relay_extra_body(request),
-            extra_headers: prepare_relay_extra_headers(request),
+            extra_body: prepare_relay_extra_body(&request.extra_body),
+            extra_headers: prepare_relay_extra_headers(&request.extra_headers),
             credentials: clients
                 .credentials
                 .iter()

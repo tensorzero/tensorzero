@@ -50,13 +50,11 @@ pub enum ExtraBodyReplacementKind {
 ///   is where they actually get applied. We don't want to require creating
 ///   fake models/providers on the relay gateway when they're never actually
 ///   going to get invoked on the relay
-pub fn prepare_relay_extra_body(
-    request: &ModelInferenceRequest<'_>,
-) -> UnfilteredInferenceExtraBody {
+pub fn prepare_relay_extra_body(extra_body: &FullExtraBodyConfig) -> UnfilteredInferenceExtraBody {
     let FullExtraBodyConfig {
         extra_body,
         inference_extra_body,
-    } = &request.extra_body;
+    } = extra_body;
 
     // Forward any static extra_body options directly to the downstream gateway,
     // which is what actually applies them when the model gets invoked
@@ -124,12 +122,12 @@ pub fn prepare_relay_extra_body(
 
 /// See `prepare_relay_extra_body` for more details - the logic is virtually identical
 pub fn prepare_relay_extra_headers(
-    request: &ModelInferenceRequest<'_>,
+    extra_headers: &FullExtraHeadersConfig,
 ) -> UnfilteredInferenceExtraHeaders {
     let FullExtraHeadersConfig {
         variant_extra_headers,
         inference_extra_headers,
-    } = &request.extra_headers;
+    } = extra_headers;
 
     let mut new_extra_headers = variant_extra_headers
         .as_ref()
@@ -365,6 +363,10 @@ pub use dynamic::ExtraBody as DynamicExtraBody;
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::extra_headers::{
+        ExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders,
+    };
+
     use super::*;
     use serde_json::json;
 
@@ -662,6 +664,144 @@ mod tests {
         assert!(
             result.is_err(),
             "Expected error when unknown fields are present"
+        );
+    }
+
+    #[test]
+    fn test_prepare_relay_extra_body() {
+        let extra_body = FullExtraBodyConfig {
+            extra_body: Some(ExtraBodyConfig {
+                data: vec![
+                    ExtraBodyReplacement {
+                        pointer: "/add_me".to_string(),
+                        kind: ExtraBodyReplacementKind::Value(json!("my_value")),
+                    },
+                    ExtraBodyReplacement {
+                        pointer: "/delete_me".to_string(),
+                        kind: ExtraBodyReplacementKind::Delete,
+                    },
+                ],
+            }),
+            inference_extra_body: FilteredInferenceExtraBody {
+                data: vec![
+                    DynamicExtraBody::Variant {
+                        variant_name: "first_variant".to_string(),
+                        pointer: "/v1".to_string(),
+                        value: json!(1),
+                    },
+                    DynamicExtraBody::VariantDelete {
+                        variant_name: "second_variant".to_string(),
+                        pointer: "/v2".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraBody::ModelProvider {
+                        model_name: "gpt-4o".to_string(),
+                        provider_name: Some("openai".to_string()),
+                        pointer: "/mp".to_string(),
+                        value: json!(2),
+                    },
+                ],
+            },
+        };
+
+        let prepared = prepare_relay_extra_body(&extra_body);
+        assert_eq!(
+            prepared,
+            UnfilteredInferenceExtraBody {
+                extra_body: vec![
+                    DynamicExtraBody::Always {
+                        pointer: "/add_me".to_string(),
+                        value: json!("my_value"),
+                    },
+                    DynamicExtraBody::AlwaysDelete {
+                        pointer: "/delete_me".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraBody::Always {
+                        pointer: "/v1".to_string(),
+                        value: json!(1),
+                    },
+                    DynamicExtraBody::AlwaysDelete {
+                        pointer: "/v2".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraBody::ModelProvider {
+                        model_name: "gpt-4o".to_string(),
+                        provider_name: Some("openai".to_string()),
+                        pointer: "/mp".to_string(),
+                        value: json!(2),
+                    },
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn test_prepare_relay_extra_headers() {
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: Some(ExtraHeadersConfig {
+                data: vec![
+                    ExtraHeader {
+                        name: "add_me".to_string(),
+                        kind: ExtraHeaderKind::Value("my_value".to_string()),
+                    },
+                    ExtraHeader {
+                        name: "delete_me".to_string(),
+                        kind: ExtraHeaderKind::Delete,
+                    },
+                ],
+            }),
+            inference_extra_headers: FilteredInferenceExtraHeaders {
+                data: vec![
+                    DynamicExtraHeader::Variant {
+                        variant_name: "first_variant".to_string(),
+                        name: "v1".to_string(),
+                        value: "v1_value".to_string(),
+                    },
+                    DynamicExtraHeader::VariantDelete {
+                        variant_name: "second_variant".to_string(),
+                        name: "v2".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraHeader::ModelProvider {
+                        model_name: "gpt-4o".to_string(),
+                        provider_name: Some("openai".to_string()),
+                        name: "mp".to_string(),
+                        value: "mp_value".to_string(),
+                    },
+                ],
+            },
+        };
+
+        let prepared = prepare_relay_extra_headers(&extra_headers);
+        assert_eq!(
+            prepared,
+            UnfilteredInferenceExtraHeaders {
+                extra_headers: vec![
+                    DynamicExtraHeader::Always {
+                        name: "add_me".to_string(),
+                        value: "my_value".to_string(),
+                    },
+                    DynamicExtraHeader::AlwaysDelete {
+                        name: "delete_me".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraHeader::Always {
+                        name: "v1".to_string(),
+                        value: "v1_value".to_string(),
+                    },
+                    DynamicExtraHeader::AlwaysDelete {
+                        name: "v2".to_string(),
+                        delete: (),
+                    },
+                    DynamicExtraHeader::ModelProvider {
+                        model_name: "gpt-4o".to_string(),
+                        provider_name: Some("openai".to_string()),
+                        name: "mp".to_string(),
+                        value: "mp_value".to_string(),
+                    },
+                ],
+            }
         );
     }
 }
