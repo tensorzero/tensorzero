@@ -1,6 +1,15 @@
 use itertools;
 
 const DEFAULT_M_RESOLUTION: usize = 1001;
+const BET_TRUNCATION_LEVEL: f64 = 0.5;
+
+/// Compute the predictable-plugin-Bernstein-type bet for a given time step.
+/// This is the ONS (Online Newton Step) betting strategy from Waudby-Smith & Ramdas (2024).
+fn compute_bet(t: u64, prev_variance: f64, alpha: f64) -> f64 {
+    let num = 2.0 * (2.0 / alpha).ln();
+    let denom = prev_variance * (t as f64) * ((t as f64) + 1.0).ln();
+    (num / denom).sqrt()
+}
 
 pub struct WealthProcesses {
     pub m_values: Option<Vec<f64>>, // None = linspace(0, 1, resolution)
@@ -108,27 +117,36 @@ pub fn update_betting_cs(
     let bets: Vec<f64> = times
         .iter()
         .zip(lagged_variances)
-        .map(|(&t, prev_variance)| {
-            let num = 2.0 * (2.0 / prev_results.alpha as f64).ln();
-            let denom = prev_variance * (t as f64) * ((t as f64) + 1.0).ln();
-            (num / denom).sqrt()
-        })
+        .map(|(&t, prev_variance)| compute_bet(t, prev_variance, prev_results.alpha as f64))
         .collect();
 
-    // Update uppwer and lower wealth processes for each candidate mean m
+    // Update upper and lower wealth processes for each candidate mean m
     // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
+    // Truncate bets to c/m (upper) or c/(1-m) (lower) to ensure wealth processes stay non-negative
     let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = prev_results
         .wealth
         .m_values_iter()
         .zip(prev_results.wealth.wealth_upper.iter())
         .zip(prev_results.wealth.wealth_lower.iter())
         .map(|((m, &prev_upper), &prev_lower)| {
+            let bet_upper_max = if m == 0.0 {
+                f64::INFINITY
+            } else {
+                BET_TRUNCATION_LEVEL / m
+            };
+            let bet_lower_max = if m == 1.0 {
+                f64::INFINITY
+            } else {
+                BET_TRUNCATION_LEVEL / (1.0 - m)
+            };
             let (log_prod_upper, log_prod_lower) = bets.iter().zip(new_observations.iter()).fold(
                 (0.0, 0.0),
                 |(acc_upper, acc_lower), (&bet, &x)| {
+                    let bet_upper = bet.min(bet_upper_max);
+                    let bet_lower = bet.min(bet_lower_max);
                     (
-                        acc_upper + (1.0 + bet * (x - m)).ln(),
-                        acc_lower + (1.0 - bet * (x - m)).ln(),
+                        acc_upper + (1.0 + bet_upper * (x - m)).ln(),
+                        acc_lower + (1.0 - bet_lower * (x - m)).ln(),
                     )
                 },
             );
