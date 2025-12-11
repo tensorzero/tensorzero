@@ -239,7 +239,7 @@ pub fn update_betting_cs(
 
     // Binary search for lower bound: find smallest m where wealth_hedged < threshold
     // Take the outer (smaller) grid point for coverage
-    let cs_lower = {
+    let (cs_lower, idx_lower) = {
         let mut lo = 0;
         let mut hi = n_grid;
         while lo < hi {
@@ -253,15 +253,15 @@ pub fn update_betting_cs(
         // lo is the first index where wealth_hedged < threshold
         // Take the outer point (one index lower) for coverage, but clamp to valid range
         if lo > 0 {
-            m_values[lo - 1]
+            (m_values[lo - 1], lo - 1)
         } else {
-            m_values[0]
+            (m_values[0], 0)
         }
     };
 
     // Binary search for upper bound: find largest m where wealth_hedged < threshold
     // Take the outer (larger) grid point for coverage
-    let cs_upper = {
+    let (cs_upper, idx_upper) = {
         let mut lo = 0;
         let mut hi = n_grid;
         while lo < hi {
@@ -275,17 +275,17 @@ pub fn update_betting_cs(
         // lo is the first index where wealth_hedged >= threshold (from the right side of interval)
         // Take the outer point (lo itself) for coverage, but clamp to valid range
         if lo < n_grid {
-            m_values[lo]
+            (m_values[lo], lo)
         } else {
-            m_values[n_grid - 1]
+            (m_values[n_grid - 1], n_grid - 1)
         }
     };
 
     // Compute the final mean estimate as the minimizer of wealth_hedged
-    // This is guaranteed to be inside the confidence set
-    let mean_est = m_values
+    // Search only within the confidence interval since the minimum must be there
+    let mean_est = m_values[idx_lower..=idx_upper]
         .iter()
-        .zip(wealth_hedged.iter())
+        .zip(wealth_hedged[idx_lower..=idx_upper].iter())
         .min_by(|(_, w1), (_, w2)| w1.partial_cmp(w2).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(&m, _)| m)
         .unwrap_or(prev_results.mean_est);
