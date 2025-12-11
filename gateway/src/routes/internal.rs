@@ -70,4 +70,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/episodes/bounds",
             get(endpoints::internal::episodes::query_episode_table_bounds_handler),
         )
+        .route(
+            "/internal/episodes/{episode_id}/inference-stats",
+            get(endpoints::internal::episodes::get_episode_inference_stats_handler),
+        )
 }

@@ -2,6 +2,9 @@
 
 use async_trait::async_trait;
 
+#[cfg(test)]
+use mockall::automock;
+
 use crate::config::MetricConfig;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
@@ -33,6 +36,7 @@ pub struct CountInferencesWithDemonstrationFeedbacksParams<'a> {
 
 /// Trait for inference statistics queries
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait InferenceStatsQueries {
     /// Counts the number of inferences for a function, optionally filtered by variant.
     async fn count_inferences_for_function(
@@ -52,4 +56,7 @@ pub trait InferenceStatsQueries {
         &self,
         params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
     ) -> Result<u64, Error>;
+
+    /// Counts the number of inferences for an episode.
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error>;
 }

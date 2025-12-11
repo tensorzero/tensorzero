@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
-  countInferencesForEpisode,
   listInferencesWithPagination,
   countInferencesByFunction,
   countInferencesForVariant,
@@ -222,20 +221,6 @@ test("listInferencesWithPagination with episode_id filter", async () => {
   for (const inference of result2.inferences) {
     expect(inference.episode_id).toBe(episodeId);
   }
-});
-
-test("countInferencesForEpisode", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8c",
-  );
-  expect(count).toBe(43);
-});
-
-test("countInferencesForEpisode with invalid episode_id", async () => {
-  const count = await countInferencesForEpisode(
-    "01942e26-549f-7153-ac56-dd1d23d30f8d",
-  );
-  expect(count).toBe(0);
 });
 
 test("countInferencesByFunction", async () => {
