@@ -926,7 +926,7 @@ impl Client {
                     TensorZeroError::Other {
                         source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
-                                "Failed to join base URL with /inference endpoint: {e}"
+                                "Failed to join base URL with /openai/v1/embeddings endpoint: {e}"
                             ),
                         })
                         .into(),
