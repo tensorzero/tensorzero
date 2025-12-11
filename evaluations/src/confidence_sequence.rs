@@ -157,7 +157,7 @@ pub fn update_betting_cs(
         })
         .unzip();
 
-    // Compute hedged wealth process
+    // Compute hedged wealth process, combo of upper and lower wealth processes
     let threshold = 1.0 / prev_results.alpha as f64;
     let wealth_hedged: Vec<f64> = new_wealth_upper
         .iter()
