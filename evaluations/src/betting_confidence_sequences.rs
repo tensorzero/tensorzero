@@ -118,7 +118,9 @@ pub struct WealthProcesses {
 
 impl WealthProcesses {
     fn resolution(&self) -> usize {
-        self.resolution.unwrap_or(DEFAULT_M_RESOLUTION)
+        let res = self.resolution.unwrap_or(DEFAULT_M_RESOLUTION);
+        assert!(res >= 2, "resolution must be at least 2, got {res}");
+        res
     }
 
     pub fn m_values_iter(&self) -> impl Iterator<Item = f64> + '_ {
@@ -191,6 +193,24 @@ pub fn update_betting_cs(
     new_observations: Vec<f64>,
     hedge_weight_upper: Option<f64>,
 ) -> MeanBettingConfidenceSequence {
+    // Handle empty observations - return unchanged
+    if new_observations.is_empty() {
+        tracing::warn!("update_betting_cs called with empty observations, returning unchanged");
+        return prev_results;
+    }
+
+    // Validate inputs
+    assert!(
+        new_observations.iter().all(|&x| (0.0..=1.0).contains(&x)),
+        "All observations must be in [0, 1]"
+    );
+    if let Some(hw) = hedge_weight_upper {
+        assert!(
+            (0.0..=1.0).contains(&hw),
+            "hedge_weight_upper must be in [0, 1]"
+        );
+    }
+
     let hedge_weight_upper = hedge_weight_upper.unwrap_or(0.5);
     let n = new_observations.len();
     let prev_count = prev_results.count;
@@ -389,6 +409,21 @@ mod tests {
                 wealth_lower: vec![1.0; resolution],
             },
         }
+    }
+
+    // Tests for resolution validation
+
+    #[test]
+    #[should_panic(expected = "resolution must be at least 2")]
+    fn test_resolution_one_panics() {
+        let wealth = WealthProcesses {
+            m_values: None,
+            resolution: Some(1), // Invalid!
+            wealth_upper: vec![1.0],
+            wealth_lower: vec![1.0],
+        };
+        // This should panic when trying to access the resolution
+        let _ = wealth.m_values();
     }
 
     // Tests for find_cs_lower
@@ -613,6 +648,54 @@ mod tests {
         assert_eq!(m_values.len(), 5);
         assert!(approx_eq(m_values[0], 0.0));
         assert!(approx_eq(m_values[4], 1.0));
+    }
+
+    // Tests for update_betting_cs input validation
+
+    #[test]
+    fn test_empty_observations_returns_unchanged() {
+        let initial = create_initial_cs(101, 0.05);
+        // Save initial values before moving
+        let initial_count = initial.count;
+        let initial_mean_est = initial.mean_est;
+        let initial_cs_lower = initial.cs_lower;
+        let initial_cs_upper = initial.cs_upper;
+
+        let updated = update_betting_cs(initial, vec![], None);
+
+        // Should return unchanged
+        assert_eq!(updated.count, initial_count);
+        assert_eq!(updated.mean_est, initial_mean_est);
+        assert_eq!(updated.cs_lower, initial_cs_lower);
+        assert_eq!(updated.cs_upper, initial_cs_upper);
+    }
+
+    #[test]
+    #[should_panic(expected = "All observations must be in [0, 1]")]
+    fn test_observation_below_zero_panics() {
+        let initial = create_initial_cs(101, 0.05);
+        let _ = update_betting_cs(initial, vec![0.5, -0.1, 0.6], None);
+    }
+
+    #[test]
+    #[should_panic(expected = "All observations must be in [0, 1]")]
+    fn test_observation_above_one_panics() {
+        let initial = create_initial_cs(101, 0.05);
+        let _ = update_betting_cs(initial, vec![0.5, 1.1, 0.6], None);
+    }
+
+    #[test]
+    #[should_panic(expected = "hedge_weight_upper must be in [0, 1]")]
+    fn test_hedge_weight_below_zero_panics() {
+        let initial = create_initial_cs(101, 0.05);
+        let _ = update_betting_cs(initial, vec![0.5], Some(-0.1));
+    }
+
+    #[test]
+    #[should_panic(expected = "hedge_weight_upper must be in [0, 1]")]
+    fn test_hedge_weight_above_one_panics() {
+        let initial = create_initial_cs(101, 0.05);
+        let _ = update_betting_cs(initial, vec![0.5], Some(1.1));
     }
 
     // Tests for update_betting_cs
