@@ -1162,4 +1162,75 @@ mod tests {
             updated.mean_est
         );
     }
+
+    #[test]
+    fn test_known_values_full_confidence_sequence() {
+        // 10 varied observations averaging to 0.7, alpha=0.05, resolution=101
+        // Pre-computed values:
+        //   cs_lower = 0.36
+        //   cs_upper = 0.86
+        //   mean_est = 0.70
+        //   variance_regularized ≈ 0.0318
+        //   mean_regularized ≈ 0.6818
+        let initial = create_initial_cs(101, 0.05);
+        let observations = vec![0.5, 0.9, 0.6, 0.8, 0.7, 0.75, 0.65, 0.72, 0.68, 0.7];
+        let updated = update_betting_cs(initial, observations, None);
+
+        // Check count
+        assert_eq!(updated.count, 10);
+
+        // Check mean_est (should be 0.7, the grid point closest to sample mean)
+        assert!(
+            (updated.mean_est - 0.7).abs() < 1e-10,
+            "mean_est should be 0.7, got {}",
+            updated.mean_est
+        );
+
+        // Check regularized mean: (0.5*1 + 7.0) / 11 ≈ 0.6818
+        let expected_mean_reg = (0.5 + 7.0) / 11.0;
+        assert!(
+            (updated.mean_regularized - expected_mean_reg).abs() < 1e-10,
+            "mean_regularized should be {expected_mean_reg}, got {}",
+            updated.mean_regularized
+        );
+
+        // Check variance_regularized ≈ 0.0318
+        assert!(
+            (updated.variance_regularized - 0.031827712868268).abs() < 1e-10,
+            "variance_regularized should be ~0.0318, got {}",
+            updated.variance_regularized
+        );
+
+        // Check confidence interval bounds
+        // cs_lower = 0.36 (with resolution=101, m_values are 0.00, 0.01, ..., 1.00)
+        assert!(
+            (updated.cs_lower - 0.36).abs() < 1e-10,
+            "cs_lower should be 0.36, got {}",
+            updated.cs_lower
+        );
+
+        // cs_upper = 0.86
+        assert!(
+            (updated.cs_upper - 0.86).abs() < 1e-10,
+            "cs_upper should be 0.86, got {}",
+            updated.cs_upper
+        );
+
+        // Verify mean_est is within the confidence interval
+        assert!(
+            updated.cs_lower <= updated.mean_est && updated.mean_est <= updated.cs_upper,
+            "mean_est {} should be within [{}, {}]",
+            updated.mean_est,
+            updated.cs_lower,
+            updated.cs_upper
+        );
+
+        // Verify the true mean (0.7) is within the confidence interval
+        assert!(
+            updated.cs_lower <= 0.7 && 0.7 <= updated.cs_upper,
+            "True mean 0.7 should be within [{}, {}]",
+            updated.cs_lower,
+            updated.cs_upper
+        );
+    }
 }
