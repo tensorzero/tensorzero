@@ -115,7 +115,7 @@ pub fn update_betting_cs(
         })
         .collect();
 
-    // Update wealth processes for each candidate mean m
+    // Update uppwer and lower wealth processes for each candidate mean m
     // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
     let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = prev_results
         .wealth
@@ -139,25 +139,19 @@ pub fn update_betting_cs(
         })
         .unzip();
 
-    // Compute hedged wealth processes
-    let wealth_weighted_upper: Vec<f64> = new_wealth_upper
-        .iter()
-        .map(|&w| hedge_weight_upper * w)
-        .collect();
-    let wealth_weighted_lower: Vec<f64> = new_wealth_lower
-        .iter()
-        .map(|&w| (1.0 - hedge_weight_upper) * w)
-        .collect();
-
-    // Combine hedged processes based on combo_type
+    // Compute hedged wealth process
     let threshold = 1.0 / prev_results.alpha as f64;
-    let wealth_hedged: Vec<f64> = wealth_weighted_upper
+    let wealth_hedged: Vec<f64> = new_wealth_upper
         .iter()
-        .zip(wealth_weighted_lower.iter())
-        .map(|(&w_upper, &w_lower)| match combo_type.as_str() {
-            "max" => w_upper.max(w_lower),
-            "convex" => w_upper + w_lower,
-            _ => w_upper.max(w_lower), // Default to max
+        .zip(new_wealth_lower.iter())
+        .map(|(&w_upper, &w_lower)| {
+            let weighted_upper = hedge_weight_upper * w_upper;
+            let weighted_lower = (1.0 - hedge_weight_upper) * w_lower;
+            match combo_type.as_str() {
+                "max" => weighted_upper.max(weighted_lower),
+                "convex" => weighted_upper + weighted_lower,
+                _ => weighted_upper.max(weighted_lower), // Default to max
+            }
         })
         .collect();
 
