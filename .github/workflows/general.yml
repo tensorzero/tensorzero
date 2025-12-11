@@ -724,13 +724,15 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-16x32' || 'namespace-profile-tensorzero-8x16' }}
+    runs-on:
+      - ${{ true && 'namespace-profile-tensorzero-8x16' || 'namespace-profile-tensorzero-8x16' }}
+      - namespace-experiments:ephemeral-storage.size-multiplier=2
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
-        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
+        replicated: ${{ true == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
           - replicated: true
