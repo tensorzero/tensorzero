@@ -279,10 +279,12 @@ async fn test_tensorzero_missing_auth() {
         ("GET", "/v1/datasets/get_datapoints"),
     ];
 
+    let client = reqwest::Client::new();
+
     for (method, path) in auth_required_routes {
         // Authorization runs before we do any parsing of the request parameters/body,
         // so we don't need to provide a valid request here.
-        let response = reqwest::Client::new()
+        let response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -299,7 +301,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_auth_response = reqwest::Client::new()
+        let bad_auth_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -317,7 +319,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_key_format_response = reqwest::Client::new()
+        let bad_key_format_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -335,7 +337,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let missing_key_response = reqwest::Client::new()
+        let missing_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -356,7 +358,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let disabled_key_response = reqwest::Client::new()
+        let disabled_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
