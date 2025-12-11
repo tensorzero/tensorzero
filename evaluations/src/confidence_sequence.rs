@@ -1,21 +1,49 @@
+//! Betting-based confidence sequences for bounded means.
+//!
+//! This module implements confidence sequences using the betting martingale framework
+//! from Waudby-Smith & Ramdas (2024), "Estimating means of bounded random variables
+//! by betting" (JRSS-B). These provide time-uniform confidence sequences, which consist
+//! of confidence intervals that are valid at any stopping time. This makes them suitable
+//! for sequential experimentation and continuous monitoring.
+//!
+//! The key idea is to construct wealth processes that grow when the true mean differs
+//! from a candidate value m. Each wealth process can be understood as the wealth
+//! accumulated by a gambler making bets about where the true mean lies relative to m.
+//! The confidence set at time t is the set of all m values for which the wealth process
+//! has not exceeded the threshold 1/α, where α is the confidence level.
+
 use itertools;
 
 const DEFAULT_M_RESOLUTION: usize = 1001;
 const BET_TRUNCATION_LEVEL: f64 = 0.5;
 
 /// Compute the predictable-plugin-Bernstein-type bet for a given time step.
-/// This is the ONS (Online Newton Step) betting strategy from Waudby-Smith & Ramdas (2024).
+///
+/// * `t` - The current time step (1-indexed)
+/// * `prev_variance` - The variance estimate from the previous time step.
+///   Bets must be predictable (measurable on the previous sigma-algebra),
+///   so can only use information from the previous time step.
+/// * `alpha` - The significance level (e.g., 0.05 for 95% confidence)
 fn compute_bet(t: u64, prev_variance: f64, alpha: f64) -> f64 {
     let num = 2.0 * (2.0 / alpha).ln();
     let denom = prev_variance * (t as f64) * ((t as f64) + 1.0).ln();
     (num / denom).sqrt()
 }
 
+/// Tracks the wealth processes used to construct confidence sequences.
+///
+/// The confidence set is defined as {m : wealth_hedged(m) < 1/α}, where
+/// wealth_hedged is a combination of the upper and lower wealth processes.
+/// These processes are evaluated on a grid of candidate mean values.
 pub struct WealthProcesses {
-    pub m_values: Option<Vec<f64>>, // None = linspace(0, 1, resolution)
-    pub resolution: Option<usize>,  // None = DEFAULT_M_RESOLUTION
-    pub wealth_upper: Vec<f64>,     // K_t^+ at each m
-    pub wealth_lower: Vec<f64>,     // K_t^- at each m
+    /// Grid of candidate mean values. If None, defaults to linspace(0, 1, resolution).
+    pub m_values: Option<Vec<f64>>,
+    /// Number of grid points. If None, defaults to DEFAULT_M_RESOLUTION (1001).
+    pub resolution: Option<usize>,
+    /// Upper wealth process K_t^+(m) at each grid point.
+    pub wealth_upper: Vec<f64>,
+    /// Lower wealth process K_t^-(m) at each grid point.
+    pub wealth_lower: Vec<f64>,
 }
 
 impl WealthProcesses {
@@ -40,31 +68,65 @@ impl WealthProcesses {
     }
 }
 
+/// A confidence sequence for a bounded mean, constructed via betting.
+///
+/// This struct maintains the state needed to incrementally update a confidence
+/// sequence as new observations arrive. The confidence interval [cs_lower, cs_upper]
+/// is valid at any stopping time with coverage probability at least 1 - α.
 pub struct MeanBettingConfidenceSequence {
-    pub name: String, // A variant or evaluator name
+    /// Identifier for this sequence (e.g., variant or evaluator name).
+    pub name: String,
+    /// Regularized running mean, used for variance estimation.
     pub mean_regularized: f64,
+    /// Regularized running variance, used for computing bets.
     pub variance_regularized: f64,
+    /// Number of observations processed so far.
     pub count: u64,
+    /// Point estimate of the mean (minimizer of the hedged wealth process).
     pub mean_est: f64,
+    /// Lower bound of the confidence interval.
     pub cs_lower: f64,
+    /// Upper bound of the confidence interval.
     pub cs_upper: f64,
+    /// Significance level (e.g., 0.05 for 95% confidence).
     pub alpha: f32,
+    /// Underlying wealth processes used to construct the confidence set.
     pub wealth: WealthProcesses,
 }
 
-// combo_type: "max" or "convex"
-// hedge weight for the process K_t+; for K_t- the hedge weight will be 1 - hedge_weight. Must be convex weights.
+/// Update a confidence sequence with new observations.
+///
+/// Processes a batch of new observations and returns an updated confidence sequence.
+/// The update involves:
+/// 1. Computing regularized running mean and variance estimates
+/// 2. Computing predictable bets based on previous variance estimates
+/// 3. Updating the upper and lower wealth processes for each candidate mean
+/// 4. Combining the wealth processes into a single hedged process and finding the new confidence bounds
+///
+/// # Arguments
+/// * `prev_results` - The current state of the confidence sequence
+/// * `new_observations` - New observations to incorporate (must be in [0, 1])
+/// * `combo_type` - How to combine upper/lower wealth processes:
+///   - `"max"`: Take the maximum of weighted processes (intersection of CSs)
+///   - `"convex"`: Sum the weighted processes (union-based combination)
+/// * `hedge_weight_upper` - Weight for the upper wealth process (must be in [0, 1]).
+///   The lower process receives weight (1 - hedge_weight_upper). If None, then
+///   defaults to 0.5.
+///
+/// # Returns
+/// Updated `MeanBettingConfidenceSequence` with new bounds and wealth process values.
 pub fn update_betting_cs(
     prev_results: MeanBettingConfidenceSequence,
     new_observations: Vec<f64>,
     combo_type: String,
-    hedge_weight_upper: f64,
+    hedge_weight_upper: Option<f64>,
 ) -> MeanBettingConfidenceSequence {
+    let hedge_weight_upper = hedge_weight_upper.unwrap_or(0.5);
     let n = new_observations.len();
     let prev_count = prev_results.count;
 
     // Times go from prev_count+1 to prev_count+n (inclusive)
-    // These represent the "time" index for each new observation
+    // These represent the time index for each new observation
     let times: Vec<u64> = ((prev_count + 1)..=(prev_count + n as u64)).collect();
 
     // Cumulative sum of new observations
@@ -157,7 +219,7 @@ pub fn update_betting_cs(
         })
         .unzip();
 
-    // Compute hedged wealth process, combo of upper and lower wealth processes
+    // Compute hedged wealth process, the max of the weighted upper and lower wealth processes
     let threshold = 1.0 / prev_results.alpha as f64;
     let wealth_hedged: Vec<f64> = new_wealth_upper
         .iter()
