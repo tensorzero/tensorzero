@@ -5,7 +5,6 @@ import {
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
   getEvaluationResults,
-  searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
@@ -53,89 +52,6 @@ describe("getEvaluationRunInfos", () => {
         variant_name: "gpt4o_mini_initial_prompt",
       },
     ]);
-  });
-});
-
-describe("searchEvaluationRuns", () => {
-  test("should return matching run ids when searching by evaluation_run_id prefix", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "46ff24",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196368f-19bd-7082-a677-1c0bf346ff24",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return matching run ids when searching by variant_name for models", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "gpt4o",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196374c-2b06-7f50-b187-80c15cec5a1f",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196368f-19bd-7082-a677-1c0bf346ff24",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
-        variant_name: "gpt4o_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196367b-c0bb-7f90-b651-f90eb9fba8f3",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return matching run ids when searching by partial variant_name", async () => {
-    const runIds = await searchEvaluationRuns(
-      "haiku",
-      "write_haiku",
-      "initial",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "01963690-dff2-7cd3-b724-62fb705772a1",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-      {
-        evaluation_run_id: "0196367a-702c-75f3-b676-d6ffcc7370a1",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-    ]);
-  });
-
-  test("should handle case-insensitive search", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "llama",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196367b-1739-7483-b3f4-f3b0a4bda063",
-        variant_name: "llama_8b_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return empty array when no matches found", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "nonexistent",
-    );
-    expect(runIds).toEqual([]);
   });
 });
 

@@ -22,8 +22,6 @@ import {
   JsonEvaluationResultSchema,
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
-  type EvaluationRunSearchResult,
-  EvaluationRunSearchResultSchema,
 } from "./evaluations";
 
 export async function getEvaluationRunInfos(
@@ -389,47 +387,6 @@ export async function getEvaluationStatistics(
   });
   const rows = await result.json<EvaluationStatistics>();
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
-}
-
-export async function searchEvaluationRuns(
-  evaluation_name: string,
-  function_name: string,
-  search_query: string,
-  limit: number = 100,
-  offset: number = 0,
-) {
-  const query = `
-    WITH
-      evaluation_inference_ids AS (
-        SELECT inference_id
-        FROM TagInference
-        WHERE key = 'tensorzero::evaluation_name'
-        AND value = {evaluation_name:String}
-      )
-    SELECT DISTINCT value as evaluation_run_id, variant_name
-    FROM TagInference FINAL
-    WHERE key = 'tensorzero::evaluation_run_id'
-      AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
-      AND (positionCaseInsensitive(value, {search_query:String}) > 0 OR positionCaseInsensitive(variant_name, {search_query:String}) > 0)
-    ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
-    LIMIT {limit:UInt32}
-    OFFSET {offset:UInt32}
-    `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_name: evaluation_name,
-      function_name: function_name,
-      limit: limit,
-      offset: offset,
-      search_query: search_query,
-    },
-  });
-  const rows = await result.json<EvaluationRunSearchResult[]>();
-  return rows.map((row) => EvaluationRunSearchResultSchema.parse(row));
 }
 
 export async function getEvaluationsForDatapoint(
