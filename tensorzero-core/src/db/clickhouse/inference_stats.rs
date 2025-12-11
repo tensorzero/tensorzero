@@ -129,6 +129,23 @@ fn build_count_demonstration_feedbacks_query(
     (query, query_params)
 }
 
+/// Builds the SQL query for counting inferences by episode.
+fn build_count_inferences_for_episode_query(
+    episode_id: uuid::Uuid,
+) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("episode_id".to_string(), episode_id.to_string());
+
+    let query = format!(
+        "SELECT COUNT() AS count
+         FROM InferenceByEpisodeId FINAL
+         WHERE episode_id_uint = toUInt128(toUUID({{episode_id:String}}))
+         FORMAT JSONEachRow"
+    );
+
+    (query, query_params)
+}
+
 #[async_trait]
 impl InferenceStatsQueries for ClickHouseConnectionInfo {
     async fn count_inferences_for_function(
@@ -166,6 +183,17 @@ impl InferenceStatsQueries for ClickHouseConnectionInfo {
     ) -> Result<u64, Error> {
         let (query, params_owned) = build_count_demonstration_feedbacks_query(params);
         let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
+        let (query, query_params_owned) = build_count_inferences_for_episode_query(episode_id);
+        let query_params: HashMap<&str, &str> = query_params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -415,5 +443,22 @@ mod tests {
 
         assert_query_contains_normalized(&query, "AND value < {threshold:Float64}");
         assert_eq!(query_params.get("threshold"), Some(&"0.5".to_string()));
+    }
+
+    #[test]
+    fn test_build_count_inferences_for_episode_query() {
+        let episode_id = uuid::Uuid::now_v7();
+        let (query, query_params) = build_count_inferences_for_episode_query(episode_id);
+
+        assert_query_contains_normalized(&query, "SELECT COUNT() AS count");
+        assert_query_contains_normalized(&query, "FROM InferenceByEpisodeId FINAL");
+        assert_query_contains_normalized(
+            &query,
+            "WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))",
+        );
+        assert_eq!(
+            query_params.get("episode_id"),
+            Some(&episode_id.to_string())
+        );
     }
 }

@@ -1,12 +1,14 @@
 //! Episodes endpoint for querying episode data.
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::{Json, debug_handler};
 use serde::Deserialize;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::inference_stats::InferenceStatsQueries;
 use crate::db::{EpisodeByIdRow, SelectQueries, TableBoundsWithCount};
+use crate::endpoints::internal::inference_stats::InferenceStatsResponse;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -65,10 +67,39 @@ pub async fn query_episode_table_bounds(
     clickhouse.query_episode_table_bounds().await
 }
 
+/// HTTP handler for getting inference stats for an episode
+#[debug_handler(state = AppStateData)]
+#[instrument(
+    name = "get_episode_inference_stats_handler",
+    skip_all,
+    fields(
+        episode_id = %episode_id,
+    )
+)]
+pub async fn get_episode_inference_stats_handler(
+    State(app_state): AppState,
+    Path(episode_id): Path<Uuid>,
+) -> Result<Json<InferenceStatsResponse>, Error> {
+    let stats =
+        get_episode_inference_stats(&app_state.clickhouse_connection_info, episode_id).await?;
+    Ok(Json(stats))
+}
+
+/// Core business logic for getting episode inference statistics
+pub async fn get_episode_inference_stats(
+    clickhouse: &impl InferenceStatsQueries,
+    episode_id: Uuid,
+) -> Result<InferenceStatsResponse, Error> {
+    let inference_count = clickhouse.count_inferences_for_episode(episode_id).await?;
+
+    Ok(InferenceStatsResponse { inference_count })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::MockSelectQueries;
+    use crate::db::inference_stats::MockInferenceStatsQueries;
     use chrono::Utc;
 
     #[tokio::test]
@@ -209,5 +240,25 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("Limit cannot exceed 100"));
+    }
+
+    #[tokio::test]
+    async fn test_get_episode_inference_stats_calls_clickhouse() {
+        let mut mock_clickhouse = MockInferenceStatsQueries::new();
+
+        let episode_id = Uuid::now_v7();
+        let expected_count = 42;
+
+        mock_clickhouse
+            .expect_count_inferences_for_episode()
+            .withf(move |id| *id == episode_id)
+            .times(1)
+            .returning(move |_| Box::pin(async move { Ok(expected_count) }));
+
+        let result = get_episode_inference_stats(&mock_clickhouse, episode_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result.inference_count, expected_count);
     }
 }

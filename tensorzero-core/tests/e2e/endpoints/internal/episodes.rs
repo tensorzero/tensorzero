@@ -2,6 +2,8 @@
 
 use reqwest::Client;
 use tensorzero_core::db::{EpisodeByIdRow, TableBoundsWithCount};
+use tensorzero_core::endpoints::internal::inference_stats::InferenceStatsResponse;
+use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
@@ -129,5 +131,55 @@ async fn test_query_episode_table_rejects_limit_over_100() {
         resp.status(),
         reqwest::StatusCode::BAD_REQUEST,
         "Expected 400 Bad Request for limit > 100"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_episode_inference_stats() {
+    let http_client = Client::new();
+
+    // First get an episode that exists
+    let bounds_url = get_gateway_endpoint("/internal/episodes/bounds");
+    let bounds_resp = http_client.get(bounds_url).send().await.unwrap();
+    assert!(bounds_resp.status().is_success());
+    let bounds: TableBoundsWithCount = bounds_resp.json().await.unwrap();
+
+    if let Some(first_id) = bounds.first_id {
+        let url = get_gateway_endpoint(&format!("/internal/episodes/{first_id}/inference-stats"));
+        let resp = http_client.get(url).send().await.unwrap();
+        assert!(
+            resp.status().is_success(),
+            "get_episode_inference_stats request failed: status={:?}",
+            resp.status()
+        );
+
+        let response: InferenceStatsResponse = resp.json().await.unwrap();
+        assert!(
+            response.inference_count > 0,
+            "Expected at least one inference for episode"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_episode_inference_stats_nonexistent_episode() {
+    let http_client = Client::new();
+
+    // Use a UUID that likely doesn't exist
+    let nonexistent_id = Uuid::now_v7();
+    let url = get_gateway_endpoint(&format!(
+        "/internal/episodes/{nonexistent_id}/inference-stats"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "Should return success even for nonexistent episode"
+    );
+
+    let response: InferenceStatsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        response.inference_count, 0,
+        "Nonexistent episode should have 0 inferences"
     );
 }

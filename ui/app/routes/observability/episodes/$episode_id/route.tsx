@@ -1,12 +1,10 @@
-import {
-  countInferencesForEpisode,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -96,6 +94,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_feedbacks,
     latestFeedbackByMetric;
 
+  const httpClient = getTensorZeroClient();
+
   if (newFeedbackId) {
     // When there's new feedback, wait for polling to complete before querying
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
@@ -108,7 +108,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           limit,
         }),
         feedbackDataPromise,
-        countInferencesForEpisode(episode_id),
+        httpClient
+          .getEpisodeInferenceStats(episode_id)
+          .then((stats) => Number(stats.inference_count)),
         dbClient.countFeedbackByTargetId({
           target_id: episode_id,
         }),
@@ -139,7 +141,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       dbClient.queryFeedbackBoundsByTargetId({
         target_id: episode_id,
       }),
-      countInferencesForEpisode(episode_id),
+      httpClient
+        .getEpisodeInferenceStats(episode_id)
+        .then((stats) => Number(stats.inference_count)),
       dbClient.countFeedbackByTargetId({
         target_id: episode_id,
       }),
