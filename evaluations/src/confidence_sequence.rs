@@ -416,7 +416,7 @@ mod tests {
         let wealth = vec![100.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0];
         let m_values: Vec<f64> = (0..7).map(|i| i as f64 / 6.0).collect();
         let threshold = 20.0;
-        let min_idx = 1; // index of minimum value (any index 1-6, use first)
+        let min_idx = 1; // smallest index of minimum value (5.0)
 
         let (_, idx) = find_cs_lower(&wealth, &m_values, threshold, min_idx);
 
@@ -756,14 +756,10 @@ mod tests {
             "wealth_lower should be the same regardless of hedge weight"
         );
 
-        // The confidence interval bounds may differ due to hedge weight
-        // (though for some data they may happen to be the same)
-        // For asymmetric data, different hedge weights should give different intervals
+        // With data not centered around 0.5, the confidence interval bounds should
+        // differ due to hedge weight
         let low_width = updated_low.cs_upper - updated_low.cs_lower;
         let high_width = updated_high.cs_upper - updated_high.cs_lower;
-
-        // With asymmetric data (high values), low hedge_weight (favoring lower process)
-        // should behave differently from high hedge_weight (favoring upper process)
         assert!(
             !approx_eq(low_width, high_width)
                 || !approx_eq(updated_low.mean_est, updated_high.mean_est),
@@ -803,7 +799,7 @@ mod tests {
 
         let error = (updated.mean_est - true_mean).abs();
         assert!(
-            error < 0.1,
+            error < 0.01,
             "Mean estimate {:.3} should be close to true mean {true_mean}: error={error}",
             updated.mean_est
         );
