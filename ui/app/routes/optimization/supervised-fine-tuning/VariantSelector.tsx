@@ -74,9 +74,7 @@ export function VariantSelector({
                     onClick={handleClick}
                     onBlur={handleBlur}
                     placeholder={
-                      hasVariants
-                        ? "Select a variant name"
-                        : "No variants available"
+                      hasVariants ? "Select variant" : "No variants available"
                     }
                     disabled={!hasVariants}
                     monospace

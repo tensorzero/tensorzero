@@ -96,7 +96,7 @@ export function FunctionSelector({
             onFocus={() => {}}
             onClick={handleClick}
             onBlur={handleBlur}
-            placeholder="Select a function"
+            placeholder="Select function"
             disabled={disabled}
             monospace
             open={open}
