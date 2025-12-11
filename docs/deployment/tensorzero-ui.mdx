@@ -23,22 +23,6 @@ For example, if the gateway is running locally, you can set `TENSORZERO_GATEWAY_
 [Deploy ClickHouse](/deployment/tensorzero-gateway/) and configure `TENSORZERO_CLICKHOUSE_URL`.
 
 </Step>
-<Step title="Configure model provider credentials">
-
-The TensorZero UI integrates with model providers like OpenAI to streamline workflows like fine-tuning.
-To use these features, you need to provide credentials for the relevant model providers as environment variables.
-You don't need to provide credentials if you're not using the fine-tuning features for those providers.
-
-The supported fine-tuning providers and their required credentials (environment variables) are:
-
-| Provider     | Required Credentials                       |
-| ------------ | ------------------------------------------ |
-| Fireworks AI | `FIREWORKS_ACCOUNT_ID` `FIREWORKS_API_KEY` |
-| GCP Vertex   | GCP account credentials                    |
-| OpenAI       | `OPENAI_API_KEY`                           |
-| Together AI  | `TOGETHER_API_KEY`                         |
-
-</Step>
 
 <Step title="Deploy the TensorZero UI">
 
