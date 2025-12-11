@@ -230,6 +230,8 @@ export * from "./Role";
 export * from "./SGLangProvider";
 export * from "./SchemaData";
 export * from "./SchemaWithMetadata";
+export * from "./SearchEvaluationRunResult";
+export * from "./SearchEvaluationRunsResponse";
 export * from "./ServiceTier";
 export * from "./StaleDatasetResponse";
 export * from "./StaticJSONSchema";

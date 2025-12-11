@@ -16,10 +16,8 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useSearchParams, useNavigate, useFetcher } from "react-router";
-import type {
-  EvaluationRunInfo,
-  EvaluationRunSearchResult,
-} from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { SearchEvaluationRunResult } from "~/types/tensorzero";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
@@ -55,7 +53,7 @@ export function EvalRunSelector({
     data,
     state,
     load: loadRunsFetcher,
-  } = useFetcher<EvaluationRunSearchResult[]>();
+  } = useFetcher<SearchEvaluationRunResult[]>();
   const isLoading = state === "loading";
 
   // Filter the fetched runs based on allowedRunInfos if it's provided
@@ -74,7 +72,7 @@ export function EvalRunSelector({
     : []; // If data itself is null/undefined, use an empty array
 
   // Update the URL with the selected run IDs
-  const updateSelectedRunIds = (runIdInfos: EvaluationRunSearchResult[]) => {
+  const updateSelectedRunIds = (runIdInfos: SearchEvaluationRunResult[]) => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set(
       "evaluation_run_ids",

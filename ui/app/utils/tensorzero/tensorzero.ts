@@ -33,6 +33,7 @@ import type {
   ListDatasetsResponse,
   ListEvaluationRunsResponse,
   ListInferencesRequest,
+  SearchEvaluationRunsResponse,
   StatusResponse,
   UiConfig,
   UpdateDatapointRequest,
@@ -854,6 +855,41 @@ export class TensorZeroClient {
 
     const result = (await response.json()) as DatapointStatsResponse;
     return Number(result.count);
+  }
+
+  /**
+   * Searches evaluation runs by ID or variant name.
+   * @param evaluationName - The name of the evaluation
+   * @param functionName - The name of the function being evaluated
+   * @param query - The search query (case-insensitive)
+   * @param limit - Maximum number of results to return (default: 100)
+   * @param offset - Number of results to skip (default: 0)
+   * @returns A promise that resolves with the search results
+   * @throws Error if the request fails
+   */
+  async searchEvaluationRuns(
+    evaluationName: string,
+    functionName: string,
+    query: string,
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<SearchEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_name", evaluationName);
+    searchParams.append("function_name", functionName);
+    searchParams.append("query", query);
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/runs/search?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    return (await response.json()) as SearchEvaluationRunsResponse;
   }
 
   private async fetch(
