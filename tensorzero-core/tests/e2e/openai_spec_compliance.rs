@@ -1,9 +1,9 @@
 #![expect(clippy::print_stdout)]
-use jsonschema::draft202012;
 use jsonschema::Validator;
+use jsonschema::draft202012;
 use reqwest::Client;
-use serde_json::json;
 use serde_json::Value;
+use serde_json::json;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use tokio::sync::OnceCell;
@@ -126,16 +126,16 @@ async fn get_component_schema(component_name: &str) -> Option<Value> {
     let mut schema = json!({
         "$ref": format!("#/components/schemas/{}", component_name)
     });
-    
-    schema.as_object_mut().unwrap().insert(
-        "$defs".to_string(),
-        components.clone(),
-    );
-    schema.as_object_mut().unwrap().insert(
-        "components".to_string(),
-        json!({ "schemas": components }),
-    );
-    
+
+    schema
+        .as_object_mut()
+        .unwrap()
+        .insert("$defs".to_string(), components.clone());
+    schema
+        .as_object_mut()
+        .unwrap()
+        .insert("components".to_string(), json!({ "schemas": components }));
+
     Some(schema)
 }
 
@@ -196,38 +196,47 @@ async fn get_error_schema() -> Validator {
     compile_schema(&schema)
 }
 
-async fn get_chat_completion_response_schema() -> Option<Validator> {
-    get_component_schema_fallback(&[
-        "ChatCompletion",
-        "CreateChatCompletionResponse",
-        "ChatCompletionResponse",
-    ])
-    .await
-    .map(|s| compile_schema(&s))
-}
-
-async fn get_embeddings_response_schema() -> Option<Validator> {
-    get_component_schema_fallback(&[
-        "CreateEmbeddingResponse",
-        "EmbeddingsResponse",
-        "EmbeddingList",
-    ])
-    .await
-    .map(|s| compile_schema(&s))
+async fn validate_response_against_schema(
+    candidate_schema_names: &[&str],
+    schema_description: &str,
+    instance: &Value,
+    context: &str,
+) {
+    match get_component_schema_fallback(candidate_schema_names).await {
+        Some(schema_value) => {
+            let validator = compile_schema(&schema_value);
+            assert_valid_schema(&validator, instance, context);
+        }
+        None => warn_schema_missing(schema_description),
+    }
 }
 
 async fn validate_chat_completion_response(instance: &Value, context: &str) {
-    get_chat_completion_response_schema().await.map_or_else(
-        || warn_schema_missing("ChatCompletion response"),
-        |schema| assert_valid_schema(&schema, instance, context),
-    );
+    validate_response_against_schema(
+        &[
+            "ChatCompletion",
+            "CreateChatCompletionResponse",
+            "ChatCompletionResponse",
+        ],
+        "ChatCompletion response",
+        instance,
+        context,
+    )
+    .await;
 }
 
 async fn validate_embeddings_response(instance: &Value, context: &str) {
-    get_embeddings_response_schema().await.map_or_else(
-        || warn_schema_missing("Embeddings response"),
-        |schema| assert_valid_schema(&schema, instance, context),
-    );
+    validate_response_against_schema(
+        &[
+            "CreateEmbeddingResponse",
+            "EmbeddingsResponse",
+            "EmbeddingList",
+        ],
+        "Embeddings response",
+        instance,
+        context,
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -342,9 +351,7 @@ async fn test_spec_chat_completion_with_tool_calls() {
         .unwrap();
 
     assert_eq!(response.status(), 200, "Expected 200 OK");
-
     let response_json: Value = response.json().await.unwrap();
-
     validate_chat_completion_response(&response_json, "Chat completion with tool calls response")
         .await;
 }
@@ -389,7 +396,7 @@ async fn test_spec_embeddings_request() {
     let response = client
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
         .json(&json!({
-            "model": "tensorzero::model_name::openai::text-embedding-3-small",
+            "model": "tensorzero::embedding_model_name::openai::text-embedding-3-small",
             "input": "hello world"
         }))
         .send()
@@ -399,7 +406,6 @@ async fn test_spec_embeddings_request() {
     assert_eq!(response.status(), 200, "Expected 200 OK");
 
     let response_json: Value = response.json().await.unwrap();
-
     validate_embeddings_response(&response_json, "Embeddings minimal request response").await;
 }
 
@@ -411,7 +417,7 @@ async fn test_spec_embeddings_array_input() {
     let response = client
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
         .json(&json!({
-            "model": "tensorzero::model_name::openai::text-embedding-3-small",
+            "model": "tensorzero::embedding_model_name::openai::text-embedding-3-small",
             "input": ["hello", "world", "test"]
         }))
         .send()
@@ -421,7 +427,6 @@ async fn test_spec_embeddings_array_input() {
     assert_eq!(response.status(), 200, "Expected 200 OK");
 
     let response_json: Value = response.json().await.unwrap();
-
     validate_embeddings_response(&response_json, "Embeddings array input response").await;
 }
 
@@ -485,6 +490,6 @@ async fn test_spec_embeddings_array_input() {
 //            );
 //        }
 //    } else {
-//        eprintln!("⚠️  Warning: Streaming chunk schema not found in spec, skipping validation");
+//        eprintln!("Warning: Streaming chunk schema not found in spec, skipping validation");
 //    }
 // }
