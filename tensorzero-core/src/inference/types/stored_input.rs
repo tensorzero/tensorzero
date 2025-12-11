@@ -496,7 +496,8 @@ impl StoredInput {
 /// Only the object-storage path is actually stored in clickhouse
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,

@@ -1,15 +1,15 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import { queryModelInferencesByInferenceId } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { resolveModelInferences } from "~/utils/resolve.server";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
-import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 export async function loader({
@@ -26,14 +26,15 @@ export async function loader({
 
   try {
     const dbClient = await getNativeDatabaseClient();
-    const tensorZeroClient = getTensorZeroClient();
+    const client = getTensorZeroClient();
 
-    const inferencesPromise = tensorZeroClient.getInferences({
+    const inferencesPromise = client.getInferences({
       ids: [inference_id],
       output_source: "inference",
     });
-    const modelInferencesPromise =
-      queryModelInferencesByInferenceId(inference_id);
+    const modelInferencesPromise = client
+      .getModelInferences(inference_id)
+      .then((response) => resolveModelInferences(response.model_inferences));
     const demonstrationFeedbackPromise =
       dbClient.queryDemonstrationFeedbackByInferenceId({
         inference_id,

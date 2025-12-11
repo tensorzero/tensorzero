@@ -5,7 +5,6 @@ import {
   listInferencesWithPagination,
   countInferencesByFunction,
   countInferencesForVariant,
-  queryModelInferencesByInferenceId,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
@@ -275,19 +274,6 @@ test("countInferencesByFunction", async () => {
       },
     ]),
   );
-});
-
-test("queryModelInferencesByInferenceId", async () => {
-  const modelInferences = await queryModelInferencesByInferenceId(
-    "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
-  );
-  expect(modelInferences.length).toBe(1);
-  const firstInference = modelInferences[0];
-  expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
-  expect(firstInference.input_messages.length).toBe(1);
-  expect(firstInference.output.length).toBe(1);
-  expect(firstInference.output[0].type).toBe("text");
-  expect(!firstInference.cached);
 });
 
 test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {

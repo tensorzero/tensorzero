@@ -97,7 +97,9 @@ use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
-use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
+use crate::serde_util::{
+    deserialize_defaulted_json_string, deserialize_json_string, serialize_json_string,
+};
 use crate::tool::{
     InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
     ToolCallWrapper, ToolResult, deserialize_optional_tool_info,
@@ -1183,8 +1185,9 @@ enum ContentBlockOutputType {
     Unknown,
 }
 
-/// Defines the types of content block that can come out of a model provider
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// Types of content blocks that can be returned by a model provider
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
@@ -1502,8 +1505,12 @@ pub enum Latency {
     Batch,
 }
 
+/// Runtime type for model inference responses during inference execution.
+///
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
 #[derive(Clone, Debug)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponse {
@@ -1521,8 +1528,13 @@ pub struct ModelInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
+/// Runtime type for model inference responses with full metadata during inference execution.
+///
+/// In the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
+/// To convert this runtime type to a storage type, use [`StoredModelInference::new`].
 #[derive(Clone, Debug)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponseWithMetadata {
@@ -1666,7 +1678,7 @@ converted into an InferenceResponseChunk and sent to the client.
 We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
 Alongside the response, we also store information about what happened during the request.
-For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
+For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and StoredModelInferences,
 which are written to ClickHouse tables of the same name asynchronously.
 */
 #[derive(Deserialize)]
@@ -1733,15 +1745,34 @@ pub enum InferenceDatabaseInsert {
     Json(JsonInferenceDatabaseInsert),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceDatabaseInsert {
+/// Stored model inference data for ClickHouse.
+///
+/// This type is used both for inserting model inferences into ClickHouse
+/// and for deserializing them when querying.
+///
+/// Note: The `timestamp` field is a materialized column in ClickHouse
+/// (computed from `UUIDv7ToDateTime(id)`), so it's only populated during reads.
+///
+/// The `input_messages` and `output` fields are stored as JSON strings in ClickHouse.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub raw_request: String,
     pub raw_response: String,
     pub system: Option<String>,
-    pub input_messages: String,
-    pub output: String,
+    /// Input messages - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub input_messages: Vec<StoredRequestMessage>,
+    /// Output content blocks - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub output: Vec<ContentBlockOutput>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
@@ -1751,6 +1782,10 @@ pub struct ModelInferenceDatabaseInsert {
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
+    /// Materialized column in ClickHouse - only present when reading from the database.
+    /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
+    #[serde(default, skip_serializing)]
+    pub timestamp: Option<String>,
 }
 
 #[cfg(test)]
@@ -1870,7 +1905,9 @@ impl ModelInferenceResponseWithMetadata {
     }
 }
 
-impl ModelInferenceDatabaseInsert {
+impl StoredModelInference {
+    /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
+    /// Used when inserting into ClickHouse.
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
@@ -1889,7 +1926,6 @@ impl ModelInferenceDatabaseInsert {
             }
             Latency::Batch => (None, None),
         };
-        let serialized_output = serialize_or_log(&result.output);
 
         // A usage of 0 indicates that something went wrong, since a model
         // should always consume and produce at least one token.
@@ -1924,7 +1960,7 @@ impl ModelInferenceDatabaseInsert {
             raw_request: result.raw_request,
             raw_response: result.raw_response,
             system: result.system,
-            output: serialized_output,
+            output: result.output,
             input_tokens,
             output_tokens,
             response_time_ms: latency_ms,
@@ -1933,8 +1969,10 @@ impl ModelInferenceDatabaseInsert {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: serialize_or_log(&stored_input_messages),
+            input_messages: stored_input_messages,
             snapshot_hash: Some(snapshot_hash),
+            // timestamp is a materialized column, not set during insert
+            timestamp: None,
         })
     }
 }
@@ -1989,14 +2027,12 @@ impl InferenceResult {
             let snapshot_hash = snapshot_hash.clone();
             async move {
                 let model_inference =
-                    ModelInferenceDatabaseInsert::new(r.clone(), inference_id, snapshot_hash).await;
+                    StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await;
                 let model_inference = match model_inference {
                     Ok(model_inference) => model_inference,
                     Err(e) => {
                         ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to construct ModelInferenceDatabaseInsert: {e:?}"
-                            ),
+                            message: format!("Failed to construct StoredModelInference: {e:?}"),
                         }
                         .log();
                         return Default::default();
@@ -2006,9 +2042,7 @@ impl InferenceResult {
                     Ok(v) => v,
                     Err(e) => {
                         ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
-                            ),
+                            message: format!("Failed to serialize StoredModelInference: {e:?}"),
                         }
                         .log();
                         Default::default()

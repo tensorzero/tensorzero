@@ -30,7 +30,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::feedback::FeedbackQueries;
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
+use tensorzero_core::inference::types::StoredModelInference;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, MigrationRecordDatabaseInsert, RunMigrationArgs, RunMigrationManagerArgs,
@@ -788,14 +788,14 @@ async fn test_clickhouse_migration_manager() {
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
     // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
-    let row = ModelInferenceDatabaseInsert {
+    let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         raw_request: String::new(),
         raw_response: String::new(),
         system: None,
-        input_messages: String::new(),
-        output: String::new(),
+        input_messages: vec![],
+        output: vec![],
         input_tokens: Some(123),
         output_tokens: None,
         response_time_ms: None,
@@ -805,6 +805,7 @@ async fn test_clickhouse_migration_manager() {
         cached: false,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
+        timestamp: None,
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)
