@@ -13,12 +13,14 @@ use std::collections::HashMap;
 use crate::EvaluationVariant;
 use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 const EVALUATOR_FAILURE_THRESHOLD: f32 = 0.05;
-#[allow(dead_code)]
+#[expect(dead_code)]
 const VARIANT_FAILURE_THRESHOLD: f32 = 0.05;
 
-#[allow(dead_code)]
+// Enum for variant status during an evals run.
+// Will to used in run() function, to be implemented.
+#[expect(dead_code)]
 enum VariantStatus {
     // Still running evals on this variant
     Active,
@@ -32,28 +34,24 @@ enum VariantStatus {
 
 // Enum for global stopping condition.
 // In case multiple stopping conditions are satisfied simultaneously,
-// the highest ranked condition takes precedence. The order of the
-// last three is fairly arbitrary.
+// the highest ranked condition takes precedence. The order of the last three is fairly arbitrary.
 pub enum GlobalStoppingReason {
-    // If top-k found, return the k that caused stopping (largest k found in k_max..k_min)
+    // If top-k found, return the k that caused stopping (largest k satisfied in k_max..k_min)
     TopKFound(u32),
-    // Hit datapoint limit
+    // Datapoint limit hit
     MaxDatapointsReached,
     // If evaluator(s) failed, return name(s) of failed evaluator(s).
     // An evaluator fails if the lower bound of the confidence sequence for its
     // failure rate exceeds EVALUATOR_FAILURE_THRESHOLD.
     EvaluatorsFailed(Vec<String>),
-    // If too many variants failes, return name(s) of failed variant(s).
-    // A variant fails if the lower bound of the confidence sequences for its
-    // failure rate exceed VARIANT_FAILURE_THRESHOLD.
-    // If more than num_variants - k_min variants have failed,
-    // we can no longer identify the top-k variants for any k
-    // in k_min..k_max.
+    // If too many variants failed (VariantStatus::Failed), return name(s) of failed variant(s).
+    // If more than num_variants - k_min variants have failed, we can no longer identify the top-k
+    // variants for any k in k_min..k_max.
     TooManyVariantsFailed(Vec<String>),
 }
 
-// Arguments to run() function below
-#[allow(dead_code)]
+// Arguments to main run() function, to be implemented
+#[expect(dead_code)]
 pub struct TopKVariantArgs {
     evaluation_name: String,
     variant_list: Vec<EvaluationVariant>,
@@ -67,8 +65,7 @@ pub struct TopKVariantArgs {
     batch_size: u32,
 }
 
-// Struct for the output of the run() function below
-#[allow(dead_code)]
+// Struct for the output of the run() function, to be implemented
 pub struct AdaptiveEvalStoppingResults {
     pub variant_performance: Vec<MeanBettingConfidenceSequence>,
     pub variant_failure_rates: Vec<MeanBettingConfidenceSequence>,
@@ -90,8 +87,10 @@ pub struct TopKStoppingResult {
 /// Check if we can confidently identify a top-k set of variants.
 ///
 /// A variant is "confidently in the top k" if its confidence sequence lower bound
-/// exceeds the upper bounds of at least (num_variants - k) other variants.
-/// This means we can be confident it's not worse than at least (num_variants - k) variants.
+/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
+/// tolerance `epsilon`. This means we can be confident it's better than at least
+/// (num_variants - k) variants, or at least not more than epsilon worse than those
+/// variants.
 ///
 /// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
 /// and working down. We return the largest k for which we can identify a top-k set.
@@ -100,14 +99,18 @@ pub struct TopKStoppingResult {
 /// * `variant_performance` - Map from variant name to its performance confidence sequence
 /// * `k_min` - Minimum acceptable k value
 /// * `k_max` - Maximum k value to check
+/// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
 ///
 /// # Returns
-/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k.
+/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
+/// if stopping occurred.
 pub fn check_topk_stopping(
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     k_min: u32,
     k_max: u32,
+    epsilon: Option<f64>,
 ) -> TopKStoppingResult {
+    let epsilon = epsilon.unwrap_or(0.0);
     let num_variants = variant_performance.len();
 
     if num_variants == 0 || k_min == 0 || k_max < k_min {
@@ -124,17 +127,17 @@ pub fn check_topk_stopping(
 
     // For each variant, count how many upper bounds its lower bound exceeds
     // This tells us how many variants it "confidently beats"
-    let mut variants_with_beats: Vec<(&String, usize)> = variant_performance
+    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
         .iter()
         .map(|(name, cs)| {
             // Binary search to find how many upper bounds are strictly less than this lower bound
-            let num_beaten = upper_bounds.partition_point(|&ub| ub < cs.cs_lower);
+            let num_beaten = upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
             (name, num_beaten)
         })
         .collect();
 
     // Sort by num_beaten descending (best variants first)
-    variants_with_beats.sort_by(|a, b| b.1.cmp(&a.1));
+    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
 
     // Check each k from k_max down to k_min
     // We want the largest k for which we can identify a top-k set
@@ -143,12 +146,12 @@ pub fn check_topk_stopping(
         let threshold = num_variants.saturating_sub(k_usize);
 
         // Check if the top k variants each beat at least (num_variants - k) others
-        if k_usize <= variants_with_beats.len()
-            && variants_with_beats[..k_usize]
+        if k_usize <= variants_with_n_beaten.len()
+            && variants_with_n_beaten[..k_usize]
                 .iter()
                 .all(|(_, num_beaten)| *num_beaten >= threshold)
         {
-            let top_variants: Vec<String> = variants_with_beats[..k_usize]
+            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
                 .iter()
                 .map(|(name, _)| (*name).clone())
                 .collect();
@@ -171,12 +174,12 @@ pub fn check_topk_stopping(
 /// Convenience wrapper to check if a specific k can be identified.
 ///
 /// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
-#[allow(dead_code)]
 pub fn check_topk(
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     k: u32,
+    epsilon: Option<f64>,
 ) -> TopKStoppingResult {
-    check_topk_stopping(variant_performance, k, k)
+    check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
 #[cfg(test)]
@@ -214,7 +217,7 @@ mod tests {
     #[test]
     fn test_check_topk_stopping_empty() {
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-        let result = check_topk_stopping(&variant_performance, 1, 1);
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
         assert!(!result.stopped);
         assert!(result.k.is_none());
         assert!(result.top_variants.is_empty());
@@ -226,11 +229,11 @@ mod tests {
             [mock_cs("a", 0.5, 0.7)].into_iter().collect();
 
         // k_min = 0 is invalid
-        let result = check_topk_stopping(&variant_performance, 0, 1);
+        let result = check_topk_stopping(&variant_performance, 0, 1, None);
         assert!(!result.stopped);
 
         // k_max < k_min is invalid
-        let result = check_topk_stopping(&variant_performance, 2, 1);
+        let result = check_topk_stopping(&variant_performance, 2, 1, None);
         assert!(!result.stopped);
     }
 
@@ -249,7 +252,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let result = check_topk_stopping(&variant_performance, 1, 1);
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(1));
         assert_eq!(result.top_variants.len(), 1);
@@ -272,7 +275,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let result = check_topk_stopping(&variant_performance, 2, 2);
+        let result = check_topk_stopping(&variant_performance, 2, 2, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(2));
         assert_eq!(result.top_variants.len(), 2);
@@ -295,7 +298,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let result = check_topk_stopping(&variant_performance, 1, 1);
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
         assert!(!result.stopped);
         assert!(result.k.is_none());
     }
@@ -320,13 +323,13 @@ mod tests {
         .collect();
 
         // When k_min=1, k_max=2, should return k=2 (largest k that works)
-        let result = check_topk_stopping(&variant_performance, 1, 2);
+        let result = check_topk_stopping(&variant_performance, 1, 2, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(2));
         assert_eq!(result.top_variants.len(), 2);
 
         // When k_min=1, k_max=1, should return k=1
-        let result = check_topk_stopping(&variant_performance, 1, 1);
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(1));
         assert_eq!(result.top_variants.len(), 1);
@@ -341,7 +344,7 @@ mod tests {
                 .into_iter()
                 .collect();
 
-        let result = check_topk_stopping(&variant_performance, 3, 3);
+        let result = check_topk_stopping(&variant_performance, 3, 3, None);
         assert!(!result.stopped);
     }
 
@@ -352,7 +355,7 @@ mod tests {
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
             [mock_cs("a", 0.5, 0.7)].into_iter().collect();
 
-        let result = check_topk_stopping(&variant_performance, 1, 1);
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(1));
         assert_eq!(result.top_variants, vec!["a".to_string()]);
@@ -368,7 +371,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let result = check_topk(&variant_performance, 1);
+        let result = check_topk(&variant_performance, 1, None);
         assert!(result.stopped);
         assert_eq!(result.k, Some(1));
     }
