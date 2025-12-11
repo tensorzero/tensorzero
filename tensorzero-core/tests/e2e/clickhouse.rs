@@ -30,7 +30,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::feedback::FeedbackQueries;
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
+use tensorzero_core::inference::types::StoredModelInference;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, MigrationRecordDatabaseInsert, RunMigrationArgs, RunMigrationManagerArgs,
@@ -165,6 +165,11 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap()
         .to_string();
 
+    // Only insert a few at a time in order to prevent ClickHouse from OOMing
+    let concurrency_limit = 2;
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
+
     // We use our latest fixtures - new columns will get ignored when inserting.
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
@@ -195,7 +200,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     .into_iter()
     .map(|(file, table)| {
         let password = password.clone();
+        let semaphore = Arc::clone(&semaphore);
         async move {
+            let _permit = semaphore.acquire().await.unwrap();
             // If we are running in CI (TENSORZERO_CI=1), we should have the clickhouse client installed locally
             // so we should not use Docker
             let mut command = if std::env::var("TENSORZERO_CI").is_ok() {
@@ -781,14 +788,14 @@ async fn test_clickhouse_migration_manager() {
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
     // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
-    let row = ModelInferenceDatabaseInsert {
+    let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         raw_request: String::new(),
         raw_response: String::new(),
         system: None,
-        input_messages: String::new(),
-        output: String::new(),
+        input_messages: vec![],
+        output: vec![],
         input_tokens: Some(123),
         output_tokens: None,
         response_time_ms: None,
@@ -798,6 +805,7 @@ async fn test_clickhouse_migration_manager() {
         cached: false,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
+        timestamp: None,
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

@@ -24,6 +24,7 @@ import type {
   GetDatapointsResponse,
   GetInferencesRequest,
   GetInferencesResponse,
+  GetModelInferencesResponse,
   InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
@@ -740,6 +741,24 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InferenceWithFeedbackStatsResponse;
+  }
+
+  /**
+   * Fetches model inferences for a given inference ID.
+   * @param inferenceId - The UUID of the inference to get model inferences for
+   * @returns A promise that resolves with the model inferences response
+   * @throws Error if the request fails
+   */
+  async getModelInferences(
+    inferenceId: string,
+  ): Promise<GetModelInferencesResponse> {
+    const endpoint = `/internal/model_inferences/${encodeURIComponent(inferenceId)}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetModelInferencesResponse;
   }
 
   private async fetch(

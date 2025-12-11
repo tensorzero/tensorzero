@@ -241,23 +241,6 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
 ]);
 export type ZodInputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
-export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
-  "type",
-  [
-    modelInferenceTextInputSchema,
-    toolCallContentSchema,
-    toolResultContentSchema,
-    imageContentSchema,
-    fileContentSchema,
-    rawTextInputSchema,
-    thoughtContentSchema,
-    unknownSchema,
-  ],
-);
-export type ZodModelInferenceInputMessageContent = z.infer<
-  typeof modelInferenceInputMessageContentSchema
->;
-
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayTextInputSchema,
   displayTemplateSchema,
@@ -282,16 +265,6 @@ export const inputMessageSchema = z
   })
   .strict();
 export type ZodInputMessage = z.infer<typeof inputMessageSchema>;
-
-export const modelInferenceInputMessageSchema = z
-  .object({
-    role: roleSchema,
-    content: z.array(modelInferenceInputMessageContentSchema),
-  })
-  .strict();
-export type ZodModelInferenceInputMessage = z.infer<
-  typeof modelInferenceInputMessageSchema
->;
 
 export const displayModelInferenceInputMessageContentSchema =
   z.discriminatedUnion("type", [
@@ -327,14 +300,6 @@ export const inputSchema = z
   .strict();
 export type ZodInput = z.infer<typeof inputSchema>;
 
-export const modelInferenceInputSchema = z
-  .object({
-    system: z.any().optional(), // Value type from Rust maps to any in TS
-    messages: z.array(modelInferenceInputMessageSchema).default([]),
-  })
-  .strict();
-export type ZodModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
-
 export const displayInputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
@@ -349,13 +314,6 @@ export const textContentSchema = z.object({
   text: z.string(),
 });
 export type ZodTextContent = z.infer<typeof textContentSchema>;
-
-export const contentBlockOutputSchema = z.discriminatedUnion("type", [
-  textContentSchema,
-  toolCallContentSchema,
-  thoughtContentSchema,
-  unknownSchema,
-]);
 
 export const jsonInferenceOutputSchema = z.object({
   // These fields are explicitly nullable, not undefined.

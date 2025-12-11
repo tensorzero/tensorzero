@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import type { Control } from "react-hook-form";
 import type { SFTFormValues } from "./types";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
@@ -32,38 +32,33 @@ export function VariantSelector({
   );
   const hasVariants = variantNames.length > 0;
 
+  const {
+    open,
+    searchValue,
+    commandRef,
+    inputValue,
+    closeDropdown,
+    handleKeyDown,
+    handleInputChange,
+    handleBlur,
+    handleClick,
+  } = useCombobox();
+
+  const filteredVariants = useMemo(() => {
+    const query = searchValue.toLowerCase();
+    if (!query) return variantNames;
+    return variantNames.filter((name) => name.toLowerCase().includes(query));
+  }, [searchValue, variantNames]);
+
   return (
     <FormField
       control={control}
       name="variant"
       render={({ field }) => {
-        const {
-          open,
-          searchValue,
-          commandRef,
-          inputValue,
-          closeDropdown,
-          handleKeyDown,
-          handleInputChange,
-          handleBlur,
-          handleClick,
-        } = useCombobox();
-
-        const filteredVariants = useMemo(() => {
-          const query = searchValue.toLowerCase();
-          if (!query) return variantNames;
-          return variantNames.filter((name) =>
-            name.toLowerCase().includes(query),
-          );
-        }, [searchValue]);
-
-        const handleSelect = useCallback(
-          (name: string) => {
-            field.onChange(name);
-            closeDropdown();
-          },
-          [field, closeDropdown],
-        );
+        const handleSelect = (name: string) => {
+          field.onChange(name);
+          closeDropdown();
+        };
 
         return (
           <FormItem>

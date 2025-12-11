@@ -1,18 +1,7 @@
-import {
-  CountSchema,
-  modelInferenceInputMessageSchema,
-  contentBlockOutputSchema,
-} from "./common";
+import { CountSchema } from "./common";
 import { data } from "react-router";
 import type { StoredInference, InferenceFilter } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
-import { resolveModelInferenceMessages } from "../resolve.server";
-import {
-  modelInferenceRowSchema,
-  parsedModelInferenceRowSchema,
-  type ModelInferenceRow,
-  type ParsedModelInferenceRow,
-} from "./inference";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "../tensorzero.server";
@@ -164,40 +153,6 @@ export async function countInferencesForEpisode(
   const rows = await resultSet.json<{ count: string }>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
-}
-
-async function parseModelInferenceRow(
-  row: ModelInferenceRow,
-): Promise<ParsedModelInferenceRow> {
-  const parsedMessages = z
-    .array(modelInferenceInputMessageSchema)
-    .parse(JSON.parse(row.input_messages));
-  const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
-  const processedRow = {
-    ...row,
-    input_messages: resolvedMessages,
-    output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
-  };
-  return parsedModelInferenceRowSchema.parse(processedRow);
-}
-
-export async function queryModelInferencesByInferenceId(
-  id: string,
-): Promise<ParsedModelInferenceRow[]> {
-  const query = `
-    SELECT *, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp FROM ModelInference WHERE inference_id = {id:String}
-  `;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { id },
-  });
-  const rows = await resultSet.json<ModelInferenceRow>();
-  const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
-  const parsedRows = await Promise.all(
-    validatedRows.map(parseModelInferenceRow),
-  );
-  return parsedRows;
 }
 
 const functionCountInfoSchema = z.object({

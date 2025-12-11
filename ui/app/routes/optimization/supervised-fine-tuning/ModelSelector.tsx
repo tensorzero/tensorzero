@@ -1,11 +1,7 @@
 import type { Control } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import type { SFTFormValues } from "./types";
-import {
-  ModelOptionSchema,
-  type ModelOption,
-  detectProviderFromModelName,
-} from "./model_options";
+import { ModelOptionSchema, type ModelOption } from "./model_options";
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Popover,
@@ -78,7 +74,7 @@ function isModelSelected(
 function isFocusWithinPopover(relatedTarget: Element | null): boolean {
   return Boolean(
     relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
-    relatedTarget?.closest(RADIX_SELECT_SELECTOR),
+      relatedTarget?.closest(RADIX_SELECT_SELECTOR),
   );
 }
 
@@ -134,15 +130,6 @@ export function ModelSelector({
     setOpen(false);
     setSearchValue(null);
   }, []);
-
-  const detectedProvider = useMemo(
-    () => detectProviderFromModelName(searchValue ?? ""),
-    [searchValue],
-  );
-
-  useEffect(() => {
-    setCustomProvider(detectedProvider);
-  }, [detectedProvider]);
 
   useEffect(() => {
     if (inputSuffixRef.current) {

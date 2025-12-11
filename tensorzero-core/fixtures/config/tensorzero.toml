@@ -88,6 +88,19 @@ type = "chat_completion"
 weight = 1.0
 model = "gpt-4.1-mini"
 
+# This function uses a tool where the config key differs from the display name
+# key = "get_temperature_with_name", name = "get_temperature"
+# This tests that allowed_tools filtering uses the key, not the display name
+[functions.weather_helper_aliased_tool]
+type = "chat"
+tools = ["get_temperature_with_name"]
+tool_choice = "auto"
+
+[functions.weather_helper_aliased_tool.variants.openai]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-4.1-mini"
+
 [functions.templates_without_variables_chat]
 type = "chat"
 

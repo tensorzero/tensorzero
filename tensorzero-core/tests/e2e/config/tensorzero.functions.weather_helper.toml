@@ -4,6 +4,20 @@ system_schema = "../../../fixtures/config/functions/weather_helper/system_schema
 tools = ["get_temperature"]
 tool_choice = "auto"
 
+# This function uses a tool where the config key differs from the display name
+# key = "get_temperature_with_name", name = "get_temperature"
+# This tests that allowed_tools filtering uses the key, not the display name
+[functions.weather_helper_aliased_tool]
+type = "chat"
+tools = ["get_temperature_with_name"]
+tool_choice = "auto"
+
+[functions.weather_helper_aliased_tool.variants.mock]
+type = "chat_completion"
+weight = 1
+model = "tool"
+max_tokens = 100
+
 [functions.weather_helper.variants.anthropic-thinking]
 type = "chat_completion"
 weight = 0
