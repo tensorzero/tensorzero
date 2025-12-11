@@ -725,8 +725,7 @@ jobs:
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
     runs-on:
-      - ${{ true && 'namespace-profile-tensorzero-8x16' || 'namespace-profile-tensorzero-8x16' }}
-      - namespace-experiments:ephemeral-storage.size-multiplier=2
+      - ${{ true && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
