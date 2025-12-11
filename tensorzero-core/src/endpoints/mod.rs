@@ -8,6 +8,7 @@ pub mod embeddings;
 pub mod episodes;
 pub mod fallback;
 pub mod feedback;
+pub mod functions;
 pub mod inference;
 pub mod internal;
 pub mod object_storage;

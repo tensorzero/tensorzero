@@ -18,6 +18,7 @@ import type {
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
+  MetricsWithFeedbackResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -808,6 +809,32 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InferenceWithFeedbackStatsResponse;
+  }
+
+  /**
+   * Fetches metrics with feedback for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get metrics for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with metrics and their feedback counts
+   * @throws Error if the request fails
+   */
+  async getFunctionMetricsWithFeedback(
+    functionName: string,
+    variantName?: string,
+  ): Promise<MetricsWithFeedbackResponse> {
+    const searchParams = new URLSearchParams();
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/metrics${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as MetricsWithFeedbackResponse;
   }
 
   /**

@@ -19,8 +19,6 @@ import type { TimeWindow } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { getInferenceTableName } from "~/utils/clickhouse/common";
-import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -72,23 +70,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     function_name,
     variant_name,
   );
-  const metricsWithFeedbackPromise = queryMetricsWithFeedback({
-    function_name,
-    inference_table: getInferenceTableName(function_config),
-    variant_name,
-  });
+  const tensorZeroClient = getTensorZeroClient();
+  const metricsWithFeedbackPromise =
+    tensorZeroClient.getFunctionMetricsWithFeedback(
+      function_name,
+      variant_name,
+    );
 
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
       ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity as TimeWindow,
-          variant_name,
-        })
+        function_name,
+        function_config,
+        metric_name,
+        metric_config: config.metrics[metric_name],
+        time_window_unit: time_granularity as TimeWindow,
+        variant_name,
+      })
       : undefined;
 
   const [
