@@ -116,22 +116,26 @@ pub fn update_betting_cs(
         .collect();
 
     // Update wealth processes for each candidate mean m
+    // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
     let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = prev_results
         .wealth
         .m_values_iter()
         .zip(prev_results.wealth.wealth_upper.iter())
         .zip(prev_results.wealth.wealth_lower.iter())
         .map(|((m, &prev_upper), &prev_lower)| {
-            let (prod_upper, prod_lower) = bets.iter().zip(new_observations.iter()).fold(
-                (1.0, 1.0),
+            let (log_prod_upper, log_prod_lower) = bets.iter().zip(new_observations.iter()).fold(
+                (0.0, 0.0),
                 |(acc_upper, acc_lower), (&bet, &x)| {
                     (
-                        acc_upper * (1.0 + bet * (x - m)),
-                        acc_lower * (1.0 - bet * (x - m)),
+                        acc_upper + (1.0 + bet * (x - m)).ln(),
+                        acc_lower + (1.0 - bet * (x - m)).ln(),
                     )
                 },
             );
-            (prev_upper * prod_upper, prev_lower * prod_lower)
+            (
+                prev_upper * log_prod_upper.exp(),
+                prev_lower * log_prod_lower.exp(),
+            )
         })
         .unzip();
 
