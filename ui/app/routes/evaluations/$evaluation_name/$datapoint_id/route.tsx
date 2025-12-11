@@ -32,7 +32,7 @@ import {
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
-import MetricValue from "~/components/metric/MetricValue";
+import { MetricBadge, MetricBadgeSize } from "~/components/metric/MetricBadge";
 import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
@@ -405,11 +405,11 @@ const MetricRow = ({
   }
   const evaluationType = evaluatorConfig.type;
   return (
-    <div className="group flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="cursor-help text-sm text-gray-600">
-            {evaluatorName}:
+            {evaluatorName}
           </div>
         </TooltipTrigger>
         <TooltipContent side="top" className="p-3">
@@ -435,7 +435,7 @@ const MetricRow = ({
           </div>
         </TooltipContent>
       </Tooltip>
-      <MetricValue
+      <MetricBadge
         value={String(metricValue)}
         metricType={getMetricType(evaluatorConfig)}
         optimize={
@@ -445,27 +445,28 @@ const MetricRow = ({
         }
         cutoff={evaluatorConfig.cutoff ?? undefined}
         isHumanFeedback={isHumanFeedback}
-        className="text-sm"
-      />
-      {inferenceId !== null && evaluationType === "llm_judge" && (
-        <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <EvaluationFeedbackEditor
-            inferenceId={inferenceId}
-            datapointId={datapointId}
-            metricName={metric_name}
-            originalValue={metricValue}
-            evalRunId={evalRunId}
-            evaluatorInferenceId={evaluatorInferenceId}
-            variantName={variantName}
-          />
-          {evaluatorInferenceId && (
-            <InferenceButton
-              inferenceId={evaluatorInferenceId}
-              tooltipText="View LLM judge inference"
+        size={MetricBadgeSize.MEDIUM}
+      >
+        {inferenceId !== null && evaluationType === "llm_judge" && (
+          <>
+            <EvaluationFeedbackEditor
+              inferenceId={inferenceId}
+              datapointId={datapointId}
+              metricName={metric_name}
+              originalValue={metricValue}
+              evalRunId={evalRunId}
+              evaluatorInferenceId={evaluatorInferenceId}
+              variantName={variantName}
             />
-          )}
-        </div>
-      )}
+            {evaluatorInferenceId && (
+              <InferenceButton
+                inferenceId={evaluatorInferenceId}
+                tooltipText="View LLM judge inference"
+              />
+            )}
+          </>
+        )}
+      </MetricBadge>
     </div>
   );
 };

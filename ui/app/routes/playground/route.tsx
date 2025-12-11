@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { EvaluationSelector } from "~/components/evaluation/EvaluationSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
   useFunctionConfig,
@@ -98,10 +99,12 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
   const currentSearchParams = new URLSearchParams(currentUrl.searchParams);
   const nextSearchParams = new URLSearchParams(nextUrl.searchParams);
 
-  // Remove variants from comparison since we want to skip revalidation if only
-  // the variants changed
+  // Remove variants and evaluation from comparison since we want to skip
+  // revalidation if only these changed (they don't require new datapoints)
   currentSearchParams.delete("variants");
   nextSearchParams.delete("variants");
+  currentSearchParams.delete("evaluation");
+  nextSearchParams.delete("evaluation");
 
   // Then manually compare the remaining search params and revalidate if
   // anything else changed
@@ -247,6 +250,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
+  const selectedEvaluation = currentSearchParams.get("evaluation");
   const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -356,6 +360,18 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
             configuredVariants ? Object.keys(configuredVariants) : []
           }
           disabled={!functionName || !datasetName}
+        />
+      </div>
+      <div className="flex max-w-180 flex-col gap-2">
+        <Label>Evaluation</Label>
+        <EvaluationSelector
+          selected={selectedEvaluation}
+          onSelect={(value) =>
+            updateSearchParams({ evaluation: value ?? null })
+          }
+          evaluations={config.evaluations}
+          functionName={functionName}
+          disabled={!functionName || !datasetName || variants.length === 0}
         />
       </div>
       {datapoints &&
@@ -484,23 +500,22 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                         </div>
                         {variants.length > 0 && (
                           <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                            {variants.map((variant) => {
-                              return (
-                                <div
-                                  key={`${datapoint.id}-${variant.name}`}
-                                  className="border-r p-4 last:border-r-0"
-                                >
-                                  <DatapointPlaygroundOutput
-                                    datapoint={datapoint}
-                                    variant={variant}
-                                    input={inputs[index]}
-                                    functionName={functionName}
-                                    functionConfig={functionConfig}
-                                    toolsConfig={config.tools}
-                                  />
-                                </div>
-                              );
-                            })}
+                            {variants.map((variant) => (
+                              <div
+                                key={`${datapoint.id}-${variant.name}`}
+                                className="border-r p-4 last:border-r-0"
+                              >
+                                <DatapointPlaygroundOutput
+                                  datapoint={datapoint}
+                                  variant={variant}
+                                  input={inputs[index]}
+                                  functionName={functionName}
+                                  functionConfig={functionConfig}
+                                  toolsConfig={config.tools}
+                                  selectedEvaluation={selectedEvaluation}
+                                />
+                              </div>
+                            ))}
                           </div>
                         )}
                       </GridRow>

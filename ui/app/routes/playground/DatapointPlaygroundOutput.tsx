@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Button } from "~/components/ui/button";
@@ -10,7 +10,7 @@ import {
 } from "./utils";
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
-import { memo } from "react";
+import { memo, useState, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { toInferenceUrl } from "~/utils/urls";
 import {
@@ -18,17 +18,167 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "~/components/ui/tooltip";
+import { MetricBadge } from "~/components/metric/MetricBadge";
+import { AnimatedEllipsis } from "~/components/ui/AnimatedEllipsis";
+import type { JsonValue } from "~/types/tensorzero";
 
-const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
+type EvaluationResult = {
+  evaluations: Record<string, JsonValue | null | undefined>;
+  evaluatorErrors: Record<string, string>;
+};
+
+type EvaluationState = {
+  status: "idle" | "loading" | "success" | "error";
+  result?: EvaluationResult;
+  error?: string;
+};
+
+type EvaluationEvent = {
+  type: "success" | "error" | "start" | "complete" | "fatal_error";
+  datapoint?: { id: string };
+  evaluations?: Record<string, JsonValue | null | undefined>;
+  evaluator_errors?: Record<string, string>;
+  error?: string;
+  message?: string;
+};
+
+type DatapointPlaygroundOutputProps = ClientInferenceInputArgs & {
+  selectedEvaluation: string | null;
+};
+
+const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
   function DatapointPlaygroundOutput(props) {
+    const { selectedEvaluation, datapoint, variant } = props;
+    const [evalState, setEvalState] = useState<EvaluationState>({
+      status: "idle",
+    });
+    const abortControllerRef = useRef<AbortController | null>(null);
+
     const query = useQuery({
       queryKey: getClientInferenceQueryKey(props),
       queryFn: getClientInferenceQueryFunction(props),
-      // Only re-fetch when the user explicitly requests it
       refetchOnMount: false,
       refetchInterval: false,
       retry: false,
     });
+
+    // Run evaluation when inference is ready and evaluation is selected
+    useEffect(() => {
+      // Only run for builtin variants with completed inference (not during refetch)
+      if (
+        variant.type !== "builtin" ||
+        !selectedEvaluation ||
+        !query.isSuccess ||
+        !query.data ||
+        query.isRefetching
+      ) {
+        if (!selectedEvaluation) {
+          setEvalState({ status: "idle" });
+        }
+        return;
+      }
+
+      // Abort any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      setEvalState({ status: "loading" });
+
+      const runEval = async () => {
+        try {
+          const response = await fetch("/api/playground/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              evaluationName: selectedEvaluation,
+              variantName: variant.name,
+              datapointIds: [datapoint.id],
+            }),
+            signal: abortControllerRef.current?.signal,
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            setEvalState({ status: "error", error: errorText });
+            return;
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            setEvalState({ status: "error", error: "No response body" });
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const event = JSON.parse(line) as EvaluationEvent;
+                if (
+                  event.type === "success" &&
+                  event.datapoint?.id === datapoint.id
+                ) {
+                  setEvalState({
+                    status: "success",
+                    result: {
+                      evaluations: event.evaluations ?? {},
+                      evaluatorErrors: event.evaluator_errors ?? {},
+                    },
+                  });
+                } else if (
+                  event.type === "error" &&
+                  event.datapoint?.id === datapoint.id
+                ) {
+                  setEvalState({
+                    status: "error",
+                    error: event.error || "Evaluation failed",
+                  });
+                } else if (event.type === "fatal_error") {
+                  setEvalState({
+                    status: "error",
+                    error: event.message || "Evaluation failed",
+                  });
+                }
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") return;
+          setEvalState({
+            status: "error",
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
+      };
+
+      runEval();
+
+      return () => {
+        abortControllerRef.current?.abort();
+      };
+    }, [
+      selectedEvaluation,
+      variant.type,
+      variant.name,
+      datapoint.id,
+      query.isSuccess,
+      query.isRefetching,
+      query.data,
+    ]);
 
     const loadingIndicator = (
       <div
@@ -122,15 +272,51 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
             <JsonOutputElement output={query.data.output} maxHeight={480} />
           )}
         </div>
+        {evalState.status !== "idle" && selectedEvaluation && (
+          <div className="mt-2">
+            {evalState.status === "loading" && (
+              <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>
+                  Evaluating
+                  <AnimatedEllipsis />
+                </span>
+              </div>
+            )}
+            {evalState.status === "error" && (
+              <div className="flex items-center gap-1.5 text-xs text-red-600">
+                <AlertCircle className="h-3 w-3" />
+                <span>{evalState.error || "Evaluation failed"}</span>
+              </div>
+            )}
+            {evalState.status === "success" &&
+              evalState.result?.evaluations && (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(evalState.result.evaluations).map(
+                    ([evaluatorName, value]) => (
+                      <MetricBadge
+                        key={evaluatorName}
+                        label={evaluatorName}
+                        value={value}
+                        error={Boolean(
+                          evalState.result?.evaluatorErrors?.[evaluatorName],
+                        )}
+                      />
+                    ),
+                  )}
+                </div>
+              )}
+          </div>
+        )}
       </div>
     );
   },
-  // TODO: Remove custom comparison and make props stable instead
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
       prevProps.variant.name === nextProps.variant.name &&
       prevProps.functionName === nextProps.functionName &&
+      prevProps.selectedEvaluation === nextProps.selectedEvaluation &&
       JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
     );
   },

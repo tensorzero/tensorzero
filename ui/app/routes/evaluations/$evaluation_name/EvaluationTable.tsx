@@ -46,7 +46,7 @@ import {
   useColorAssigner,
   ColorAssignerProvider,
 } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
+import { MetricBadge, isCutoffFailed } from "~/components/metric/MetricBadge";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import Input from "~/components/inference/Input";
@@ -592,35 +592,31 @@ export function EvaluationTable({
                                     key={metric_name}
                                     className="h-[52px] text-center align-middle"
                                   >
-                                    {/* Add group and relative positioning to the container */}
-                                    <div className="group relative flex h-full items-center justify-center">
+                                    <div className="flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricType &&
                                       evaluatorConfig ? (
-                                        <>
-                                          <MetricValue
-                                            value={metricValue.value}
-                                            metricType={metricType}
-                                            isHumanFeedback={
-                                              metricValue.is_human_feedback
-                                            }
-                                            optimize={
-                                              evaluatorConfig.type ===
-                                              "llm_judge"
-                                                ? evaluatorConfig.optimize
-                                                : "max"
-                                            }
-                                            cutoff={
-                                              evaluatorConfig.cutoff ??
-                                              undefined
-                                            }
-                                          />
-                                          {/* Make feedback editor appear on hover */}
+                                        <MetricBadge
+                                          value={metricValue.value}
+                                          metricType={metricType}
+                                          isHumanFeedback={
+                                            metricValue.is_human_feedback
+                                          }
+                                          optimize={
+                                            evaluatorConfig.type === "llm_judge"
+                                              ? evaluatorConfig.optimize
+                                              : "max"
+                                          }
+                                          cutoff={
+                                            evaluatorConfig.cutoff ?? undefined
+                                          }
+                                        >
                                           {evaluatorConfig.type ===
                                             "llm_judge" && (
+                                            // Stop click event propagation so row navigation is not triggered
+                                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                                             <div
-                                              className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                                              // Stop click event propagation so the row navigation is not triggered
+                                              className="flex gap-1"
                                               onClick={(e) =>
                                                 e.stopPropagation()
                                               }
@@ -653,7 +649,7 @@ export function EvaluationTable({
                                               )}
                                             </div>
                                           )}
-                                        </>
+                                        </MetricBadge>
                                       ) : (
                                         "-"
                                       )}
