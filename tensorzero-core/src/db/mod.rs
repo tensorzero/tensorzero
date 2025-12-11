@@ -39,6 +39,7 @@ pub trait HealthCheckable {
 }
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait SelectQueries {
     async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 
