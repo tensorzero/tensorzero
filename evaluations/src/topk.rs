@@ -377,4 +377,122 @@ mod tests {
         assert!(result.stopped);
         assert_eq!(result.k, Some(1));
     }
+
+    #[test]
+    fn test_check_topk_stopping_epsilon_enables_stopping() {
+        // Variant A: [0.48, 0.7] - lower bound just below B's upper
+        // Variant B: [0.3, 0.5] - upper bound at 0.5
+        // Variant C: [0.2, 0.4] - clearly worse
+        //
+        // Without epsilon: A's lower (0.48) < B's upper (0.5), so A doesn't beat B
+        // A only beats C (0.48 > 0.4), so num_beaten = 1
+        // For top-1, need to beat >= 2, so no stopping
+        //
+        // With epsilon = 0.05: A beats B if 0.5 - 0.05 < 0.48, i.e., 0.45 < 0.48 ✓
+        // A now beats both B and C, so top-1 is identified
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.48, 0.7),
+            mock_cs("b", 0.3, 0.5),
+            mock_cs("c", 0.2, 0.4),
+        ]
+        .into_iter()
+        .collect();
+
+        // Without epsilon, can't identify top-1
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
+        assert!(!result.stopped);
+
+        // With epsilon = 0.05, top-1 is identified
+        let result = check_topk_stopping(&variant_performance, 1, 1, Some(0.05));
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+        assert!(result.top_variants.contains(&"a".to_string()));
+    }
+
+    #[test]
+    fn test_check_topk_stopping_epsilon_enables_larger_k() {
+        // Variant A: [0.7, 0.9] - clearly best
+        // Variant B: [0.48, 0.65] - B's lower (0.48) just below C's upper (0.5)
+        // Variant C: [0.3, 0.5] - middle
+        // Variant D: [0.1, 0.3] - clearly worst
+        //
+        // Without epsilon:
+        // A beats 3 (all uppers < 0.7)
+        // B beats 1 (only D's upper 0.3 < 0.48)
+        // C beats 1 (only D's upper 0.3 < 0.3? No, 0.3 is not < 0.3)
+        // Actually C's lower is 0.3, D's upper is 0.3, so C beats 0 (0.3 is not < 0.3)
+        // For top-2, need to beat >= 2. Only A qualifies.
+        //
+        // With epsilon = 0.05:
+        // B beats C if 0.5 - 0.05 < 0.48, i.e., 0.45 < 0.48 ✓
+        // B beats D if 0.3 - 0.05 < 0.48, i.e., 0.25 < 0.48 ✓
+        // So B now beats 2, qualifying for top-2
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.7, 0.9),
+            mock_cs("b", 0.48, 0.65),
+            mock_cs("c", 0.3, 0.5),
+            mock_cs("d", 0.1, 0.3),
+        ]
+        .into_iter()
+        .collect();
+
+        // Without epsilon, can identify top-1 but not top-2
+        let result = check_topk_stopping(&variant_performance, 1, 1, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+
+        let result = check_topk_stopping(&variant_performance, 2, 2, None);
+        assert!(!result.stopped);
+
+        // With epsilon = 0.05, can identify top-2
+        let result = check_topk_stopping(&variant_performance, 2, 2, Some(0.05));
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert!(result.top_variants.contains(&"a".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn test_check_topk_stopping_epsilon_zero_same_as_none() {
+        // Verify that epsilon = Some(0.0) behaves the same as None
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.7, 0.9),
+            mock_cs("b", 0.3, 0.5),
+            mock_cs("c", 0.2, 0.4),
+        ]
+        .into_iter()
+        .collect();
+
+        let result_none = check_topk_stopping(&variant_performance, 1, 2, None);
+        let result_zero = check_topk_stopping(&variant_performance, 1, 2, Some(0.0));
+
+        assert_eq!(result_none.stopped, result_zero.stopped);
+        assert_eq!(result_none.k, result_zero.k);
+        // Note: top_variants order might differ, so just check same elements
+        assert_eq!(
+            result_none.top_variants.len(),
+            result_zero.top_variants.len()
+        );
+    }
+
+    #[test]
+    fn test_check_topk_stopping_large_epsilon_all_beat_all() {
+        // With a very large epsilon, every variant "beats" every other variant
+        // (since ub - epsilon will be negative for any reasonable upper bound)
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.1, 0.2),
+            mock_cs("b", 0.3, 0.4),
+            mock_cs("c", 0.5, 0.6),
+        ]
+        .into_iter()
+        .collect();
+
+        // With epsilon = 1.0, all variants beat all others
+        // Each variant beats 3 (including itself's upper bound)
+        // For top-1, need >= 2. All qualify, so we get a top-3 (largest k checked first)
+        let result = check_topk_stopping(&variant_performance, 1, 3, Some(1.0));
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+        assert_eq!(result.top_variants.len(), 3);
+    }
 }
