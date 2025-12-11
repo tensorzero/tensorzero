@@ -35,7 +35,6 @@ const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 const RADIX_SELECT_SELECTOR = "[data-radix-select-content]";
 const COMMAND_MENU_KEYS = ["ArrowDown", "ArrowUp", "Enter"];
 
-// Extra padding around the badge/chevron area (right-3 = 12px on each side)
 const INPUT_RIGHT_CONTENT_PADDING_PX = 24;
 
 function createCustomModel(
@@ -227,7 +226,6 @@ export function ModelSelector({
             return;
           }
 
-          // User cleared the input - deselect
           if (searchValue === "") {
             field.onChange(undefined);
             closeDropdown();
