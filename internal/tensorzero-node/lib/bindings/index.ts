@@ -115,6 +115,7 @@ export * from "./GetDatapointCountResponse";
 export * from "./GetDatapointParams";
 export * from "./GetDatapointsRequest";
 export * from "./GetDatapointsResponse";
+export * from "./GetEpisodeInferenceCountResponse";
 export * from "./GetFeedbackByVariantParams";
 export * from "./GetInferencesRequest";
 export * from "./GetInferencesResponse";

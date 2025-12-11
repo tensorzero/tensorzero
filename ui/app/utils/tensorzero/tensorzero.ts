@@ -46,6 +46,7 @@ import type {
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
   ListEpisodesResponse,
+  GetEpisodeInferenceCountResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -985,6 +986,24 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as TableBoundsWithCount;
+  }
+
+  /**
+   * Gets inference statistics for a specific episode.
+   * @param episode_id - The UUID of the episode
+   * @returns A promise that resolves with the inference stats
+   * @throws Error if the request fails
+   */
+  async getEpisodeInferenceCount(
+    episode_id: string,
+  ): Promise<GetEpisodeInferenceCountResponse> {
+    const endpoint = `/internal/episodes/${episode_id}/inference-stats`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEpisodeInferenceCountResponse;
   }
 
   private async fetch(
