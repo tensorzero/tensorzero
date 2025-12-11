@@ -342,9 +342,7 @@ pub fn update_betting_cs(
         .last()
         .unwrap_or(&prev_results.variance_regularized);
 
-    let mean_reg_final = *means_reg
-        .last()
-        .unwrap_or(&prev_results.mean_regularized);
+    let mean_reg_final = *means_reg.last().unwrap_or(&prev_results.mean_regularized);
 
     MeanBettingConfidenceSequence {
         name: prev_results.name,
@@ -928,6 +926,57 @@ mod tests {
         assert!(updated.cs_lower <= updated.cs_upper);
     }
 
+    #[test]
+    fn test_incremental_vs_batch_updates() {
+        // Verify that processing observations incrementally gives the same result as batch
+        let observations = vec![0.3, 0.7, 0.5, 0.6, 0.4];
+
+        // Batch processing
+        let initial_batch = create_initial_cs(101, 0.05);
+        let batch_result = update_betting_cs(initial_batch, observations.clone(), None);
+
+        // Incremental processing
+        let mut incremental = create_initial_cs(101, 0.05);
+        for obs in observations {
+            incremental = update_betting_cs(incremental, vec![obs], None);
+        }
+
+        // Results should match
+        assert_eq!(batch_result.count, incremental.count);
+        assert!(
+            (batch_result.variance_regularized - incremental.variance_regularized).abs() < 1e-10,
+            "Variance should match: batch={}, incremental={}",
+            batch_result.variance_regularized,
+            incremental.variance_regularized
+        );
+
+        // Wealth processes should match
+        for (i, (batch_w, incr_w)) in batch_result
+            .wealth
+            .wealth_upper
+            .iter()
+            .zip(incremental.wealth.wealth_upper.iter())
+            .enumerate()
+        {
+            assert!(
+                (batch_w - incr_w).abs() < 1e-10,
+                "Wealth upper at index {i} should match: batch={batch_w}, incremental={incr_w}"
+            );
+        }
+        for (i, (batch_w, incr_w)) in batch_result
+            .wealth
+            .wealth_lower
+            .iter()
+            .zip(incremental.wealth.wealth_lower.iter())
+            .enumerate()
+        {
+            assert!(
+                (batch_w - incr_w).abs() < 1e-10,
+                "Wealth lower at index {i} should match: batch={batch_w}, incremental={incr_w}"
+            );
+        }
+    }
+
     // ==================== Regression tests with known values ====================
     // These tests use pre-computed values to detect regressions in the algorithm.
     // If these fail after a code change, verify the change is intentional.
@@ -981,12 +1030,17 @@ mod tests {
 
     #[test]
     fn test_known_values_single_observation_wealth_at_endpoints() {
-        // Single observation x=0.5 with alpha=0.05
-        // bet = 6.524984655851606
-        // At m=0.0: wealth_upper = exp(ln(1 + bet*0.5)) ≈ 4.262492
-        //           wealth_lower = exp(ln(1 - 0.5*0.5)) = 0.75 (bet truncated to 0.5/(1-0) = 0.5)
-        // At m=1.0: wealth_upper = exp(ln(1 + 0.5*(-0.5))) = 0.75 (bet truncated to 0.5/1 = 0.5)
-        //           wealth_lower = exp(ln(1 - bet*(-0.5))) ≈ 4.262492
+        // Single observation x=0.5 with alpha=0.05, bet=6.524984655851606
+        // At m=0.0:
+        //   bet_upper_max = 0.5/0 = inf (no truncation), bet_upper = 6.52
+        //   bet_lower_max = 0.5/(1-0) = 0.5, bet_lower = 0.5 (truncated)
+        //   wealth_upper = 1 + 6.52*(0.5-0) = 4.262492
+        //   wealth_lower = 1 - 0.5*(0.5-0) = 0.75
+        // At m=1.0:
+        //   bet_upper_max = 0.5/1 = 0.5, bet_upper = 0.5 (truncated)
+        //   bet_lower_max = 0.5/(1-1) = inf (no truncation), bet_lower = 6.52
+        //   wealth_upper = 1 + 0.5*(0.5-1) = 0.75
+        //   wealth_lower = 1 - 6.52*(0.5-1) = 4.262492
         let initial = create_initial_cs(101, 0.05);
         let updated = update_betting_cs(initial, vec![0.5], None);
 
@@ -1066,57 +1120,6 @@ mod tests {
             "Wealth lower at m=0.5 after [0.6, 0.4] should be 0.99, got {}",
             updated.wealth.wealth_lower[idx_half]
         );
-    }
-
-    #[test]
-    fn test_known_values_incremental_vs_batch() {
-        // Verify that processing observations incrementally gives the same result as batch
-        let observations = vec![0.3, 0.7, 0.5, 0.6, 0.4];
-
-        // Batch processing
-        let initial_batch = create_initial_cs(101, 0.05);
-        let batch_result = update_betting_cs(initial_batch, observations.clone(), None);
-
-        // Incremental processing
-        let mut incremental = create_initial_cs(101, 0.05);
-        for obs in observations {
-            incremental = update_betting_cs(incremental, vec![obs], None);
-        }
-
-        // Results should match
-        assert_eq!(batch_result.count, incremental.count);
-        assert!(
-            (batch_result.variance_regularized - incremental.variance_regularized).abs() < 1e-10,
-            "Variance should match: batch={}, incremental={}",
-            batch_result.variance_regularized,
-            incremental.variance_regularized
-        );
-
-        // Wealth processes should match
-        for (i, (batch_w, incr_w)) in batch_result
-            .wealth
-            .wealth_upper
-            .iter()
-            .zip(incremental.wealth.wealth_upper.iter())
-            .enumerate()
-        {
-            assert!(
-                (batch_w - incr_w).abs() < 1e-10,
-                "Wealth upper at index {i} should match: batch={batch_w}, incremental={incr_w}"
-            );
-        }
-        for (i, (batch_w, incr_w)) in batch_result
-            .wealth
-            .wealth_lower
-            .iter()
-            .zip(incremental.wealth.wealth_lower.iter())
-            .enumerate()
-        {
-            assert!(
-                (batch_w - incr_w).abs() < 1e-10,
-                "Wealth lower at index {i} should match: batch={batch_w}, incremental={incr_w}"
-            );
-        }
     }
 
     #[test]
