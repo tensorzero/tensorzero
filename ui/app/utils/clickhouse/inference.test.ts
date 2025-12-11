@@ -2,19 +2,12 @@ import { expect, test } from "vitest";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
-  countInferencesForFunction,
-  countInferencesForVariant,
-  queryInferenceById,
   listInferencesWithPagination,
   countInferencesByFunction,
-  queryModelInferencesByInferenceId,
+  countInferencesForVariant,
 } from "./inference.server";
-import type { ZodTextContent } from "./common";
+import { countInferencesForFunction } from "./inference.server";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
-import type {
-  ContentBlockChatOutput,
-  JsonInferenceOutput,
-} from "~/types/tensorzero";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -245,34 +238,6 @@ test("countInferencesForEpisode with invalid episode_id", async () => {
   expect(count).toBe(0);
 });
 
-test("queryInferenceById for chat inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a001",
-  );
-  expect(inference?.function_type).toBe("chat");
-  expect(inference?.input.messages.length).toBeGreaterThan(0);
-  const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as ZodTextContent;
-  expect(firstOutput.type).toBe("text");
-  expect(firstOutput.text).toBe("Yes.");
-});
-
-test("queryInferenceById for missing inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-910b-7ab1-a645-46bc4463a000",
-  );
-  expect(inference).toBeNull();
-});
-
-test("queryInferenceById for json inference", async () => {
-  const inference = await queryInferenceById(
-    "01942e26-88ab-7331-8293-de75cc2b88a7",
-  );
-  expect(inference?.function_type).toBe("json");
-  expect(inference?.input.messages.length).toBe(0);
-  const output = inference?.output as JsonInferenceOutput;
-  expect(output.parsed).toBeDefined();
-});
 test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual(
@@ -309,19 +274,6 @@ test("countInferencesByFunction", async () => {
       },
     ]),
   );
-});
-
-test("queryModelInferencesByInferenceId", async () => {
-  const modelInferences = await queryModelInferencesByInferenceId(
-    "0195aef6-6cee-75e3-9097-f7bdf6e9c9af",
-  );
-  expect(modelInferences.length).toBe(1);
-  const firstInference = modelInferences[0];
-  expect(firstInference.id).toBe("0195aef6-77a9-7ce1-8910-016c2bef9cec");
-  expect(firstInference.input_messages.length).toBe(1);
-  expect(firstInference.output.length).toBe(1);
-  expect(firstInference.output[0].type).toBe("text");
-  expect(!firstInference.cached);
 });
 
 test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {

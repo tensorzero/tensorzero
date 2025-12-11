@@ -26,6 +26,7 @@ const mockConfig: UiConfig = {
   tools: {
     search_wikipedia: {
       name: "search_wikipedia",
+      key: "search_wikipedia",
       description:
         "Search Wikipedia for pages that match the query. Returns a list of page titles.",
       parameters: {

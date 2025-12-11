@@ -81,6 +81,14 @@ level = "inference"
 description = "Get the current temperature in a given location"
 parameters = "../../../fixtures/config/tools/get_temperature.json"
 
+# This tool has a custom display name that differs from the config key
+# key = "get_temperature_with_name", name = "get_temperature"
+# Used to test that allowed_tools filtering uses the key, not the display name
+[tools.get_temperature_with_name]
+description = "Get the current temperature in a given location (aliased)"
+parameters = "../../../fixtures/config/tools/get_temperature.json"
+name = "get_temperature"
+
 [tools.get_humidity]
 description = "Get the current humidity in a given location"
 parameters = "../../../fixtures/config/tools/get_humidity.json"

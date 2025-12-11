@@ -62,6 +62,10 @@ pub async fn test_render_samples_no_function() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client
@@ -98,6 +102,10 @@ pub async fn test_render_samples_no_variant() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let error = client
@@ -147,6 +155,10 @@ pub async fn test_render_samples_missing_variable() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client
@@ -188,6 +200,10 @@ pub async fn test_render_samples_normal() {
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
@@ -221,6 +237,10 @@ pub async fn test_render_samples_normal() {
                 raw: Some("{}".to_string()), // This should not be validated
             }],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
@@ -268,6 +288,10 @@ pub async fn test_render_samples_normal() {
                 text: "Hello, world!".to_string(),
             })]],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
@@ -313,6 +337,10 @@ pub async fn test_render_samples_normal() {
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
     ];
 
@@ -506,6 +534,10 @@ pub async fn test_render_samples_template_no_schema() {
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client

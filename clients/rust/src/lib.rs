@@ -68,7 +68,8 @@ pub use tensorzero_core::endpoints::datasets::{
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
-    InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
+    ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
+    InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{

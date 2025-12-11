@@ -706,3 +706,142 @@ async fn test_allowed_tools_restriction() {
                 .is_empty()
     );
 }
+
+/// Test 8: allowed_tools uses tool config key, not display name
+///
+/// Tests that when a tool has a custom `name` field (display name) different from
+/// its config key, allowed_tools filtering uses the KEY for validation and filtering,
+/// but the display name is sent to the LLM.
+///
+/// Config setup:
+/// - Tool config key: "get_temperature_with_name"
+/// - Tool display name: "get_temperature"
+/// - Function: "weather_helper_aliased_tool" uses this tool
+#[tokio::test(flavor = "multi_thread")]
+async fn test_allowed_tools_uses_key_not_display_name() {
+    let episode_id = Uuid::now_v7();
+
+    // Test 1: Using the config KEY should work
+    let payload = json!({
+        "function_name": "weather_helper_aliased_tool",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Tokyo?"
+                }
+            ]
+        },
+        "stream": false,
+        // Use the config KEY (not the display name)
+        "allowed_tools": ["get_temperature_with_name"],
+        "tool_choice": "auto",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    if status != StatusCode::OK {
+        let error_text = response.text().await.unwrap();
+        panic!("Expected 200 OK when using config key, got {status}: {error_text}");
+    }
+
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Verify that the tool call in the inference response uses the DISPLAY NAME
+    // The dummy "tool" model returns a tool call with name "get_temperature"
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 1, "Should have one tool call");
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+
+    // The `name` field should be the DISPLAY NAME, not the config key
+    let tool_call_name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(
+        tool_call_name, "get_temperature",
+        "Tool call name should be the display name, not the config key 'get_temperature_with_name'"
+    );
+
+    // The `raw_name` should also be the display name (what the model returned)
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(
+        raw_name, "get_temperature",
+        "Raw name should be the display name"
+    );
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify the tool was available and stored correctly
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+
+    // The tool should be in tools_available with the DISPLAY NAME (what's sent to LLM)
+    let tools_available = tool_params
+        .get("tools_available")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(tools_available.len(), 1);
+    // The name stored/sent to LLM is the display name "get_temperature", not the key
+    assert_eq!(
+        tools_available[0].get("name").unwrap().as_str().unwrap(),
+        "get_temperature",
+        "Tool should be stored with display name, not config key"
+    );
+
+    // Test 2: Using the DISPLAY NAME should fail validation
+    // (because allowed_tools validates against config keys)
+    let episode_id_2 = Uuid::now_v7();
+    let payload_with_display_name = json!({
+        "function_name": "weather_helper_aliased_tool",
+        "episode_id": episode_id_2,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather in Paris?"
+                }
+            ]
+        },
+        "stream": false,
+        // Try to use the display name - this should FAIL
+        "allowed_tools": ["get_temperature"],
+        "tool_choice": "auto",
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload_with_display_name)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail because "get_temperature" is not a valid tool KEY
+    // (it's only the display name of "get_temperature_with_name")
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Using display name instead of config key should fail validation"
+    );
+
+    let error_response = response.json::<Value>().await.unwrap();
+    let error_message = error_response.get("error").unwrap().as_str().unwrap();
+    assert!(
+        error_message.contains("get_temperature"),
+        "Error should mention the tool name: {error_message}"
+    );
+}
