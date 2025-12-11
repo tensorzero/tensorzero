@@ -12,8 +12,6 @@
 //! The confidence set at time t is the set of all m values for which the wealth process
 //! has not exceeded the threshold 1/α, where α is the confidence level.
 
-use itertools;
-
 const DEFAULT_M_RESOLUTION: usize = 1001;
 const BET_TRUNCATION_LEVEL: f64 = 0.5;
 
@@ -123,20 +121,13 @@ impl WealthProcesses {
         res
     }
 
-    pub fn m_values_iter(&self) -> impl Iterator<Item = f64> + '_ {
-        let resolution = self.resolution();
-        self.m_values
-            .as_ref()
-            .map(|v| itertools::Either::Left(v.iter().copied()))
-            .unwrap_or_else(|| {
-                itertools::Either::Right(
-                    (0..resolution).map(move |i| i as f64 / (resolution - 1) as f64),
-                )
-            })
-    }
-
     pub fn m_values(&self) -> Vec<f64> {
-        self.m_values_iter().collect()
+        self.m_values.clone().unwrap_or_else(|| {
+            let resolution = self.resolution();
+            (0..resolution)
+                .map(|i| i as f64 / (resolution - 1) as f64)
+                .collect()
+        })
     }
 }
 
@@ -275,12 +266,12 @@ pub fn update_betting_cs(
     // Update upper and lower wealth processes for each candidate mean m
     // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
     // Truncate bets to c/m (upper) or c/(1-m) (lower) to ensure wealth processes stay non-negative
-    let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = prev_results
-        .wealth
-        .m_values_iter()
+    let m_values = prev_results.wealth.m_values();
+    let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = m_values
+        .iter()
         .zip(prev_results.wealth.wealth_upper.iter())
         .zip(prev_results.wealth.wealth_lower.iter())
-        .map(|((m, &prev_upper), &prev_lower)| {
+        .map(|((&m, &prev_upper), &prev_lower)| {
             let bet_upper_max = if m == 0.0 {
                 f64::INFINITY
             } else {
@@ -324,7 +315,6 @@ pub fn update_betting_cs(
     // Find confidence bounds using binary search
     // The confidence set is {m : wealth_hedged(m) < 1/alpha}
     // We assume this forms an interval and find its boundaries
-    let m_values = prev_results.wealth.m_values();
     let n_grid = m_values.len();
 
     // Find the minimum of wealth_hedged - this is the point estimate (mean_est)
@@ -609,14 +599,14 @@ mod tests {
     }
 
     #[test]
-    fn test_wealth_processes_m_values_iter_default() {
+    fn test_wealth_processes_m_values_default() {
         let wp = WealthProcesses {
             m_values: None,
             resolution: Some(11),
             wealth_upper: vec![1.0; 11],
             wealth_lower: vec![1.0; 11],
         };
-        let m_values: Vec<f64> = wp.m_values_iter().collect();
+        let m_values = wp.m_values();
         assert_eq!(m_values.len(), 11);
         assert!(approx_eq(m_values[0], 0.0));
         assert!(approx_eq(m_values[5], 0.5));
@@ -624,7 +614,7 @@ mod tests {
     }
 
     #[test]
-    fn test_wealth_processes_m_values_iter_custom() {
+    fn test_wealth_processes_m_values_custom() {
         let custom_m = vec![0.1, 0.2, 0.3, 0.4, 0.5];
         let wp = WealthProcesses {
             m_values: Some(custom_m.clone()),
@@ -632,22 +622,8 @@ mod tests {
             wealth_upper: vec![1.0; 5],
             wealth_lower: vec![1.0; 5],
         };
-        let m_values: Vec<f64> = wp.m_values_iter().collect();
-        assert_eq!(m_values, custom_m);
-    }
-
-    #[test]
-    fn test_wealth_processes_m_values_method() {
-        let wp = WealthProcesses {
-            m_values: None,
-            resolution: Some(5),
-            wealth_upper: vec![1.0; 5],
-            wealth_lower: vec![1.0; 5],
-        };
         let m_values = wp.m_values();
-        assert_eq!(m_values.len(), 5);
-        assert!(approx_eq(m_values[0], 0.0));
-        assert!(approx_eq(m_values[4], 1.0));
+        assert_eq!(m_values, custom_m);
     }
 
     // Tests for update_betting_cs input validation
