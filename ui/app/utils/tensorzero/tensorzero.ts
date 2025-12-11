@@ -14,6 +14,7 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CountModelsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
   Datapoint,
@@ -759,6 +760,22 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetModelInferencesResponse;
+  }
+
+  /**
+   * Counts the number of distinct models used.
+   * @returns A promise that resolves with the count of distinct models
+   * @throws Error if the request fails
+   */
+  async countDistinctModelsUsed(): Promise<CountModelsResponse> {
+    const response = await this.fetch("/internal/models/count", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CountModelsResponse;
   }
 
   private async fetch(

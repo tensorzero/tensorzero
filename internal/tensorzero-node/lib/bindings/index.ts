@@ -32,6 +32,7 @@ export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
 export * from "./CountDatapointsForDatasetFunctionParams";
 export * from "./CountFeedbackByTargetIdParams";
+export * from "./CountModelsResponse";
 export * from "./CreateChatDatapointRequest";
 export * from "./CreateDatapointRequest";
 export * from "./CreateDatapointsFromInferenceOutputSource";
