@@ -116,7 +116,9 @@ export async function loader() {
     countWorkflowEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
-  const numModelsUsedPromise = nativeDatabaseClient.countDistinctModelsUsed();
+  const numModelsUsedPromise = getTensorZeroClient()
+    .countDistinctModelsUsed()
+    .then((response) => response.model_count);
 
   // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
