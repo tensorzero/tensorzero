@@ -103,22 +103,22 @@ pub struct MeanBettingConfidenceSequence {
 /// 3. Updating the upper and lower wealth processes for each candidate mean
 /// 4. Combining the wealth processes into a single hedged process and finding the new confidence bounds
 ///
+/// This function uses a hedged capital process that takes the maximum of the weighted
+/// upper and lower wealth processes. This combination is guaranteed to produce confidence
+/// sets that are intervals, which is not necessarily true for other combination types
+/// (e.g., convex/sum combinations can produce non-convex confidence sets).
+///
 /// # Arguments
 /// * `prev_results` - The current state of the confidence sequence
 /// * `new_observations` - New observations to incorporate (must be in [0, 1])
-/// * `combo_type` - How to combine upper/lower wealth processes:
-///   - `"max"`: Take the maximum of weighted processes (intersection of CSs)
-///   - `"convex"`: Sum the weighted processes (union-based combination)
 /// * `hedge_weight_upper` - Weight for the upper wealth process (must be in [0, 1]).
-///   The lower process receives weight (1 - hedge_weight_upper). If None, then
-///   defaults to 0.5.
+///   The lower process receives weight (1 - hedge_weight_upper). If None, defaults to 0.5.
 ///
 /// # Returns
 /// Updated `MeanBettingConfidenceSequence` with new bounds and wealth process values.
 pub fn update_betting_cs(
     prev_results: MeanBettingConfidenceSequence,
     new_observations: Vec<f64>,
-    combo_type: String,
     hedge_weight_upper: Option<f64>,
 ) -> MeanBettingConfidenceSequence {
     let hedge_weight_upper = hedge_weight_upper.unwrap_or(0.5);
@@ -219,7 +219,7 @@ pub fn update_betting_cs(
         })
         .unzip();
 
-    // Compute hedged wealth process, the max of the weighted upper and lower wealth processes
+    // Compute hedged wealth process as the max of the weighted upper and lower wealth processes
     let threshold = 1.0 / prev_results.alpha as f64;
     let wealth_hedged: Vec<f64> = new_wealth_upper
         .iter()
@@ -227,11 +227,7 @@ pub fn update_betting_cs(
         .map(|(&w_upper, &w_lower)| {
             let weighted_upper = hedge_weight_upper * w_upper;
             let weighted_lower = (1.0 - hedge_weight_upper) * w_lower;
-            match combo_type.as_str() {
-                "max" => weighted_upper.max(weighted_lower),
-                "convex" => weighted_upper + weighted_lower,
-                _ => weighted_upper.max(weighted_lower), // Default to max
-            }
+            weighted_upper.max(weighted_lower)
         })
         .collect();
 
