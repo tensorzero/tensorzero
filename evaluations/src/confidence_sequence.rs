@@ -211,8 +211,15 @@ pub fn update_betting_cs(
         }
     };
 
-    // Compute the final mean estimate (using the last regularized mean)
-    let mean_est = *means_reg.last().unwrap_or(&prev_results.mean_est);
+    // Compute the final mean estimate as the minimizer of wealth_hedged
+    // This is guaranteed to be inside the confidence set
+    let mean_est = m_values
+        .iter()
+        .zip(wealth_hedged.iter())
+        .min_by(|(_, w1), (_, w2)| w1.partial_cmp(w2).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(&m, _)| m)
+        .unwrap_or(prev_results.mean_est);
+
     let variance_reg_final = *variances_reg
         .last()
         .unwrap_or(&prev_results.variance_regularized);
