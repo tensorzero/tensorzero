@@ -935,7 +935,7 @@ impl Client {
                 let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
                     source: Error::new(ErrorDetails::Serialization {
                         message: format!(
-                            "Failed to serialize inference params: {}",
+                            "Failed to serialize embedding params: {}",
                             DisplayOrDebug {
                                 val: e,
                                 debug: self.verbose_errors,
