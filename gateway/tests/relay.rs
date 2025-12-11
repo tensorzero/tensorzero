@@ -899,11 +899,7 @@ model_name = "good"
 
     let status = response.status();
     let body_text = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        200,
-        "Response status: {status}, body: {body_text}"
-    );
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
 
     // Verify we got a successful embeddings response
@@ -946,11 +942,7 @@ model_name = "good"
 
     let status = response.status();
     let body_text = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        200,
-        "Response status: {status}, body: {body_text}"
-    );
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
 
     // Verify we got a successful embeddings response
@@ -1062,8 +1054,7 @@ model_name = "good"
     let status = response.status();
     let body_text = response.text().await.unwrap();
     assert_eq!(
-        status,
-        200,
+        status, 200,
         "Request with env API key should succeed. Status: {status}, body: {body_text}"
     );
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
@@ -1121,8 +1112,7 @@ model_name = "good"
     let status = response.status();
     let body_text = response.text().await.unwrap();
     assert_eq!(
-        status,
-        200,
+        status, 200,
         "Request with valid dynamic API key should succeed. Status: {status}, body: {body_text}"
     );
     let body: serde_json::Value = serde_json::from_str(&body_text).unwrap();
@@ -1145,7 +1135,10 @@ model_name = "good"
         .await
         .unwrap();
 
-    assert_eq!(new_response.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        new_response.status(),
+        http::StatusCode::INTERNAL_SERVER_ERROR
+    );
     let body = new_response.text().await.unwrap();
     assert!(
         body.contains("Invalid format for TensorZero API key"),
