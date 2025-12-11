@@ -363,7 +363,7 @@ Each object in the array has the following fields:
 
 - `scope` (object, optional): Limits which model/provider combination can use this tool. If omitted, the tool is available to all compatible providers.
   - `model_name` (string): The model name as defined in your configuration
-  - `model_provider_name` (string): The provider name for that model
+  - `provider_name` (string, optional): The provider name for that model. If omitted, the tool is available to all providers for the specified model.
 - `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
 
 When using OpenAI client libraries, pass this parameter via `extra_body`.
@@ -423,7 +423,7 @@ response = client.chat.completions.create(
             {
                 "scope": {
                     "model_name": "gpt-5-mini",
-                    "model_provider_name": "openai"
+                    "provider_name": "openai"
                 },
                 "tool": {
                     "type": "web_search"
