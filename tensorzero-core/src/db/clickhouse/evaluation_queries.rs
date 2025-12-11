@@ -67,6 +67,47 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         parse_json_rows(response.response.as_str())
     }
+
+    async fn count_datapoints_for_evaluation(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<u64, Error> {
+        let query = r"
+            WITH all_inference_ids AS (
+                SELECT DISTINCT inference_id
+                FROM TagInference FINAL
+                WHERE key = 'tensorzero::evaluation_run_id'
+                    AND function_name = {function_name:String}
+                    AND value IN ({evaluation_run_ids:Array(String)})
+            ),
+            all_datapoint_ids AS (
+                SELECT DISTINCT value as datapoint_id
+                FROM TagInference FINAL
+                WHERE key = 'tensorzero::datapoint_id'
+                    AND function_name = {function_name:String}
+                    AND inference_id IN (SELECT inference_id FROM all_inference_ids)
+                ORDER BY toUInt128(toUUID(datapoint_id)) DESC
+            )
+            SELECT toUInt32(count()) as count
+            FROM all_datapoint_ids
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let eval_run_ids_str: Vec<String> =
+            evaluation_run_ids.iter().map(|id| id.to_string()).collect();
+
+        let function_name_str = function_name.to_string();
+        let eval_run_ids_joined = eval_run_ids_str.join(",");
+
+        let mut params = HashMap::new();
+        params.insert("function_name", function_name_str.as_str());
+        params.insert("evaluation_run_ids", eval_run_ids_joined.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_count(&response.response)
+    }
 }
 
 #[cfg(test)]
@@ -240,5 +281,98 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let _result = conn.list_evaluation_runs(100, 0).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_count_datapoints_for_evaluation() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "all_inference_ids AS");
+                assert_query_contains(query, "all_datapoint_ids AS");
+                assert_query_contains(query, "SELECT toUInt32(count()) as count");
+                assert_eq!(params.get("function_name"), Some(&"test_function"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":42}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_datapoints_for_evaluation(
+                "test_function",
+                &[uuid::Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result, 42);
+    }
+
+    #[tokio::test]
+    async fn test_count_datapoints_multiple_run_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":100}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let run_ids = vec![
+            uuid::Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap(),
+            uuid::Uuid::parse_str("11234567-89ab-cdef-0123-456789abcdef").unwrap(),
+        ];
+
+        let result = conn
+            .count_datapoints_for_evaluation("test_function", &run_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 100);
+    }
+
+    #[tokio::test]
+    async fn test_count_datapoints_zero_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":0}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_datapoints_for_evaluation(
+                "nonexistent_function",
+                &[uuid::Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result, 0);
     }
 }

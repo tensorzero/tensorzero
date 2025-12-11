@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  countDatapointsForEvaluation,
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
@@ -386,27 +385,6 @@ describe("getEvaluationStatistics", () => {
     // Wilson CI for n=42, p≈0.524
     expect(statistics[3].ci_lower).toBeCloseTo(0.377222, 5);
     expect(statistics[3].ci_upper).toBeCloseTo(0.666406, 5);
-  });
-});
-
-describe("countDatapointsForEvaluation", () => {
-  test("should return correct number of datapoints for haiku evaluation", async () => {
-    const datapoints = await countDatapointsForEvaluation(
-      "write_haiku",
-      "chat",
-      ["01963690-dff2-7cd3-b724-62fb705772a1"],
-    );
-    // This should not include data that is after the evaluation run
-    expect(datapoints).toBe(77);
-  });
-
-  test("should return correct number of datapoints for entity_extraction evaluation", async () => {
-    const datapoints = await countDatapointsForEvaluation(
-      "extract_entities",
-      "json",
-      ["0196368f-19bd-7082-a677-1c0bf346ff24"],
-    );
-    expect(datapoints).toBe(41);
   });
 });
 
