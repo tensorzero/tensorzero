@@ -50,7 +50,9 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
+use crate::observability::overhead_timing::OverheadTimingLayer;
 use crate::observability::span_leak_detector::SpanLeakDetector;
+use crate::utils::spawn_ignoring_shutdown;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -58,7 +60,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Router, middleware};
 use clap::ValueEnum;
 use http::HeaderMap;
-use metrics::{Unit, describe_counter};
+use metrics::{Unit, describe_counter, describe_histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::Status;
@@ -89,7 +91,9 @@ use uuid::Uuid;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
+mod disjoint_intervals;
 mod exporter_wrapper;
+pub mod overhead_timing;
 pub mod request_logging;
 mod span_leak_detector;
 pub mod tracing_bug;
@@ -1149,6 +1153,7 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         .with(otel_layer)
         .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
         .with(leak_detector.clone())
+        .with(OverheadTimingLayer::new())
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
@@ -1187,6 +1192,17 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
     })?;
+    let handle_clone = metrics_handle.clone();
+    // Metrics are pull-based via the `/metrics` endpoint, so we don't
+    // need to do anything on shutdown
+    spawn_ignoring_shutdown(async move {
+        loop {
+            // metrics-exporter-prometheus defaults to 5 seconds for `upkeep_timeout`
+            // when using `install()`
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            handle_clone.run_upkeep();
+        }
+    });
 
     // Register the expected metrics along with their types and docstrings
     describe_counter!(
@@ -1211,6 +1227,12 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
         "tensorzero_inferences_total",
         Unit::Count,
         "Inferences performed by TensorZero",
+    );
+
+    describe_histogram!(
+        "tensorzero_overhead",
+        Unit::Milliseconds,
+        "Overhead of TensorZero on HTTP requests"
     );
 
     Ok(metrics_handle)

@@ -1,5 +1,7 @@
 #![expect(clippy::expect_used, clippy::unwrap_used, clippy::missing_panics_doc)]
 
+use std::collections::HashMap;
+
 use crate::{Client, ClientBuilder, ClientBuilderMode};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
@@ -103,11 +105,27 @@ macro_rules! make_gateway_test_functions {
     };
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
 pub fn get_gateway_endpoint(path: &str) -> String {
     let gateway_host =
         std::env::var("TENSORZERO_GATEWAY_HOST").unwrap_or_else(|_| "localhost".to_string());
     let gateway_port =
         std::env::var("TENSORZERO_GATEWAY_PORT").unwrap_or_else(|_| "3000".to_string());
     format!("http://{gateway_host}:{gateway_port}{path}")
+}
+
+pub async fn get_metrics(client: &reqwest::Client, url: &str) -> HashMap<String, String> {
+    let response = client.get(url).send().await.unwrap().text().await.unwrap();
+    let metrics: HashMap<String, String> = response
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let mut parts = line.rsplitn(2, ' ');
+            match (parts.next(), parts.next()) {
+                (Some(value), Some(key)) => Some((key.to_string(), value.to_string())),
+                _ => None,
+            }
+        })
+        .collect();
+
+    metrics
 }

@@ -109,7 +109,7 @@ pub use tensorzero_optimizers::endpoints::{
 #[cfg(feature = "git")]
 mod git;
 
-#[cfg(feature = "e2e_tests")]
+#[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
 // Re-export observability for pyo3 feature
