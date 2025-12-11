@@ -426,19 +426,6 @@ export async function countDatapointsForEvaluation(
   return parsedRows[0].count;
 }
 
-export async function countTotalEvaluationRuns() {
-  const query = `
-    SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
-
 export async function getEvaluationRunInfo(
   limit: number = 100,
   offset: number = 0,

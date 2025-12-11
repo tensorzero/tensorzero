@@ -240,11 +240,6 @@ export class DatabaseClient {
     return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
   }
 
-  async countDistinctModelsUsed(): Promise<number> {
-    const response = await this.nativeDatabaseClient.countDistinctModelsUsed();
-    return response;
-  }
-
   async queryEpisodeTable(
     limit: number,
     before?: string,

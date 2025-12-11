@@ -17,7 +17,6 @@ import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import {
-  getVariantCounts,
   getVariantPerformances,
   getFunctionThroughputByVariant,
 } from "~/utils/clickhouse/function";
@@ -43,6 +42,7 @@ import {
   getNativeDatabaseClient,
   getNativeTensorZeroClient,
 } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -80,10 +80,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     function_name,
     inference_table: getInferenceTableName(function_config),
   });
-  const variantCountsPromise = getVariantCounts({
+  const variantCountsPromise = getTensorZeroClient().getInferenceStats(
     function_name,
-    function_config,
-  });
+    {
+      groupBy: "variant",
+    },
+  );
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
@@ -155,7 +157,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantSamplingProbabilitiesPromise,
   ]);
 
-  const variant_counts_with_metadata = variant_counts.map((variant_count) => {
+  const variant_counts_with_metadata = (
+    variant_counts.stats_by_variant ?? []
+  ).map((variant_count) => {
     let variant_config = function_config.variants[
       variant_count.variant_name
     ] || {
