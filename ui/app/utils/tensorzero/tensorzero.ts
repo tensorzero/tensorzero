@@ -15,6 +15,7 @@ import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   CountModelsResponse,
+  DatapointStatsResponse,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
@@ -889,6 +890,33 @@ export class TensorZeroClient {
     const count_response =
       (await response.json()) as EvaluationRunStatsResponse;
     return Number(count_response.count);
+  }
+
+  /**
+   * Counts unique datapoints across specified evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param evaluationRunIds - Array of evaluation run IDs
+   * @returns A promise that resolves with the datapoint count
+   * @throws Error if the request fails
+   */
+  async countDatapointsForEvaluation(
+    functionName: string,
+    evaluationRunIds: string[],
+  ): Promise<number> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/datapoint-count?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const result = (await response.json()) as DatapointStatsResponse;
+    return Number(result.count);
   }
 
   /**

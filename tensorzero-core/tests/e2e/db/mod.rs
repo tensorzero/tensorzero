@@ -1,5 +1,6 @@
 mod bandit_queries;
 mod dataset_queries;
+mod evaluation_queries;
 mod experimentation_queries;
 mod feedback_queries;
 mod inference_queries;
