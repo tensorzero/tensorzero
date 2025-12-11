@@ -1,4 +1,36 @@
-// Initialize with None values
+use itertools;
+
+const DEFAULT_M_RESOLUTION: usize = 1001;
+
+pub struct WealthProcesses {
+    pub m_values: Option<Vec<f64>>, // None = linspace(0, 1, resolution)
+    pub resolution: Option<usize>,  // None = DEFAULT_M_RESOLUTION
+    pub wealth_upper: Vec<f64>,     // K_t^+ at each m
+    pub wealth_lower: Vec<f64>,     // K_t^- at each m
+}
+
+impl WealthProcesses {
+    fn resolution(&self) -> usize {
+        self.resolution.unwrap_or(DEFAULT_M_RESOLUTION)
+    }
+
+    pub fn m_values_iter(&self) -> impl Iterator<Item = f64> + '_ {
+        let resolution = self.resolution();
+        self.m_values
+            .as_ref()
+            .map(|v| itertools::Either::Left(v.iter().copied()))
+            .unwrap_or_else(|| {
+                itertools::Either::Right(
+                    (0..resolution).map(move |i| i as f64 / (resolution - 1) as f64),
+                )
+            })
+    }
+
+    pub fn m_values(&self) -> Vec<f64> {
+        self.m_values_iter().collect()
+    }
+}
+
 pub struct MeanBettingConfidenceSequence {
     pub name: String, // A variant or evaluator name
     pub mean_regularized: f64,
@@ -8,6 +40,7 @@ pub struct MeanBettingConfidenceSequence {
     pub cs_lower: f64,
     pub cs_upper: f64,
     pub alpha: f32,
+    pub wealth: WealthProcesses,
 }
 
 // combo_type: "max" or "convex"
@@ -82,7 +115,27 @@ pub fn update_betting_cs(
         })
         .collect();
 
-    // TODO: Continue with the rest of the confidence sequence update...
+    // Update wealth processes for each candidate mean m
+    let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = prev_results
+        .wealth
+        .m_values_iter()
+        .zip(prev_results.wealth.wealth_upper.iter())
+        .zip(prev_results.wealth.wealth_lower.iter())
+        .map(|((m, &prev_upper), &prev_lower)| {
+            let (prod_upper, prod_lower) = bets.iter().zip(new_observations.iter()).fold(
+                (1.0, 1.0),
+                |(acc_upper, acc_lower), (&bet, &x)| {
+                    (
+                        acc_upper * (1.0 + bet * (x - m)),
+                        acc_lower * (1.0 - bet * (x - m)),
+                    )
+                },
+            );
+            (prev_upper * prod_upper, prev_lower * prod_lower)
+        })
+        .unzip();
+
+    // TODO: Compute new confidence bounds from wealth processes
 
     prev_results // Placeholder return
 }
