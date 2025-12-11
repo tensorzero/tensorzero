@@ -138,6 +138,119 @@ async fn test_count_inferences_for_nonexistent_variant() {
     assert_eq!(count, 0);
 }
 
+#[tokio::test]
+async fn test_count_inferences_by_variant_for_chat_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let params = CountInferencesParams {
+        function_name: "write_haiku",
+        function_type: FunctionConfigType::Chat,
+        variant_name: None,
+    };
+
+    let rows = clickhouse
+        .count_inferences_by_variant(params)
+        .await
+        .unwrap();
+
+    // There should be at least 2 variants for write_haiku
+    assert!(
+        rows.len() >= 2,
+        "Expected at least 2 variants for write_haiku, got {}",
+        rows.len()
+    );
+
+    // The sum of all variant counts should match the total count
+    let total_from_variants: u64 = rows.iter().map(|r| r.inference_count).sum();
+
+    let total_params = CountInferencesParams {
+        function_name: "write_haiku",
+        function_type: FunctionConfigType::Chat,
+        variant_name: None,
+    };
+    let total_count = clickhouse
+        .count_inferences_for_function(total_params)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        total_from_variants, total_count,
+        "Sum of variant counts ({total_from_variants}) should equal total count ({total_count})"
+    );
+
+    // Results should be ordered by inference_count DESC
+    for i in 1..rows.len() {
+        assert!(
+            rows[i - 1].inference_count >= rows[i].inference_count,
+            "Results should be ordered by inference_count DESC"
+        );
+    }
+
+    // Each row should have a valid last_used timestamp
+    for row in &rows {
+        assert!(
+            !row.last_used_at.is_empty(),
+            "last_used should not be empty for variant {}",
+            row.variant_name
+        );
+        // Verify it's a valid ISO 8601 format
+        assert!(
+            row.last_used_at.contains('T') && row.last_used_at.ends_with('Z'),
+            "last_used should be in ISO 8601 format, got: {}",
+            row.last_used_at
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_count_inferences_by_variant_for_json_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let params = CountInferencesParams {
+        function_name: "extract_entities",
+        function_type: FunctionConfigType::Json,
+        variant_name: None,
+    };
+
+    let rows = clickhouse
+        .count_inferences_by_variant(params)
+        .await
+        .unwrap();
+
+    // There should be at least 2 variants for extract_entities
+    assert!(
+        rows.len() >= 2,
+        "Expected at least 2 variants for extract_entities, got {}",
+        rows.len()
+    );
+
+    // Verify expected variants are present
+    let variant_names: Vec<&str> = rows.iter().map(|r| r.variant_name.as_str()).collect();
+    assert!(
+        variant_names.contains(&"gpt4o_initial_prompt"),
+        "Expected gpt4o_initial_prompt variant to be present"
+    );
+}
+
+#[tokio::test]
+async fn test_count_inferences_by_variant_for_nonexistent_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let params = CountInferencesParams {
+        function_name: "nonexistent_function",
+        function_type: FunctionConfigType::Chat,
+        variant_name: None,
+    };
+
+    let rows = clickhouse
+        .count_inferences_by_variant(params)
+        .await
+        .unwrap();
+
+    // Should return empty for nonexistent function
+    assert!(rows.is_empty());
+}
+
 /// Test counting feedbacks for a float metric
 #[tokio::test]
 async fn test_count_feedbacks_for_float_metric() {
