@@ -28,6 +28,7 @@ use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;
+pub mod evaluation_queries;
 pub mod feedback;
 pub mod inference_queries;
 pub mod inference_stats;

@@ -6,10 +6,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  countTotalEvaluationRuns,
-  getEvaluationRunInfo,
-} from "~/utils/clickhouse/evaluations.server";
+import { getEvaluationRunInfo } from "~/utils/clickhouse/evaluations.server";
 import EvaluationRunsTable from "./EvaluationRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
@@ -20,9 +17,10 @@ import {
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const totalEvaluationRuns = await countTotalEvaluationRuns();
+  const totalEvaluationRuns = await getTensorZeroClient().countEvaluationRuns();
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
