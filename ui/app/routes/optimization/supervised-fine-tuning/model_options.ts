@@ -8,42 +8,6 @@ export const ModelOptionSchema = z.object({
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
-/**
- * Detect provider from model name prefix for autocomplete.
- * Best-effort matching for common model naming patterns.
- */
-export function detectProviderFromModelName(
-  modelName: string,
-): ModelOption["provider"] {
-  const lower = modelName.toLowerCase();
-
-  // GCP Vertex Gemini
-  if (lower.startsWith("gemini")) {
-    return "gcp_vertex_gemini";
-  }
-
-  // Together AI
-  if (
-    lower.startsWith("gemma") ||
-    lower.startsWith("qwen") ||
-    lower.startsWith("deepseek")
-  ) {
-    return "together";
-  }
-
-  // Fireworks
-  if (
-    lower.startsWith("llama") ||
-    lower.startsWith("mixtral") ||
-    lower.startsWith("mistral") ||
-    lower.startsWith("yi")
-  ) {
-    return "fireworks";
-  }
-
-  return "openai";
-}
-
 export const models: ModelOption[] = [
   // OpenAI
   {
