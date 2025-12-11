@@ -49,7 +49,7 @@ pub fn update_betting_cs(
     prev_results: MeanBettingConfidenceSequence,
     new_observations: Vec<f64>,
     combo_type: String,
-    hedge_weight_upper: f32,
+    hedge_weight_upper: f64,
 ) -> MeanBettingConfidenceSequence {
     let n = new_observations.len();
     let prev_count = prev_results.count;
@@ -135,7 +135,98 @@ pub fn update_betting_cs(
         })
         .unzip();
 
-    // TODO: Compute new confidence bounds from wealth processes
+    // Compute hedged wealth processes
+    let wealth_weighted_upper: Vec<f64> = new_wealth_upper
+        .iter()
+        .map(|&w| hedge_weight_upper * w)
+        .collect();
+    let wealth_weighted_lower: Vec<f64> = new_wealth_lower
+        .iter()
+        .map(|&w| (1.0 - hedge_weight_upper) * w)
+        .collect();
 
-    prev_results // Placeholder return
+    // Combine hedged processes based on combo_type
+    let threshold = 1.0 / prev_results.alpha as f64;
+    let wealth_hedged: Vec<f64> = wealth_weighted_upper
+        .iter()
+        .zip(wealth_weighted_lower.iter())
+        .map(|(&w_upper, &w_lower)| match combo_type.as_str() {
+            "max" => w_upper.max(w_lower),
+            "convex" => w_upper + w_lower,
+            _ => w_upper.max(w_lower), // Default to max
+        })
+        .collect();
+
+    // Find confidence bounds using binary search
+    // The confidence set is {m : wealth_hedged(m) < 1/alpha}
+    // We assume this forms an interval and find its boundaries
+    let m_values = prev_results.wealth.m_values();
+    let n_grid = m_values.len();
+
+    // Binary search for lower bound: find smallest m where wealth_hedged < threshold
+    // Take the outer (smaller) grid point for coverage
+    let cs_lower = {
+        let mut lo = 0;
+        let mut hi = n_grid;
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if wealth_hedged[mid] >= threshold {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        // lo is the first index where wealth_hedged < threshold
+        // Take the outer point (one index lower) for coverage, but clamp to valid range
+        if lo > 0 {
+            m_values[lo - 1]
+        } else {
+            m_values[0]
+        }
+    };
+
+    // Binary search for upper bound: find largest m where wealth_hedged < threshold
+    // Take the outer (larger) grid point for coverage
+    let cs_upper = {
+        let mut lo = 0;
+        let mut hi = n_grid;
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if wealth_hedged[mid] < threshold {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        // lo is the first index where wealth_hedged >= threshold (from the right side of interval)
+        // Take the outer point (lo itself) for coverage, but clamp to valid range
+        if lo < n_grid {
+            m_values[lo]
+        } else {
+            m_values[n_grid - 1]
+        }
+    };
+
+    // Compute the final mean estimate (using the last regularized mean)
+    let mean_est = *means_reg.last().unwrap_or(&prev_results.mean_est);
+    let variance_reg_final = *variances_reg
+        .last()
+        .unwrap_or(&prev_results.variance_regularized);
+
+    MeanBettingConfidenceSequence {
+        name: prev_results.name,
+        mean_regularized: mean_est,
+        variance_regularized: variance_reg_final,
+        count: prev_count + n as u64,
+        mean_est,
+        cs_lower,
+        cs_upper,
+        alpha: prev_results.alpha,
+        wealth: WealthProcesses {
+            m_values: prev_results.wealth.m_values,
+            resolution: prev_results.wealth.resolution,
+            wealth_upper: new_wealth_upper,
+            wealth_lower: new_wealth_lower,
+        },
+    }
 }
