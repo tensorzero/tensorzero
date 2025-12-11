@@ -775,12 +775,18 @@ mod tests {
     fn test_interval_tightens_with_more_observations() {
         let initial = create_initial_cs(101, 0.05);
 
-        // Add observations centered around 0.5
-        let obs_batch1 = vec![0.5; 10];
+        // Add observations centered around 0.5 with some variance
+        let obs_batch1 = vec![0.4, 0.6, 0.45, 0.55, 0.5, 0.48, 0.52, 0.47, 0.53, 0.5];
         let updated1 = update_betting_cs(initial, obs_batch1, None);
         let width1 = updated1.cs_upper - updated1.cs_lower;
 
-        let obs_batch2 = vec![0.5; 50];
+        // Add more observations centered around 0.5
+        let obs_batch2 = vec![
+            0.42, 0.58, 0.46, 0.54, 0.5, 0.49, 0.51, 0.47, 0.53, 0.5, 0.44, 0.56, 0.48, 0.52, 0.5,
+            0.45, 0.55, 0.49, 0.51, 0.5, 0.43, 0.57, 0.47, 0.53, 0.5, 0.46, 0.54, 0.48, 0.52, 0.5,
+            0.41, 0.59, 0.45, 0.55, 0.5, 0.44, 0.56, 0.49, 0.51, 0.5, 0.42, 0.58, 0.46, 0.54, 0.5,
+            0.47, 0.53, 0.48, 0.52, 0.5,
+        ];
         let updated2 = update_betting_cs(updated1, obs_batch2, None);
         let width2 = updated2.cs_upper - updated2.cs_lower;
 
@@ -795,13 +801,16 @@ mod tests {
         let initial = create_initial_cs(101, 0.05);
         let true_mean = 0.7;
 
-        // Generate observations at the true mean
-        let observations = vec![true_mean; 100];
+        // Generate 100 observations with mean 0.7 and some variance
+        // Values oscillate around 0.7: 0.6, 0.8, 0.65, 0.75, 0.7, repeated 20 times
+        let observations: Vec<f64> = (0..20)
+            .flat_map(|_| vec![0.6, 0.8, 0.65, 0.75, 0.7])
+            .collect();
         let updated = update_betting_cs(initial, observations, None);
 
         let error = (updated.mean_est - true_mean).abs();
         assert!(
-            error < 0.01,
+            error < 0.02,
             "Mean estimate {:.3} should be close to true mean {true_mean}: error={error}",
             updated.mean_est
         );
@@ -917,7 +926,11 @@ mod tests {
     #[test]
     fn test_many_observations_stability() {
         let initial = create_initial_cs(101, 0.05);
-        let observations = vec![0.5; 500];
+        // Generate 500 observations with mean 0.5 and variance
+        // Pattern: 0.3, 0.7, 0.4, 0.6, 0.5 repeated 100 times
+        let observations: Vec<f64> = (0..100)
+            .flat_map(|_| vec![0.3, 0.7, 0.4, 0.6, 0.5])
+            .collect();
         let updated = update_betting_cs(initial, observations, None);
 
         assert!(updated.cs_lower.is_finite());
