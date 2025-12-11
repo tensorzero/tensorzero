@@ -9,7 +9,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import type { EvaluationInfoResult } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunInfo } from "~/types/tensorzero";
 import {
   TableItemTime,
   TableItemFunction,
@@ -21,7 +21,7 @@ import { toEvaluationUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
 function EvaluationRunRow({
   evaluationRun,
 }: {
-  evaluationRun: EvaluationInfoResult;
+  evaluationRun: EvaluationRunInfo;
 }) {
   const functionConfig = useFunctionConfig(evaluationRun.function_name);
   const functionType = functionConfig?.type;
@@ -86,7 +86,7 @@ function EvaluationRunRow({
 export default function EvaluationRunsTable({
   evaluationRuns,
 }: {
-  evaluationRuns: EvaluationInfoResult[];
+  evaluationRuns: EvaluationRunInfo[];
 }) {
   return (
     <div>
