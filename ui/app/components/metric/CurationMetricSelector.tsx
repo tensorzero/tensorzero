@@ -165,7 +165,7 @@ export default function CurationMetricSelector<
                     aria-label="Metric"
                     aria-labelledby={`${metricLabelId}-label`}
                     id={metricComboboxId}
-                    className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
+                    className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border px-3 font-normal hover:cursor-pointer"
                     disabled={!functionValue || metricsLoading}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">

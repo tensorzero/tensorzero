@@ -103,19 +103,16 @@ export function AddToDatasetButton({
   const datasetSelector = (
     <DatasetSelector
       selected={selectedDataset}
-      onSelect={(dataset) => {
+      onSelect={(dataset, _isNew) => {
         setSelectedDataset(dataset);
         if (alwaysUseInherit) {
           handleDatasetAction(dataset, "inherit");
         } else {
-          setOutputDialogOpen(true);
+          // Small delay to ensure the popover has fully closed before opening the dialog
+          setTimeout(() => setOutputDialogOpen(true), 0);
         }
       }}
-      buttonProps={{
-        size: "sm",
-      }}
-      label="Add to dataset"
-      labelClassName="text-fg-primary font-medium"
+      placeholder="Add to dataset"
       disabled={isReadOnly}
     />
   );

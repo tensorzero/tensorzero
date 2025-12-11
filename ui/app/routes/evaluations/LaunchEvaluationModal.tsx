@@ -12,13 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { EvaluationSelector } from "~/components/evaluations/EvaluationSelector";
+import { VariantSelector } from "~/components/variant/VariantSelector";
 import {
   Tooltip,
   TooltipContent,
@@ -197,25 +192,21 @@ function EvaluationForm({
           Evaluation
         </label>
       </div>
-      <Select
+
+      <input
+        type="hidden"
         name="evaluation_name"
-        value={selectedEvaluationName ?? undefined}
-        onValueChange={(value) => {
+        value={selectedEvaluationName ?? ""}
+      />
+
+      <EvaluationSelector
+        selected={selectedEvaluationName}
+        onSelect={(value) => {
           setSelectedEvaluationName(value);
-          setSelectedVariantName(null); // Reset variant selection when evaluation changes
+          setSelectedVariantName(null);
         }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select an evaluation" />
-        </SelectTrigger>
-        <SelectContent>
-          {evaluation_names.map((evaluation_name) => (
-            <SelectItem key={evaluation_name} value={evaluation_name}>
-              {evaluation_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        evaluationNames={evaluation_names}
+      />
       <div className="mt-4">
         <label
           htmlFor="dataset_name"
@@ -228,11 +219,11 @@ function EvaluationForm({
       <input
         type="hidden"
         name="dataset_name"
-        value={selectedDatasetName ?? undefined}
+        value={selectedDatasetName ?? ""}
       />
 
       <DatasetSelector
-        label="Select a dataset"
+        placeholder="Select dataset"
         functionName={function_name ?? undefined}
         selected={selectedDatasetName ?? undefined}
         onSelect={setSelectedDatasetName}
@@ -268,29 +259,21 @@ function EvaluationForm({
           Variant
         </label>
       </div>
-      <Select
+
+      <input
+        type="hidden"
         name="variant_name"
-        value={selectedVariantName ?? undefined}
+        value={selectedVariantName ?? ""}
+      />
+
+      <VariantSelector
+        selected={selectedVariantName}
+        onSelect={setSelectedVariantName}
+        variantNames={
+          functionConfig ? Object.keys(functionConfig.variants) : []
+        }
         disabled={!selectedEvaluationName}
-        onValueChange={(value) => setSelectedVariantName(value)}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select a variant" />
-        </SelectTrigger>
-        <SelectContent>
-          {(() => {
-            if (!selectedEvaluationName || !functionConfig) return null;
-
-            const variant_names = Object.keys(functionConfig.variants);
-
-            return variant_names.map((variant_name) => (
-              <SelectItem key={variant_name} value={variant_name}>
-                {variant_name}
-              </SelectItem>
-            ));
-          })()}
-        </SelectContent>
-      </Select>
+      />
       <div className="mt-4">
         <div className="mb-1 flex items-center gap-1.5">
           <label htmlFor="concurrency_limit" className="text-sm font-medium">
@@ -313,7 +296,7 @@ function EvaluationForm({
             </Tooltip>
           </TooltipProvider>
         </div>
-        <input
+        <Input
           type="number"
           id="concurrency_limit"
           name="concurrency_limit"
@@ -321,7 +304,7 @@ function EvaluationForm({
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}
-          className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
+          className="font-mono"
           required
         />
       </div>
@@ -352,8 +335,8 @@ function EvaluationForm({
           placeholder="No limit"
           className={
             !isMaxDatapointsValid && maxDatapoints !== ""
-              ? "border-red-500 focus:ring-red-500"
-              : ""
+              ? "border-red-500 font-mono"
+              : "font-mono"
           }
         />
         {!isMaxDatapointsValid && maxDatapoints !== "" && (

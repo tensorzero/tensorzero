@@ -37,7 +37,7 @@ export function DatasetFormField<T extends FieldValues>({
                 field.onChange(value);
                 onSelect?.(value, isNew);
               }}
-              label={placeholder}
+              placeholder={placeholder}
               allowCreation={allowCreation}
             />
           </div>

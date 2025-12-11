@@ -1,30 +1,27 @@
+import { useCallback, useMemo } from "react";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from "~/components/ui/popover";
-import { Button } from "~/components/ui/button";
-import { ChevronDown } from "lucide-react";
 import { Functions } from "~/components/icons/Icons";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "~/components/ui/command";
+import { CommandGroup, CommandItem } from "~/components/ui/command";
 import clsx from "clsx";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import { useMemo, useState } from "react";
 import type { FunctionConfig } from "~/types/tensorzero";
+import {
+  useCombobox,
+  ComboboxInput,
+  ComboboxContent,
+} from "~/components/ui/combobox";
 
 interface FunctionSelectorProps {
   selected: string | null;
   onSelect?: (functionName: string) => void;
   functions: { [x: string]: FunctionConfig | undefined };
   hideDefaultFunction?: boolean;
+  disabled?: boolean;
 }
 
 export function FunctionTypeIcon({ type }: { type: FunctionConfig["type"] }) {
@@ -41,9 +38,19 @@ export function FunctionSelector({
   onSelect,
   functions,
   hideDefaultFunction = false,
+  disabled = false,
 }: FunctionSelectorProps) {
-  const [open, setOpen] = useState(false);
-  const [inputValue, setInputValue] = useState("");
+  const {
+    open,
+    searchValue,
+    commandRef,
+    inputValue,
+    closeDropdown,
+    handleKeyDown,
+    handleInputChange,
+    handleBlur,
+    handleClick,
+  } = useCombobox();
 
   const functionEntries = useMemo(
     () =>
@@ -53,83 +60,77 @@ export function FunctionSelector({
     [functions, hideDefaultFunction],
   );
 
+  const filteredFunctions = useMemo(() => {
+    const query = searchValue.toLowerCase();
+    if (!query) return functionEntries;
+    return functionEntries.filter(([name]) =>
+      name.toLowerCase().includes(query),
+    );
+  }, [functionEntries, searchValue]);
+
   const selectedFn = selected ? functions[selected] : undefined;
 
+  const handleSelect = useCallback(
+    (name: string) => {
+      onSelect?.(name);
+      closeDropdown();
+    },
+    [onSelect, closeDropdown],
+  );
+
+  const getIcon = useCallback(() => {
+    if (selectedFn) {
+      return () => <FunctionTypeIcon type={selectedFn.type} />;
+    }
+    return Functions;
+  }, [selectedFn]);
+
   return (
-    // TODO Pass through classname here?
-    <div className="w-full space-y-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          {/* TODO We should have a button variant for comboboxes */}
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border px-3 font-normal hover:cursor-pointer"
-          >
-            <div className="min-w-0 flex-1">
-              {selectedFn ? (
-                <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                  <FunctionTypeIcon type={selectedFn.type} />
-                  <span className="truncate font-mono">{selected}</span>
-                </div>
-              ) : (
-                <div className="text-fg-muted flex items-center gap-x-2">
-                  <Functions className="text-fg-muted h-4 w-4 shrink-0" />
-                  <span className="text-fg-secondary flex text-sm">
-                    Select a function
-                  </span>
-                </div>
-              )}
-            </div>
-            <ChevronDown
-              className={clsx(
-                "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
-                open ? "-rotate-180" : "rotate-0",
-              )}
-            />
-          </Button>
-        </PopoverTrigger>
+    <div className="w-full">
+      <Popover open={open}>
+        <PopoverAnchor asChild>
+          <ComboboxInput
+            value={inputValue(selected)}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => {}}
+            onClick={handleClick}
+            onBlur={handleBlur}
+            placeholder="Select a function"
+            disabled={disabled}
+            monospace
+            open={open}
+            icon={getIcon()}
+          />
+        </PopoverAnchor>
         <PopoverContent
           className="w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
         >
-          <Command>
-            {/* `pl-1` to align input text with command item text so it's all neatly in a column */}
-            <CommandInput
-              placeholder="Find a function..."
-              value={inputValue}
-              onValueChange={setInputValue}
-              className="h-9 pl-1"
-            />
-
-            <CommandList>
-              <CommandEmpty className="flex items-center justify-center p-4 text-sm">
-                No functions found.
-              </CommandEmpty>
-
-              <CommandGroup>
-                {functionEntries.map(
-                  ([name, fn]) =>
-                    fn && (
-                      <CommandItem
-                        key={name}
-                        value={name}
-                        onSelect={() => {
-                          onSelect?.(name);
-                          setInputValue("");
-                          setOpen(false);
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <FunctionTypeIcon type={fn.type} />
-                        <span className="truncate font-mono">{name}</span>
-                      </CommandItem>
-                    ),
-                )}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+          <ComboboxContent ref={commandRef} emptyMessage="No functions found.">
+            <CommandGroup>
+              {filteredFunctions.map(
+                ([name, fn]) =>
+                  fn && (
+                    <CommandItem
+                      key={name}
+                      value={name}
+                      onSelect={() => handleSelect(name)}
+                      className={clsx(
+                        "flex items-center gap-2",
+                        selected === name && "font-medium",
+                      )}
+                    >
+                      <FunctionTypeIcon type={fn.type} />
+                      <span className="truncate font-mono">{name}</span>
+                    </CommandItem>
+                  ),
+              )}
+            </CommandGroup>
+          </ComboboxContent>
         </PopoverContent>
       </Popover>
     </div>
