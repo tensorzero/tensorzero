@@ -39,6 +39,8 @@ pub trait HealthCheckable {
 
 #[async_trait]
 pub trait SelectQueries {
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
     async fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
@@ -49,8 +51,6 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
-
-    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 
     async fn query_episode_table(
         &self,

@@ -42,11 +42,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_distinct_models_used(&self) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_distinct_models_used)
-    }
-
-    #[napi]
     pub async fn query_episode_table(&self, params: String) -> Result<String, napi::Error> {
         napi_call!(
             &self,
