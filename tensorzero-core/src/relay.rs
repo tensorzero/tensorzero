@@ -140,7 +140,6 @@ impl TensorzeroRelay {
         &self,
         params: EmbeddingsParams,
     ) -> Result<EmbeddingResponse, Error> {
-        let _start_time = Instant::now();
         let params = OpenAICompatibleEmbeddingParams {
             input: params.input,
             model: format!("tensorzero::embedding_model_name::{}", params.model_name),
