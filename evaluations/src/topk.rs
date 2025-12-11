@@ -7,6 +7,8 @@
 //! - Batch processing for efficiency
 //! - Checkpointed execution for crash recovery
 //! - Configurable minimum/maximum datapoints and precision targets
+//!
+//! NOTE: This module is work in progress.
 
 use std::collections::HashMap;
 
