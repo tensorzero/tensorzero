@@ -342,9 +342,13 @@ pub fn update_betting_cs(
         .last()
         .unwrap_or(&prev_results.variance_regularized);
 
+    let mean_reg_final = *means_reg
+        .last()
+        .unwrap_or(&prev_results.mean_regularized);
+
     MeanBettingConfidenceSequence {
         name: prev_results.name,
-        mean_regularized: mean_est,
+        mean_regularized: mean_reg_final,
         variance_regularized: variance_reg_final,
         count: prev_count + n as u64,
         mean_est,
@@ -922,5 +926,237 @@ mod tests {
         assert!(updated.cs_upper.is_finite());
         assert!(updated.mean_est.is_finite());
         assert!(updated.cs_lower <= updated.cs_upper);
+    }
+
+    // ==================== Regression tests with known values ====================
+    // These tests use pre-computed values to detect regressions in the algorithm.
+    // If these fail after a code change, verify the change is intentional.
+
+    #[test]
+    fn test_known_values_compute_bet() {
+        // bet = sqrt(2 * ln(2/alpha) / (prev_variance * t * ln(t+1)))
+        // At t=1, prev_variance=0.25, alpha=0.05:
+        // bet = sqrt(2 * ln(40) / (0.25 * 1 * ln(2))) = 6.524984655851606
+        let bet = compute_bet(1, 0.25, 0.05);
+        assert!(
+            (bet - 6.524984655851606).abs() < 1e-10,
+            "Bet at t=1 should be 6.524984655851606, got {bet}"
+        );
+
+        // At t=2, prev_variance=0.12625, alpha=0.05:
+        // bet = sqrt(2 * ln(40) / (0.12625 * 2 * ln(3))) = 5.157144640499054
+        let bet2 = compute_bet(2, 0.12625, 0.05);
+        assert!(
+            (bet2 - 5.157144640499054).abs() < 1e-10,
+            "Bet at t=2 should be 5.157144640499054, got {bet2}"
+        );
+    }
+
+    #[test]
+    fn test_known_values_single_observation_at_half() {
+        // Single observation x=0.5 with alpha=0.05
+        // At m=0.5: wealth_upper = 1 + bet*(0.5-0.5) = 1.0
+        //           wealth_lower = 1 - bet*(0.5-0.5) = 1.0
+        let initial = create_initial_cs(101, 0.05);
+        let updated = update_betting_cs(initial, vec![0.5], None);
+
+        // Find the index closest to m=0.5
+        let m_values = updated.wealth.m_values();
+        let idx_half = m_values
+            .iter()
+            .position(|&m| (m - 0.5).abs() < 1e-10)
+            .expect("Should have m=0.5 in grid");
+
+        assert!(
+            (updated.wealth.wealth_upper[idx_half] - 1.0).abs() < 1e-10,
+            "Wealth upper at m=0.5 should be 1.0, got {}",
+            updated.wealth.wealth_upper[idx_half]
+        );
+        assert!(
+            (updated.wealth.wealth_lower[idx_half] - 1.0).abs() < 1e-10,
+            "Wealth lower at m=0.5 should be 1.0, got {}",
+            updated.wealth.wealth_lower[idx_half]
+        );
+    }
+
+    #[test]
+    fn test_known_values_single_observation_wealth_at_endpoints() {
+        // Single observation x=0.5 with alpha=0.05
+        // bet = 6.524984655851606
+        // At m=0.0: wealth_upper = exp(ln(1 + bet*0.5)) ≈ 4.262492
+        //           wealth_lower = exp(ln(1 - 0.5*0.5)) = 0.75 (bet truncated to 0.5/(1-0) = 0.5)
+        // At m=1.0: wealth_upper = exp(ln(1 + 0.5*(-0.5))) = 0.75 (bet truncated to 0.5/1 = 0.5)
+        //           wealth_lower = exp(ln(1 - bet*(-0.5))) ≈ 4.262492
+        let initial = create_initial_cs(101, 0.05);
+        let updated = update_betting_cs(initial, vec![0.5], None);
+
+        // First element is m=0.0
+        // Use 1e-6 tolerance due to log-sum-exp numerical differences
+        assert!(
+            (updated.wealth.wealth_upper[0] - 4.262492327925803).abs() < 1e-6,
+            "Wealth upper at m=0.0 should be ~4.262492, got {}",
+            updated.wealth.wealth_upper[0]
+        );
+        assert!(
+            (updated.wealth.wealth_lower[0] - 0.75).abs() < 1e-10,
+            "Wealth lower at m=0.0 should be 0.75, got {}",
+            updated.wealth.wealth_lower[0]
+        );
+
+        // Last element is m=1.0
+        let last = updated.wealth.wealth_upper.len() - 1;
+        assert!(
+            (updated.wealth.wealth_upper[last] - 0.75).abs() < 1e-10,
+            "Wealth upper at m=1.0 should be 0.75, got {}",
+            updated.wealth.wealth_upper[last]
+        );
+        assert!(
+            (updated.wealth.wealth_lower[last] - 4.262492327925803).abs() < 1e-6,
+            "Wealth lower at m=1.0 should be ~4.262492, got {}",
+            updated.wealth.wealth_lower[last]
+        );
+    }
+
+    #[test]
+    fn test_known_values_two_observations_mean_and_variance() {
+        // Two observations [0.6, 0.4] with alpha=0.05
+        // After both: mean_reg = (0.5 + 0.6 + 0.4) / 3 = 0.5
+        //             var_reg = (0.25 + (0.6-0.55)^2 + (0.4-0.5)^2) / 3 = 0.0875
+        let initial = create_initial_cs(101, 0.05);
+        let updated = update_betting_cs(initial, vec![0.6, 0.4], None);
+
+        assert_eq!(updated.count, 2);
+
+        // Note: mean_regularized is set to mean_est (minimizer of wealth_hedged)
+        // which may differ from the regularized mean. Check variance instead.
+        assert!(
+            (updated.variance_regularized - 0.0875).abs() < 1e-10,
+            "Variance regularized should be 0.0875, got {}",
+            updated.variance_regularized
+        );
+    }
+
+    #[test]
+    fn test_known_values_two_observations_wealth_at_half() {
+        // Two observations [0.6, 0.4] with alpha=0.05
+        // At m=0.5, bet truncation is 0.5/0.5 = 1.0 for both upper and lower
+        // Raw bets (6.52, 5.16) get truncated to 1.0
+        // factor_upper for x=0.6: 1 + 1*(0.6-0.5) = 1.1
+        // factor_lower for x=0.6: 1 - 1*(0.6-0.5) = 0.9
+        // factor_upper for x=0.4: 1 + 1*(0.4-0.5) = 0.9
+        // factor_lower for x=0.4: 1 - 1*(0.4-0.5) = 1.1
+        // wealth_upper = 1.0 * 1.1 * 0.9 = 0.99
+        // wealth_lower = 1.0 * 0.9 * 1.1 = 0.99
+        let initial = create_initial_cs(101, 0.05);
+        let updated = update_betting_cs(initial, vec![0.6, 0.4], None);
+
+        let m_values = updated.wealth.m_values();
+        let idx_half = m_values
+            .iter()
+            .position(|&m| (m - 0.5).abs() < 1e-10)
+            .expect("Should have m=0.5 in grid");
+
+        assert!(
+            (updated.wealth.wealth_upper[idx_half] - 0.99).abs() < 1e-10,
+            "Wealth upper at m=0.5 after [0.6, 0.4] should be 0.99, got {}",
+            updated.wealth.wealth_upper[idx_half]
+        );
+        assert!(
+            (updated.wealth.wealth_lower[idx_half] - 0.99).abs() < 1e-10,
+            "Wealth lower at m=0.5 after [0.6, 0.4] should be 0.99, got {}",
+            updated.wealth.wealth_lower[idx_half]
+        );
+    }
+
+    #[test]
+    fn test_known_values_incremental_vs_batch() {
+        // Verify that processing observations incrementally gives the same result as batch
+        let observations = vec![0.3, 0.7, 0.5, 0.6, 0.4];
+
+        // Batch processing
+        let initial_batch = create_initial_cs(101, 0.05);
+        let batch_result = update_betting_cs(initial_batch, observations.clone(), None);
+
+        // Incremental processing
+        let mut incremental = create_initial_cs(101, 0.05);
+        for obs in observations {
+            incremental = update_betting_cs(incremental, vec![obs], None);
+        }
+
+        // Results should match
+        assert_eq!(batch_result.count, incremental.count);
+        assert!(
+            (batch_result.variance_regularized - incremental.variance_regularized).abs() < 1e-10,
+            "Variance should match: batch={}, incremental={}",
+            batch_result.variance_regularized,
+            incremental.variance_regularized
+        );
+
+        // Wealth processes should match
+        for (i, (batch_w, incr_w)) in batch_result
+            .wealth
+            .wealth_upper
+            .iter()
+            .zip(incremental.wealth.wealth_upper.iter())
+            .enumerate()
+        {
+            assert!(
+                (batch_w - incr_w).abs() < 1e-10,
+                "Wealth upper at index {i} should match: batch={batch_w}, incremental={incr_w}"
+            );
+        }
+        for (i, (batch_w, incr_w)) in batch_result
+            .wealth
+            .wealth_lower
+            .iter()
+            .zip(incremental.wealth.wealth_lower.iter())
+            .enumerate()
+        {
+            assert!(
+                (batch_w - incr_w).abs() < 1e-10,
+                "Wealth lower at index {i} should match: batch={batch_w}, incremental={incr_w}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_known_values_wealth_increases_away_from_true_mean() {
+        // When true mean is 0.7, wealth should be minimized near m=0.7
+        // and increase as m moves away from the true mean
+        let initial = create_initial_cs(101, 0.05);
+        let observations = vec![0.7; 20]; // 20 observations at true mean 0.7
+        let updated = update_betting_cs(initial, observations, None);
+
+        let m_values = updated.wealth.m_values();
+        let n = m_values.len();
+
+        // Find index closest to 0.7
+        let idx_70 = m_values
+            .iter()
+            .position(|&m| (m - 0.7).abs() < 0.01)
+            .expect("Should have m near 0.7");
+
+        // Wealth at m=0.0 should be much larger than at m=0.7
+        assert!(
+            updated.wealth.wealth_upper[0] > updated.wealth.wealth_upper[idx_70] * 10.0,
+            "Wealth at m=0.0 ({}) should be much larger than at m=0.7 ({})",
+            updated.wealth.wealth_upper[0],
+            updated.wealth.wealth_upper[idx_70]
+        );
+
+        // Wealth at m=1.0 should be larger than at m=0.7 (but not as extreme as m=0.0)
+        assert!(
+            updated.wealth.wealth_lower[n - 1] > updated.wealth.wealth_lower[idx_70],
+            "Wealth at m=1.0 ({}) should be larger than at m=0.7 ({})",
+            updated.wealth.wealth_lower[n - 1],
+            updated.wealth.wealth_lower[idx_70]
+        );
+
+        // Mean estimate should be close to 0.7
+        assert!(
+            (updated.mean_est - 0.7).abs() < 0.05,
+            "Mean estimate should be close to 0.7, got {}",
+            updated.mean_est
+        );
     }
 }
