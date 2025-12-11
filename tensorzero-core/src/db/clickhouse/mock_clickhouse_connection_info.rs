@@ -8,6 +8,10 @@ use crate::db::datasets::{
     CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetQueries, DatasetQueryParams,
     GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
 };
+use crate::db::inference_stats::{
+    CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
+    CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
+};
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -31,6 +35,7 @@ pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) dataset_queries: MockDatasetQueries,
     pub(crate) config_queries: MockConfigQueries,
     pub(crate) model_inference_queries: MockModelInferenceQueries,
+    pub(crate) inference_stats_queries: MockInferenceStatsQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -40,6 +45,7 @@ impl MockClickHouseConnectionInfo {
             dataset_queries: MockDatasetQueries::new(),
             config_queries: MockConfigQueries::new(),
             model_inference_queries: MockModelInferenceQueries::new(),
+            inference_stats_queries: MockInferenceStatsQueries::new(),
         }
     }
 }
@@ -129,6 +135,45 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<Vec<StoredModelInference>, Error> {
         self.model_inference_queries
             .get_model_inferences_by_inference_id(inference_id)
+            .await
+    }
+}
+
+#[async_trait]
+impl InferenceStatsQueries for MockClickHouseConnectionInfo {
+    async fn count_inferences_for_function(
+        &self,
+        params: CountInferencesParams<'_>,
+    ) -> Result<u64, Error> {
+        self.inference_stats_queries
+            .count_inferences_for_function(params)
+            .await
+    }
+
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error> {
+        self.inference_stats_queries
+            .count_inferences_by_variant(params)
+            .await
+    }
+
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error> {
+        self.inference_stats_queries
+            .count_inferences_with_feedback(params)
+            .await
+    }
+
+    async fn count_inferences_with_demonstration_feedback(
+        &self,
+        params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
+    ) -> Result<u64, Error> {
+        self.inference_stats_queries
+            .count_inferences_with_demonstration_feedback(params)
             .await
     }
 }
