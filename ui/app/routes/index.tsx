@@ -21,7 +21,6 @@ import {
 } from "~/components/icons/Icons";
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
-import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
   countWorkflowEvaluationProjects,
@@ -110,7 +109,7 @@ export async function loader() {
   const countsInfoPromise = countInferencesByFunction();
   const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = getTensorZeroClient().listDatasets({});
-  const numEvaluationRunsPromise = countTotalEvaluationRuns();
+  const numEvaluationRunsPromise = getTensorZeroClient().countEvaluationRuns();
   const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
   const numWorkflowEvaluationRunProjectsPromise =
     countWorkflowEvaluationProjects();
