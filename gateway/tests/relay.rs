@@ -598,12 +598,13 @@ async fn test_relay_downstream_error_model() {
         .await
         .unwrap();
 
-    // Should propagate the error from downstream
-    assert!(
-        response.status().is_client_error() || response.status().is_server_error(),
-        "Expected error status, got: {}",
-        response.status()
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(
+        body_text,
+        "{\"error\":\"All variants failed with errors: dummy::error: Error forwarding request in relay mode: HTTP Error (status code 502): {\\\"error\\\":\\\"All variants failed with errors: dummy::error: All model providers failed to infer with errors: dummy: Error from dummy client: Error sending request to Dummy provider for model 'error'.\\\\nRaw request: raw request\\\"}\"}"
     );
+    assert_eq!(status, http::StatusCode::BAD_GATEWAY);
 }
 
 // ============================================================================
