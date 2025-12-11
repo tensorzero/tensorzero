@@ -199,7 +199,6 @@ export * from "./ProviderTool";
 export * from "./ProviderToolScope";
 export * from "./ProviderToolScopeModelProvider";
 export * from "./QueryDemonstrationFeedbackByInferenceIdParams";
-export * from "./QueryEpisodeTableParams";
 export * from "./QueryFeedbackBoundsByTargetIdParams";
 export * from "./QueryFeedbackByTargetIdParams";
 export * from "./RFTJsonSchemaInfoOption";

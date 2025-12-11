@@ -4,7 +4,6 @@ import type {
   ClientInferenceParams,
   CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
-  EpisodeByIdRow,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -16,7 +15,6 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  TableBoundsWithCount,
   FeedbackRow,
   FeedbackBounds,
   TimeWindow,
@@ -238,26 +236,6 @@ export class DatabaseClient {
     const modelLatencyQuantilesString =
       await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
     return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
-  }
-
-  async queryEpisodeTable(
-    limit: number,
-    before?: string,
-    after?: string,
-  ): Promise<EpisodeByIdRow[]> {
-    const params = safeStringify({
-      limit,
-      before,
-      after,
-    });
-    const episodeTableString =
-      await this.nativeDatabaseClient.queryEpisodeTable(params);
-    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
-  }
-
-  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
-    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
-    return JSON.parse(bounds) as TableBoundsWithCount;
   }
 
   async queryFeedbackByTargetId(

@@ -62,4 +62,12 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/models/count",
             get(endpoints::internal::models::count_models_handler),
         )
+        .route(
+            "/internal/episodes",
+            get(endpoints::internal::episodes::query_episode_table_handler),
+        )
+        .route(
+            "/internal/episodes/bounds",
+            get(endpoints::internal::episodes::query_episode_table_bounds_handler),
+        )
 }
