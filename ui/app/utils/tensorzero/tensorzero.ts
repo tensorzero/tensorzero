@@ -32,6 +32,7 @@ import type {
   InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
+  ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
   StatusResponse,
@@ -839,6 +840,31 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as CountModelsResponse;
+  }
+
+  /**
+   * Lists evaluation runs with pagination.
+   * @param limit - Maximum number of evaluation runs to return (default: 100)
+   * @param offset - Number of evaluation runs to skip for pagination (default: 0)
+   * @returns A promise that resolves with the list of evaluation runs
+   * @throws Error if the request fails
+   */
+  async listEvaluationRuns(
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<ListEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/runs${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListEvaluationRunsResponse;
   }
 
   /**
