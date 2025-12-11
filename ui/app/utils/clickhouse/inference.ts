@@ -184,35 +184,25 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-export const modelInferenceRowSchema = z.object({
+// TODO(shuyangli): sort out file loading and delete these Zod schemas.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const parsedModelInferenceRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   raw_request: z.string(),
   raw_response: z.string(),
   model_name: z.string(),
   model_provider_name: z.string(),
-  input_tokens: z.number().nullable(),
-  output_tokens: z.number().nullable(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
   response_time_ms: z.number().nullable(),
   ttft_ms: z.number().nullable(),
   timestamp: z.string().datetime(),
   system: z.string().nullable(),
-  input_messages: z.string(),
-  output: z.string(),
+  input_messages: z.array(displayModelInferenceInputMessageSchema),
+  output: z.array(modelInferenceOutputContentBlockSchema),
   cached: z.boolean(),
 });
-
-export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;
-
-export const parsedModelInferenceRowSchema = modelInferenceRowSchema
-  .omit({
-    input_messages: true,
-    output: true,
-  })
-  .extend({
-    input_messages: z.array(displayModelInferenceInputMessageSchema),
-    output: z.array(modelInferenceOutputContentBlockSchema),
-  });
 
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema

@@ -145,6 +145,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let calculator_tool = StaticToolConfig {
         name: "calculator".to_string(),
+        key: "calculator".to_string(),
         description: "Evaluates mathematical expressions".to_string(),
         parameters: calculator_schema,
         strict: true,
@@ -165,6 +166,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let weather_tool = StaticToolConfig {
         name: "weather".to_string(),
+        key: "weather".to_string(),
         description: "Gets weather information".to_string(),
         parameters: weather_schema,
         strict: true,
