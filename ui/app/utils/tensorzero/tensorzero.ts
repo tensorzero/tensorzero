@@ -31,6 +31,7 @@ import type {
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
+  ListInferenceMetadataResponse,
   StatusResponse,
   UiConfig,
   UpdateDatapointRequest,
@@ -800,6 +801,41 @@ export class TensorZeroClient {
     const count_response =
       (await response.json()) as EvaluationRunStatsResponse;
     return Number(count_response.count);
+  }
+
+  /**
+   * Lists inference metadata with optional cursor-based pagination.
+   * @param params - Optional pagination parameters
+   * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
+   * @param params.after - Cursor to fetch records after this ID (mutually exclusive with before)
+   * @param params.limit - Maximum number of records to return
+   * @returns A promise that resolves with the inference metadata response
+   * @throws Error if the request fails
+   */
+  async listInferenceMetadata(params?: {
+    before?: string;
+    after?: string;
+    limit?: number;
+  }): Promise<ListInferenceMetadataResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.before) {
+      searchParams.append("before", params.before);
+    }
+    if (params?.after) {
+      searchParams.append("after", params.after);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/inference_metadata${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListInferenceMetadataResponse;
   }
 
   private async fetch(
