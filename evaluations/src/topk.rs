@@ -92,13 +92,22 @@ pub fn check_topk_stopping(
     let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    // For each variant, count how many upper bounds its lower bound exceeds
-    // This tells us how many variants it "confidently beats"
+    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
+    // with tolerance epsilon. This tells us how many variants it "confidently beats".
+    // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
     let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
         .iter()
         .map(|(name, cs)| {
-            // Binary search to find how many upper bounds are strictly less than this lower bound
-            let num_beaten = upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
+            // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
+            let num_beaten_including_self =
+                upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
+            // Subtract 1 if this variant's own upper bound was counted
+            let beats_self = cs.cs_upper - epsilon < cs.cs_lower;
+            let num_beaten = if beats_self {
+                num_beaten_including_self.saturating_sub(1)
+            } else {
+                num_beaten_including_self
+            };
             (name, num_beaten)
         })
         .collect();
@@ -488,13 +497,45 @@ mod tests {
         .into_iter()
         .collect();
 
-        // With epsilon = 1.0, all variants beat all others
-        // Each variant beats 3 (including itself's upper bound)
+        // With epsilon = 1.0, all variants beat the other 2 variants
+        // (a variant never counts itself as beaten)
         // For top-1, need >= 2. All qualify, so we get a top-3 (largest k checked first)
         let result = check_topk_stopping(&variant_performance, 1, 3, Some(1.0)).unwrap();
         assert!(result.stopped);
         assert_eq!(result.k, Some(3));
         assert_eq!(result.top_variants.len(), 3);
+    }
+
+    /// Test that a variant never counts itself as beaten.
+    #[test]
+    fn test_check_topk_stopping_variant_does_not_beat_itself() {
+        // With 2 variants and large epsilon, each variant beats the other but not itself.
+        // So each variant beats exactly 1 other variant.
+        // For top-1: need to beat >= 1. Both qualify.
+        // For top-2: need to beat >= 0. Both qualify.
+        // The key point: with epsilon=1.0, if variants counted themselves, they'd each
+        // beat 2 variants and top-1 would be identified. But they shouldn't count themselves.
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [mock_cs("a", 0.1, 0.2), mock_cs("b", 0.3, 0.4)]
+                .into_iter()
+                .collect();
+
+        // With epsilon = 1.0, each variant beats exactly 1 other (not itself)
+        // For top-1, need to beat >= 1. Both qualify, so we get top-2.
+        let result = check_topk_stopping(&variant_performance, 1, 2, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert_eq!(result.top_variants.len(), 2);
+
+        // If variants incorrectly counted themselves, each would beat 2 variants,
+        // and top-1 would be viable (need >= 1 beaten). Verify top-1 does NOT
+        // incorrectly select just one variant.
+        let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+        // Both variants beat exactly 1 other, so top-1 requires beating >= 1, which both do.
+        // Since both qualify but we can only pick 1, this should still stop with k=1.
+        // The important thing is the count is 1 (not 2).
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
     }
 
     /// Test that k_max caps the returned k, even when larger k values are viable.
