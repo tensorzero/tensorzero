@@ -40,6 +40,7 @@ import {
   getNativeTensorZeroClient,
 } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { applyPaginationLogic } from "~/utils/pagination";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -201,42 +202,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   });
 
   // Handle pagination from listInferenceMetadata response
-  // Determine if there are more pages based on whether we got more than limit results
-  const hasMore = inferenceResult.inference_metadata.length > limit;
-
-  // Pagination direction logic:
-  // - When using 'before': we're going to older inferences (next page = older)
-  // - When using 'after': we're going to newer inferences (previous page = newer)
-  // - When neither: we're on the first page (most recent)
-  let hasNextInferencePage: boolean;
-  let hasPreviousInferencePage: boolean;
-  let inferences: typeof inferenceResult.inference_metadata;
-
-  if (beforeInference) {
-    // Going backwards in time (older). hasMore means there are older pages.
-    hasNextInferencePage = hasMore;
-    // We came from a newer page, so there's always a previous (newer) page
-    hasPreviousInferencePage = true;
-    // Extra item is at the end, so take first 'limit' items
-    inferences = inferenceResult.inference_metadata.slice(0, limit);
-  } else if (afterInference) {
-    // Going forwards in time (newer). hasMore means there are newer pages.
-    hasPreviousInferencePage = hasMore;
-    // We came from an older page, so there's always a next (older) page
-    hasNextInferencePage = true;
-    // Extra item is at position 0, so take items from position 1 onwards
-    if (hasMore) {
-      inferences = inferenceResult.inference_metadata.slice(1, limit + 1);
-    } else {
-      inferences = inferenceResult.inference_metadata;
-    }
-  } else {
-    // Initial page load - showing most recent
-    hasNextInferencePage = hasMore;
-    hasPreviousInferencePage = false;
-    // Extra item is at the end, so take first 'limit' items
-    inferences = inferenceResult.inference_metadata.slice(0, limit);
-  }
+  const {
+    items: inferences,
+    hasNextPage: hasNextInferencePage,
+    hasPreviousPage: hasPreviousInferencePage,
+  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
+    before: beforeInference,
+    after: afterInference,
+  });
 
   return {
     function_name,
