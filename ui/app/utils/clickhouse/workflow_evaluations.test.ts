@@ -8,7 +8,6 @@ import {
   countWorkflowEvaluationProjects,
   countWorkflowEvaluationRunEpisodes,
   countWorkflowEvaluationRuns as countWorkflowEvaluationRuns,
-  getWorkflowEvaluationProjects,
   getWorkflowEvaluationRunEpisodesByTaskName,
   getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
   getWorkflowEvaluationRuns,
@@ -394,24 +393,6 @@ describe("countWorkflowEvaluationRunEpisodes", () => {
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
-  });
-});
-
-describe("getWorkflowEvaluationProjects", () => {
-  test("should return correct projects", async () => {
-    const projects = await getWorkflowEvaluationProjects(10, 0);
-    expect(projects).toMatchObject([
-      {
-        count: 7,
-        last_updated: "2025-05-05T14:42:02Z",
-        name: "beerqa-agentic-rag",
-      },
-      {
-        count: 3,
-        last_updated: "2025-05-01T18:07:26Z",
-        name: "21_questions",
-      },
-    ]);
   });
 });
 

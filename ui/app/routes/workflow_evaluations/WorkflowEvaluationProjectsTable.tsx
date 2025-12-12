@@ -9,7 +9,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { TableItemTime } from "~/components/ui/TableItems";
-import type { WorkflowEvaluationProject } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationProject } from "~/types/tensorzero";
 import { toWorkflowEvaluationProjectUrl } from "~/utils/urls";
 
 export default function WorkflowEvaluationProjectsTable({

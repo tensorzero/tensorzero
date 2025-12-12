@@ -3,3 +3,4 @@ pub mod inference_metadata;
 pub mod inference_stats;
 pub mod model_inferences;
 pub mod models;
+pub mod workflow_evaluations;

@@ -61,13 +61,3 @@ export const workflowEvaluationRunStatisticsByMetricNameSchema = z.object({
 export type WorkflowEvaluationRunStatisticsByMetricName = z.infer<
   typeof workflowEvaluationRunStatisticsByMetricNameSchema
 >;
-
-export const workflowEvaluationProjectSchema = z.object({
-  name: z.string(),
-  count: z.number(),
-  last_updated: z.string().datetime(),
-});
-
-export type WorkflowEvaluationProject = z.infer<
-  typeof workflowEvaluationProjectSchema
->;

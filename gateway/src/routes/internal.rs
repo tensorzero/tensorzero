@@ -99,4 +99,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
         )
+        // Workflow evaluation endpoints
+        .route(
+            "/internal/workflow-evaluations/projects",
+            get(endpoints::internal::workflow_evaluations::get_workflow_evaluation_projects_handler),
+        )
 }
