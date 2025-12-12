@@ -180,7 +180,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         evaluation_run_id,
         dataset_name: Some(params.dataset_name),
         datapoint_ids: None,
-        variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
+        variants: vec![EvaluationVariant::Info(Box::new(dynamic_variant_config))],
         concurrency: params.concurrency,
         inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation
     };

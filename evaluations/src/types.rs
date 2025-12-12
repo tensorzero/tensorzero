@@ -56,9 +56,10 @@ pub struct EvaluationCoreArgs {
     /// Either dataset_name or datapoint_ids must be provided, but not both.
     pub datapoint_ids: Option<Vec<Uuid>>,
 
-    /// Variant to use for evaluation.
-    /// Either a variant name from the config file, or a dynamic variant configuration.
-    pub variant: EvaluationVariant,
+    /// Variants to evaluate.
+    /// Each can be either a variant name from the config file, or a dynamic variant configuration.
+    /// All variants will be evaluated on the same datapoints, with results merged into a single stream.
+    pub variants: Vec<EvaluationVariant>,
 
     /// Number of concurrent requests to make.
     pub concurrency: usize,

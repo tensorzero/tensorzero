@@ -38,18 +38,25 @@ pub struct Args {
 
     /// Name of the dataset to run on.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "datapoint_ids")]
     pub dataset_name: Option<String>,
 
     /// Specific datapoint IDs to evaluate (comma-separated).
     /// Either dataset_name or datapoint_ids must be provided, but not both.
     /// Example: --datapoint-ids 01957bbb-44a8-7490-bfe7-32f8ed2fc797,01957bbb-44a8-7490-bfe7-32f8ed2fc798
-    #[arg(long, value_delimiter = ',')]
+    #[arg(long, value_delimiter = ',', conflicts_with = "dataset_name")]
     pub datapoint_ids: Option<Vec<Uuid>>,
 
     /// Name of the variant to run.
-    #[arg(short, long)]
-    pub variant_name: String,
+    /// Either variant_name or variant_names must be provided, but not both.
+    #[arg(short, long, conflicts_with = "variant_names")]
+    pub variant_name: Option<String>,
+
+    /// Names of multiple variants to run (comma-separated).
+    /// Either variant_name or variant_names must be provided, but not both.
+    /// Example: --variant-names gpt_4o_mini,claude_sonnet
+    #[arg(long, value_delimiter = ',', conflicts_with = "variant_name")]
+    pub variant_names: Option<Vec<String>>,
 
     /// Number of concurrent requests to make.
     #[arg(short, long, default_value = "1")]
