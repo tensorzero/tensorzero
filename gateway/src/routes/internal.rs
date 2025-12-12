@@ -38,6 +38,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::inference_metadata::get_inference_metadata_handler),
         )
         .route(
+            "/internal/episode_inferences",
+            get(endpoints::internal::episode_inferences::get_episode_inferences_handler),
+        )
+        .route(
             "/internal/ui-config",
             get(endpoints::ui::get_config::ui_config_handler),
         )

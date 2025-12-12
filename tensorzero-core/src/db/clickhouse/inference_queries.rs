@@ -9,8 +9,8 @@ use crate::db::clickhouse::query_builder::{
 };
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, DEFAULT_INFERENCE_QUERY_LIMIT,
-    InferenceMetadata, InferenceOutputSource, InferenceQueries, ListInferenceMetadataParams,
-    ListInferencesParams, PaginationParams,
+    InferenceMetadata, InferenceOutputSource, InferenceQueries, ListEpisodeInferencesParams,
+    ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
 use crate::function::FunctionConfigType;
 use crate::{
@@ -103,6 +103,47 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         Ok(results)
     }
+
+    async fn list_episode_inferences(
+        &self,
+        params: &ListEpisodeInferencesParams,
+    ) -> Result<Vec<StoredInferenceDatabase>, Error> {
+        let (sql, query_params) = generate_list_episode_inferences_sql(params);
+        let query_params_refs: std::collections::HashMap<&str, &str> = query_params
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let response = self
+            .inner
+            .run_query_synchronous(sql, &query_params_refs)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut inferences = response
+            .response
+            .trim()
+            .lines()
+            .map(|line| {
+                serde_json::from_str::<ClickHouseStoredInferenceWithDispreferredOutputs>(line)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to deserialize response: {e:?}"),
+                        })
+                    })
+                    .and_then(ClickHouseStoredInferenceWithDispreferredOutputs::try_into)
+            })
+            .collect::<Result<Vec<StoredInferenceDatabase>, Error>>()?;
+
+        // Reverse results for "after" pagination (we queried ASC, but want DESC output)
+        if matches!(params.pagination, Some(PaginationParams::After { .. })) {
+            inferences.reverse();
+        }
+
+        Ok(inferences)
+    }
 }
 
 /// Generates the SQL query and parameters for listing inference metadata.
@@ -174,6 +215,112 @@ fn generate_list_inference_metadata_sql(
         ORDER BY id_uint {order_direction}
         LIMIT {{limit:UInt64}}
         FORMAT JSONEachRow
+        "
+    );
+
+    (query, query_params)
+}
+
+/// Generates the SQL query and parameters for listing inferences by episode ID.
+/// Uses a CTE with InferenceByEpisodeId to efficiently look up inference IDs for an episode,
+/// then joins with ChatInference and JsonInference tables to get full inference data.
+fn generate_list_episode_inferences_sql(
+    params: &ListEpisodeInferencesParams,
+) -> (String, std::collections::HashMap<String, String>) {
+    let limit = if params.limit == 0 {
+        DEFAULT_INFERENCE_QUERY_LIMIT
+    } else {
+        params.limit
+    };
+
+    let mut where_clauses: Vec<String> = Vec::new();
+    let mut query_params: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // Episode ID is required
+    query_params.insert("episode_id".to_string(), params.episode_id.to_string());
+    where_clauses.push("episode_id_uint = toUInt128({episode_id:UUID})".to_string());
+
+    // Handle pagination
+    let order_direction = match &params.pagination {
+        Some(PaginationParams::Before { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint < toUInt128({cursor_id:UUID})".to_string());
+            "DESC"
+        }
+        Some(PaginationParams::After { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint > toUInt128({cursor_id:UUID})".to_string());
+            "ASC" // For after, we order ASC and then reverse in Rust
+        }
+        None => "DESC", // Default: most recent first
+    };
+
+    query_params.insert("limit".to_string(), limit.to_string());
+
+    let where_clause = format!("WHERE {}", where_clauses.join(" AND "));
+
+    // Build the query with CTE
+    // The CTE filters InferenceByEpisodeId to get the relevant inference IDs and their types.
+    // Then we query both ChatInference and JsonInference with matching IDs.
+    let query = format!(
+        r"
+WITH episode_inference_ids AS (
+    SELECT id_uint, function_type
+    FROM InferenceByEpisodeId FINAL
+    {where_clause}
+    ORDER BY id_uint {order_direction}
+    LIMIT {{limit:UInt64}}
+)
+SELECT
+    'chat' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    '' as output_schema,
+    i.tags as tags,
+    i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM ChatInference AS i
+WHERE i.id IN (SELECT uint_to_uuid(id_uint) FROM episode_inference_ids WHERE function_type = 'chat')
+UNION ALL
+SELECT
+    'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM JsonInference AS i
+WHERE i.id IN (SELECT uint_to_uuid(id_uint) FROM episode_inference_ids WHERE function_type = 'json')
+ORDER BY toUInt128(inference_id) {order_direction}
+FORMAT JSONEachRow
         "
     );
 
@@ -1698,6 +1845,266 @@ mod tests {
                 .unwrap();
 
             assert!(result.is_empty());
+        }
+    }
+
+    mod list_episode_inferences_tests {
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::query_builder::test_util::{
+            assert_query_contains, assert_query_does_not_contain,
+        };
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{
+            InferenceQueries, ListEpisodeInferencesParams, PaginationParams,
+        };
+        use std::sync::Arc;
+        use uuid::Uuid;
+
+        use super::super::generate_list_episode_inferences_sql;
+
+        #[test]
+        fn test_generate_episode_inferences_sql_basic() {
+            let episode_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: None,
+                limit: 20,
+            };
+
+            let (sql, query_params) = generate_list_episode_inferences_sql(&params);
+
+            // Verify CTE structure
+            assert_query_contains(&sql, "WITH episode_inference_ids AS");
+            assert_query_contains(&sql, "FROM InferenceByEpisodeId FINAL");
+            assert_query_contains(&sql, "episode_id_uint = toUInt128({episode_id:UUID})");
+
+            // Verify UNION ALL structure
+            assert_query_contains(&sql, "UNION ALL");
+            assert_query_contains(&sql, "FROM ChatInference AS i");
+            assert_query_contains(&sql, "FROM JsonInference AS i");
+
+            // Verify uint_to_uuid conversion in WHERE clause
+            assert_query_contains(
+                &sql,
+                "WHERE i.id IN (SELECT uint_to_uuid(id_uint) FROM episode_inference_ids WHERE function_type = 'chat')",
+            );
+            assert_query_contains(
+                &sql,
+                "WHERE i.id IN (SELECT uint_to_uuid(id_uint) FROM episode_inference_ids WHERE function_type = 'json')",
+            );
+
+            // Verify default ordering (DESC)
+            assert_query_contains(&sql, "ORDER BY id_uint DESC");
+
+            // Verify parameters
+            assert!(query_params.contains_key("episode_id"));
+            assert_eq!(query_params.get("limit").map(|s| s.as_str()), Some("20"));
+        }
+
+        #[test]
+        fn test_generate_episode_inferences_sql_with_before_pagination() {
+            let episode_id = Uuid::now_v7();
+            let cursor_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: Some(PaginationParams::Before { id: cursor_id }),
+                limit: 10,
+            };
+
+            let (sql, query_params) = generate_list_episode_inferences_sql(&params);
+
+            // Verify before pagination clause
+            assert_query_contains(&sql, "id_uint < toUInt128({cursor_id:UUID})");
+            assert_query_contains(&sql, "ORDER BY id_uint DESC");
+
+            // Verify parameters
+            assert!(query_params.contains_key("cursor_id"));
+        }
+
+        #[test]
+        fn test_generate_episode_inferences_sql_with_after_pagination() {
+            let episode_id = Uuid::now_v7();
+            let cursor_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: Some(PaginationParams::After { id: cursor_id }),
+                limit: 10,
+            };
+
+            let (sql, query_params) = generate_list_episode_inferences_sql(&params);
+
+            // Verify after pagination clause - uses ASC ordering
+            assert_query_contains(&sql, "id_uint > toUInt128({cursor_id:UUID})");
+            assert_query_contains(&sql, "ORDER BY id_uint ASC");
+
+            // Verify parameters
+            assert!(query_params.contains_key("cursor_id"));
+        }
+
+        #[test]
+        fn test_generate_episode_inferences_sql_selects_all_columns() {
+            let episode_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: None,
+                limit: 20,
+            };
+
+            let (sql, _) = generate_list_episode_inferences_sql(&params);
+
+            // Verify chat inference columns
+            assert_query_contains(&sql, "'chat' as type");
+            assert_query_contains(&sql, "i.timestamp");
+            assert_query_contains(&sql, "i.episode_id as episode_id");
+            assert_query_contains(&sql, "i.function_name as function_name");
+            assert_query_contains(&sql, "i.id as inference_id");
+            assert_query_contains(&sql, "i.input as input");
+            assert_query_contains(&sql, "i.output as output");
+            assert_query_contains(&sql, "i.tags as tags");
+            assert_query_contains(&sql, "i.tool_params as tool_params");
+            assert_query_contains(&sql, "i.variant_name as variant_name");
+
+            // Verify json inference columns
+            assert_query_contains(&sql, "'json' as type");
+            assert_query_contains(&sql, "i.output_schema as output_schema");
+        }
+
+        #[tokio::test]
+        async fn test_list_episode_inferences_with_mock() {
+            let episode_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "WITH episode_inference_ids AS");
+                    assert_query_contains(query, "episode_id_uint = toUInt128({episode_id:UUID})");
+                    assert_query_contains(query, "UNION ALL");
+                    assert!(params.get("episode_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_episode_inferences(&ListEpisodeInferencesParams {
+                    episode_id,
+                    pagination: None,
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_episode_inferences_with_before_pagination_mock() {
+            let episode_id = Uuid::now_v7();
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint < toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint DESC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_episode_inferences(&ListEpisodeInferencesParams {
+                    episode_id,
+                    pagination: Some(PaginationParams::Before { id: cursor_id }),
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_episode_inferences_with_after_pagination_mock() {
+            let episode_id = Uuid::now_v7();
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint > toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint ASC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_episode_inferences(&ListEpisodeInferencesParams {
+                    episode_id,
+                    pagination: Some(PaginationParams::After { id: cursor_id }),
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_generate_episode_inferences_sql_default_limit() {
+            let episode_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: None,
+                limit: 0, // Should default to DEFAULT_INFERENCE_QUERY_LIMIT (20)
+            };
+
+            let (_, query_params) = generate_list_episode_inferences_sql(&params);
+
+            // Verify default limit is applied
+            assert_eq!(query_params.get("limit").map(|s| s.as_str()), Some("20"));
+        }
+
+        #[test]
+        fn test_generate_episode_inferences_sql_no_database_prefix() {
+            let episode_id = Uuid::now_v7();
+            let params = ListEpisodeInferencesParams {
+                episode_id,
+                pagination: None,
+                limit: 20,
+            };
+
+            let (sql, _) = generate_list_episode_inferences_sql(&params);
+
+            // Verify no database prefix (e.g., "tensorzero_ui_fixtures.")
+            assert_query_does_not_contain(&sql, "tensorzero");
+            assert_query_does_not_contain(&sql, "fixtures");
         }
     }
 }

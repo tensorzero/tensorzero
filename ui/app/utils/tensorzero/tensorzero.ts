@@ -30,6 +30,7 @@ import type {
   InferenceStatsResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
+  ListEpisodeInferencesResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
   StatusResponse,
@@ -804,11 +805,14 @@ export class TensorZeroClient {
   }
 
   /**
-   * Lists inference metadata with optional cursor-based pagination.
-   * @param params - Optional pagination parameters
+   * Lists inference metadata with optional cursor-based pagination and filtering.
+   * @param params - Optional pagination and filter parameters
    * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
    * @param params.after - Cursor to fetch records after this ID (mutually exclusive with before)
    * @param params.limit - Maximum number of records to return
+   * @param params.function_name - Optional function name to filter by
+   * @param params.variant_name - Optional variant name to filter by
+   * @param params.episode_id - Optional episode ID to filter by
    * @returns A promise that resolves with the inference metadata response
    * @throws Error if the request fails
    */
@@ -816,6 +820,9 @@ export class TensorZeroClient {
     before?: string;
     after?: string;
     limit?: number;
+    function_name?: string | null;
+    variant_name?: string | null;
+    episode_id?: string | null;
   }): Promise<ListInferenceMetadataResponse> {
     const searchParams = new URLSearchParams();
     if (params?.before) {
@@ -827,6 +834,15 @@ export class TensorZeroClient {
     if (params?.limit !== undefined) {
       searchParams.append("limit", params.limit.toString());
     }
+    if (params?.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params?.variant_name) {
+      searchParams.append("variant_name", params.variant_name);
+    }
+    if (params?.episode_id) {
+      searchParams.append("episode_id", params.episode_id);
+    }
     const queryString = searchParams.toString();
     const endpoint = `/internal/inference_metadata${queryString ? `?${queryString}` : ""}`;
 
@@ -836,6 +852,46 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as ListInferenceMetadataResponse;
+  }
+
+  /**
+   * Lists full inferences for an episode with optional cursor-based pagination.
+   * @param episodeId - The episode ID to get inferences for (required)
+   * @param params - Optional pagination parameters
+   * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
+   * @param params.after - Cursor to fetch records after this ID (mutually exclusive with before)
+   * @param params.limit - Maximum number of records to return
+   * @returns A promise that resolves with the episode inferences response
+   * @throws Error if the request fails
+   */
+  async listEpisodeInferences(
+    episodeId: string,
+    params?: {
+      before?: string;
+      after?: string;
+      limit?: number;
+    },
+  ): Promise<ListEpisodeInferencesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("episode_id", episodeId);
+    if (params?.before) {
+      searchParams.append("before", params.before);
+    }
+    if (params?.after) {
+      searchParams.append("after", params.after);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/episode_inferences?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListEpisodeInferencesResponse;
   }
 
   private async fetch(

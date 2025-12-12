@@ -1,7 +1,5 @@
-import {
-  countInferencesForEpisode,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesForEpisode } from "~/utils/clickhouse/inference.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
@@ -74,6 +72,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const dbClient = await getNativeDatabaseClient();
+  const client = getTensorZeroClient();
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
@@ -101,11 +100,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
     [inferenceResult, feedbacks, num_inferences, num_feedbacks] =
       await Promise.all([
-        listInferencesWithPagination({
+        client.listInferenceMetadata({
           episode_id,
           before: beforeInference ?? undefined,
           after: afterInference ?? undefined,
-          limit,
+          limit: limit + 1, // Fetch one extra to determine pagination
         }),
         feedbackDataPromise,
         countInferencesForEpisode(episode_id),
@@ -129,11 +128,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       num_feedbacks,
       latestFeedbackByMetric,
     ] = await Promise.all([
-      listInferencesWithPagination({
+      client.listInferenceMetadata({
         episode_id,
         before: beforeInference ?? undefined,
         after: afterInference ?? undefined,
-        limit,
+        limit: limit + 1, // Fetch one extra to determine pagination
       }),
       feedbackDataPromise,
       dbClient.queryFeedbackBoundsByTargetId({
@@ -146,7 +145,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       queryLatestFeedbackIdByMetric({ target_id: episode_id }),
     ]);
   }
-  if (inferenceResult.inferences.length === 0) {
+  // Handle pagination from listInferenceMetadata response
+  const hasNextInferencePage =
+    inferenceResult.inference_metadata.length > limit;
+  const inferences = inferenceResult.inference_metadata.slice(0, limit);
+  const hasPreviousInferencePage = !!(beforeInference || afterInference);
+
+  if (inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
       status: 404,
     });
@@ -154,9 +159,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     episode_id,
-    inferences: inferenceResult.inferences,
-    hasNextInferencePage: inferenceResult.hasNextPage,
-    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
+    inferences,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     feedbacks,
     feedbackBounds,
     num_inferences,
@@ -204,7 +209,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.inference_id);
+    searchParams.set("beforeInference", bottomInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -212,7 +217,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.inference_id);
+    searchParams.set("afterInference", topInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 

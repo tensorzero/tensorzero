@@ -43,20 +43,23 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // Check if we have any filters - if not, use the faster gateway endpoint
-  const hasFilters =
-    function_name || variant_name || episode_id || search_query || filter;
+  // Only need the slow path for search queries and advanced filters
+  // The fast listInferenceMetadata endpoint now supports function_name, variant_name, and episode_id
+  const needsFullInferences = search_query || filter;
 
   const countsInfo = await countInferencesByFunction();
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
 
-  if (!hasFilters) {
-    // Use faster gateway endpoint when no filters are applied
+  if (!needsFullInferences) {
+    // Use faster gateway endpoint - now supports simple filters
     const client = getTensorZeroClient();
     const metadataResponse = await client.listInferenceMetadata({
       before: before || undefined,
       after: after || undefined,
       limit: limit + 1, // Fetch one extra to determine if there's a next page
+      function_name,
+      variant_name,
+      episode_id,
     });
 
     const hasNextPage = metadataResponse.inference_metadata.length > limit;

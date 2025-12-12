@@ -289,6 +289,17 @@ pub struct ListInferenceMetadataParams {
     pub episode_id: Option<Uuid>,
 }
 
+/// Parameters for listing inferences by episode ID.
+#[derive(Debug, Clone)]
+pub struct ListEpisodeInferencesParams {
+    /// Episode ID to query (required).
+    pub episode_id: Uuid,
+    /// Optional cursor-based pagination condition.
+    pub pagination: Option<PaginationParams>,
+    /// Maximum number of records to return.
+    pub limit: u32,
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -304,4 +315,10 @@ pub trait InferenceQueries {
         &self,
         params: &ListInferenceMetadataParams,
     ) -> Result<Vec<InferenceMetadata>, Error>;
+
+    /// List full inferences for an episode using the InferenceByEpisodeId table.
+    async fn list_episode_inferences(
+        &self,
+        params: &ListEpisodeInferencesParams,
+    ) -> Result<Vec<StoredInferenceDatabase>, Error>;
 }

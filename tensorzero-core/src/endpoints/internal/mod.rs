@@ -1,3 +1,4 @@
+pub mod episode_inferences;
 pub mod evaluations;
 pub mod inference_metadata;
 pub mod inference_stats;
