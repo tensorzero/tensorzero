@@ -98,7 +98,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       function_name: inf.function_name,
       variant_name: inf.variant_name,
       function_type: inf.type,
-      snapshot_hash: null,
     }),
   );
 

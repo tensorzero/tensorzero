@@ -270,6 +270,7 @@ pub struct InferenceMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub function_type: FunctionType,
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }

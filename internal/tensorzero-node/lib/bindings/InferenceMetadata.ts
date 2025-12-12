@@ -10,5 +10,5 @@ export type InferenceMetadata = {
   variant_name: string;
   episode_id: string;
   function_type: FunctionType;
-  snapshot_hash: string | null;
+  snapshot_hash?: string;
 };
