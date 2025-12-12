@@ -72,7 +72,7 @@ pub fn check_topk_stopping(
     let epsilon = epsilon.unwrap_or(0.0);
     let num_variants = variant_performance.len();
 
-    // Programmer errors → return Error
+    // Invalid parameters: return error
     if k_min == 0 {
         anyhow::bail!("k_min must be > 0");
     }
@@ -83,7 +83,7 @@ pub fn check_topk_stopping(
         anyhow::bail!("epsilon ({epsilon}) must be >= 0");
     }
 
-    // Runtime edge cases → warn + graceful return
+    // Runtime edge cases: log a warning, return empty result
     if num_variants == 0 {
         tracing::warn!("check_topk_stopping: no variants provided");
         return Ok(TopKStoppingResult {
