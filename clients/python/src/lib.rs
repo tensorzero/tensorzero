@@ -540,6 +540,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            api_key: None,
         })
     }
 }

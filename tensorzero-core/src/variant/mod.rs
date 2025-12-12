@@ -4,6 +4,7 @@ use itertools::izip;
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -111,7 +112,7 @@ pub struct ChainOfThoughtConfigPyClass {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]

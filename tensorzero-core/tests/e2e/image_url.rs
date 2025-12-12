@@ -437,6 +437,7 @@ async fn test_base64_image_with_fetch_false() {
 }
 
 #[tokio::test]
+#[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_true() {
     let episode_id = Uuid::now_v7();
 
@@ -515,6 +516,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
 }
 
 #[tokio::test]
+#[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_false() {
     let episode_id = Uuid::now_v7();
 

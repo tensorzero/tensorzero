@@ -1338,6 +1338,7 @@ mod tests {
     async fn test_validate_parse_demonstration() {
         let weather_tool_config_static = StaticToolConfig {
             name: "get_temperature".to_string(),
+            key: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",

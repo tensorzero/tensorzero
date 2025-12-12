@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -306,27 +306,6 @@ pub struct TensorZeroClient {
 #[napi]
 impl TensorZeroClient {
     #[napi(factory)]
-    pub async fn build_embedded(
-        config_path: String,
-        clickhouse_url: Option<String>,
-        postgres_url: Option<String>,
-        timeout: Option<f64>,
-    ) -> Result<Self, napi::Error> {
-        let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(Path::new(&config_path).to_path_buf()),
-            clickhouse_url,
-            postgres_url,
-            timeout: timeout.map(Duration::from_secs_f64),
-            verify_credentials: false,
-            allow_batch_writes: false,
-        })
-        .build()
-        .await
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        Ok(Self { client })
-    }
-
-    #[napi(factory)]
     pub async fn build_http(gateway_url: String) -> Result<Self, napi::Error> {
         let url = Url::parse(&gateway_url).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
@@ -429,23 +408,6 @@ impl TensorZeroClient {
         })?;
         Ok(probabilities_str)
     }
-}
-
-#[napi]
-pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Error> {
-    let config_path = config_path
-        .as_ref()
-        .map(Path::new)
-        .map(|path| path.to_path_buf());
-    let config = tensorzero::get_config_no_verify_credentials(config_path)
-        .await
-        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?
-        // Note: this is OK because we're simply serializing it and passing to Node
-        // We'll never write anything to DB that uses this exact config since we drop it after serializing
-        .dangerous_into_config_without_writing();
-    let config_str =
-        serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    Ok(config_str)
 }
 
 #[napi]

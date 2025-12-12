@@ -446,7 +446,12 @@ impl ModelConfig {
             {
                 let response = relay
                     .relay_non_streaming(model_name, request, clients)
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Relay {
+                            message: e.to_string(),
+                        })
+                    })?;
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
@@ -563,8 +568,14 @@ impl ModelConfig {
             {
                 // Note - we do *not* call wrap_provider_stream,
                 // since we don't want caching or (model provider) OTEL attributes
-                let (stream, raw_request) =
-                    relay.relay_streaming(model_name, request, clients).await?;
+                let (stream, raw_request) = relay
+                    .relay_streaming(model_name, request, clients)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Relay {
+                            message: e.to_string(),
+                        })
+                    })?;
                 return Ok(StreamResponseAndMessages {
                     response: StreamResponse {
                         stream: stream.instrument(Span::current()),

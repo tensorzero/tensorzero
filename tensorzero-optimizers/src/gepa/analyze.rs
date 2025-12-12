@@ -407,8 +407,9 @@ mod tests {
     use std::collections::HashMap;
     use tensorzero_core::{
         config::{SchemaData, path::ResolvedTomlPathData},
+        db::stored_datapoint::StoredChatInferenceDatapoint,
         endpoints::{
-            datasets::{Datapoint, StoredChatInferenceDatapoint},
+            datasets::Datapoint,
             inference::{ChatInferenceResponse, InferenceResponse},
         },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
@@ -885,6 +886,7 @@ mod tests {
         // Create a static tool config
         let tool_config = Arc::new(StaticToolConfig {
             name: "test_tool".to_string(),
+            key: "test_tool".to_string(),
             description: "Test tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",

@@ -66,7 +66,6 @@ jobs:
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
-          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/empty.toml" >> fixtures/.env
 
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f ../ci/internal-network.yml up --no-build -d
@@ -147,7 +146,6 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000/custom/prefix" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/base-path.toml" >> fixtures/.env
-          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/base-path.toml" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
@@ -271,9 +269,7 @@ jobs:
         env:
           TENSORZERO_CI: 1
           TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
-          # These 2 vars are set so the env.server code doesn't complain
-          TENSORZERO_UI_CONFIG_PATH: "ui/fixtures/config/tensorzero.toml"
-          TENSORZERO_GATEWAY_URL: "placeholder" # these
+          TENSORZERO_GATEWAY_URL: "http://gateway:3000"
         run: pnpm ui:test:e2e --grep "@credentials"
 
       - name: Print docker compose logs

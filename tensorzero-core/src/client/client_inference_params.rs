@@ -90,6 +90,12 @@ pub struct ClientInferenceParams {
     #[serde(default)]
     #[ts(skip)]
     pub otlp_traces_extra_headers: HashMap<String, String>,
+    /// Tensorzero API key to set in the `Authorization` header when making the HTTP request to the TensorZero Gateway.
+    /// This field is not serialized into the request body.
+    #[serde(skip)]
+    #[serde(default)]
+    #[ts(skip)]
+    pub api_key: Option<SecretString>,
 }
 
 impl TryFrom<ClientInferenceParams> for Params {
@@ -148,6 +154,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         extra_headers,
         internal_dynamic_variant_config,
         otlp_traces_extra_headers: _,
+        api_key: _,
     } = client_params;
     let _ = Params {
         function_name,

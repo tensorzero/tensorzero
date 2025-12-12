@@ -7,7 +7,7 @@ use tensorzero_core::db::clickhouse::{
     TableName,
     test_helpers::{CLICKHOUSE_URL, get_clickhouse},
 };
-use tensorzero_core::endpoints::datasets::{
+use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use uuid::Uuid;

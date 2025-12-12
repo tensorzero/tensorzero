@@ -1,7 +1,11 @@
 /// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
 use reqwest::Client;
 use serde_json::{Value, json};
-use tensorzero::InferenceOutputSource;
+use tensorzero::{
+    ChatCompletionInferenceParams, GetInferencesResponse, InferenceOutputSource, InferenceParams,
+    InferenceResponse, StoredInference,
+};
+use tensorzero_core::inference::types::extra_body::DynamicExtraBody;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -35,7 +39,7 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 async fn get_inferences_by_ids(
     ids: Vec<Uuid>,
     output_source: InferenceOutputSource,
-) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+) -> Result<Vec<StoredInference>, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let id_strings: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
 
@@ -55,13 +59,8 @@ async fn get_inferences_by_ids(
         resp.text().await
     );
 
-    let resp_json: Value = resp.json().await?;
-    let inferences = resp_json["inferences"]
-        .as_array()
-        .expect("Expected 'inferences' array in response")
-        .clone();
-
-    Ok(inferences)
+    let resp_json: GetInferencesResponse = resp.json().await?;
+    Ok(resp_json.inferences)
 }
 
 // Tests for list_inferences endpoint
@@ -478,10 +477,11 @@ pub async fn test_get_by_ids_json_only() {
     assert_eq!(res.len(), 3);
 
     for inference in &res {
-        assert_eq!(inference["type"], "json");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "extract_entities");
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected Json inference");
+        };
+        assert!(ids.contains(&json_inference.inference_id));
+        assert_eq!(json_inference.function_name, "extract_entities");
     }
 }
 
@@ -512,10 +512,11 @@ pub async fn test_get_by_ids_chat_only() {
     assert_eq!(res.len(), 2);
 
     for inference in &res {
-        assert_eq!(inference["type"], "chat");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "write_haiku");
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected Chat inference");
+        };
+        assert!(ids.contains(&chat_inference.inference_id));
+        assert_eq!(chat_inference.function_name, "write_haiku");
     }
 }
 
@@ -571,19 +572,17 @@ pub async fn test_get_by_ids_mixed_types() {
     let mut chat_count = 0;
 
     for inference in &res {
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-
-        match inference["type"].as_str().unwrap() {
-            "json" => {
-                assert_eq!(inference["function_name"], "extract_entities");
+        match inference {
+            StoredInference::Json(json_inference) => {
+                assert!(ids.contains(&json_inference.inference_id));
+                assert_eq!(json_inference.function_name, "extract_entities");
                 json_count += 1;
             }
-            "chat" => {
-                assert_eq!(inference["function_name"], "write_haiku");
+            StoredInference::Chat(chat_inference) => {
+                assert!(ids.contains(&chat_inference.inference_id));
+                assert_eq!(chat_inference.function_name, "write_haiku");
                 chat_count += 1;
             }
-            other => panic!("Unexpected inference type: {other}"),
         }
     }
 
@@ -622,9 +621,10 @@ pub async fn test_get_by_ids_duplicate_ids() {
 
     // Should still only get back 1 inference (deduplicated by ClickHouse)
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0]["type"], "json");
-    let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
-    assert_eq!(returned_id, id);
+    let StoredInference::Json(json_inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
+    assert_eq!(json_inference.inference_id, id);
 }
 
 // Tests for search_query_experimental
@@ -1165,5 +1165,193 @@ pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
     assert!(
         !resp.status().is_success(),
         "Request with cursor and metric ordering should fail"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
+    let http_client = Client::new();
+
+    // Create an inference with a nontrivial extra_body and inference params
+    let extra_body_value = json!([
+        {"pointer": "/test_field", "value": "test_value"},
+        {"pointer": "/nested/field", "value": {"key": "nested_value"}}
+    ]);
+
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: Some(42),
+            ..Default::default()
+        },
+    };
+
+    let inference_payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value,
+        "params": params
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}",
+        inference_response.status()
+    );
+
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    let StoredInference::Chat(inference) = &res[0] else {
+        panic!("Expected Chat inference");
+    };
+
+    // Assert the extra_body is correctly returned
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
+
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/test_field");
+            assert_eq!(*value, json!("test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Check the second extra_body entry (nested value)
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/nested/field");
+            assert_eq!(*value, json!({"key": "nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Assert the inference_params are correctly returned
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.7));
+    assert_eq!(chat_completion_params.max_tokens, Some(100));
+    assert_eq!(chat_completion_params.seed, Some(42));
+
+    // Assert processing_time_ms is present (should be non-null for a completed inference)
+    assert!(
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_json_function_with_inference_params() {
+    let http_client = Client::new();
+
+    // Create a JSON inference with extra_body and inference params
+    let extra_body_value = json!([
+        {"pointer": "/json_test_field", "value": "json_test_value"},
+        {"pointer": "/json_nested/field", "value": {"key": "json_nested_value"}}
+    ]);
+
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.5),
+            max_tokens: Some(200),
+            top_p: Some(0.9),
+            ..Default::default()
+        },
+    };
+
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value,
+        "params": params
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}",
+        inference_response.status()
+    );
+
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    let StoredInference::Json(inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
+
+    // Assert the extra_body is correctly returned
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
+
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_test_field");
+            assert_eq!(*value, json!("json_test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Check the second extra_body entry (nested value)
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_nested/field");
+            assert_eq!(*value, json!({"key": "json_nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Assert the inference_params are correctly returned
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.5));
+    assert_eq!(chat_completion_params.max_tokens, Some(200));
+    assert_eq!(chat_completion_params.top_p, Some(0.9));
+
+    // Assert processing_time_ms is present
+    assert!(
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
     );
 }

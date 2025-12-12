@@ -33,7 +33,7 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     await page.getByText("Select a dataset").click();
 
     // Type to filter/search for our dataset
-    const datasetInput = page.getByPlaceholder("Find a dataset...");
+    const datasetInput = page.getByPlaceholder("Select a dataset");
     await datasetInput.fill(datasetName);
     const datasetOption = page.locator(`[data-dataset-name="${datasetName}"]`);
     await expect(datasetOption).toBeVisible();

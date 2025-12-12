@@ -144,6 +144,10 @@ mod tests {
             inference_id: id,
             tool_params: ToolCallConfigDatabaseInsert::default(),
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         })
     }
 

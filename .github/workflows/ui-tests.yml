@@ -102,7 +102,6 @@ jobs:
         env:
           OPENAI_API_KEY: not_used
           FIREWORKS_API_KEY: not_used
-          TENSORZERO_UI_CONFIG_PATH: fixtures/config/tensorzero.toml
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
@@ -112,6 +111,7 @@ jobs:
         working-directory: internal/tensorzero-node
         env:
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
+          TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
 
       - name: Print Docker Compose logs

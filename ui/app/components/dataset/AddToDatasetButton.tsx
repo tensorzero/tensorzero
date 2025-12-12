@@ -111,10 +111,11 @@ export function AddToDatasetButton({
           setOutputDialogOpen(true);
         }
       }}
-      placeholder="Add to dataset"
       buttonProps={{
         size: "sm",
       }}
+      label="Add to dataset"
+      labelClassName="text-fg-primary font-medium"
       disabled={isReadOnly}
     />
   );

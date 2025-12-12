@@ -33,8 +33,7 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,

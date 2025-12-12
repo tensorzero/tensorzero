@@ -29,6 +29,8 @@ jobs:
         with:
           repository: ${{ github.event.client_payload.pull_request.head.repo.full_name }}
           ref: ${{ github.event.client_payload.pull_request.head.ref }}
+          # We need to use a PAT so that GitHub will let us modify workflow files when pushing to a branch
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add initial reaction
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043

@@ -4438,6 +4438,7 @@ mod tests {
 
         let static_tool = StaticToolConfig {
             name: "test_tool".to_string(),
+            key: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: tool_schema,
             strict: false,

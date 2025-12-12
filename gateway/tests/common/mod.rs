@@ -1,12 +1,29 @@
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::print_stdout,
+    clippy::allow_attributes
+)]
 use std::{net::SocketAddr, process::Stdio};
 
 use reqwest::Response;
 use tempfile::NamedTempFile;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader, Lines},
-    process::{Child, ChildStdout, Command},
+    io::AsyncBufReadExt,
+    process::{Child, Command},
+    sync::mpsc::UnboundedReceiver,
 };
+
+/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
+#[allow(dead_code)]
+pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
+
+    sqlx::PgPool::connect(&postgres_url)
+        .await
+        .expect("Failed to connect to PostgreSQL")
+}
 
 pub fn gateway_path() -> String {
     // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
@@ -50,17 +67,25 @@ pub async fn start_gateway_on_random_port(
     let mut child = builder.spawn().unwrap();
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
 
-    let mut output = Vec::new();
+    let (line_tx, mut line_rx) = tokio::sync::mpsc::unbounded_channel();
+    #[allow(clippy::disallowed_methods)]
+    tokio::spawn(async move {
+        while let Some(line) = stdout.next_line().await.unwrap() {
+            println!("{line}");
+            let _ = line_tx.send(line.clone());
+        }
+    });
+
     let mut listening_line = None;
-    while let Some(line) = stdout.next_line().await.unwrap() {
-        println!("gateway output line: {line}");
+    let mut output = Vec::new();
+    while let Some(line) = line_rx.recv().await {
+        if line.contains("listening on 0.0.0.0:") {
+            listening_line = Some(line.clone());
+        }
         output.push(line.clone());
         if line.contains("{\"message\":\"└") {
             // We're done logging the startup message
             break;
-        }
-        if line.contains("listening on 0.0.0.0:") {
-            listening_line = Some(line);
         }
     }
 
@@ -78,7 +103,7 @@ pub async fn start_gateway_on_random_port(
     ChildData {
         addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
         output,
-        stdout,
+        stdout: line_rx,
         child,
     }
 }
@@ -87,7 +112,7 @@ pub async fn start_gateway_on_random_port(
 pub struct ChildData {
     pub addr: SocketAddr,
     pub output: Vec<String>,
-    pub stdout: Lines<BufReader<ChildStdout>>,
+    pub stdout: UnboundedReceiver<String>,
     // This kills the child on drop
     pub child: Child,
 }

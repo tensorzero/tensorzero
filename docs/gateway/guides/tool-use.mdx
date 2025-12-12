@@ -322,6 +322,8 @@ See "Advanced Usage" below for information on how to customize the tool calling 
 
 You can restrict the set of tools that can be called at inference time by using the `allowed_tools` parameter.
 
+The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
+
 For example, suppose your TensorZero function has access to several tools, but you only want to allow the `get_temperature` tool to be called during a particular inference.
 You can achieve this by setting `allowed_tools=["get_temperature"]` in your inference request.
 
@@ -390,6 +392,43 @@ You can also provide them dynamically at inference time via the `provider_tools`
 See [How to call the OpenAI Responses API](/gateway/call-the-openai-responses-api) for a complete guide on using provider tools like web search.
 
 </Tip>
+
+### Using OpenAI Custom Tools
+
+<Warning>
+
+OpenAI custom tools are only supported by OpenAI models.
+Using custom tools with other providers will result in an error.
+
+</Warning>
+
+OpenAI offers custom tools that support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output (using Lark or regex syntax).
+
+Custom tools are passed dynamically at inference time via `additional_tools` with `type: "openai_custom"`:
+
+```json
+{
+  "model_name": "openai::gpt-5-mini",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate Python code to print 'Hello, World!'"
+      }
+    ]
+  },
+  "additional_tools": [
+    {
+      "type": "openai_custom",
+      "name": "code_generator",
+      "description": "Generates Python code snippets",
+      "format": { "type": "text" }
+    }
+  ]
+}
+```
+
+See the [API Reference](/gateway/api-reference/inference/#additional_tools) for full documentation on custom tool formats including grammar-based constraints.
 
 ## Learn More
 

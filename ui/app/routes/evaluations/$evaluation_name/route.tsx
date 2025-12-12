@@ -359,7 +359,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             onSelect={handleDatasetSelect}
             functionName={function_name}
             disabled={isReadOnly || selectedRows.size === 0}
-            placeholder={
+            label={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
                 : "Add selected inferences to dataset"

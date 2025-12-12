@@ -8,8 +8,9 @@ use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
     config::{SchemaData, path::ResolvedTomlPathData},
+    db::stored_datapoint::StoredChatInferenceDatapoint,
     endpoints::{
-        datasets::{Datapoint, StoredChatInferenceDatapoint},
+        datasets::Datapoint,
         inference::{ChatInferenceResponse, InferenceResponse},
     },
     evaluations::{
@@ -144,6 +145,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let calculator_tool = StaticToolConfig {
         name: "calculator".to_string(),
+        key: "calculator".to_string(),
         description: "Evaluates mathematical expressions".to_string(),
         parameters: calculator_schema,
         strict: true,
@@ -164,6 +166,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let weather_tool = StaticToolConfig {
         name: "weather".to_string(),
+        key: "weather".to_string(),
         description: "Gets weather information".to_string(),
         parameters: weather_schema,
         strict: true,
@@ -823,7 +826,7 @@ async fn test_analyze_input_format_scenarios() {
             Some(false), // parallel_tool_calls
         );
 
-        let datapoint = tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: uuid::Uuid::now_v7(),

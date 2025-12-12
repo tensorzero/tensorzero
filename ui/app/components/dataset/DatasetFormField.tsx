@@ -7,7 +7,7 @@ interface DatasetFormFieldProps<T extends FieldValues> {
   name: FieldPath<T>;
   label?: string;
   onSelect?: (value: string, isNew: boolean) => void;
-  placeholder?: string;
+  placeholder: string;
   allowCreation?: boolean;
 }
 
@@ -37,7 +37,7 @@ export function DatasetFormField<T extends FieldValues>({
                 field.onChange(value);
                 onSelect?.(value, isNew);
               }}
-              placeholder={placeholder}
+              label={placeholder}
               allowCreation={allowCreation}
             />
           </div>

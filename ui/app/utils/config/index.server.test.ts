@@ -12,18 +12,17 @@ vi.mock("~/utils/get-tensorzero-client.server", () => ({
   })),
 }));
 
-// Mock the environment
+// Mock the environment (only needed for gateway URL, config is always loaded from gateway)
 vi.mock("../env.server", () => ({
   getEnv: vi.fn(() => ({
-    TENSORZERO_FEATURE_FLAG__UI_CONFIG_FROM_GATEWAY: true,
-    TENSORZERO_UI_DEFAULT_CONFIG: false,
-    TENSORZERO_UI_CONFIG_PATH: "/path/to/config",
+    TENSORZERO_GATEWAY_URL: "http://localhost:3000",
   })),
 }));
 
 // Mock the logger to avoid console noise in tests
 vi.mock("../logger", () => ({
   logger: {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),

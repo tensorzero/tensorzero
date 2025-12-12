@@ -4,6 +4,8 @@ use crate::config::ConfigFileGlob;
 use crate::config::RuntimeOverlay;
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
+use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
+use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -192,7 +194,7 @@ impl HTTPGateway {
         Ok((response, raw_response))
     }
 
-    async fn http_inference_stream(
+    async fn send_http_stream_inference(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
@@ -314,25 +316,42 @@ pub struct ClientBuilder {
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP Error (status code {status_code}): {text:?}")]
     Http {
         status_code: u16,
         text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("{source}")] // the `source` has already been formatted (below)
     Other {
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("HTTP Error: request timed out")]
     RequestTimeout,
-    #[error("Failed to get git info: {source}")]
     Git {
         #[source]
         source: git2::Error,
     },
+}
+
+impl Display for TensorZeroError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorZeroError::Http {
+                status_code,
+                text,
+                source: _,
+            } => {
+                if let Some(text) = text {
+                    write!(f, "HTTP Error (status code {status_code}): {text}")
+                } else {
+                    write!(f, "HTTP Error (status code {status_code})")
+                }
+            }
+            TensorZeroError::Other { source } => write!(f, "{source}"),
+            TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
+            TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -913,6 +932,64 @@ impl Client {
         }
     }
 
+    pub async fn http_embeddings(
+        &self,
+        params: OpenAICompatibleEmbeddingParams,
+        api_key: Option<SecretString>,
+    ) -> Result<HttpResponse<OpenAIEmbeddingResponse>, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("/openai/v1/embeddings").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /openai/v1/embeddings endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Failed to serialize embedding params: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                })?;
+                let mut builder = client
+                    .http_client
+                    .post(url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body.clone());
+
+                if let Some(api_key) = api_key {
+                    builder = builder.header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", api_key.expose_secret()),
+                    );
+                }
+                let (response, raw_response) = client.send_and_parse_http_response(builder).await?;
+                Ok(HttpResponse {
+                    response,
+                    raw_request: body,
+                    raw_response: Some(raw_response),
+                })
+            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "HTTP embeddings is not supported in embedded gateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
     /// Runs a TensorZero inference over HTTP
     /// This is like `inference`, but only works in HTTPGateway mode
     /// The `HttpResponse` struct contains extra http-specific information (e.g. raw_request and raw_response),
@@ -953,6 +1030,13 @@ impl Client {
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body.clone());
 
+                if let Some(api_key) = params.api_key {
+                    builder = builder.header(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Bearer {}", api_key.expose_secret()),
+                    );
+                }
+
                 // Add OTLP trace headers with the required prefix
                 for (key, value) in &params.otlp_traces_extra_headers {
                     let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
@@ -962,7 +1046,7 @@ impl Client {
                 if params.stream.unwrap_or(false) {
                     Ok(HttpResponse {
                         response: InferenceOutput::Streaming(
-                            client.http_inference_stream(builder).await?,
+                            client.send_http_stream_inference(builder).await?,
                         ),
                         raw_request: body,
                         raw_response: None,

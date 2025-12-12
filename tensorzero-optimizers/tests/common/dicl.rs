@@ -656,6 +656,7 @@ fn create_inference_params(
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
         otlp_traces_extra_headers: Default::default(),
+        api_key: None,
     }
 }
 

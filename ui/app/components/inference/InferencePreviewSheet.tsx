@@ -41,7 +41,7 @@ export function InferencePreviewSheet({
 
   // Extract stable values from fetcher for dependency arrays
   const fetcherState = fetcher.state;
-  const fetcherDataInferenceId = fetcher.data?.inference.id;
+  const fetcherDataInferenceId = fetcher.data?.inference.inference_id;
 
   // Fetch data when sheet opens with an inference ID (only if we don't have data)
   // Also refetch when inference ID changes to avoid showing stale data
@@ -101,10 +101,10 @@ export function InferencePreviewSheet({
               <>
                 Inference{" "}
                 <a
-                  href={toInferenceUrl(inferenceData.inference.id)}
+                  href={toInferenceUrl(inferenceData.inference.inference_id)}
                   className="text-md font-mono font-semibold hover:underline"
                 >
-                  {inferenceData.inference.id}
+                  {inferenceData.inference.inference_id}
                 </a>
               </>
             ) : (

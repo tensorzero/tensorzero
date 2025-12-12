@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  Config,
   CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
   EpisodeByIdRow,
@@ -12,15 +11,12 @@ import type {
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
-  ModelLatencyDatapoint,
-  ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
   FeedbackBounds,
-  TimeWindow,
   QueryFeedbackBoundsByTargetIdParams,
   QueryFeedbackByTargetIdParams,
   CountFeedbackByTargetIdParams,
@@ -45,7 +41,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
@@ -63,21 +58,6 @@ export class TensorZeroClient {
 
   constructor(client: NativeTensorZeroClientType) {
     this.nativeClient = client;
-  }
-
-  static async buildEmbedded(
-    configPath: string,
-    clickhouseUrl?: string | undefined | null,
-    postgresUrl?: string | undefined | null,
-    timeout?: number | undefined | null,
-  ): Promise<TensorZeroClient> {
-    const nativeClient = await NativeTensorZeroClient.buildEmbedded(
-      configPath,
-      clickhouseUrl,
-      postgresUrl,
-      timeout,
-    );
-    return new TensorZeroClient(nativeClient);
   }
 
   static async buildHttp(gatewayUrl: string): Promise<TensorZeroClient> {
@@ -127,11 +107,6 @@ export class TensorZeroClient {
 }
 
 export default TensorZeroClient;
-
-export async function getConfig(configPath: string | null): Promise<Config> {
-  const configString = await nativeGetConfig(configPath);
-  return JSON.parse(configString) as Config;
-}
 
 // Export quantiles array from migration_0035
 export { getQuantiles };
@@ -236,35 +211,6 @@ export class DatabaseClient {
     return new DatabaseClient(
       await NativeDatabaseClient.fromClickhouseUrl(url),
     );
-  }
-
-  async getModelUsageTimeseries(
-    timeWindow: TimeWindow,
-    maxPeriods: number,
-  ): Promise<ModelUsageTimePoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-      max_periods: maxPeriods,
-    });
-    const modelUsageTimeseriesString =
-      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
-    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
-  }
-
-  async getModelLatencyQuantiles(
-    timeWindow: TimeWindow,
-  ): Promise<ModelLatencyDatapoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-    });
-    const modelLatencyQuantilesString =
-      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
-    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
-  }
-
-  async countDistinctModelsUsed(): Promise<number> {
-    const response = await this.nativeDatabaseClient.countDistinctModelsUsed();
-    return response;
   }
 
   async queryEpisodeTable(

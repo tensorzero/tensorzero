@@ -58,7 +58,7 @@ export function CloneDatapointButton({ datapoint }: CloneDatapointButtonProps) {
     <DatasetSelector
       selected={selectedDataset}
       onSelect={handleDatasetSelect}
-      placeholder="Clone"
+      label="Clone"
       buttonProps={{
         size: "sm",
       }}

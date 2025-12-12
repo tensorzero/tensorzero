@@ -5,14 +5,15 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{FunctionTool, GetDatapointParams, StoredDatapoint};
+use tensorzero::{FunctionTool, GetDatapointParams};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
     clickhouse_flush_async_insert, get_clickhouse,
 };
-use tensorzero_core::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
@@ -36,7 +37,7 @@ async fn test_update_chat_datapoint_output() {
     let mut tags = std::collections::HashMap::new();
     tags.insert("version".to_string(), "1".to_string());
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -65,6 +66,10 @@ async fn test_update_chat_datapoint_output() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -169,7 +174,7 @@ async fn test_update_json_datapoint_output() {
         "additionalProperties": false
     });
 
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: None,
@@ -199,6 +204,10 @@ async fn test_update_json_datapoint_output() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -266,7 +275,7 @@ async fn test_update_multiple_datapoints() {
     let datapoint_id1 = Uuid::now_v7();
     let datapoint_id2 = Uuid::now_v7();
 
-    let datapoint_insert1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -295,10 +304,14 @@ async fn test_update_multiple_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
-    let datapoint_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -327,6 +340,10 @@ async fn test_update_multiple_datapoints() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -435,7 +452,7 @@ async fn test_update_datapoint_type_mismatch() {
     // Create a chat datapoint
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -464,6 +481,10 @@ async fn test_update_datapoint_type_mismatch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -503,7 +524,7 @@ async fn test_update_datapoint_with_metadata() {
     // Create a datapoint
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -532,6 +553,10 @@ async fn test_update_datapoint_with_metadata() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -638,7 +663,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     // Create a datapoint with output
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -667,6 +692,10 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -725,7 +754,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     // Create a datapoint with tool_params
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -771,6 +800,10 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -837,7 +870,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     tags.insert("key1".to_string(), "value1".to_string());
     tags.insert("key2".to_string(), "value2".to_string());
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -866,6 +899,10 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -924,7 +961,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     // Create a datapoint with a name
     let datapoint_id = Uuid::now_v7();
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("Original Name".to_string()),
@@ -953,6 +990,10 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1017,7 +1058,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
         "additionalProperties": false
     });
 
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: None,
@@ -1047,6 +1088,10 @@ async fn test_update_json_datapoint_set_output_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1115,7 +1160,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         "additionalProperties": false
     });
 
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: None,
@@ -1145,6 +1190,10 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1206,7 +1255,7 @@ async fn test_update_metadata_chat_datapoint() {
 
     // Create a chat datapoint
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("original_name".to_string()),
@@ -1230,6 +1279,8 @@ async fn test_update_metadata_chat_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1306,7 +1357,7 @@ async fn test_update_metadata_json_datapoint() {
         "additionalProperties": false
     });
 
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: Some("original_json_name".to_string()),
@@ -1331,6 +1382,10 @@ async fn test_update_metadata_json_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1393,7 +1448,7 @@ async fn test_update_metadata_set_name_to_null() {
 
     // Create a chat datapoint with a name
     let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("to_be_removed".to_string()),
@@ -1415,6 +1470,10 @@ async fn test_update_metadata_set_name_to_null() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1472,7 +1531,7 @@ async fn test_update_metadata_batch() {
     let datapoint_id1 = Uuid::now_v7();
     let datapoint_id2 = Uuid::now_v7();
 
-    let datapoint1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("name1".to_string()),
@@ -1494,10 +1553,14 @@ async fn test_update_metadata_batch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
-    let datapoint2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("name2".to_string()),
@@ -1519,6 +1582,10 @@ async fn test_update_metadata_batch() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1652,7 +1719,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
     let mut tags = HashMap::new();
     tags.insert("env".to_string(), "test".to_string());
 
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "basic_test".to_string(),
         name: Some("Original Name".to_string()),
@@ -1682,6 +1749,10 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
         source_inference_id: None,
         // Make a non-custom datapoint so that it can be modified
         is_custom: false,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 
@@ -1798,7 +1869,7 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
         "additionalProperties": false
     });
 
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "json_success".to_string(),
         name: Some("Original Name".to_string()),
@@ -1830,6 +1901,10 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
         source_inference_id: None,
         // Mark as non-custom so that it can be modified
         is_custom: false,
+
+        // Ignored during insert
+        is_deleted: false,
+        updated_at: String::new(),
         snapshot_hash: None,
     });
 

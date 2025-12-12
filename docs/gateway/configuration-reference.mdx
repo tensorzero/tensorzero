@@ -1531,7 +1531,7 @@ Can be either a string for a single credential location, or an object with `defa
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 # ...
 type = "xai"
 api_key_location = "dynamic::xai_api_key"
@@ -1550,10 +1550,10 @@ Defines the model name to use with the xAI API.
 See [xAI's documentation](https://docs.x.ai/docs/models) for the list of available model names.
 
 ```toml title="tensorzero.toml"
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 # ...
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 # ...
 ```
 
@@ -4246,7 +4246,7 @@ If `true`, the gateway will throw an error on startup if it fails to connect to 
 If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
 If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
 
-If you have features that require PostgreSQL (rate limiting or Track-and-Stop experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require PostgreSQL (e.g. rate limiting, adaptive experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 

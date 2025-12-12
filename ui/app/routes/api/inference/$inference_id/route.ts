@@ -1,17 +1,16 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import {
-  queryInferenceById,
-  queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference.server";
-import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { resolveModelInferences } from "~/utils/resolve.server";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 export async function loader({
   request,
@@ -27,10 +26,15 @@ export async function loader({
 
   try {
     const dbClient = await getNativeDatabaseClient();
+    const client = getTensorZeroClient();
 
-    const inferencePromise = queryInferenceById(inference_id);
-    const modelInferencesPromise =
-      queryModelInferencesByInferenceId(inference_id);
+    const inferencesPromise = client.getInferences({
+      ids: [inference_id],
+      output_source: "inference",
+    });
+    const modelInferencesPromise = client
+      .getModelInferences(inference_id)
+      .then((response) => resolveModelInferences(response.model_inferences));
     const demonstrationFeedbackPromise =
       dbClient.queryDemonstrationFeedbackByInferenceId({
         inference_id,
@@ -47,7 +51,7 @@ export async function loader({
           limit: 10,
         });
 
-    let inference,
+    let inferences,
       model_inferences,
       demonstration_feedback,
       feedback_bounds,
@@ -57,9 +61,9 @@ export async function loader({
     if (newFeedbackId) {
       // When there's new feedback, wait for polling to complete before querying
       // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
-      [inference, model_inferences, demonstration_feedback, feedback] =
+      [inferences, model_inferences, demonstration_feedback, feedback] =
         await Promise.all([
-          inferencePromise,
+          inferencesPromise,
           modelInferencesPromise,
           demonstrationFeedbackPromise,
           feedbackDataPromise,
@@ -73,14 +77,14 @@ export async function loader({
     } else {
       // Normal case: execute all queries in parallel
       [
-        inference,
+        inferences,
         model_inferences,
         demonstration_feedback,
         feedback_bounds,
         feedback,
         latestFeedbackByMetric,
       ] = await Promise.all([
-        inferencePromise,
+        inferencesPromise,
         modelInferencesPromise,
         demonstrationFeedbackPromise,
         dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
@@ -89,9 +93,13 @@ export async function loader({
       ]);
     }
 
-    if (!inference) {
-      throw data(`Inference ${inference_id} not found`, { status: 404 });
+    if (inferences.inferences.length !== 1) {
+      throw data(`No inference found for id ${inference_id}.`, {
+        status: 404,
+      });
     }
+    const inference = inferences.inferences[0];
+    const resolvedInput = await loadFileDataForStoredInput(inference.input);
 
     // Get used variants for default function
     const usedVariants =
@@ -101,6 +109,7 @@ export async function loader({
 
     const inferenceData: InferenceDetailData = {
       inference,
+      input: resolvedInput,
       model_inferences,
       feedback,
       feedback_bounds,

@@ -12,9 +12,13 @@ use mockall::automock;
 
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
+use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::deserialize_json_string;
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use crate::inference::types::{
+    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, StoredInput,
+};
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
@@ -38,6 +42,12 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
@@ -69,6 +79,10 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             tool_params: value.tool_params,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
+            inference_params: value.inference_params,
+            processing_time_ms: value.processing_time_ms,
+            ttft_ms: value.ttft_ms,
         })
     }
 }
@@ -89,6 +103,12 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: Option<u64>,
+    pub ttft_ms: Option<u64>,
 }
 
 impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJsonInference {
@@ -119,6 +139,10 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
             output_schema: value.output_schema,
             tags: value.tags,
             timestamp: value.timestamp,
+            extra_body: value.extra_body,
+            inference_params: value.inference_params,
+            processing_time_ms: value.processing_time_ms,
+            ttft_ms: value.ttft_ms,
         })
     }
 }
@@ -237,6 +261,35 @@ pub enum PaginationParams {
     After { id: Uuid },
 }
 
+/// Inference metadata from the InferenceById table.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InferenceMetadata {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub function_type: FunctionType,
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<String>,
+}
+
+/// Parameters for listing inference metadata.
+#[derive(Debug, Clone, Default)]
+pub struct ListInferenceMetadataParams {
+    /// Optional cursor-based pagination condition.
+    pub pagination: Option<PaginationParams>,
+    /// Maximum number of records to return.
+    pub limit: u32,
+    /// Optional function name to filter by.
+    pub function_name: Option<String>,
+    /// Optional variant name to filter by.
+    pub variant_name: Option<String>,
+    /// Optional episode ID to filter by.
+    pub episode_id: Option<Uuid>,
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -246,4 +299,10 @@ pub trait InferenceQueries {
         config: &Config,
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error>;
+
+    /// List inference metadata from the InferenceById table.
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error>;
 }

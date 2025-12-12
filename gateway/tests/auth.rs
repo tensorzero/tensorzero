@@ -1,4 +1,4 @@
-#![expect(clippy::print_stdout, clippy::expect_used)]
+#![expect(clippy::print_stdout)]
 use std::process::Stdio;
 use std::str::FromStr;
 
@@ -14,20 +14,10 @@ use tensorzero_core::{
 use tokio::process::Command;
 use uuid::Uuid;
 
-use crate::common::start_gateway_on_random_port;
+use crate::common::{get_postgres_pool_for_testing, start_gateway_on_random_port};
 use secrecy::ExposeSecret;
 
 mod common;
-
-/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
-async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
-
-    sqlx::PgPool::connect(&postgres_url)
-        .await
-        .expect("Failed to connect to PostgreSQL")
-}
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
@@ -255,7 +245,7 @@ async fn test_tensorzero_missing_auth() {
     [gateway.auth.cache]
     enabled = false
     ",
-        None,
+        Some("gateway=debug,tensorzero_core=debug,warn"),
     )
     .await;
 
@@ -289,10 +279,12 @@ async fn test_tensorzero_missing_auth() {
         ("GET", "/v1/datasets/get_datapoints"),
     ];
 
+    let client = reqwest::Client::new();
+
     for (method, path) in auth_required_routes {
         // Authorization runs before we do any parsing of the request parameters/body,
         // so we don't need to provide a valid request here.
-        let response = reqwest::Client::new()
+        let response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -309,7 +301,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_auth_response = reqwest::Client::new()
+        let bad_auth_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -327,7 +319,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_key_format_response = reqwest::Client::new()
+        let bad_key_format_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -345,7 +337,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let missing_key_response = reqwest::Client::new()
+        let missing_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -366,7 +358,7 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let disabled_key_response = reqwest::Client::new()
+        let disabled_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
