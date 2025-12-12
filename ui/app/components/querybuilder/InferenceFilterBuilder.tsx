@@ -29,6 +29,7 @@ import {
   TagFilterRow,
   FloatMetricFilterRow,
   BooleanMetricFilterRow,
+  DemonstrationFilterRow,
 } from "./FilterRows";
 import AddButton from "./AddButton";
 import { DeleteButton } from "../ui/DeleteButton";
@@ -50,6 +51,13 @@ export default function InferenceFilterBuilder({
     setInferenceFilter({
       type: "and",
       children: [createTagFilter()],
+    });
+  };
+
+  const handleAddDemonstration = () => {
+    setInferenceFilter({
+      type: "and",
+      children: [createDemonstrationFilter()],
     });
   };
 
@@ -92,6 +100,7 @@ export default function InferenceFilterBuilder({
       ) : (
         <div className="flex gap-2">
           <AddMetricPopover onSelect={handleAddMetric} />
+          <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           <AddButton label="Tag" onClick={handleAddTag} />
           <AddButton label="And" onClick={handleAddAnd} />
           <AddButton label="Or" onClick={handleAddOr} />
@@ -161,6 +170,10 @@ const FilterGroup = memo(function FilterGroup({
     handleAddChild(createTagFilter());
   };
 
+  const handleAddDemonstration = () => {
+    handleAddChild(createDemonstrationFilter());
+  };
+
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
     const newFilter = createMetricFilter(metricName, metricConfig);
     if (newFilter) {
@@ -220,6 +233,7 @@ const FilterGroup = memo(function FilterGroup({
         <div className="flex items-center gap-2">
           <AddMetricPopover onSelect={handleAddMetric} />
           <AddButton label="Tag" onClick={handleAddTag} />
+          <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           {depth < MAX_NESTING_DEPTH && (
             <>
               <AddButton
@@ -326,6 +340,10 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
     );
   }
 
+  if (filter.type === "demonstration_feedback") {
+    return <DemonstrationFilterRow filter={filter} onChange={onChange} />;
+  }
+
   // Unsupported filter type
   return null;
 });
@@ -425,4 +443,11 @@ function createMetricFilter(
     };
   }
   return null;
+}
+
+function createDemonstrationFilter(): InferenceFilter {
+  return {
+    type: "demonstration_feedback",
+    has_demonstration_feedback: true,
+  };
 }

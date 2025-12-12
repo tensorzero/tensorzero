@@ -58,7 +58,7 @@ test.describe("Inference Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select function using FunctionSelector (combobox pattern)
-    await page.getByRole("combobox").click();
+    await page.getByRole("combobox", { name: "Function filter" }).click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Apply filters and wait for results
@@ -195,6 +195,62 @@ test.describe("Inference Filtering", () => {
     }
   });
 
+  test("should add demonstration feedback filter (has feedback)", async ({
+    page,
+  }) => {
+    await page.goto("/observability/inferences");
+
+    const filterButton = page.locator("thead").getByRole("button").last();
+    await filterButton.click();
+    await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Demonstration" }).click();
+
+    // Also select a specific function to ensure deterministic results
+    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page
+      .getByRole("option", { name: "json_success_no_input_schema" })
+      .click();
+
+    const demoSelect = page.getByRole("combobox", {
+      name: "Has demonstration feedback",
+    });
+    await expect(demoSelect).toBeVisible();
+
+    // Default is true; apply filters
+    await applyFiltersAndWait(page);
+
+    await expect(page).toHaveURL(/demonstration_feedback/, { timeout: 10_000 });
+  });
+
+  test("should add demonstration feedback filter (no feedback)", async ({
+    page,
+  }) => {
+    await page.goto("/observability/inferences");
+
+    const filterButton = page.locator("thead").getByRole("button").last();
+    await filterButton.click();
+    await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Demonstration" }).click();
+
+    // Also select a specific function to ensure deterministic results
+    await page.getByRole("combobox", { name: "Function filter" }).click();
+    await page
+      .getByRole("option", { name: "json_success_no_input_schema" })
+      .click();
+
+    const demoSelect = page.getByRole("combobox", {
+      name: "Has demonstration feedback",
+    });
+    await demoSelect.click();
+    await page.getByRole("option", { name: "false" }).click();
+
+    await applyFiltersAndWait(page);
+
+    await expect(page).toHaveURL(/demonstration_feedback/, { timeout: 10_000 });
+  });
+
   test("should clear function filter", async ({ page }) => {
     // Start with a filter already applied
     await page.goto("/observability/inferences?function_name=write_haiku");
@@ -256,7 +312,7 @@ test.describe("Inference Filtering", () => {
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
     // Select function
-    await page.getByRole("combobox").click();
+    await page.getByRole("combobox", { name: "Function filter" }).click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Add variant filter
