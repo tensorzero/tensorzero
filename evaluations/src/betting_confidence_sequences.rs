@@ -36,36 +36,35 @@ impl Default for WealthProcessGridPoints {
 }
 
 impl WealthProcessGridPoints {
-    /// Returns the grid of candidate mean values, validating inputs.
-    ///
-    /// # Errors
-    /// - Returns error if resolution is less than 2
-    pub fn m_values(&self) -> Result<Vec<f64>> {
+    pub fn new_from_values(mvalues: Vec<f64>) -> Result<WealthProcessGridPoints> {
+        let num_values = mvalues.len();
+        if num_values < 2 {
+            bail!("At least 2 grid points must be specified, got {num_values}")
+        }
+        Ok(WealthProcessGridPoints::MValues(mvalues))
+    }
+
+    pub fn new_from_resolution(resolution: usize) -> Result<WealthProcessGridPoints> {
+        if resolution < 2 {
+            bail!("Grid resolution must be at least 2, got {resolution}")
+        }
+        Ok(WealthProcessGridPoints::Resolution(resolution))
+    }
+
+    /// Returns the grid of candidate mean values.
+    pub fn m_values(&self) -> Vec<f64> {
         match self {
-            Self::MValues(v) => Ok(v.clone()),
-            Self::Resolution(res) => {
-                if *res < 2 {
-                    bail!("resolution must be at least 2, got {res}");
-                }
-                Ok((0..*res).map(|i| i as f64 / (*res - 1) as f64).collect())
-            }
+            Self::MValues(v) => v.clone(),
+            Self::Resolution(res) => (0..*res).map(|i| i as f64 / (*res - 1) as f64).collect(),
         }
     }
 
     /// Returns the number of grid points.
-    ///
-    /// # Errors
-    /// - Returns error if resolution is less than 2
     #[expect(clippy::len_without_is_empty)] // is_empty() not meaningful; grids must have >= 2 points
-    pub fn len(&self) -> Result<usize> {
+    pub fn len(&self) -> usize {
         match self {
-            Self::MValues(v) => Ok(v.len()),
-            Self::Resolution(res) => {
-                if *res < 2 {
-                    bail!("resolution must be at least 2, got {res}");
-                }
-                Ok(*res)
-            }
+            Self::MValues(v) => v.len(),
+            Self::Resolution(res) => *res,
         }
     }
 }
@@ -283,7 +282,7 @@ pub fn update_betting_cs(
     // Update upper and lower wealth processes for each candidate mean m
     // Use log-sum-exp for numerical stability: prod(1 + bet*(x-m)) = exp(sum(log(1 + bet*(x-m))))
     // Truncate bets to c/m (upper) or c/(1-m) (lower) to ensure wealth processes stay non-negative
-    let m_values = prev_results.wealth.grid.m_values()?;
+    let m_values = prev_results.wealth.grid.m_values();
     let (new_wealth_upper, new_wealth_lower): (Vec<f64>, Vec<f64>) = m_values
         .iter()
         .zip(prev_results.wealth.wealth_upper.iter())
@@ -416,18 +415,41 @@ mod tests {
         }
     }
 
-    // Tests for resolution validation
+    // Tests for grid construction validation
 
     #[test]
     fn test_resolution_one_returns_error() {
-        let grid = WealthProcessGridPoints::Resolution(1); // Invalid!
-        let result = grid.m_values();
+        let result = WealthProcessGridPoints::new_from_resolution(1);
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("resolution must be at least 2")
+                .contains("Grid resolution must be at least 2")
+        );
+    }
+
+    #[test]
+    fn test_empty_m_values_returns_error() {
+        let result = WealthProcessGridPoints::new_from_values(vec![]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least 2 grid points must be specified")
+        );
+    }
+
+    #[test]
+    fn test_single_m_value_returns_error() {
+        let result = WealthProcessGridPoints::new_from_values(vec![0.5]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least 2 grid points must be specified")
         );
     }
 
@@ -594,19 +616,19 @@ mod tests {
     #[test]
     fn test_grid_default_resolution() {
         let grid = WealthProcessGridPoints::default();
-        assert_eq!(grid.len().unwrap(), DEFAULT_M_RESOLUTION);
+        assert_eq!(grid.len(), DEFAULT_M_RESOLUTION);
     }
 
     #[test]
     fn test_grid_custom_resolution() {
         let grid = WealthProcessGridPoints::Resolution(101);
-        assert_eq!(grid.len().unwrap(), 101);
+        assert_eq!(grid.len(), 101);
     }
 
     #[test]
     fn test_grid_m_values_from_resolution() {
         let grid = WealthProcessGridPoints::Resolution(11);
-        let m_values = grid.m_values().unwrap();
+        let m_values = grid.m_values();
         assert_eq!(m_values.len(), 11);
         assert!(approx_eq(m_values[0], 0.0));
         assert!(approx_eq(m_values[5], 0.5));
@@ -617,7 +639,7 @@ mod tests {
     fn test_grid_m_values_custom() {
         let custom_m = vec![0.1, 0.2, 0.3, 0.4, 0.5];
         let grid = WealthProcessGridPoints::MValues(custom_m.clone());
-        let m_values = grid.m_values().unwrap();
+        let m_values = grid.m_values();
         assert_eq!(m_values, custom_m);
     }
 
@@ -786,7 +808,7 @@ mod tests {
         let observations = vec![0.5, 0.6];
         let updated = update_betting_cs(initial, observations, None).unwrap();
 
-        assert_eq!(updated.wealth.grid.len().unwrap(), 51);
+        assert_eq!(updated.wealth.grid.len(), 51);
         assert_eq!(updated.wealth.wealth_upper.len(), 51);
         assert_eq!(updated.wealth.wealth_lower.len(), 51);
     }
@@ -1097,7 +1119,7 @@ mod tests {
         let updated = update_betting_cs(initial, vec![0.5], None).unwrap();
 
         // Find the index closest to m=0.5
-        let m_values = updated.wealth.grid.m_values().unwrap();
+        let m_values = updated.wealth.grid.m_values();
         let idx_half = m_values
             .iter()
             .position(|&m| (m - 0.5).abs() < 1e-10)
@@ -1191,7 +1213,7 @@ mod tests {
         let initial = create_initial_cs(101, 0.05);
         let updated = update_betting_cs(initial, vec![0.6, 0.4], None).unwrap();
 
-        let m_values = updated.wealth.grid.m_values().unwrap();
+        let m_values = updated.wealth.grid.m_values();
         let idx_half = m_values
             .iter()
             .position(|&m| (m - 0.5).abs() < 1e-10)
@@ -1217,7 +1239,7 @@ mod tests {
         let observations = vec![0.7; 20]; // 20 observations at true mean 0.7
         let updated = update_betting_cs(initial, observations, None).unwrap();
 
-        let m_values = updated.wealth.grid.m_values().unwrap();
+        let m_values = updated.wealth.grid.m_values();
         let n = m_values.len();
 
         // Find index closest to 0.7
