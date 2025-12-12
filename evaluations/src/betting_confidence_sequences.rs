@@ -45,22 +45,9 @@ fn find_cs_lower(
     threshold: f64,
     min_idx: usize,
 ) -> (f64, usize) {
-    let mut lo = 0;
-    let mut hi = min_idx + 1; // Search in [0, min_idx]
-
-    // Find first index where wealth < threshold
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if wealth_hedged[mid] >= threshold {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-
-    // lo is the first index where wealth < threshold
-    // Take lo - 1 as outer bound for coverage, clamp to valid range
-    let idx = if lo > 0 { lo - 1 } else { 0 };
+    // partition_point returns the first index where the predicate is false
+    let first_below = wealth_hedged[..=min_idx].partition_point(|w| *w >= threshold);
+    let idx = first_below.saturating_sub(1);
     (m_values[idx], idx)
 }
 
@@ -80,23 +67,8 @@ fn find_cs_upper(
     min_idx: usize,
 ) -> (f64, usize) {
     let n = wealth_hedged.len();
-    let mut lo = min_idx;
-    let mut hi = n;
-
-    // Find first index where wealth >= threshold (in the monotonically increasing region)
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if wealth_hedged[mid] < threshold {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-
-    // lo is the first index where wealth >= threshold
-    // The last index with wealth < threshold is lo - 1
-    // Take lo as outer bound for coverage, clamp to valid range
-    let idx = lo.min(n - 1);
+    let first_above_relative = wealth_hedged[min_idx..].partition_point(|w| *w < threshold);
+    let idx = (min_idx + first_above_relative).min(n - 1);
     (m_values[idx], idx)
 }
 
