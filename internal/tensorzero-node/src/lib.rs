@@ -47,7 +47,7 @@ pub struct EvaluationRunStartEvent {
     pub num_datapoints: usize,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
-    pub variant_name: String,
+    pub variant_name: Option<String>,
 }
 
 #[derive(Serialize, ts_rs::TS)]
@@ -120,7 +120,8 @@ pub struct RunEvaluationStreamingParams {
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
     pub datapoint_ids: Option<Vec<String>>,
-    pub variant_name: String,
+    pub variant_name: Option<String>,
+    pub variant_info: Option<String>,
     pub concurrency: u32,
     pub inference_cache: String,
     pub max_datapoints: Option<u32>,
@@ -215,6 +216,21 @@ pub async fn run_evaluation_streaming(
         HashMap::new()
     };
 
+    let variant = match (params.variant_name.clone(), params.variant_info) {
+        (Some(name), None) => EvaluationVariant::Name(name),
+        (None, Some(info)) => {
+            let info = serde_json::from_str(&info).map_err(|e| {
+                napi::Error::from_reason(format!("Failed to deserialize variant_info: {e}"))
+            })?;
+            EvaluationVariant::Info(Box::new(info))
+        }
+        _ => {
+            return Err(napi::Error::from_reason(
+                "Exactly one of variant_name or variant_info must be provided",
+            ));
+        }
+    };
+
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
@@ -222,7 +238,7 @@ pub async fn run_evaluation_streaming(
         function_configs,
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: Some(datapoint_ids.clone()),
-        variant: EvaluationVariant::Name(params.variant_name.clone()),
+        variant,
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,
@@ -247,7 +263,7 @@ pub async fn run_evaluation_streaming(
         num_datapoints: result.run_info.num_datapoints,
         evaluation_name: params.evaluation_name.clone(),
         dataset_name: params.dataset_name.clone(),
-        variant_name: params.variant_name.clone(),
+        variant_name: params.variant_name,
     });
 
     send_event(&callback, &start_event)?;

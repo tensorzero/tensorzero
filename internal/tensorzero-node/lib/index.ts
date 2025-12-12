@@ -120,7 +120,9 @@ interface RunEvaluationStreamingParams {
   functionConfig: string;
   evaluationName: string;
   datasetName: string;
-  variantName: string;
+  variantName?: string;
+  /** variantInfo is a serialized UninitializedVariantInfo type */
+  variantInfo?: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
