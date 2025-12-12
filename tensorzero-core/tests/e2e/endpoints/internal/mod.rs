@@ -1,3 +1,4 @@
+mod episodes;
 mod inference_metadata;
 mod inference_stats;
 mod model_inferences;

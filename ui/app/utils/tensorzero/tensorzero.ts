@@ -37,11 +37,13 @@ import type {
   ListInferenceMetadataResponse,
   StatusResponse,
   TimeWindow,
+  TableBoundsWithCount,
   UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
+  ListEpisodesResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -933,6 +935,53 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as ListInferenceMetadataResponse;
+  }
+
+  /**
+   * Lists episodes with pagination support.
+   * @param limit - Maximum number of episodes to return
+   * @param before - Return episodes before this episode_id (for pagination)
+   * @param after - Return episodes after this episode_id (for pagination)
+   * @returns A promise that resolves with an array of episodes
+   * @throws Error if the request fails
+   */
+  async listEpisodes(
+    limit: number,
+    before?: string,
+    after?: string,
+  ): Promise<ListEpisodesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    if (before) {
+      searchParams.append("before", before);
+    }
+    if (after) {
+      searchParams.append("after", after);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/episodes?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListEpisodesResponse;
+  }
+
+  /**
+   * Queries episode table bounds (first_id, last_id, and count).
+   * @returns A promise that resolves with the bounds information
+   * @throws Error if the request fails
+   */
+  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+    const endpoint = `/internal/episodes/bounds`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as TableBoundsWithCount;
   }
 
   private async fetch(

@@ -19,25 +19,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn query_episode_table(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            query_episode_table,
-            params,
-            QueryEpisodeTableParams {
-                limit,
-                before,
-                after
-            }
-        )
-    }
-
-    #[napi]
-    pub async fn query_episode_table_bounds(&self) -> Result<String, napi::Error> {
-        napi_call!(&self, query_episode_table_bounds)
-    }
-
-    #[napi]
     pub async fn get_cumulative_feedback_timeseries(
         &self,
         params: String,
@@ -157,16 +138,6 @@ impl DatabaseClient {
 
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-struct QueryEpisodeTableParams {
-    pub limit: u32,
-    #[ts(optional)]
-    pub before: Option<Uuid>,
-    #[ts(optional)]
-    pub after: Option<Uuid>,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
