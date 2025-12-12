@@ -73,9 +73,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .getByText("gpt4o_mini_initial_prompt")
           .click();
         await page.getByPlaceholder("Select model...").click();
-        await page
-          .getByRole("option", { name: [model, provider].join(" ") })
-          .click();
+        await page.getByRole("option", { name: model }).click();
         await page
           .getByRole("button", { name: "Start Fine-tuning Job" })
           .click();
@@ -120,9 +118,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .getByText("gpt4o_mini_initial_prompt")
       .click();
     await page.getByPlaceholder("Select model...").click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
-      .click();
+    await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
     await page
@@ -170,9 +166,7 @@ model_name = "mock-inference-finetune-1234"
       .click();
     await page.getByLabel("honest_answer").getByText("honest_answer").click();
     await page.getByPlaceholder("Select model...").click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
-      .click();
+    await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
     await page
@@ -254,9 +248,9 @@ test.describe("Error handling", () => {
     await modelInput.click();
     await modelInput.fill("error");
     // Wait for the options to load
-    await page.getByRole("option", { name: "error OpenAI" }).waitFor();
-    // Click on the option that has text "error" and provider "OpenAI"
-    await page.getByRole("option", { name: "error OpenAI" }).click();
+    await page.getByRole("option", { name: "error" }).waitFor();
+    // Click on the option that has text "error"
+    await page.getByRole("option", { name: "error" }).click();
     // Click on the Start Fine-tuning Job button
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -274,7 +268,7 @@ test.describe("should expose configured providers", () => {
     "together",
   ];
 
-  // ensure each provider we expect is in the list
+  // Ensure each provider we expect is in the list
   providers.forEach((provider) => {
     test(provider, async ({ page }) => {
       await page.goto("/optimization/supervised-fine-tuning");
@@ -286,12 +280,15 @@ test.describe("should expose configured providers", () => {
       await modelInput.click();
       await modelInput.fill(modelName);
 
-      // Wait for the options to load
-      await page
-        .getByRole("option", {
-          name: `${modelName} ${providerName}`,
-        })
-        .waitFor();
+      // Wait for the custom model option to appear and open its provider dropdown
+      const customOption = page.getByRole("option").first();
+      await customOption.waitFor();
+      await customOption.getByRole("combobox").click();
+
+      // Verify this provider is available in the dropdown
+      await expect(
+        page.getByRole("option", { name: providerName }),
+      ).toBeVisible();
     });
   });
 
@@ -308,7 +305,12 @@ test.describe("should expose configured providers", () => {
     await modelInput.click();
     await modelInput.fill(modelName);
 
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("option")).toHaveCount(providers.length);
+    // Wait for the custom model option to appear and open its provider dropdown
+    const customOption = page.getByRole("option").first();
+    await customOption.waitFor();
+    await customOption.getByRole("combobox").click();
+
+    // Verify all providers are available in the dropdown
+    await expect(page.getByRole("option")).toHaveCount(providers.length);
   });
 });
