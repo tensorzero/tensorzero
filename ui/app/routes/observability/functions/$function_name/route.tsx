@@ -1,7 +1,4 @@
-import {
-  countInferencesForFunction,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -43,6 +40,7 @@ import {
   getNativeTensorZeroClient,
 } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { applyPaginationLogic } from "~/utils/pagination";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -69,11 +67,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
-  const inferencePromise = listInferencesWithPagination({
+  const client = getTensorZeroClient();
+  const inferencePromise = client.listInferenceMetadata({
     function_name,
     before: beforeInference || undefined,
     after: afterInference || undefined,
-    limit,
+    limit: limit + 1, // Fetch one extra to determine pagination
   });
   const numInferencesPromise = countInferencesForFunction(function_name);
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
@@ -202,11 +201,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   });
 
+  // Handle pagination from listInferenceMetadata response
+  const {
+    items: inferences,
+    hasNextPage: hasNextInferencePage,
+    hasPreviousPage: hasPreviousInferencePage,
+  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
+    before: beforeInference,
+    after: afterInference,
+  });
+
   return {
     function_name,
-    inferences: inferenceResult.inferences,
-    hasNextInferencePage: inferenceResult.hasNextPage,
-    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
+    inferences,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
@@ -248,7 +257,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.inference_id);
+    searchParams.set("beforeInference", bottomInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -256,7 +265,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.inference_id);
+    searchParams.set("afterInference", topInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 

@@ -33,6 +33,7 @@ import type {
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListInferencesRequest,
+  ListInferenceMetadataResponse,
   StatusResponse,
   TimeWindow,
   UiConfig,
@@ -856,6 +857,56 @@ export class TensorZeroClient {
     const count_response =
       (await response.json()) as EvaluationRunStatsResponse;
     return Number(count_response.count);
+  }
+
+  /**
+   * Lists inference metadata with optional cursor-based pagination and filtering.
+   * @param params - Optional pagination and filter parameters
+   * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
+   * @param params.after - Cursor to fetch records after this ID (mutually exclusive with before)
+   * @param params.limit - Maximum number of records to return
+   * @param params.function_name - Optional function name to filter by
+   * @param params.variant_name - Optional variant name to filter by
+   * @param params.episode_id - Optional episode ID to filter by
+   * @returns A promise that resolves with the inference metadata response
+   * @throws Error if the request fails
+   */
+  async listInferenceMetadata(params?: {
+    before?: string;
+    after?: string;
+    limit?: number;
+    function_name?: string | null;
+    variant_name?: string | null;
+    episode_id?: string | null;
+  }): Promise<ListInferenceMetadataResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.before) {
+      searchParams.append("before", params.before);
+    }
+    if (params?.after) {
+      searchParams.append("after", params.after);
+    }
+    if (params?.limit !== undefined) {
+      searchParams.append("limit", params.limit.toString());
+    }
+    if (params?.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params?.variant_name) {
+      searchParams.append("variant_name", params.variant_name);
+    }
+    if (params?.episode_id) {
+      searchParams.append("episode_id", params.episode_id);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/inference_metadata${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListInferenceMetadataResponse;
   }
 
   private async fetch(
