@@ -72,10 +72,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .getByLabel("gpt4o_mini_initial_prompt")
           .getByText("gpt4o_mini_initial_prompt")
           .click();
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a model..." })
-          .click();
+        await page.getByPlaceholder("Select model...").click();
         await page
           .getByRole("option", { name: [model, provider].join(" ") })
           .click();
@@ -122,10 +119,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
+    await page.getByPlaceholder("Select model...").click();
     await page
       .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
@@ -175,10 +169,7 @@ model_name = "mock-inference-finetune-1234"
       .filter({ hasText: "Select a variant name" })
       .click();
     await page.getByLabel("honest_answer").getByText("honest_answer").click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
+    await page.getByPlaceholder("Select model...").click();
     await page
       .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
       .click();
@@ -259,12 +250,9 @@ test.describe("Error handling", () => {
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    // Fill in the input of the popover with "error"
-    await page.getByPlaceholder("Search models...").fill("error");
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await modelInput.fill("error");
     // Wait for the options to load
     await page.getByRole("option", { name: "error OpenAI" }).waitFor();
     // Click on the option that has text "error" and provider "OpenAI"
@@ -294,12 +282,9 @@ test.describe("should expose configured providers", () => {
       const modelName = "test-name";
       const providerName = formatProvider(provider).name;
 
-      await page
-        .getByRole("combobox")
-        .filter({ hasText: "Select a model..." })
-        .click();
-
-      await page.getByPlaceholder("Search models...").fill(modelName);
+      const modelInput = page.getByPlaceholder("Select model...");
+      await modelInput.click();
+      await modelInput.fill(modelName);
 
       // Wait for the options to load
       await page
@@ -319,12 +304,9 @@ test.describe("should expose configured providers", () => {
 
     const modelName = "test-name";
 
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-
-    await page.getByPlaceholder("Search models...").fill(modelName);
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await modelInput.fill(modelName);
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("option")).toHaveCount(providers.length);
