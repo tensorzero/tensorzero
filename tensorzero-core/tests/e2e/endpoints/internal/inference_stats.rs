@@ -522,3 +522,174 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
         response.feedback_count
     );
 }
+
+// Tests from fixtures for write_haiku and extract_entities functions
+
+/// Helper function to call the inference stats endpoint (for fixture-based tests)
+async fn get_inference_stats_fixture(
+    function_name: &str,
+    query_params: &str,
+) -> Result<InferenceStatsResponse, Box<dyn std::error::Error>> {
+    let http_client = Client::new();
+    let url = format!(
+        "/internal/functions/{function_name}/inference-stats{}",
+        if query_params.is_empty() {
+            String::new()
+        } else {
+            format!("?{query_params}")
+        }
+    );
+
+    let resp = http_client.get(get_gateway_endpoint(&url)).send().await?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await?;
+        return Err(format!("Request failed: status={status}, body={body}").into());
+    }
+
+    let response: InferenceStatsResponse = resp.json().await?;
+    Ok(response)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_basic() {
+    let res = get_inference_stats_fixture("write_haiku", "")
+        .await
+        .unwrap();
+
+    assert!(
+        res.inference_count >= 804,
+        "Expected at least 804 inferences for write_haiku, got {}",
+        res.inference_count
+    );
+
+    // Should not have stats_by_variant when group_by is not specified
+    assert!(
+        res.stats_by_variant.is_none(),
+        "stats_by_variant should not be present without group_by"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_with_variant_filter() {
+    let res = get_inference_stats_fixture("basic_test", "variant_name=test")
+        .await
+        .unwrap();
+
+    assert!(
+        res.inference_count >= 1,
+        "Expected at least 1 inference for basic_test/test, got {}",
+        res.inference_count
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_group_by_variant() {
+    let res = get_inference_stats_fixture("basic_test", "group_by=variant")
+        .await
+        .unwrap();
+
+    let total_count = res.inference_count;
+    assert!(
+        total_count >= 1,
+        "Expected at least 1 inference for basic_test, got {total_count}"
+    );
+
+    let stats_by_variant = res
+        .stats_by_variant
+        .expect("Expected stats_by_variant to be present");
+
+    // Should have at least 2 variants
+    assert!(
+        stats_by_variant.len() >= 2,
+        "Expected at least 2 variants, got {}",
+        stats_by_variant.len()
+    );
+
+    // Sum of variant counts should equal total
+    let sum_of_variants: u64 = stats_by_variant.iter().map(|v| v.inference_count).sum();
+    assert_eq!(
+        sum_of_variants, total_count,
+        "Sum of variant counts ({sum_of_variants}) should equal total count ({total_count})"
+    );
+
+    // Variants should be ordered by inference_count DESC
+    let counts: Vec<u64> = stats_by_variant.iter().map(|v| v.inference_count).collect();
+    for i in 1..counts.len() {
+        assert!(
+            counts[i - 1] >= counts[i],
+            "Counts should be in descending order"
+        );
+    }
+
+    // Each variant should have last_used_at in ISO 8601 format
+    for variant in &stats_by_variant {
+        assert!(
+            variant.last_used_at.contains('T') && variant.last_used_at.ends_with('Z'),
+            "last_used_at should be in ISO 8601 format, got: {}",
+            variant.last_used_at
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_group_by_variant_json_function() {
+    let res = get_inference_stats_fixture("extract_entities", "group_by=variant")
+        .await
+        .unwrap();
+
+    assert!(
+        res.inference_count >= 1,
+        "Expected at least 1 inferences for extract_entities, got {}",
+        res.inference_count
+    );
+
+    let stats_by_variant = res
+        .stats_by_variant
+        .expect("Expected stats_by_variant to be present");
+
+    // Verify expected variant is present
+    let variant_names: Vec<&str> = stats_by_variant
+        .iter()
+        .map(|v| v.variant_name.as_str())
+        .collect();
+    assert!(
+        variant_names.contains(&"gpt4o_initial_prompt"),
+        "Expected gpt4o_initial_prompt variant to be present"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_nonexistent_function() {
+    let http_client = Client::new();
+    let url = "/internal/functions/nonexistent_function/inference-stats";
+
+    let resp = http_client
+        .get(get_gateway_endpoint(url))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        !resp.status().is_success(),
+        "Request for nonexistent function should fail"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inference_stats_nonexistent_variant() {
+    let http_client = Client::new();
+    let url = "/internal/functions/write_haiku/inference-stats?variant_name=nonexistent_variant";
+
+    let resp = http_client
+        .get(get_gateway_endpoint(url))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        !resp.status().is_success(),
+        "Request for nonexistent variant should fail"
+    );
+}

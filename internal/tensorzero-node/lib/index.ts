@@ -11,15 +11,12 @@ import type {
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
-  ModelLatencyDatapoint,
-  ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
   FeedbackBounds,
-  TimeWindow,
   QueryFeedbackBoundsByTargetIdParams,
   QueryFeedbackByTargetIdParams,
   CountFeedbackByTargetIdParams,
@@ -214,30 +211,6 @@ export class DatabaseClient {
     return new DatabaseClient(
       await NativeDatabaseClient.fromClickhouseUrl(url),
     );
-  }
-
-  async getModelUsageTimeseries(
-    timeWindow: TimeWindow,
-    maxPeriods: number,
-  ): Promise<ModelUsageTimePoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-      max_periods: maxPeriods,
-    });
-    const modelUsageTimeseriesString =
-      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
-    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
-  }
-
-  async getModelLatencyQuantiles(
-    timeWindow: TimeWindow,
-  ): Promise<ModelLatencyDatapoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-    });
-    const modelLatencyQuantilesString =
-      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
-    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
   }
 
   async queryEpisodeTable(

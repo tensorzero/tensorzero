@@ -8,7 +8,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { VariantCounts } from "~/utils/clickhouse/function";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -22,8 +21,9 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
+import type { InferenceStatsByVariant } from "~/types/tensorzero";
 
-type VariantCountsWithMetadata = VariantCounts & {
+type VariantCountsWithMetadata = InferenceStatsByVariant & {
   type: string;
 };
 
@@ -58,11 +58,11 @@ export default function FunctionVariantTable({
         header: "Type",
         cell: (info) => <Code>{info.getValue()}</Code>,
       }),
-      columnHelper.accessor("count", {
+      columnHelper.accessor("inference_count", {
         header: "Count",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor("last_used", {
+      columnHelper.accessor("last_used_at", {
         header: "Last Used",
         cell: (info) => <TableItemTime timestamp={info.getValue()} />,
       }),
