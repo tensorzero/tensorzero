@@ -25,6 +25,7 @@ import type {
   DeleteDatapointsResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
+  GetWorkflowEvaluationProjectsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -888,6 +889,31 @@ export class TensorZeroClient {
     const count_response =
       (await response.json()) as EvaluationRunStatsResponse;
     return Number(count_response.count);
+  }
+
+  /**
+   * Gets workflow evaluation projects with pagination.
+   * @param limit - Maximum number of projects to return (default: 100)
+   * @param offset - Number of projects to skip (default: 0)
+   * @returns A promise that resolves with the workflow evaluation projects response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationProjects(
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<GetWorkflowEvaluationProjectsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/projects${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationProjectsResponse;
   }
 
   /**
