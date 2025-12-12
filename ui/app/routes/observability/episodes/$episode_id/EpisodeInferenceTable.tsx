@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceMetadata } from "~/types/tensorzero";
+import type { StoredInference } from "~/types/tensorzero";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -18,10 +18,9 @@ import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
 import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 import { Button } from "~/components/ui/button";
 import { Eye } from "lucide-react";
-import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 
 interface EpisodeInferenceTableProps {
-  inferences: InferenceMetadata[];
+  inferences: StoredInference[];
   onOpenSheet: (inferenceId: string) => void;
   onCloseSheet: () => void;
   openSheetInferenceId: string | null;
@@ -50,17 +49,20 @@ export default function EpisodeInferenceTable({
             <TableEmptyState message="No inferences found" />
           ) : (
             inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
+              <TableRow
+                key={inference.inference_id}
+                id={inference.inference_id}
+              >
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
-                    id={inference.id}
-                    link={toInferenceUrl(inference.id)}
+                    id={inference.inference_id}
+                    link={toInferenceUrl(inference.inference_id)}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
-                    functionType={inference.function_type}
+                    functionType={inference.type}
                     link={toFunctionUrl(inference.function_name)}
                   />
                 </TableCell>
@@ -75,13 +77,13 @@ export default function EpisodeInferenceTable({
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  <TableItemTime timestamp={uuidv7ToTimestamp(inference.id)} />
+                  <TableItemTime timestamp={inference.timestamp} />
                 </TableCell>
                 <TableCell className="text-center">
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onOpenSheet(inference.id)}
+                    onClick={() => onOpenSheet(inference.inference_id)}
                     aria-label="View inference details"
                   >
                     <Eye className="h-4 w-4" />

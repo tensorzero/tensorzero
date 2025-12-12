@@ -100,8 +100,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
     [inferenceResult, feedbacks, num_inferences, num_feedbacks] =
       await Promise.all([
-        client.listInferenceMetadata({
-          episode_id,
+        client.listEpisodeInferences(episode_id, {
           before: beforeInference ?? undefined,
           after: afterInference ?? undefined,
           limit: limit + 1, // Fetch one extra to determine pagination
@@ -128,8 +127,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       num_feedbacks,
       latestFeedbackByMetric,
     ] = await Promise.all([
-      client.listInferenceMetadata({
-        episode_id,
+      client.listEpisodeInferences(episode_id, {
         before: beforeInference ?? undefined,
         after: afterInference ?? undefined,
         limit: limit + 1, // Fetch one extra to determine pagination
@@ -145,10 +143,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       queryLatestFeedbackIdByMetric({ target_id: episode_id }),
     ]);
   }
-  // Handle pagination from listInferenceMetadata response
-  const hasNextInferencePage =
-    inferenceResult.inference_metadata.length > limit;
-  const inferences = inferenceResult.inference_metadata.slice(0, limit);
+  // Handle pagination from listEpisodeInferences response
+  const hasNextInferencePage = inferenceResult.inferences.length > limit;
+  const inferences = inferenceResult.inferences.slice(0, limit);
   const hasPreviousInferencePage = !!(beforeInference || afterInference);
 
   if (inferences.length === 0) {
@@ -209,7 +206,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
+    searchParams.set("beforeInference", bottomInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -217,7 +214,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
+    searchParams.set("afterInference", topInference.inference_id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
