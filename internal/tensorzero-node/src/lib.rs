@@ -120,8 +120,7 @@ pub struct RunEvaluationStreamingParams {
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
     pub datapoint_ids: Option<Vec<String>>,
-    pub variant_name: String, // make this optional
-    // add a variant_info field (probably serialized) as a string
+    pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
     pub max_datapoints: Option<u32>,
@@ -137,8 +136,6 @@ pub async fn run_evaluation_streaming(
 ) -> Result<(), napi::Error> {
     let url = Url::parse(&params.gateway_url)
         .map_err(|e| napi::Error::from_reason(format!("Invalid gateway URL: {e}")))?;
-    // check that exactly one of variant_name and variant_info is provided
-    // if variant_info is provided, desrialize into UninitializedVariantInfo struct
 
     // Deserialize configs from JSON strings
     let evaluation_config: EvaluationConfig = serde_json::from_str(&params.evaluation_config)
@@ -225,7 +222,7 @@ pub async fn run_evaluation_streaming(
         function_configs,
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: Some(datapoint_ids.clone()),
-        variant: EvaluationVariant::Name(params.variant_name.clone()), // if we have variant info instead, construct the EvaluationVariant::Info variant
+        variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,
