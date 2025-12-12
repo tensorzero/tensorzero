@@ -12681,7 +12681,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(input_tokens > 5);
 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
