@@ -14,24 +14,6 @@ use std::collections::HashMap;
 
 use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
 
-// Enum for global stopping condition.
-// In case multiple stopping conditions are satisfied simultaneously,
-// the highest ranked condition takes precedence. The order of the last three is fairly arbitrary.
-pub enum GlobalStoppingReason {
-    // If top-k found, return the k that caused stopping (largest k satisfied in k_max..k_min)
-    TopKFound(u32),
-    // Datapoint limit hit
-    MaxDatapointsReached,
-    // If evaluator(s) failed, return name(s) of failed evaluator(s).
-    // An evaluator fails if the lower bound of the confidence sequence for its
-    // failure rate exceeds EVALUATOR_FAILURE_THRESHOLD.
-    EvaluatorsFailed(Vec<String>),
-    // If too many variants failed (VariantStatus::Failed), return name(s) of failed variant(s).
-    // If more than num_variants - k_min variants have failed, we can no longer identify the top-k
-    // variants for any k in k_min..k_max.
-    TooManyVariantsFailed(Vec<String>),
-}
-
 /// Result of checking the top-k stopping condition.
 #[derive(Debug, Clone)]
 pub struct TopKStoppingResult {
