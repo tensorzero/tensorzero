@@ -1276,14 +1276,31 @@ impl TensorZeroGateway {
     /// :param params: The parameters specifying which inferences to convert to datapoints.
     ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
     ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A list of UUIDs of the created datapoints.
-    #[pyo3(signature = (*, dataset_name, params))]
+    #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences(
         this: PyRef<'_, Self>,
         dataset_name: String,
         params: Bound<'_, PyAny>,
+        output_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `request` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
         let fut = client.create_datapoints_from_inferences(dataset_name, params);
@@ -2495,14 +2512,31 @@ impl AsyncTensorZeroGateway {
     /// :param params: The parameters specifying which inferences to convert to datapoints.
     ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
     ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A `CreateDatapointsResponse` object containing the IDs of the newly-created datapoints.
-    #[pyo3(signature = (*, dataset_name, params))]
+    #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
         params: Bound<'a, PyAny>,
+        output_source: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `request` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {

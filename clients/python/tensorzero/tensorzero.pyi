@@ -870,12 +870,15 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         dataset_name: str,
         params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Optional[Literal["none", "inference", "demonstration"]] = None,
     ) -> CreateDatapointsResponse:
         """
         Create datapoints from inferences.
 
         :param dataset_name: The name of the dataset to create datapoints in.
         :param params: The parameters specifying which inferences to convert to datapoints.
+        :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+                             Can also be specified inside `params.output_source`. If both are provided, an error is raised.
         :return: A `CreateDatapointsResponse` object.
         """
 
@@ -1413,12 +1416,15 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         dataset_name: str,
         params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Optional[Literal["none", "inference", "demonstration"]] = None,
     ) -> CreateDatapointsResponse:
         """
         Create datapoints from inferences.
 
         :param dataset_name: The name of the dataset to create datapoints in.
         :param params: The parameters specifying which inferences to convert to datapoints.
+        :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+                             Can also be specified inside `params.output_source`. If both are provided, an error is raised.
         :return: A `CreateDatapointsResponse` object.
         """
 
