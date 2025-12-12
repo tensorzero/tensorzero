@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Badge } from "~/components/ui/badge";
+import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { logger } from "~/utils/logger";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
@@ -161,18 +162,16 @@ export function DatasetBuilderForm() {
                 <div>
                   <FormLabel>Variant</FormLabel>
                   <div className="mt-2">
-                    <Input
+                    <VariantSelector
+                      functionName={functionName ?? null}
                       value={form.watch("variant_name") ?? ""}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         form.setValue(
                           "variant_name",
-                          e.target.value || undefined,
-                          {
-                            shouldValidate: true,
-                          },
+                          value === "__all__" ? undefined : value || undefined,
+                          { shouldValidate: true },
                         )
                       }
-                      placeholder="Enter variant name"
                     />
                   </div>
                 </div>

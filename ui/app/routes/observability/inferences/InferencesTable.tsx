@@ -31,6 +31,7 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import { useAllFunctionConfigs } from "~/context/config";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
 
@@ -240,21 +241,17 @@ export default function InferencesTable({
               </div>
 
               <div>
-                <label htmlFor="variant-filter" className="text-sm font-medium">
-                  Variant
-                </label>
+                <label className="text-sm font-medium">Variant</label>
                 <div className="mt-1 flex items-center gap-2">
-                  <Input
-                    id="variant-filter"
-                    value={filterVariantName}
-                    onChange={(e) => setFilterVariantName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleFilterSubmit();
+                  <div className="flex-1">
+                    <VariantSelector
+                      functionName={filterFunctionName}
+                      value={filterVariantName}
+                      onChange={(value) =>
+                        setFilterVariantName(value === "__all__" ? "" : value)
                       }
-                    }}
-                    placeholder="Enter variant name"
-                  />
+                    />
+                  </div>
                   {filterVariantName && (
                     <Button
                       variant="outline"
