@@ -173,6 +173,7 @@ mod tests {
         )
     }
 
+    /// Test that empty input returns no stopping.
     #[test]
     fn test_check_topk_stopping_empty() {
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
@@ -182,6 +183,7 @@ mod tests {
         assert!(result.top_variants.is_empty());
     }
 
+    /// Test that invalid k values (k_min=0 or k_max < k_min) return no stopping.
     #[test]
     fn test_check_topk_stopping_invalid_k() {
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
@@ -196,6 +198,7 @@ mod tests {
         assert!(!result.stopped);
     }
 
+    /// Test top-1 identification when one variant clearly dominates all others.
     #[test]
     fn test_check_topk_stopping_clear_winner() {
         // Variant A: [0.7, 0.9] - clearly better
@@ -218,6 +221,7 @@ mod tests {
         assert!(result.top_variants.contains(&"a".to_string()));
     }
 
+    /// Test top-2 identification when two variants clearly beat a third.
     #[test]
     fn test_check_topk_stopping_top2() {
         // Variant A: [0.7, 0.9] - in top 2
@@ -242,6 +246,7 @@ mod tests {
         assert!(result.top_variants.contains(&"b".to_string()));
     }
 
+    /// Test that overlapping confidence intervals prevent top-1 identification.
     #[test]
     fn test_check_topk_stopping_overlapping_intervals_no_stop() {
         // All intervals overlap significantly - can't distinguish
@@ -262,6 +267,7 @@ mod tests {
         assert!(result.k.is_none());
     }
 
+    /// Test that the largest viable k is returned when checking a range.
     #[test]
     fn test_check_topk_stopping_k_range() {
         // Variant A: [0.8, 0.9] - beats B and C
@@ -295,6 +301,7 @@ mod tests {
         assert!(result.top_variants.contains(&"a".to_string()));
     }
 
+    /// Test that requesting k larger than the number of variants returns no stopping.
     #[test]
     fn test_check_topk_stopping_k_larger_than_variants() {
         // Only 2 variants but asking for top-3
@@ -307,6 +314,7 @@ mod tests {
         assert!(!result.stopped);
     }
 
+    /// Test that a single variant is trivially identified as top-1.
     #[test]
     fn test_check_topk_single_variant() {
         // Single variant - should be identified as top-1
@@ -320,6 +328,7 @@ mod tests {
         assert_eq!(result.top_variants, vec!["a".to_string()]);
     }
 
+    /// Test that check_topk wrapper correctly calls check_topk_stopping with k_min = k_max.
     #[test]
     fn test_check_topk_wrapper() {
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
@@ -335,6 +344,7 @@ mod tests {
         assert_eq!(result.k, Some(1));
     }
 
+    /// Test that epsilon tolerance enables top-1 stopping for nearly-separated intervals.
     #[test]
     fn test_check_topk_stopping_epsilon_enables_stopping() {
         // Variant A: [0.48, 0.7] - lower bound just below B's upper
@@ -366,6 +376,7 @@ mod tests {
         assert!(result.top_variants.contains(&"a".to_string()));
     }
 
+    /// Test that epsilon tolerance enables identifying a larger top-k set.
     #[test]
     fn test_check_topk_stopping_epsilon_enables_larger_k() {
         // Variant A: [0.7, 0.9] - clearly best
@@ -409,9 +420,9 @@ mod tests {
         assert!(result.top_variants.contains(&"b".to_string()));
     }
 
+    /// Test that epsilon=0.0 behaves identically to epsilon=None.
     #[test]
     fn test_check_topk_stopping_epsilon_zero_same_as_none() {
-        // Verify that epsilon = Some(0.0) behaves the same as None
         let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
             mock_cs("a", 0.7, 0.9),
             mock_cs("b", 0.3, 0.5),
@@ -432,6 +443,7 @@ mod tests {
         );
     }
 
+    /// Test that a very large epsilon makes all variants beat all others.
     #[test]
     fn test_check_topk_stopping_large_epsilon_all_beat_all() {
         // With a very large epsilon, every variant "beats" every other variant
@@ -453,6 +465,7 @@ mod tests {
         assert_eq!(result.top_variants.len(), 3);
     }
 
+    /// Test that k_max caps the returned k, even when larger k values are viable.
     #[test]
     fn test_check_topk_stopping_returns_largest_viable_k() {
         // Variant A: [0.8, 0.95] - beats all 4 others
@@ -506,6 +519,7 @@ mod tests {
         assert_eq!(result.top_variants.len(), 4);
     }
 
+    /// Test that no stopping occurs when no k in the range is viable.
     #[test]
     fn test_check_topk_stopping_k_range_no_viable_k() {
         // Variant A: [0.4, 0.7]
@@ -539,6 +553,7 @@ mod tests {
         assert_eq!(result.k, Some(3));
     }
 
+    /// Test a "gap" scenario where k=1 and k=3 are viable but k=2 is not.
     #[test]
     fn test_check_topk_stopping_k_range_partial_viability() {
         // Variant A: [0.7, 0.9] - beats B and C
