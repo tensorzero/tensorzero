@@ -1,4 +1,5 @@
-import type { InferenceFilter, StoredInference } from "~/types/tensorzero";
+import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
+import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 import {
   Table,
   TableBody,
@@ -43,7 +44,7 @@ export default function InferencesTable({
   search_query,
   filters,
 }: {
-  inferences: StoredInference[];
+  inferences: InferenceMetadata[];
   function_name: string | undefined;
   variant_name: string | undefined;
   episode_id: string | undefined;
@@ -165,14 +166,11 @@ export default function InferencesTable({
             <TableEmptyState message="No inferences found" />
           ) : (
             inferences.map((inference) => (
-              <TableRow
-                key={inference.inference_id}
-                id={inference.inference_id}
-              >
+              <TableRow key={inference.id} id={inference.id}>
                 <TableCell>
                   <TableItemShortUuid
-                    id={inference.inference_id}
-                    link={toInferenceUrl(inference.inference_id)}
+                    id={inference.id}
+                    link={toInferenceUrl(inference.id)}
                   />
                 </TableCell>
                 <TableCell>
@@ -184,7 +182,7 @@ export default function InferencesTable({
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
-                    functionType={inference.type}
+                    functionType={inference.function_type}
                     link={toFunctionUrl(inference.function_name)}
                   />
                 </TableCell>
@@ -199,7 +197,9 @@ export default function InferencesTable({
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  <TableItemTime timestamp={inference.timestamp} />
+                  <TableItemTime
+                    timestamp={uuidv7ToTimestamp(inference.id).toISOString()}
+                  />
                 </TableCell>
                 <TableCell />
               </TableRow>

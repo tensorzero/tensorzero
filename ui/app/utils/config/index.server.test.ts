@@ -22,6 +22,7 @@ vi.mock("../env.server", () => ({
 // Mock the logger to avoid console noise in tests
 vi.mock("../logger", () => ({
   logger: {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),

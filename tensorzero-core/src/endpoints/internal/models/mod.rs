@@ -4,12 +4,16 @@
 
 pub mod types;
 
+pub use types::{CountModelsResponse, GetModelLatencyResponse, GetModelUsageResponse};
+
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use tracing::instrument;
 
 use crate::db::SelectQueries;
-use crate::endpoints::internal::models::types::CountModelsResponse;
+use crate::endpoints::internal::models::types::{
+    GetModelLatencyQueryParams, GetModelUsageQueryParams,
+};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -27,4 +31,38 @@ pub async fn count_models_handler(
         .await?;
 
     Ok(Json(CountModelsResponse { model_count: count }))
+}
+
+/// Handler for `GET /internal/models/usage`
+///
+/// Returns model usage timeseries data (tokens, counts over time).
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.usage", skip_all)]
+pub async fn get_model_usage_handler(
+    State(app_state): AppState,
+    Query(params): Query<GetModelUsageQueryParams>,
+) -> Result<Json<GetModelUsageResponse>, Error> {
+    let data = app_state
+        .clickhouse_connection_info
+        .get_model_usage_timeseries(params.time_window, params.max_periods)
+        .await?;
+
+    Ok(Json(GetModelUsageResponse { data }))
+}
+
+/// Handler for `GET /internal/models/latency`
+///
+/// Returns model latency quantile distributions.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.latency", skip_all)]
+pub async fn get_model_latency_handler(
+    State(app_state): AppState,
+    Query(params): Query<GetModelLatencyQueryParams>,
+) -> Result<Json<GetModelLatencyResponse>, Error> {
+    let data = app_state
+        .clickhouse_connection_info
+        .get_model_latency_quantiles(params.time_window)
+        .await?;
+
+    Ok(Json(GetModelLatencyResponse { data }))
 }

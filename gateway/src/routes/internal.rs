@@ -34,6 +34,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::model_inferences::get_model_inferences_handler),
         )
         .route(
+            "/internal/inference_metadata",
+            get(endpoints::internal::inference_metadata::get_inference_metadata_handler),
+        )
+        .route(
             "/internal/ui-config",
             get(endpoints::ui::get_config::ui_config_handler),
         )
@@ -67,5 +71,17 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/evaluations/run-stats",
             get(endpoints::internal::evaluations::get_evaluation_run_stats_handler),
+        )
+        .route(
+                        "/internal/evaluations/runs",
+            get(endpoints::internal::evaluations::list_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/models/usage",
+            get(endpoints::internal::models::get_model_usage_handler),
+        )
+        .route(
+            "/internal/models/latency",
+            get(endpoints::internal::models::get_model_latency_handler),
         )
 }
