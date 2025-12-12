@@ -12,27 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::EvaluationVariant;
 use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
-
-#[expect(dead_code)]
-const EVALUATOR_FAILURE_THRESHOLD: f32 = 0.05;
-#[expect(dead_code)]
-const VARIANT_FAILURE_THRESHOLD: f32 = 0.05;
-
-// Enum for variant status during an evals run.
-// Will to used in run() function, to be implemented.
-#[expect(dead_code)]
-enum VariantStatus {
-    // Still running evals on this variant
-    Active,
-    // Not running evals; variant is confidently within top k_min
-    Include,
-    // Not running evals; variant is confidently outside the top k_max
-    Exclude,
-    // Not running evals; variant failure rate is confidently >= VARIANT_FAILURE_THRESHOLD
-    Failed,
-}
 
 // Enum for global stopping condition.
 // In case multiple stopping conditions are satisfied simultaneously,
@@ -50,29 +30,6 @@ pub enum GlobalStoppingReason {
     // If more than num_variants - k_min variants have failed, we can no longer identify the top-k
     // variants for any k in k_min..k_max.
     TooManyVariantsFailed(Vec<String>),
-}
-
-// Arguments to main run() function, to be implemented
-#[expect(dead_code)]
-pub struct TopKVariantArgs {
-    evaluation_name: String,
-    variant_list: Vec<EvaluationVariant>,
-    dataset_name: String,
-    k_min: u32,
-    k_max: u32,
-    max_datapoints: u64,
-    epsilon: f32,
-    alpha_performance: f32,
-    alpha_failure: f32,
-    batch_size: u32,
-}
-
-// Struct for the output of the run() function, to be implemented
-pub struct AdaptiveEvalStoppingResults {
-    pub variant_performance: Vec<MeanBettingConfidenceSequence>,
-    pub variant_failure_rates: Vec<MeanBettingConfidenceSequence>,
-    pub evaluator_failure_rates: Vec<MeanBettingConfidenceSequence>,
-    pub stopping_reason: GlobalStoppingReason,
 }
 
 /// Result of checking the top-k stopping condition.
@@ -494,5 +451,133 @@ mod tests {
         assert!(result.stopped);
         assert_eq!(result.k, Some(3));
         assert_eq!(result.top_variants.len(), 3);
+    }
+
+    #[test]
+    fn test_check_topk_stopping_returns_largest_viable_k() {
+        // Variant A: [0.8, 0.95] - beats all 4 others
+        // Variant B: [0.7, 0.85] - beats C, D, E (3 others)
+        // Variant C: [0.5, 0.65] - beats D, E (2 others)
+        // Variant D: [0.3, 0.45] - beats E (1 other)
+        // Variant E: [0.1, 0.25] - beats none
+        //
+        // For top-1: need to beat >= 4. Only A qualifies.
+        // For top-2: need to beat >= 3. A and B qualify.
+        // For top-3: need to beat >= 2. A, B, C qualify.
+        // For top-4: need to beat >= 1. A, B, C, D qualify.
+        // For top-5: need to beat >= 0. All qualify.
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.8, 0.95),
+            mock_cs("b", 0.7, 0.85),
+            mock_cs("c", 0.5, 0.65),
+            mock_cs("d", 0.3, 0.45),
+            mock_cs("e", 0.1, 0.25),
+        ]
+        .into_iter()
+        .collect();
+
+        // k_min=1, k_max=5: should return k=5 (largest viable)
+        let result = check_topk_stopping(&variant_performance, 1, 5, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(5));
+        assert_eq!(result.top_variants.len(), 5);
+
+        // k_min=1, k_max=3: should return k=3 (largest viable within range)
+        let result = check_topk_stopping(&variant_performance, 1, 3, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+        assert_eq!(result.top_variants.len(), 3);
+        assert!(result.top_variants.contains(&"a".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+        assert!(result.top_variants.contains(&"c".to_string()));
+
+        // k_min=1, k_max=2: should return k=2
+        let result = check_topk_stopping(&variant_performance, 1, 2, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert_eq!(result.top_variants.len(), 2);
+        assert!(result.top_variants.contains(&"a".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+
+        // k_min=2, k_max=4: should return k=4 (largest viable within range)
+        let result = check_topk_stopping(&variant_performance, 2, 4, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(4));
+        assert_eq!(result.top_variants.len(), 4);
+    }
+
+    #[test]
+    fn test_check_topk_stopping_k_range_no_viable_k() {
+        // Variant A: [0.4, 0.7]
+        // Variant B: [0.35, 0.65]
+        // Variant C: [0.3, 0.6]
+        // All intervals overlap significantly - no one beats anyone
+        //
+        // For any k < 3, we need variants to beat others, but none do.
+        // Only k=3 works (need to beat >= 0).
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.4, 0.7),
+            mock_cs("b", 0.35, 0.65),
+            mock_cs("c", 0.3, 0.6),
+        ]
+        .into_iter()
+        .collect();
+
+        // k_min=1, k_max=2: neither k=1 nor k=2 is viable, so no stopping
+        let result = check_topk_stopping(&variant_performance, 1, 2, None);
+        assert!(!result.stopped);
+        assert!(result.k.is_none());
+
+        // k_min=1, k_max=3: k=3 is viable (all variants beat >= 0 others)
+        let result = check_topk_stopping(&variant_performance, 1, 3, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+
+        // k_min=3, k_max=3: k=3 is viable
+        let result = check_topk_stopping(&variant_performance, 3, 3, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+    }
+
+    #[test]
+    fn test_check_topk_stopping_k_range_partial_viability() {
+        // Variant A: [0.7, 0.9] - beats B and C
+        // Variant B: [0.4, 0.6] - beats no one (C's upper 0.55 > B's lower 0.4)
+        // Variant C: [0.35, 0.55] - beats no one
+        //
+        // A beats 2 (both uppers < 0.7)
+        // B beats 0
+        // C beats 0
+        //
+        // For top-1: need >= 2. Only A qualifies. ✓
+        // For top-2: need >= 1. Only A qualifies (1 variant). ✗
+        // For top-3: need >= 0. All qualify. ✓
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs("a", 0.7, 0.9),
+            mock_cs("b", 0.4, 0.6),
+            mock_cs("c", 0.35, 0.55),
+        ]
+        .into_iter()
+        .collect();
+
+        // k_min=1, k_max=3: k=3 is largest viable
+        let result = check_topk_stopping(&variant_performance, 1, 3, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+
+        // k_min=1, k_max=2: only k=1 is viable (k=2 fails)
+        let result = check_topk_stopping(&variant_performance, 1, 2, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+        assert_eq!(result.top_variants, vec!["a".to_string()]);
+
+        // k_min=2, k_max=2: k=2 is not viable, no stopping
+        let result = check_topk_stopping(&variant_performance, 2, 2, None);
+        assert!(!result.stopped);
+
+        // k_min=2, k_max=3: k=3 is viable
+        let result = check_topk_stopping(&variant_performance, 2, 3, None);
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
     }
 }
