@@ -433,7 +433,6 @@ pub async fn run_evaluation_core_streaming(
     let variants: Vec<Arc<EvaluationVariant>> = args.variants.into_iter().map(Arc::new).collect();
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
-    let num_variants = variants.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
     // Setup stopping manager for adaptive stopping
@@ -442,7 +441,7 @@ pub async fn run_evaluation_core_streaming(
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
-        num_datapoints: dataset_len * num_variants,
+        num_datapoints: dataset_len,
     };
 
     // Send the run info as the first message
