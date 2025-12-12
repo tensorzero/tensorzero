@@ -121,7 +121,7 @@ pub struct RunEvaluationStreamingParams {
     pub dataset_name: Option<String>,
     pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: Option<String>,
-    pub variant_info: Option<String>,
+    pub internal_dynamic_variant_config: Option<String>,
     pub concurrency: u32,
     pub inference_cache: String,
     pub max_datapoints: Option<u32>,
@@ -216,17 +216,22 @@ pub async fn run_evaluation_streaming(
         HashMap::new()
     };
 
-    let variant = match (params.variant_name.clone(), params.variant_info) {
+    let variant = match (
+        params.variant_name.clone(),
+        params.internal_dynamic_variant_config,
+    ) {
         (Some(name), None) => EvaluationVariant::Name(name),
-        (None, Some(info)) => {
-            let info = serde_json::from_str(&info).map_err(|e| {
-                napi::Error::from_reason(format!("Failed to deserialize variant_info: {e}"))
+        (None, Some(config)) => {
+            let config = serde_json::from_str(&config).map_err(|e| {
+                napi::Error::from_reason(format!(
+                    "Failed to deserialize internal_dynamic_variant_config: {e}"
+                ))
             })?;
-            EvaluationVariant::Info(Box::new(info))
+            EvaluationVariant::Info(Box::new(config))
         }
         _ => {
             return Err(napi::Error::from_reason(
-                "Exactly one of variant_name or variant_info must be provided",
+                "Exactly one of variant_name or internal_dynamic_variant_config must be provided",
             ));
         }
     };
