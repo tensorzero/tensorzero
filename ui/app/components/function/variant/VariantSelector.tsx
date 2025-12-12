@@ -35,6 +35,7 @@ export function VariantSelector({
       disabled={disabled || !functionName}
     >
       <SelectTrigger
+        aria-label="Variant"
         className={isPlaceholder ? "text-muted-foreground" : undefined}
       >
         <SelectValue placeholder="Select a variant" />

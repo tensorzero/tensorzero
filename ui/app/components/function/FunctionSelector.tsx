@@ -65,6 +65,7 @@ export function FunctionSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-label="Function"
             className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border px-3 font-normal hover:cursor-pointer"
           >
             <div className="min-w-0 flex-1">
