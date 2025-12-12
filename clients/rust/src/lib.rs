@@ -103,6 +103,7 @@ pub use tensorzero_optimizers::endpoints::{
 };
 
 // Keep git module for Git-related extension traits
+#[cfg(feature = "git")]
 mod git;
 
 #[cfg(feature = "e2e_tests")]
@@ -112,6 +113,7 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
+#[cfg(feature = "git")]
 use crate::git::GitInfo;
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
@@ -577,6 +579,7 @@ impl ClientExt for Client {
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
         // Apply the git information to the tags so it gets stored for our workflow evaluation run
+        #[cfg(feature = "git")]
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
