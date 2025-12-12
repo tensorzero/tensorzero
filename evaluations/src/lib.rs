@@ -40,6 +40,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+pub mod betting_confidence_sequences;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;

@@ -713,8 +713,8 @@ mod tests {
         assert_query_contains, assert_query_does_not_contain,
     };
     use crate::db::clickhouse::query_builder::{
-        FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy, OrderByTerm,
-        OrderDirection, QueryParameter,
+        DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+        OrderBy, OrderByTerm, OrderDirection, QueryParameter,
     };
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
@@ -960,6 +960,50 @@ mod tests {
             name: "p2".to_string(),
             value: "0.5".to_string(),
         }));
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_positive() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: true,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_negative() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: false,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
     }
 
     #[tokio::test]
