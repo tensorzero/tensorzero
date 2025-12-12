@@ -67,4 +67,12 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/run-stats",
             get(endpoints::internal::evaluations::get_evaluation_run_stats_handler),
         )
+        .route(
+            "/internal/models/usage",
+            get(endpoints::internal::models::get_model_usage_handler),
+        )
+        .route(
+            "/internal/models/latency",
+            get(endpoints::internal::models::get_model_latency_handler),
+        )
 }
