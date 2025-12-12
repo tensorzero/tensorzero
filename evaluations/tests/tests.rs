@@ -81,8 +81,8 @@ async fn run_evaluations_json() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: None,
+        variant_names: Some(vec!["gpt_4o_mini".to_string()]),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         // This test relies on the cache (see below), so we need to enable it
@@ -419,14 +419,15 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     let evaluation_run_id = Uuid::now_v7();
 
     // Test: Both datapoint_ids and max_datapoints provided should fail
+    // Also tests variant_names with multiple variants
     let args = Args {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: None,
+        variant_names: Some(vec!["gpt_4o_mini".to_string(), "dummy_error".to_string()]),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
