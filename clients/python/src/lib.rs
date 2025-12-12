@@ -607,6 +607,14 @@ fn construct_evaluation_variants(
     if let Some(info) = internal_dynamic_variant_config {
         Ok(vec![EvaluationVariant::Info(Box::new(info))])
     } else if let Some(name) = variant_name {
+        let warnings = PyModule::import(py, "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "`variant_name` is deprecated. Please use `variant_names` instead.",
+                py.get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
         Ok(vec![EvaluationVariant::Name(name)])
     } else if let Some(names) = parsed_variant_names {
         Ok(names.into_iter().map(EvaluationVariant::Name).collect())
