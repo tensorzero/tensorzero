@@ -545,13 +545,18 @@ impl BaseTensorZeroGateway {
     }
 }
 
-/// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
-/// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
-fn construct_evaluation_variant(
+/// Helper function to construct EvaluationVariants from the optional variant parameters.
+/// Supports:
+/// - `variant_names`: A single string or list of strings (preferred)
+/// - `variant_name`: A single string (deprecated, use variant_names instead)
+/// - `internal_dynamic_variant_config`: A dynamic variant config dict
+/// Validates that exactly one of these options is provided.
+fn construct_evaluation_variants(
     py: Python<'_>,
     internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     variant_name: Option<String>,
-) -> PyResult<EvaluationVariant> {
+    variant_names: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Vec<EvaluationVariant>> {
     // Deserialize internal_dynamic_variant_config if provided
     let internal_dynamic_variant_config: Option<UninitializedVariantInfo> =
         if let Some(config) = internal_dynamic_variant_config {
@@ -560,16 +565,56 @@ fn construct_evaluation_variant(
             None
         };
 
-    match (internal_dynamic_variant_config, variant_name) {
-        (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
-        (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
-        (None, None) => Err(PyValueError::new_err(
-            "Either `variant_name` or `internal_dynamic_variant_config` must be provided.",
-        )),
-        (Some(_), Some(_)) => Err(PyValueError::new_err(
-            "Cannot specify both `variant_name` and `internal_dynamic_variant_config`. \
-            When using a dynamic variant, provide only `internal_dynamic_variant_config`.",
-        )),
+    // Parse variant_names - can be a single string or a list of strings
+    let parsed_variant_names: Option<Vec<String>> = if let Some(names) = variant_names {
+        if let Ok(single_name) = names.extract::<String>() {
+            // Single string provided
+            Some(vec![single_name])
+        } else if let Ok(name_list) = names.extract::<Vec<String>>() {
+            // List of strings provided
+            Some(name_list)
+        } else {
+            return Err(PyValueError::new_err(
+                "`variant_names` must be a string or a list of strings",
+            ));
+        }
+    } else {
+        None
+    };
+
+    // Count how many variant options were provided
+    let options_provided = [
+        internal_dynamic_variant_config.is_some(),
+        variant_name.is_some(),
+        parsed_variant_names.is_some(),
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count();
+
+    if options_provided == 0 {
+        return Err(PyValueError::new_err(
+            "One of `variant_name`, `variant_names`, or `internal_dynamic_variant_config` must be provided.",
+        ));
+    }
+
+    if options_provided > 1 {
+        return Err(PyValueError::new_err(
+            "Cannot specify more than one of `variant_name`, `variant_names`, or `internal_dynamic_variant_config`.",
+        ));
+    }
+
+    if let Some(info) = internal_dynamic_variant_config {
+        Ok(vec![EvaluationVariant::Info(Box::new(info))])
+    } else if let Some(name) = variant_name {
+        Ok(vec![EvaluationVariant::Name(name)])
+    } else if let Some(names) = parsed_variant_names {
+        Ok(names.into_iter().map(EvaluationVariant::Name).collect())
+    } else {
+        // This should never happen due to the check above
+        Err(PyValueError::new_err(
+            "One of `variant_name`, `variant_names`, or `internal_dynamic_variant_config` must be provided.",
+        ))
     }
 }
 
@@ -1341,7 +1386,8 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate
+    /// * `variant_name` - Optional name of a single variant to evaluate (deprecated, use variant_names instead)
+    /// * `variant_names` - Variant(s) to evaluate. Can be a single string or a list of strings for multi-variant evaluation.
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
@@ -1358,13 +1404,14 @@ impl TensorZeroGateway {
                         dataset_name=None,
                         datapoint_ids=None,
                         variant_name=None,
+                        variant_names=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
                         internal_dynamic_variant_config=None,
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, variant_names=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1373,6 +1420,7 @@ impl TensorZeroGateway {
         dataset_name: Option<String>,
         datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
+        variant_names: Option<&Bound<'_, PyAny>>,
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
@@ -1394,8 +1442,12 @@ impl TensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
-        let variant =
-            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
+        let variants = construct_evaluation_variants(
+            this.py(),
+            internal_dynamic_variant_config,
+            variant_name,
+            variant_names,
+        )?;
 
         // Parse adaptive_stopping config from Python dict
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
@@ -1466,7 +1518,7 @@ impl TensorZeroGateway {
             evaluation_run_id,
             dataset_name,
             datapoint_ids,
-            variants: vec![variant],
+            variants,
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -2577,7 +2629,8 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate
+    /// * `variant_name` - Optional name of a single variant to evaluate (deprecated, use variant_names instead)
+    /// * `variant_names` - Variant(s) to evaluate. Can be a single string or a list of strings for multi-variant evaluation.
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
@@ -2594,13 +2647,14 @@ impl AsyncTensorZeroGateway {
                         dataset_name=None,
                         datapoint_ids=None,
                         variant_name=None,
+                        variant_names=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
                         internal_dynamic_variant_config=None,
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, variant_names=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2609,6 +2663,7 @@ impl AsyncTensorZeroGateway {
         dataset_name: Option<String>,
         datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
+        variant_names: Option<&Bound<'py, PyAny>>,
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
@@ -2623,8 +2678,12 @@ impl AsyncTensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
-        let variant =
-            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
+        let variants = construct_evaluation_variants(
+            this.py(),
+            internal_dynamic_variant_config,
+            variant_name,
+            variant_names,
+        )?;
 
         // Parse adaptive_stopping config from Python dict
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
@@ -2703,7 +2762,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_run_id,
                 dataset_name,
                 datapoint_ids,
-                variants: vec![variant],
+                variants,
                 concurrency,
                 inference_cache: inference_cache_enum,
             };

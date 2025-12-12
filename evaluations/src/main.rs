@@ -16,7 +16,8 @@ async fn main() -> Result<()> {
             evaluation_run_id = %evaluation_run_id,
             evaluation_name = %args.evaluation_name,
             dataset_name = %dataset_name,
-            variant_name = %args.variant_name,
+            variant_name = ?args.variant_name,
+            variant_names = ?args.variant_names,
             concurrency = %args.concurrency,
             "Starting evaluation run"
         );
@@ -25,7 +26,8 @@ async fn main() -> Result<()> {
             evaluation_run_id = %evaluation_run_id,
             evaluation_name = %args.evaluation_name,
             num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(),
-            variant_name = %args.variant_name,
+            variant_name = ?args.variant_name,
+            variant_names = ?args.variant_names,
             concurrency = %args.concurrency,
             "Starting evaluation run"
         );

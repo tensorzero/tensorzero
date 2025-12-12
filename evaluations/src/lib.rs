@@ -96,7 +96,7 @@ pub struct Clients {
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = ?args.variant_name, variant_names = ?args.variant_names, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -121,6 +121,16 @@ pub async fn run_evaluation(
             "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
         );
     }
+
+    // Build variants list from either variant_name or variant_names
+    let variants: Vec<EvaluationVariant> = match (args.variant_name, args.variant_names) {
+        (Some(name), None) => vec![EvaluationVariant::Name(name)],
+        (None, Some(names)) => names.into_iter().map(EvaluationVariant::Name).collect(),
+        (None, None) => bail!("Either --variant-name or --variant-names must be provided"),
+        (Some(_), Some(_)) => {
+            bail!("Cannot provide both --variant-name and --variant-names")
+        }
+    };
 
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
@@ -189,7 +199,7 @@ pub async fn run_evaluation(
         function_configs,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
-        variants: vec![EvaluationVariant::Name(args.variant_name)],
+        variants,
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
