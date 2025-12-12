@@ -55,6 +55,7 @@ export * from "./DatasetQueryParams";
 export * from "./DeepSeekProvider";
 export * from "./DeleteDatapointsRequest";
 export * from "./DeleteDatapointsResponse";
+export * from "./DemonstrationFeedbackFilter";
 export * from "./DemonstrationFeedbackRow";
 export * from "./Detail";
 export * from "./DiclConfig";
