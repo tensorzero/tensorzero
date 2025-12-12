@@ -69,8 +69,10 @@ test.describe("Dataset Builder", () => {
     await page.getByRole("combobox", { name: "Function" }).click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
-    // Select variant
-    await page.getByRole("combobox", { name: "Variant" }).click();
+    // Select variant (wait for it to be enabled after function selection)
+    const variantCombobox = page.getByRole("combobox", { name: "Variant" });
+    await expect(variantCombobox).toBeEnabled();
+    await variantCombobox.click();
     await page
       .getByRole("option", { name: "initial_prompt_gpt4o_mini" })
       .click();
