@@ -74,7 +74,7 @@ function startConfigHashPolling(): void {
     });
   }, CONFIG_HASH_POLL_INTERVAL_MS);
 
-  logger.info(
+  logger.debug(
     `Started config hash polling (interval: ${CONFIG_HASH_POLL_INTERVAL_MS}ms)`,
   );
 }

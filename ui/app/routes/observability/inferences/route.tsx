@@ -13,7 +13,9 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
-import type { InferenceFilter } from "~/types/tensorzero";
+import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { applyPaginationLogic } from "~/utils/pagination";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -42,24 +44,72 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  const [inferenceResult, countsInfo] = await Promise.all([
-    listInferencesWithPagination({
+  // Only need the slow path for search queries and advanced filters
+  // The fast listInferenceMetadata endpoint now supports function_name, variant_name, and episode_id
+  const needsFullInferences = search_query || filter;
+
+  const countsInfo = await countInferencesByFunction();
+  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+
+  if (!needsFullInferences) {
+    // Use faster gateway endpoint - now supports simple filters
+    const client = getTensorZeroClient();
+    const metadataResponse = await client.listInferenceMetadata({
       before: before || undefined,
       after: after || undefined,
-      limit,
+      limit: limit + 1, // Fetch one extra to determine if there's a next page
       function_name,
       variant_name,
       episode_id,
-      filter,
-      search_query,
-    }),
-    countInferencesByFunction(),
-  ]);
+    });
 
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+    const {
+      items: inferences,
+      hasNextPage,
+      hasPreviousPage,
+    } = applyPaginationLogic(metadataResponse.inference_metadata, limit, {
+      before,
+      after,
+    });
+
+    return {
+      inferences,
+      hasNextPage,
+      hasPreviousPage,
+      limit,
+      totalInferences,
+      function_name,
+      variant_name,
+      episode_id,
+      search_query,
+      filter,
+    };
+  }
+
+  const inferenceResult = await listInferencesWithPagination({
+    before: before || undefined,
+    after: after || undefined,
+    limit,
+    function_name,
+    variant_name,
+    episode_id,
+    filter,
+    search_query,
+  });
+
+  // Map StoredInference to InferenceMetadata shape for the table
+  const inferences: InferenceMetadata[] = inferenceResult.inferences.map(
+    (inf) => ({
+      id: inf.inference_id,
+      episode_id: inf.episode_id,
+      function_name: inf.function_name,
+      variant_name: inf.variant_name,
+      function_type: inf.type,
+    }),
+  );
 
   return {
-    inferences: inferenceResult.inferences,
+    inferences,
     hasNextPage: inferenceResult.hasNextPage,
     hasPreviousPage: inferenceResult.hasPreviousPage,
     limit,
@@ -107,7 +157,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const handleNextPage = () => {
     if (bottomInference) {
       const params = buildSearchParams();
-      params.set("before", bottomInference.inference_id);
+      params.set("before", bottomInference.id);
       navigate(`?${params.toString()}`, {
         preventScrollReset: true,
       });
@@ -117,7 +167,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const handlePreviousPage = () => {
     if (topInference) {
       const params = buildSearchParams();
-      params.set("after", topInference.inference_id);
+      params.set("after", topInference.id);
       navigate(`?${params.toString()}`, {
         preventScrollReset: true,
       });

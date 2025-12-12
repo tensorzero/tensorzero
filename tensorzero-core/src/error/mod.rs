@@ -525,6 +525,9 @@ pub enum ErrorDetails {
     RateLimitExceeded {
         failed_rate_limits: Vec<FailedRateLimit>,
     },
+    Relay {
+        message: String,
+    },
     RateLimitMissingMaxTokens,
     Serialization {
         message: String,
@@ -645,6 +648,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::Relay { .. } => tracing::Level::ERROR,
             ErrorDetails::FatalStreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
@@ -796,6 +800,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::Relay { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -1001,6 +1006,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
                 )
+            }
+            ErrorDetails::Relay { message } => {
+                write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,

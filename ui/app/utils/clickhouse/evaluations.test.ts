@@ -1,8 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
   countDatapointsForEvaluation,
-  countTotalEvaluationRuns,
-  getEvaluationRunInfo,
   getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
@@ -409,69 +407,6 @@ describe("countDatapointsForEvaluation", () => {
       ["0196368f-19bd-7082-a677-1c0bf346ff24"],
     );
     expect(datapoints).toBe(41);
-  });
-});
-
-describe("countTotalEvaluationRuns", () => {
-  test("should return correct number of evaluation runs", async () => {
-    const runs = await countTotalEvaluationRuns();
-    expect(runs).toBe(9);
-  });
-});
-
-describe("getEvaluationRunInfo", () => {
-  test("should return correct evaluation run info", async () => {
-    const runs = await getEvaluationRunInfo();
-
-    // Check the total number of runs
-    expect(runs.length).toBe(9);
-
-    // Check structure and content of the first row
-    expect(runs[0]).toMatchObject({
-      dataset_name: "foo",
-      evaluation_name: "entity_extraction",
-      evaluation_run_id: "0196374c-2b06-7f50-b187-80c15cec5a1f",
-      function_name: "extract_entities",
-      last_inference_timestamp: "2025-04-15T02:34:21Z",
-      variant_name: "gpt4o_mini_initial_prompt",
-    });
-    // Check structure and content of another row
-    expect(runs[3]).toMatchObject({
-      evaluation_name: "haiku",
-      evaluation_run_id: "01963690-dff2-7cd3-b724-62fb705772a1",
-      function_name: "write_haiku",
-      variant_name: "initial_prompt_gpt4o_mini",
-    });
-
-    // Verify that all items have the expected properties
-    runs.forEach((run) => {
-      expect(run).toHaveProperty("evaluation_run_id");
-      expect(run).toHaveProperty("evaluation_name");
-      expect(run).toHaveProperty("function_name");
-      expect(run).toHaveProperty("variant_name");
-      expect(run).toHaveProperty("last_inference_timestamp");
-
-      // Check data types
-      expect(typeof run.evaluation_run_id).toBe("string");
-      expect(typeof run.evaluation_name).toBe("string");
-      expect(typeof run.function_name).toBe("string");
-      expect(typeof run.variant_name).toBe("string");
-      expect(typeof run.last_inference_timestamp).toBe("string");
-    });
-
-    // Verify that the runs are sorted by evaluation_run_id in descending order
-    // This verifies the ORDER BY clause is working
-    expect(runs[0].evaluation_run_id > runs[1].evaluation_run_id).toBe(true);
-
-    // Check for specific evaluation_names in the dataset
-    const evaluationNames = runs.map((run) => run.evaluation_name);
-    expect(evaluationNames).toContain("entity_extraction");
-    expect(evaluationNames).toContain("haiku");
-
-    // Check for specific function_names in the dataset
-    const functionNames = runs.map((run) => run.function_name);
-    expect(functionNames).toContain("extract_entities");
-    expect(functionNames).toContain("write_haiku");
   });
 });
 

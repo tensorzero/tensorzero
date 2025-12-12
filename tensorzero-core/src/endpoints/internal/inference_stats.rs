@@ -6,8 +6,9 @@ use futures::future::try_join;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::config::Config;
 use crate::db::inference_stats::{
-    CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
+    CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, InferenceStatsQueries,
 };
 use crate::error::{Error, ErrorDetails};
@@ -18,14 +19,50 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub struct InferenceStatsQueryParams {
     /// Optional variant name to filter by
     pub variant_name: Option<String>,
+    /// Optional grouping for the results
+    pub group_by: Option<InferenceStatsGroupBy>,
+}
+
+/// Grouping options for inference statistics
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceStatsGroupBy {
+    /// Group by variant name
+    Variant,
 }
 
 /// Response containing inference statistics
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct InferenceStatsResponse {
     /// The count of inferences for the function (and optionally variant)
     pub inference_count: u64,
+    /// Counts grouped by variant (only present when group_by=variant)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats_by_variant: Option<Vec<InferenceStatsByVariant>>,
+}
+
+/// Inference stats for a variant
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct InferenceStatsByVariant {
+    /// The variant name
+    pub variant_name: String,
+    /// Number of inferences for this variant
+    pub inference_count: u64,
+    /// ISO 8601 timestamp of the last inference
+    pub last_used_at: String,
+}
+
+impl From<CountByVariant> for InferenceStatsByVariant {
+    fn from(row: CountByVariant) -> Self {
+        Self {
+            variant_name: row.variant_name,
+            inference_count: row.inference_count,
+            last_used_at: row.last_used_at,
+        }
+    }
 }
 
 /// Query parameters for the feedback stats endpoint
@@ -61,7 +98,13 @@ pub async fn get_inference_stats_handler(
     Query(params): Query<InferenceStatsQueryParams>,
 ) -> Result<Json<InferenceStatsResponse>, Error> {
     Ok(Json(
-        get_inference_stats(app_state, &function_name, params).await?,
+        get_inference_stats(
+            &app_state.config,
+            &app_state.clickhouse_connection_info,
+            &function_name,
+            params,
+        )
+        .await?,
     ))
 }
 
@@ -81,17 +124,21 @@ pub async fn get_inference_with_feedback_stats_handler(
     Query(params): Query<InferenceWithFeedbackStatsQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackStatsResponse>, Error> {
     Ok(Json(
-        get_inference_with_feedback_stats(app_state, function_name, metric_name, params).await?,
+        get_inference_with_feedback_stats(
+            &app_state.config,
+            &app_state.clickhouse_connection_info,
+            function_name,
+            metric_name,
+            params,
+        )
+        .await?,
     ))
 }
 
 /// Core business logic for getting inference statistics
 async fn get_inference_stats(
-    AppStateData {
-        config,
-        clickhouse_connection_info,
-        ..
-    }: AppStateData,
+    config: &Config,
+    clickhouse: &impl InferenceStatsQueries,
     function_name: &str,
     params: InferenceStatsQueryParams,
 ) -> Result<InferenceStatsResponse, Error> {
@@ -108,26 +155,40 @@ async fn get_inference_stats(
         .into());
     }
 
+    // Standard count (optionally filtered by variant_name)
     let count_params = CountInferencesParams {
         function_name,
         function_type: function.config_type(),
         variant_name: params.variant_name.as_deref(),
     };
 
-    let inference_count = clickhouse_connection_info
+    // Handle group_by=variant case
+    if let Some(InferenceStatsGroupBy::Variant) = params.group_by {
+        let variant_rows = clickhouse.count_inferences_by_variant(count_params).await?;
+
+        let inference_count = variant_rows.iter().map(|r| r.inference_count).sum();
+        let stats_by_variant = variant_rows.into_iter().map(Into::into).collect();
+
+        return Ok(InferenceStatsResponse {
+            inference_count,
+            stats_by_variant: Some(stats_by_variant),
+        });
+    }
+
+    let inference_count = clickhouse
         .count_inferences_for_function(count_params)
         .await?;
 
-    Ok(InferenceStatsResponse { inference_count })
+    Ok(InferenceStatsResponse {
+        inference_count,
+        stats_by_variant: None,
+    })
 }
 
 /// Core business logic for getting feedback statistics
 async fn get_inference_with_feedback_stats(
-    AppStateData {
-        config,
-        clickhouse_connection_info,
-        ..
-    }: AppStateData,
+    config: &Config,
+    clickhouse_connection_info: &impl InferenceStatsQueries,
     function_name: String,
     metric_name: String,
     params: InferenceWithFeedbackStatsQueryParams,
@@ -192,6 +253,8 @@ async fn get_inference_with_feedback_stats(
 mod tests {
     use super::*;
     use crate::config::{Config, ConfigFileGlob};
+    use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::function::FunctionConfigType;
     use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
     use std::sync::Arc;
@@ -202,10 +265,14 @@ mod tests {
         let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config);
 
-        let params = InferenceStatsQueryParams { variant_name: None };
+        let params = InferenceStatsQueryParams {
+            variant_name: None,
+            group_by: None,
+        };
 
         let result = get_inference_stats(
-            gateway_handle.app_state.clone(),
+            &gateway_handle.app_state.config,
+            &gateway_handle.app_state.clickhouse_connection_info,
             "nonexistent_function",
             params,
         )
@@ -243,10 +310,16 @@ mod tests {
 
         let params = InferenceStatsQueryParams {
             variant_name: Some("nonexistent_variant".to_string()),
+            group_by: None,
         };
 
-        let result =
-            get_inference_stats(gateway_handle.app_state.clone(), "test_function", params).await;
+        let result = get_inference_stats(
+            &gateway_handle.app_state.config,
+            &gateway_handle.app_state.clickhouse_connection_info,
+            "test_function",
+            params,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -261,7 +334,8 @@ mod tests {
         let params = InferenceWithFeedbackStatsQueryParams { threshold: 0.0 };
 
         let result = get_inference_with_feedback_stats(
-            gateway_handle.app_state.clone(),
+            &gateway_handle.app_state.config,
+            &gateway_handle.app_state.clickhouse_connection_info,
             "nonexistent_function".to_string(),
             "some_metric".to_string(),
             params,
@@ -301,7 +375,8 @@ mod tests {
         let params = InferenceWithFeedbackStatsQueryParams { threshold: 0.0 };
 
         let result = get_inference_with_feedback_stats(
-            gateway_handle.app_state.clone(),
+            &gateway_handle.app_state.config,
+            &gateway_handle.app_state.clickhouse_connection_info,
             "test_function".to_string(),
             "nonexistent_metric".to_string(),
             params,
@@ -314,5 +389,54 @@ mod tests {
             err.to_string().contains("nonexistent_metric"),
             "Error message should contain metric name, but got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_stats_calls_clickhouse() {
+        // Create a config with a function
+        let config_str = r#"
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.test_variant]
+            type = "chat_completion"
+            model = "openai::gpt-4"
+        "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let config = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_stats_queries
+            .expect_count_inferences_for_function()
+            .withf(|params| {
+                assert_eq!(params.function_name, "test_function");
+                assert_eq!(params.function_type, FunctionConfigType::Chat);
+                assert!(params.variant_name.is_none());
+                true
+            })
+            .times(1)
+            .returning(|_| Box::pin(async move { Ok(42) }));
+
+        let params = InferenceStatsQueryParams {
+            variant_name: None,
+            group_by: None,
+        };
+
+        let result = get_inference_stats(&config, &mock_clickhouse, "test_function", params)
+            .await
+            .unwrap();
+
+        assert_eq!(result.inference_count, 42);
+        assert!(result.stats_by_variant.is_none());
     }
 }

@@ -12,10 +12,8 @@ import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
-import {
-  countInferencesForVariant,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getVariantPerformances } from "~/utils/clickhouse/function";
 import type { TimeWindow } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
@@ -32,6 +30,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { applyPaginationLogic } from "~/utils/pagination";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -60,10 +59,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
-  const inferencePromise = listInferencesWithPagination({
+  const client = getTensorZeroClient();
+  const inferencePromise = client.listInferenceMetadata({
     function_name,
     variant_name,
-    limit,
+    limit: limit + 1, // Fetch one extra to determine pagination
     before: beforeInference || undefined,
     after: afterInference || undefined,
   });
@@ -103,13 +103,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     metricsWithFeedbackPromise,
   ]);
 
+  // Handle pagination from listInferenceMetadata response
+  const {
+    items: inferences,
+    hasNextPage: hasNextInferencePage,
+    hasPreviousPage: hasPreviousInferencePage,
+  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
+    before: beforeInference,
+    after: afterInference,
+  });
+
   return {
     function_name,
     variant_name,
     num_inferences,
-    inferences: inferenceResult.inferences,
-    hasNextInferencePage: inferenceResult.hasNextPage,
-    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
+    inferences,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
     variant_performances,
     metricsWithFeedback,
   };
@@ -157,7 +167,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.inference_id);
+    searchParams.set("beforeInference", bottomInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -165,7 +175,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.inference_id);
+    searchParams.set("afterInference", topInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
