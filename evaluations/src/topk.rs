@@ -161,7 +161,7 @@ pub fn check_topk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::betting_confidence_sequences::WealthProcesses;
+    use crate::betting_confidence_sequences::{WealthProcessGridPoints, WealthProcesses};
 
     /// Helper to create a mock confidence sequence with specified bounds
     fn mock_cs(
@@ -181,8 +181,7 @@ mod tests {
                 cs_upper,
                 alpha: 0.05,
                 wealth: WealthProcesses {
-                    m_values: None,
-                    resolution: Some(101),
+                    grid: WealthProcessGridPoints::Resolution(101),
                     wealth_upper: vec![1.0; 101],
                     wealth_lower: vec![1.0; 101],
                 },
