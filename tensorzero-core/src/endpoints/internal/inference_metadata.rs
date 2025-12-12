@@ -22,6 +22,12 @@ pub struct InferenceMetadataQueryParams {
     pub after: Option<Uuid>,
     /// Maximum number of records to return (default: 20)
     pub limit: Option<u32>,
+    /// Filter by function name
+    pub function_name: Option<String>,
+    /// Filter by variant name
+    pub variant_name: Option<String>,
+    /// Filter by episode ID
+    pub episode_id: Option<Uuid>,
 }
 
 /// Response containing a list of inference metadata
@@ -52,6 +58,9 @@ pub async fn get_inference_metadata_handler(
     let list_params = ListInferenceMetadataParams {
         pagination,
         limit: params.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+        function_name: params.function_name,
+        variant_name: params.variant_name,
+        episode_id: params.episode_id,
     };
 
     let inference_metadata = app_state

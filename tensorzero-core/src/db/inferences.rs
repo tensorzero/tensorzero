@@ -281,6 +281,12 @@ pub struct ListInferenceMetadataParams {
     pub pagination: Option<PaginationParams>,
     /// Maximum number of records to return.
     pub limit: u32,
+    /// Optional function name to filter by.
+    pub function_name: Option<String>,
+    /// Optional variant name to filter by.
+    pub variant_name: Option<String>,
+    /// Optional episode ID to filter by.
+    pub episode_id: Option<Uuid>,
 }
 
 #[async_trait]

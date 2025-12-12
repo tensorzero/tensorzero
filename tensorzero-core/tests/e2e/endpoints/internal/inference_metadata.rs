@@ -136,3 +136,112 @@ async fn test_list_inference_metadata_with_after() {
         }
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inference_metadata_with_function_name() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/inference_metadata?function_name=basic_test&limit=10");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "list_inference_metadata with function_name failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListInferenceMetadataResponse = resp.json().await.unwrap();
+    // All returned records should have the specified function_name
+    for meta in &response.inference_metadata {
+        assert_eq!(
+            meta.function_name, "basic_test",
+            "All records should have function_name 'basic_test'"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inference_metadata_with_variant_name() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/inference_metadata?variant_name=test&limit=10");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "list_inference_metadata with variant_name failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListInferenceMetadataResponse = resp.json().await.unwrap();
+    // All returned records should have the specified variant_name
+    for meta in &response.inference_metadata {
+        assert_eq!(
+            meta.variant_name, "test",
+            "All records should have variant_name 'test'"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inference_metadata_with_episode_id() {
+    let http_client = Client::new();
+    // First, get some inference metadata to find a valid episode_id
+    let url = get_gateway_endpoint("/internal/inference_metadata?limit=1");
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(resp.status().is_success());
+
+    let response: ListInferenceMetadataResponse = resp.json().await.unwrap();
+    if response.inference_metadata.is_empty() {
+        // No inferences to test with, skip
+        return;
+    }
+
+    let episode_id = response.inference_metadata[0].episode_id;
+
+    // Now query with that episode_id
+    let url = get_gateway_endpoint(&format!(
+        "/internal/inference_metadata?episode_id={episode_id}&limit=10"
+    ));
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "list_inference_metadata with episode_id failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListInferenceMetadataResponse = resp.json().await.unwrap();
+    // All returned records should have the specified episode_id
+    for meta in &response.inference_metadata {
+        assert_eq!(
+            meta.episode_id, episode_id,
+            "All records should have the specified episode_id"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inference_metadata_with_multiple_filters() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/inference_metadata?function_name=basic_test&variant_name=test&limit=10",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "list_inference_metadata with multiple filters failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListInferenceMetadataResponse = resp.json().await.unwrap();
+    // All returned records should match both filters
+    for meta in &response.inference_metadata {
+        assert_eq!(
+            meta.function_name, "basic_test",
+            "All records should have function_name 'basic_test'"
+        );
+        assert_eq!(
+            meta.variant_name, "test",
+            "All records should have variant_name 'test'"
+        );
+    }
+}

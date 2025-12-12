@@ -13,7 +13,8 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
-import type { InferenceFilter } from "~/types/tensorzero";
+import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -42,24 +43,64 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  const [inferenceResult, countsInfo] = await Promise.all([
-    listInferencesWithPagination({
+  // Check if we have any filters - if not, use the faster gateway endpoint
+  const hasFilters =
+    function_name || variant_name || episode_id || search_query || filter;
+
+  const countsInfo = await countInferencesByFunction();
+  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+
+  if (!hasFilters) {
+    // Use faster gateway endpoint when no filters are applied
+    const client = getTensorZeroClient();
+    const metadataResponse = await client.listInferenceMetadata({
       before: before || undefined,
       after: after || undefined,
+      limit: limit + 1, // Fetch one extra to determine if there's a next page
+    });
+
+    const hasNextPage = metadataResponse.inference_metadata.length > limit;
+    const inferences = metadataResponse.inference_metadata.slice(0, limit);
+
+    return {
+      inferences,
+      hasNextPage,
+      hasPreviousPage: !!(before || after),
       limit,
+      totalInferences,
       function_name,
       variant_name,
       episode_id,
-      filter,
       search_query,
-    }),
-    countInferencesByFunction(),
-  ]);
+      filter,
+    };
+  }
 
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  const inferenceResult = await listInferencesWithPagination({
+    before: before || undefined,
+    after: after || undefined,
+    limit,
+    function_name,
+    variant_name,
+    episode_id,
+    filter,
+    search_query,
+  });
+
+  // Map StoredInference to InferenceMetadata shape for the table
+  const inferences: InferenceMetadata[] = inferenceResult.inferences.map(
+    (inf) => ({
+      id: inf.inference_id,
+      episode_id: inf.episode_id,
+      function_name: inf.function_name,
+      variant_name: inf.variant_name,
+      function_type: inf.type,
+      snapshot_hash: null,
+    }),
+  );
 
   return {
-    inferences: inferenceResult.inferences,
+    inferences,
     hasNextPage: inferenceResult.hasNextPage,
     hasPreviousPage: inferenceResult.hasPreviousPage,
     limit,
@@ -107,7 +148,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const handleNextPage = () => {
     if (bottomInference) {
       const params = buildSearchParams();
-      params.set("before", bottomInference.inference_id);
+      params.set("before", bottomInference.id);
       navigate(`?${params.toString()}`, {
         preventScrollReset: true,
       });
@@ -117,7 +158,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const handlePreviousPage = () => {
     if (topInference) {
       const params = buildSearchParams();
-      params.set("after", topInference.inference_id);
+      params.set("after", topInference.id);
       navigate(`?${params.toString()}`, {
         preventScrollReset: true,
       });
