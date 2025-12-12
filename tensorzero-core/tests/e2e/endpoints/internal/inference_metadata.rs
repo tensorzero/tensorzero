@@ -140,7 +140,8 @@ async fn test_list_inference_metadata_with_after() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_function_name() {
     let http_client = Client::new();
-    let url = get_gateway_endpoint("/internal/inference_metadata?function_name=basic_test&limit=10");
+    let url =
+        get_gateway_endpoint("/internal/inference_metadata?function_name=basic_test&limit=10");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(

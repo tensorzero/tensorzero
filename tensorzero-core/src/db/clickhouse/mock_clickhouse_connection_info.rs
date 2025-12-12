@@ -74,9 +74,7 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         &self,
         params: &ListEpisodeInferencesParams,
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
-        self.inference_queries
-            .list_episode_inferences(params)
-            .await
+        self.inference_queries.list_episode_inferences(params).await
     }
 }
 
