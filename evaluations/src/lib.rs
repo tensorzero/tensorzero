@@ -29,7 +29,7 @@ use tensorzero_core::endpoints::datasets::v1::{
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_core::utils::spawn_ignoring_shutdown;
+use tensorzero_core::utils::{deprecation_warning, spawn_ignoring_shutdown};
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
 };
@@ -124,7 +124,12 @@ pub async fn run_evaluation(
 
     // Build variants list from either variant_name or variant_names
     let variants: Vec<EvaluationVariant> = match (args.variant_name, args.variant_names) {
-        (Some(name), None) => vec![EvaluationVariant::Name(name)],
+        (Some(name), None) => {
+            deprecation_warning(
+                "`--variant-name` is deprecated. Please use `--variant-names` instead.",
+            );
+            vec![EvaluationVariant::Name(name)]
+        }
         (None, Some(names)) => names.into_iter().map(EvaluationVariant::Name).collect(),
         (None, None) => bail!("Either --variant-name or --variant-names must be provided"),
         (Some(_), Some(_)) => {
