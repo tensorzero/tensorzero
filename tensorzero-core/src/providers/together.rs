@@ -975,7 +975,9 @@ mod tests {
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1024,7 +1026,7 @@ mod tests {
         );
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, Some(10));
-        assert_eq!(inference_response.usage.output_tokens, Some(20));
+        assert_eq!(inference_response.usage.output_tokens, Some(10));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1037,14 +1039,19 @@ mod tests {
             choices: vec![TogetherResponseChoice {
                 index: 0,
                 message: TogetherResponseMessage {
-                    content: Some("<think>hmmm</think>Hello, world!".to_string()),
+                    content: Some(
+                        "<think>This is the reasoning process</think>This is the answer"
+                            .to_string(),
+                    ),
                     tool_calls: None,
                 },
                 finish_reason: None,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1068,7 +1075,7 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: Some("hmmm".to_string()),
+                text: Some("This is the reasoning process".to_string()),
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
@@ -1076,7 +1083,7 @@ mod tests {
         );
         assert_eq!(
             inference_response.output[1],
-            "Hello, world!".to_string().into()
+            "This is the answer".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
 
@@ -1092,7 +1099,9 @@ mod tests {
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1146,7 +1155,9 @@ mod tests {
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -1519,6 +1530,8 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message = together_to_tensorzero_chunk(
@@ -1536,6 +1549,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
 

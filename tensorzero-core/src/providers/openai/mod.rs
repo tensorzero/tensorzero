@@ -2377,16 +2377,61 @@ impl<'a> OpenAIBatchRequest<'a> {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct OpenAIPromptTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_tokens: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct OpenAICompletionTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_prediction_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected_prediction_tokens: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIUsage {
     pub prompt_tokens: Option<u32>,
     pub completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_details: Option<OpenAICompletionTokensDetails>,
 }
 
 impl From<OpenAIUsage> for Usage {
     fn from(usage: OpenAIUsage) -> Self {
+        use crate::inference::types::usage::{InputTokensDetails, OutputTokensDetails};
+
+        let input_tokens_details = usage
+            .prompt_tokens_details
+            .map(|details| InputTokensDetails {
+                cached_tokens: details.cached_tokens,
+                audio_tokens: details.audio_tokens,
+            });
+
+        let output_tokens_details =
+            usage
+                .completion_tokens_details
+                .map(|details| OutputTokensDetails {
+                    reasoning_tokens: details.reasoning_tokens,
+                    audio_tokens: details.audio_tokens,
+                    accepted_prediction_tokens: details.accepted_prediction_tokens,
+                    rejected_prediction_tokens: details.rejected_prediction_tokens,
+                });
+
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            input_tokens_details,
+            output_tokens_details,
         }
     }
 }
@@ -2394,13 +2439,26 @@ impl From<OpenAIUsage> for Usage {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIEmbeddingUsage {
     pub prompt_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
 }
 
 impl From<OpenAIEmbeddingUsage> for Usage {
     fn from(usage: OpenAIEmbeddingUsage) -> Self {
+        use crate::inference::types::usage::InputTokensDetails;
+
+        let input_tokens_details = usage
+            .prompt_tokens_details
+            .map(|details| InputTokensDetails {
+                cached_tokens: details.cached_tokens,
+                audio_tokens: details.audio_tokens,
+            });
+
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: Some(0), // this is always zero for embeddings
+            input_tokens_details,
+            ..Default::default()
         }
     }
 }
@@ -3393,6 +3451,8 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3485,6 +3545,8 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3569,6 +3631,8 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let request_body = OpenAIRequest {
@@ -3622,6 +3686,8 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -3975,6 +4041,8 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message = openai_to_tensorzero_chunk(
@@ -3990,6 +4058,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
     }
@@ -5338,5 +5407,78 @@ mod tests {
             }
             _ => panic!("Expected AllowedTools variant with empty list"),
         }
+    }
+
+    #[test]
+    fn test_openai_usage_detail_fields_parsing() {
+        // Test that OpenAI usage detail fields are correctly parsed
+        let usage_with_details = OpenAIUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                cached_tokens: Some(30),
+                audio_tokens: Some(10),
+            }),
+            completion_tokens_details: Some(OpenAICompletionTokensDetails {
+                reasoning_tokens: Some(20),
+                audio_tokens: Some(5),
+                accepted_prediction_tokens: Some(15),
+                rejected_prediction_tokens: Some(3),
+            }),
+        };
+
+        let usage: Usage = usage_with_details.into();
+
+        assert_eq!(usage.input_tokens, Some(100), "Input tokens should match prompt_tokens");
+        assert_eq!(usage.output_tokens, Some(50), "Output tokens should match completion_tokens");
+
+        let input_details = usage.input_tokens_details.expect("Should have input details");
+        assert_eq!(input_details.cached_tokens, Some(30), "Cached tokens should be preserved");
+        assert_eq!(input_details.audio_tokens, Some(10), "Audio tokens should be preserved");
+
+        let output_details = usage.output_tokens_details.expect("Should have output details");
+        assert_eq!(output_details.reasoning_tokens, Some(20), "Reasoning tokens should be preserved");
+        assert_eq!(output_details.audio_tokens, Some(5), "Audio tokens should be preserved");
+        assert_eq!(output_details.accepted_prediction_tokens, Some(15), "Accepted prediction tokens should be preserved");
+        assert_eq!(output_details.rejected_prediction_tokens, Some(3), "Rejected prediction tokens should be preserved");
+    }
+
+    #[test]
+    fn test_openai_usage_without_details() {
+        // Test that OpenAI usage without detail fields works correctly
+        let usage_without_details = OpenAIUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+        };
+
+        let usage: Usage = usage_without_details.into();
+
+        assert_eq!(usage.input_tokens, Some(100), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "Output tokens should match");
+        assert!(usage.input_tokens_details.is_none(), "Should not have input details");
+        assert!(usage.output_tokens_details.is_none(), "Should not have output details");
+    }
+
+    #[test]
+    fn test_openai_embedding_usage_with_details() {
+        // Test embedding usage with prompt token details
+        let embedding_usage = OpenAIEmbeddingUsage {
+            prompt_tokens: Some(75),
+            prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                cached_tokens: Some(25),
+                audio_tokens: None,
+            }),
+        };
+
+        let usage: Usage = embedding_usage.into();
+
+        assert_eq!(usage.input_tokens, Some(75), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(0), "Output tokens should be 0 for embeddings");
+
+        let input_details = usage.input_tokens_details.expect("Should have input details");
+        assert_eq!(input_details.cached_tokens, Some(25), "Cached tokens should be preserved");
+        assert!(input_details.audio_tokens.is_none(), "Audio tokens should be None");
     }
 }

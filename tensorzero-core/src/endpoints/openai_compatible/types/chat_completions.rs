@@ -679,7 +679,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     service_tier: None,
                     system_fingerprint: String::new(),
                     object: "chat.completion".to_string(),
-                    usage: response.usage.into(),
+                    usage: OpenAICompatibleUsage::from(response.usage),
                     episode_id: response.episode_id.to_string(),
                 }
             }
@@ -699,11 +699,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 system_fingerprint: String::new(),
                 service_tier: None,
                 object: "chat.completion".to_string(),
-                usage: OpenAICompatibleUsage {
-                    prompt_tokens: response.usage.input_tokens,
-                    completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.total_tokens(),
-                },
+                usage: OpenAICompatibleUsage::from(response.usage),
                 episode_id: response.episode_id.to_string(),
             },
         }

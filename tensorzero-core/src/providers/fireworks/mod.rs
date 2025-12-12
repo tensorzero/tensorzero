@@ -967,6 +967,8 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -1153,7 +1155,9 @@ mod tests {
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1290,11 +1294,13 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message = fireworks_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk.clone(),
+            "raw_chunk".to_string(),
+            chunk,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
@@ -1308,6 +1314,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
     }

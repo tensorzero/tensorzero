@@ -1,0 +1,194 @@
+---
+title: Token Usage Details
+sidebarTitle: Usage Details
+description: Understanding and leveraging detailed token usage information in TensorZero.
+---
+
+TensorZero now provides granular token usage breakdowns that help you optimize costs and understand model behavior.
+
+## Overview
+
+When supported by the underlying provider, TensorZero returns detailed token usage information beyond simple input/output counts. This includes:
+
+- **Cached tokens** - Tokens served from cache, reducing costs and latency
+- **Reasoning tokens** - Tokens used for internal reasoning (o1/o3 models)
+- **Audio tokens** - Multimodal token usage
+- **Prediction tokens** - Speculative decoding metrics
+
+## Provider Support
+
+| Provider | Cached Tokens | Reasoning Tokens | Audio Tokens | Prediction Tokens |
+|----------|--------------|------------------|--------------|-------------------|
+| OpenAI | ✅ | ✅ | ✅ | ✅ |
+| Azure OpenAI | ✅ | ✅ | ✅ | ✅ |
+| Anthropic | ✅ | ❌ | ❌ | ❌ |
+| GCP Vertex Gemini | ✅ | ❌ | ❌ | ❌ |
+| Google AI Studio | ✅ | ❌ | ❌ | ❌ |
+| AWS Bedrock (Anthropic) | ✅ | ❌ | ❌ | ❌ |
+| OpenAI-compatible¹ | Varies | Varies | Varies | Varies |
+
+¹ Includes Groq, Mistral, Fireworks, Together, DeepSeek, Hyperbolic, xAI, OpenRouter, vLLM, SGLang
+
+## Response Format
+
+Usage details are only available through the OpenAI-compatible API endpoints. The native TensorZero API (`/inference`) returns only basic token counts.
+
+### OpenAI-Compatible API
+
+When using `/openai/v1/chat/completions`:
+
+```json
+{
+  "usage": {
+    "prompt_tokens": 100,
+    "completion_tokens": 50,
+    "total_tokens": 150,
+    "prompt_tokens_details": {
+      "cached_tokens": 30,
+      "audio_tokens": 10
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 20,
+      "audio_tokens": 5,
+      "accepted_prediction_tokens": 15,
+      "rejected_prediction_tokens": 3
+    }
+  }
+}
+```
+
+## Cost Optimization
+
+Understanding token details helps optimize costs:
+
+### Cache Utilization
+Cached tokens are typically 50-90% cheaper than regular tokens:
+
+```python
+# Example cost calculation
+regular_cost = 1000 * 0.01  # $10 for 1K regular tokens
+cached_cost = 950 * 0.001 + 50 * 0.01  # $1.45 for 950 cached + 50 regular
+savings = (regular_cost - cached_cost) / regular_cost  # 85.5% savings!
+```
+
+<Tip>
+Maximize cache hits by:
+- Using consistent system prompts
+- Structuring prompts with reusable prefixes  
+- Batching similar requests together
+</Tip>
+
+### Reasoning Token Monitoring
+For o1/o3 models, track the reasoning ratio:
+
+```python
+reasoning_ratio = reasoning_tokens / total_completion_tokens
+# High ratios indicate complex problem solving
+# Consider simpler models for straightforward tasks
+```
+
+### Prediction Token Analysis
+Monitor speculative decoding effectiveness:
+
+```python
+prediction_success = accepted / (accepted + rejected)
+# Low success rates may indicate:
+# - Highly variable outputs
+# - Need for parameter tuning
+```
+
+## Data Storage
+
+Token details are stored in the `ModelInference` table:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `input_tokens` | Nullable(UInt32) | Total input tokens |
+| `output_tokens` | Nullable(UInt32) | Total output tokens |
+| `input_tokens_details` | Nullable(String) | JSON with cached_tokens, audio_tokens |
+| `output_tokens_details` | Nullable(String) | JSON with reasoning_tokens, audio_tokens, prediction tokens |
+
+## Implementation Examples
+
+### Python
+```python
+from tensorzero import AsyncTensorZeroGateway
+
+async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    result = await client.inference(
+        function_name="chat_function",
+        input={"messages": [{"role": "user", "content": "Hello"}]}
+    )
+    
+    # Access usage details
+    if result.usage:
+        total_input = result.usage.get("input_tokens", 0)
+        if details := result.usage.get("input_tokens_details"):
+            cached = details.get("cached_tokens", 0)
+            print(f"Cache hit rate: {cached/total_input:.1%}")
+```
+
+### OpenAI SDK
+```python
+from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = OpenAI()
+patch_openai_client(client)
+
+response = client.chat.completions.create(
+    model="tensorzero::my_function::my_variant",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Check for detail fields
+if usage := response.usage:
+    if prompt_details := usage.prompt_tokens_details:
+        print(f"Cached tokens: {prompt_details.cached_tokens}")
+```
+
+## Best Practices
+
+1. **Graceful Degradation**: Always check for detail field existence
+   ```python
+   cached = usage.get("input_tokens_details", {}).get("cached_tokens", 0)
+   ```
+
+2. **Provider-Aware Logic**: Handle provider differences
+   ```python
+   if provider in ["openai", "anthropic", "gemini"]:
+       # Process cache tokens
+   ```
+
+3. **Monitor Trends**: Track detail metrics over time
+   ```sql
+   SELECT 
+     AVG(JSON_EXTRACT(input_tokens_details, '$.cached_tokens')) as avg_cached,
+     COUNT(*) as total_requests
+   FROM ModelInference
+   WHERE timestamp > now() - INTERVAL 1 DAY
+   ```
+
+## Migration Guide
+
+The usage details feature is fully backward compatible:
+
+- **Existing code continues to work** - Detail fields are optional
+- **No breaking changes** - All fields are additive
+- **Gradual adoption** - Add detail tracking when needed
+
+```python
+# Existing code (unchanged)
+total = response.usage.input_tokens + response.usage.output_tokens
+
+# Enhanced code (optional)
+if details := response.usage.get("input_tokens_details"):
+    log_cache_metrics(details)
+```
+
+## Related Documentation
+
+- [Data Model](/gateway/data-model) - Database schema for usage details
+- [API Reference: Inference](/gateway/api-reference/inference) - Native API usage details
+- [API Reference: OpenAI-Compatible](/gateway/api-reference/inference-openai-compatible) - OpenAI format usage details
+- [Configuration Reference](/gateway/configuration-reference) - Provider configuration

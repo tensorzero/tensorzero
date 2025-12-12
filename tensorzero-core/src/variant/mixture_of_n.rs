@@ -1156,6 +1156,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1190,6 +1191,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1243,6 +1245,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1280,6 +1283,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1359,6 +1363,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1393,6 +1398,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1503,8 +1509,9 @@ mod tests {
         };
 
         let expected_usage = Usage {
-            input_tokens: Some(35),
-            output_tokens: Some(46),
+            input_tokens: Some(25),
+            output_tokens: Some(45),
+            ..Default::default()
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1769,7 +1776,8 @@ mod tests {
             }),
             Some(Usage {
                 input_tokens: Some(10),
-                output_tokens: Some(20),
+                output_tokens: Some(5),
+                ..Default::default()
             }),
         )
         .unwrap();
@@ -1817,7 +1825,8 @@ mod tests {
                 created: 123456,
                 usage: Some(Usage {
                     input_tokens: Some(10),
-                    output_tokens: Some(20),
+                    output_tokens: Some(5),
+                    ..Default::default()
                 }),
                 latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),

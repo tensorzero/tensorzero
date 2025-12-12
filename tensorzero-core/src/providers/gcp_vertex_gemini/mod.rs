@@ -827,9 +827,18 @@ fn make_provider_batch_inference_output(
             provider_type: PROVIDER_TYPE.to_string(),
         })
     })?;
+    let input_tokens_details = usage_metadata.cached_content_token_count.map(|cached| {
+        crate::inference::types::usage::InputTokensDetails {
+            cached_tokens: Some(cached),
+            audio_tokens: None,
+        }
+    });
+
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
         output_tokens: usage_metadata.candidates_token_count,
+        input_tokens_details,
+        ..Default::default()
     };
 
     let (output, finish_reason) = get_response_content(
@@ -2896,6 +2905,8 @@ struct GCPVertexGeminiUsageMetadata {
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cached_content_token_count: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2974,9 +2985,18 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             })
         })?;
 
+        let input_tokens_details = usage_metadata.cached_content_token_count.map(|cached| {
+            crate::inference::types::usage::InputTokensDetails {
+                cached_tokens: Some(cached),
+                audio_tokens: None,
+            }
+        });
+
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.candidates_token_count,
+            input_tokens_details,
+            ..Default::default()
         };
 
         let system = generic_request.system.clone();
@@ -3059,9 +3079,18 @@ fn convert_stream_response_with_metadata_to_chunk(
     // We should filter those out.
     let usage = response.usage_metadata.and_then(|metadata| {
         if metadata.prompt_token_count.is_some() || metadata.candidates_token_count.is_some() {
+            let input_tokens_details = metadata.cached_content_token_count.map(|cached| {
+                crate::inference::types::usage::InputTokensDetails {
+                    cached_tokens: Some(cached),
+                    audio_tokens: None,
+                }
+            });
+
             Some(Usage {
                 input_tokens: metadata.prompt_token_count,
                 output_tokens: metadata.candidates_token_count,
+                input_tokens_details,
+                ..Default::default()
             })
         } else {
             None
@@ -3661,6 +3690,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: None,
                 candidates_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3714,6 +3744,7 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3760,6 +3791,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3827,6 +3859,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3896,6 +3929,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3954,6 +3988,7 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -4606,6 +4641,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4667,6 +4703,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4716,6 +4753,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4881,6 +4919,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                cached_content_token_count: None,
             }),
         };
         let mut last_tool_name = None;
@@ -5402,5 +5441,68 @@ mod tests {
         assert!(logs_contain(
             "GCP Vertex Gemini does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[test]
+    fn test_gcp_vertex_gemini_cached_content_token_mapping() {
+        use crate::inference::types::usage::{InputTokensDetails, Usage};
+        
+        // Test with cached tokens
+        let usage_metadata = GCPVertexGeminiUsageMetadata {
+            prompt_token_count: Some(500),
+            candidates_token_count: Some(200),
+            cached_content_token_count: Some(150),
+        };
+
+        let input_tokens_details = usage_metadata
+            .cached_content_token_count
+            .map(|cached| InputTokensDetails {
+                cached_tokens: Some(cached),
+                audio_tokens: None,
+            });
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
+            input_tokens_details,
+            ..Default::default()
+        };
+
+        assert_eq!(usage.input_tokens, Some(500), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(200), "Output tokens should match");
+        
+        let input_details = usage.input_tokens_details.expect("Should have input details");
+        assert_eq!(input_details.cached_tokens, Some(150), "Cached content tokens should map correctly");
+        assert!(input_details.audio_tokens.is_none(), "Audio tokens should be None for Gemini");
+    }
+
+    #[test]
+    fn test_gcp_vertex_gemini_without_cached_tokens() {
+        use crate::inference::types::usage::{InputTokensDetails, Usage};
+        
+        // Test without cached tokens
+        let usage_metadata = GCPVertexGeminiUsageMetadata {
+            prompt_token_count: Some(300),
+            candidates_token_count: Some(100),
+            cached_content_token_count: None,
+        };
+
+        let input_tokens_details = usage_metadata
+            .cached_content_token_count
+            .map(|cached| InputTokensDetails {
+                cached_tokens: Some(cached),
+                audio_tokens: None,
+            });
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
+            input_tokens_details,
+            ..Default::default()
+        };
+
+        assert_eq!(usage.input_tokens, Some(300), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(100), "Output tokens should match");
+        assert!(usage.input_tokens_details.is_none(), "Should not have input details without cached tokens");
     }
 }

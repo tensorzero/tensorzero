@@ -76,10 +76,29 @@ pub enum OpenAIEmbedding {
 pub struct OpenAIEmbeddingUsage {
     prompt_tokens: Option<u32>,
     total_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenAIPromptTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cached_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    audio_tokens: Option<u32>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
     fn from(response: EmbeddingResponse) -> Self {
+        let prompt_tokens_details =
+            response
+                .usage
+                .input_tokens_details
+                .map(|details| OpenAIPromptTokensDetails {
+                    cached_tokens: details.cached_tokens,
+                    audio_tokens: details.audio_tokens,
+                });
+
         OpenAIEmbeddingResponse::List {
             data: response
                 .embeddings
@@ -94,6 +113,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
             usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
+                prompt_tokens_details,
             }),
         }
     }

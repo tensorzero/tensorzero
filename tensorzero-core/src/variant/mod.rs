@@ -1286,6 +1286,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {
@@ -1398,6 +1399,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {
@@ -1614,6 +1616,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match inference_result {

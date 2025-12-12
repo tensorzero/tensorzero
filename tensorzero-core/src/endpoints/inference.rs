@@ -198,6 +198,7 @@ pub async fn inference_handler(
 pub type InferenceStream =
     Pin<Box<dyn FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
 
+#[expect(clippy::large_enum_variant)]
 pub enum InferenceOutput {
     NonStreaming(InferenceResponse),
     Streaming(InferenceStream),
@@ -813,7 +814,7 @@ fn create_stream(
         let mut buffer = vec![];
         let mut extra_usage = Some(Usage::sum_iter_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
         // If `extra_usage` is zero, we don't want to potentially add the extra chunk below. It is handled already in `prepare_response_chunk`.
-        if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
+        if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0), ..Default::default() }) {
             extra_usage = None;
         }
         let mut inference_ttft = None;
@@ -1264,6 +1265,7 @@ impl InferenceResponseChunk {
             Some(Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                ..Default::default()
             })
         } else {
             inference_result.usage().copied()

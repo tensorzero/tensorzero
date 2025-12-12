@@ -64,8 +64,10 @@ This is the inference request you'd make if you had called the model provider di
 | `raw_response`        |        String         | Raw response from the model provider (varies)              |
 | `model_name`          |        String         | Name of the model used for the inference                   |
 | `model_provider_name` |        String         | Name of the model provider used for the inference          |
-| `input_tokens`        |   Nullable(UInt32)    |                                                            |
-| `output_tokens`       |   Nullable(UInt32)    |                                                            |
+| `input_tokens`        |   Nullable(UInt32)    | Total number of input tokens consumed                      |
+| `output_tokens`       |   Nullable(UInt32)    | Total number of output tokens generated                    |
+| `input_tokens_details` | Nullable(String)     | JSON object with input token breakdown                     |
+| `output_tokens_details` | Nullable(String)    | JSON object with output token breakdown                    |
 | `response_time_ms`    |   Nullable(UInt32)    |                                                            |
 | `ttft_ms`             |   Nullable(UInt32)    | Only available in streaming inferences                     |
 | `timestamp`           |       DateTime        | Materialized from `id` (using `UUIDv7ToDateTime` function) |
@@ -74,6 +76,20 @@ This is the inference request you'd make if you had called the model provider di
 | `output`              |  Array(ContentBlock)  | The output of the model                                    |
 
 A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/gateway/api-reference/inference/#content-block)).
+
+### Usage Details Fields
+
+The `input_tokens_details` and `output_tokens_details` fields contain JSON objects with granular token breakdowns when supported by the provider:
+
+**`input_tokens_details`:**
+- `cached_tokens`: Number of tokens served from cache (OpenAI, Anthropic, Gemini, AWS Bedrock)
+- `audio_tokens`: Number of audio input tokens (OpenAI multimodal models)
+
+**`output_tokens_details`:**
+- `reasoning_tokens`: Number of tokens used for reasoning/thinking (OpenAI o1/o3 models)
+- `audio_tokens`: Number of audio output tokens (OpenAI multimodal models)
+- `accepted_prediction_tokens`: Successfully predicted tokens from speculative decoding (OpenAI)
+- `rejected_prediction_tokens`: Failed prediction tokens that were regenerated (OpenAI)
 
 ## `DynamicInContextLearningExample`
 

@@ -124,6 +124,7 @@ impl From<OpenAIResponsesUsage> for Usage {
         Usage {
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
+            ..Default::default()
         }
     }
 }
@@ -1361,6 +1362,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 Usage {
                     input_tokens,
                     output_tokens,
+                    ..Default::default()
                 }
             });
 
@@ -1411,6 +1413,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 Usage {
                     input_tokens,
                     output_tokens,
+                    ..Default::default()
                 }
             });
 
@@ -2116,6 +2119,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                ..Default::default()
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
@@ -2162,6 +2166,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(100),
+                ..Default::default()
             })
         );
     }

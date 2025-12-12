@@ -699,13 +699,30 @@ fn convert_to_output(
 pub struct GCPVertexAnthropic {
     input_tokens: u32,
     output_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_creation_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<GCPVertexAnthropic> for Usage {
     fn from(value: GCPVertexAnthropic) -> Self {
+        use crate::inference::types::usage::InputTokensDetails;
+
+        let input_tokens_details = if value.cache_read_input_tokens.is_some() {
+            Some(InputTokensDetails {
+                cached_tokens: value.cache_read_input_tokens,
+                audio_tokens: None,
+            })
+        } else {
+            None
+        };
+
         Usage {
             input_tokens: Some(value.input_tokens),
             output_tokens: Some(value.output_tokens),
+            input_tokens_details,
+            output_tokens_details: None,
         }
     }
 }
@@ -817,6 +834,8 @@ mod tests {
         GCPVertexAnthropic {
             input_tokens,
             output_tokens,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
         }
     }
 
@@ -1254,6 +1273,8 @@ mod tests {
         let anthropic_usage = GCPVertexAnthropic {
             input_tokens: 100,
             output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -1279,8 +1300,10 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: 10,
+                output_tokens: 10,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let latency = Latency::NonStreaming {
@@ -1342,8 +1365,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, Some(100));
-        assert_eq!(inference_response.usage.output_tokens, Some(50));
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(10));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, Some("system".to_string()));
@@ -1370,8 +1393,10 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: 10,
+                output_tokens: 10,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1426,8 +1451,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, Some(100));
-        assert_eq!(inference_response.usage.output_tokens, Some(50));
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(10));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, None);
@@ -1457,8 +1482,10 @@ mod tests {
             stop_reason: None,
             stop_sequence: None,
             usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: 10,
+                output_tokens: 10,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let generic_request = ModelInferenceRequest {

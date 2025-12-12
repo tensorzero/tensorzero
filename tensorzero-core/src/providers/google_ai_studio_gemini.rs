@@ -1251,13 +1251,28 @@ struct GeminiUsageMetadata {
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cached_content_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+        use crate::inference::types::usage::InputTokensDetails;
+
+        let input_tokens_details = if usage_metadata.cached_content_token_count.is_some() {
+            Some(InputTokensDetails {
+                cached_tokens: usage_metadata.cached_content_token_count,
+                audio_tokens: None,
+            })
+        } else {
+            None
+        };
+
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.candidates_token_count,
+            input_tokens_details,
+            output_tokens_details: None,
         }
     }
 }
@@ -1496,6 +1511,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                cached_content_token_count: None,
             }),
         };
 
@@ -2009,6 +2025,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
             }),
@@ -2066,6 +2083,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2111,6 +2129,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
             }),
@@ -2179,6 +2198,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2245,6 +2265,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
             }),
@@ -2305,6 +2326,7 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                ..Default::default()
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2553,6 +2575,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
             }),
@@ -2618,6 +2641,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
             }),
@@ -2687,6 +2711,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
             }),
@@ -2746,6 +2771,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
             }),
@@ -2802,6 +2828,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
             }),
@@ -2849,6 +2876,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![],
             usage_metadata: Some(GeminiUsageMetadata {
+                cached_content_token_count: None,
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
             }),
@@ -2930,6 +2958,7 @@ mod tests {
                 usage_metadata: Some(GeminiUsageMetadata {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
+                    cached_content_token_count: None,
                 }),
             };
 

@@ -1060,7 +1060,9 @@ mod tests {
             }],
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
-                completion_tokens: Some(20),
+                completion_tokens: Some(10),
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

@@ -1582,6 +1582,7 @@ impl ModelInferenceResponseWithMetadata {
             Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                ..Default::default()
             }
         } else {
             self.usage
@@ -1872,6 +1873,7 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                ..Default::default()
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -2438,6 +2440,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            ..Default::default()
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -3242,6 +3245,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3249,6 +3253,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3274,6 +3279,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3281,6 +3287,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3306,6 +3313,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3313,6 +3321,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3338,6 +3347,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3345,6 +3355,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    ..Default::default()
                 },
                 false,
             ),
@@ -3371,6 +3382,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 },
                 true,
             ), // This will be treated as 0/0 due to cached=true
@@ -3378,6 +3390,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    ..Default::default()
                 },
                 false,
             ),

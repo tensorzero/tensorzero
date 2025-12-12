@@ -1,7 +1,7 @@
 ---
 title: "API Reference: Inference (OpenAI-Compatible)"
 sidebarTitle: Inference (OpenAI)
-description: API reference for the `/openai/v1/chat/completions` endpoint.
+description: API reference for the OpenAI-compatible endpoints.
 ---
 
 ## `POST /openai/v1/chat/completions`
@@ -665,9 +665,20 @@ If the following `stream_options` is provided...
   "usage": {
     "prompt_tokens": 123,
     "completion_tokens": 456,
-    "total_tokens": 579
+    "total_tokens": 579,
+    "prompt_tokens_details": {
+      "cached_tokens": 30,
+      "audio_tokens": 10
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 100,
+      "audio_tokens": 5,
+      "accepted_prediction_tokens": 20,
+      "rejected_prediction_tokens": 3
+    }
   }
   ...
+}
 ```
 
 </Accordion>
@@ -854,6 +865,16 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+- **`prompt_tokens_details`**: Optional breakdown of prompt tokens (object)
+  - **`cached_tokens`**: Number of tokens served from cache (integer)
+  - **`audio_tokens`**: Number of audio input tokens (integer)
+- **`completion_tokens_details`**: Optional breakdown of completion tokens (object)
+  - **`reasoning_tokens`**: Number of tokens used for reasoning (integer)
+  - **`audio_tokens`**: Number of audio output tokens (integer)
+  - **`accepted_prediction_tokens`**: Successfully predicted tokens (integer)
+  - **`rejected_prediction_tokens`**: Failed prediction tokens (integer)
+
+The detail fields are only included when supported by the underlying provider.
 
 </Tab>
 <Tab title="Streaming">

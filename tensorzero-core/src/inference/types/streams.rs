@@ -873,6 +873,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    ..Default::default()
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -952,10 +953,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1005,6 +1008,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1037,6 +1041,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1117,6 +1122,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(15),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1238,10 +1244,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1291,6 +1299,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1339,10 +1348,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            ..Default::default()
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            ..Default::default()
         };
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -1401,6 +1412,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                ..Default::default()
             }
         );
         match response {
@@ -1527,6 +1539,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    ..Default::default()
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -1576,6 +1589,7 @@ mod tests {
             Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                ..Default::default()
             }
         );
         let chat_result = match result {
@@ -1674,6 +1688,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    ..Default::default()
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1761,6 +1776,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    ..Default::default()
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1839,6 +1855,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
+                    ..Default::default()
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1921,6 +1938,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
+                    ..Default::default()
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1988,6 +2006,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
+                ..Default::default()
             }),
             raw_response: "chunk1".to_string(),
             latency,
@@ -2105,6 +2124,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
+                    ..Default::default()
                 }),
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
@@ -2183,6 +2203,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             }),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -2200,6 +2221,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));

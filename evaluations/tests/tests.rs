@@ -1659,6 +1659,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            ..Default::default()
         },
         variant_name: "test_variant".to_string(),
     });
@@ -1836,6 +1837,7 @@ async fn test_run_llm_judge_evaluator_json() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            ..Default::default()
         },
         variant_name: "test_variant".to_string(),
     });

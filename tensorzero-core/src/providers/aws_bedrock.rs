@@ -666,9 +666,19 @@ fn bedrock_to_tensorzero_stream_message(
             match message.usage {
                 None => Ok(None),
                 Some(usage) => {
+                    // Map cache tokens if present (for Anthropic models on Bedrock)
+                    let input_tokens_details = usage.cache_read_input_tokens.map(|cached| {
+                        crate::inference::types::usage::InputTokensDetails {
+                            cached_tokens: Some(cached as u32),
+                            audio_tokens: None,
+                        }
+                    });
+
                     let usage = Some(Usage {
                         input_tokens: Some(usage.input_tokens as u32),
                         output_tokens: Some(usage.output_tokens as u32),
+                        input_tokens_details,
+                        ..Default::default()
                     });
 
                     Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1040,9 +1050,21 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 
         let usage = output
             .usage
-            .map(|u| Usage {
-                input_tokens: Some(u.input_tokens as u32),
-                output_tokens: Some(u.output_tokens as u32),
+            .map(|u| {
+                // Map cache tokens if present (for Anthropic models on Bedrock)
+                let input_tokens_details = u.cache_read_input_tokens.map(|cached| {
+                    crate::inference::types::usage::InputTokensDetails {
+                        cached_tokens: Some(cached as u32),
+                        audio_tokens: None,
+                    }
+                });
+
+                Usage {
+                    input_tokens: Some(u.input_tokens as u32),
+                    output_tokens: Some(u.output_tokens as u32),
+                    input_tokens_details,
+                    ..Default::default()
+                }
             })
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {

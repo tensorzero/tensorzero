@@ -1705,6 +1705,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1789,6 +1790,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1886,6 +1888,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -1990,6 +1993,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2123,6 +2127,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2249,6 +2254,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                ..Default::default()
             }
         );
         match result {
@@ -2576,8 +2582,9 @@ mod tests {
                     chunk.usage(),
                     Some(&Usage {
                         input_tokens: Some(10),
-                        output_tokens: Some(16),
-                    })
+                        output_tokens: Some(10),
+                        ..Default::default()
+                    }),
                 );
                 break;
             }

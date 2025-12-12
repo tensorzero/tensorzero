@@ -1184,17 +1184,58 @@ impl<'a> GroqRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub(super) struct GroqPromptTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub(super) struct GroqCompletionTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_prediction_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected_prediction_tokens: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct GroqUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<GroqPromptTokensDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_details: Option<GroqCompletionTokensDetails>,
 }
 
 impl From<GroqUsage> for Usage {
     fn from(usage: GroqUsage) -> Self {
+        use crate::inference::types::usage::{InputTokensDetails, OutputTokensDetails};
+
+        let input_tokens_details = usage
+            .prompt_tokens_details
+            .map(|details| InputTokensDetails {
+                cached_tokens: details.cached_tokens,
+                audio_tokens: None,
+            });
+
+        let output_tokens_details =
+            usage
+                .completion_tokens_details
+                .map(|details| OutputTokensDetails {
+                    reasoning_tokens: details.reasoning_tokens,
+                    audio_tokens: None,
+                    accepted_prediction_tokens: details.accepted_prediction_tokens,
+                    rejected_prediction_tokens: details.rejected_prediction_tokens,
+                });
+
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            input_tokens_details,
+            output_tokens_details,
         }
     }
 }
@@ -1824,6 +1865,8 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1924,6 +1967,8 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2016,6 +2061,8 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
         let request_body = GroqRequest {
@@ -2075,6 +2122,8 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             },
         };
 
@@ -2458,6 +2507,8 @@ mod tests {
             usage: Some(GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
+                completion_tokens_details: None,
             }),
         };
         let message =
@@ -2469,6 +2520,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                ..Default::default()
             })
         );
     }

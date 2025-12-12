@@ -246,6 +246,8 @@ pub fn prepare_serialized_openai_compatible_events(
                     prompt_tokens: total_usage.prompt_tokens,
                     completion_tokens: total_usage.completion_tokens,
                     total_tokens: total_usage.total_tokens,
+                    prompt_tokens_details: total_usage.prompt_tokens_details,
+                    completion_tokens_details: total_usage.completion_tokens_details,
                 }),
             };
             yield Event::default().json_data(

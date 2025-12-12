@@ -1524,6 +1524,7 @@ impl From<OpenRouterUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            ..Default::default()
         }
     }
 }
@@ -2829,7 +2830,8 @@ mod tests {
             message.usage,
             Some(Usage {
                 input_tokens: Some(10),
-                output_tokens: Some(20),
+                output_tokens: Some(10),
+                ..Default::default()
             })
         );
     }

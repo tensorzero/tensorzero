@@ -1087,13 +1087,30 @@ fn convert_to_output(
 pub struct AnthropicUsage {
     input_tokens: u32,
     output_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_creation_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
+        use crate::inference::types::usage::InputTokensDetails;
+
+        let input_tokens_details = if value.cache_read_input_tokens.is_some() {
+            Some(InputTokensDetails {
+                cached_tokens: value.cache_read_input_tokens,
+                audio_tokens: None,
+            })
+        } else {
+            None
+        };
+
         Usage {
             input_tokens: Some(value.input_tokens),
             output_tokens: Some(value.output_tokens),
+            input_tokens_details,
+            output_tokens_details: None,
         }
     }
 }
@@ -1535,6 +1552,8 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
     AnthropicUsage {
         input_tokens,
         output_tokens,
+        cache_creation_input_tokens: None,
+        cache_read_input_tokens: None,
     }
 }
 
@@ -2269,6 +2288,8 @@ mod tests {
         let anthropic_usage = AnthropicUsage {
             input_tokens: 100,
             output_tokens: 50,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2293,6 +2314,8 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2376,6 +2399,8 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2446,6 +2471,8 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: 100,
                 output_tokens: 50,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
         let request_body = AnthropicRequestBody {
@@ -3217,5 +3244,66 @@ mod tests {
         // Verify only the allowed tool is included
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "get_temperature");
+    }
+
+    #[test]
+    fn test_anthropic_cache_fields_to_usage_details() {
+        // Test that Anthropic cache fields are correctly mapped to usage details
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: 200,
+            output_tokens: 100,
+            cache_creation_input_tokens: Some(50),
+            cache_read_input_tokens: Some(75),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(usage.input_tokens, Some(200), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(100), "Output tokens should match");
+
+        // Verify cache_read_input_tokens maps to cached_tokens
+        let input_details = usage.input_tokens_details.expect("Should have input details");
+        assert_eq!(input_details.cached_tokens, Some(75), "Cache read tokens should map to cached_tokens");
+        assert!(input_details.audio_tokens.is_none(), "Audio tokens should be None for Anthropic");
+
+        // Anthropic doesn't have output token details
+        assert!(usage.output_tokens_details.is_none(), "Should not have output details for Anthropic");
+    }
+
+    #[test]
+    fn test_anthropic_usage_without_cache() {
+        // Test Anthropic usage without cache fields
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: 150,
+            output_tokens: 80,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(usage.input_tokens, Some(150), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(80), "Output tokens should match");
+        assert!(usage.input_tokens_details.is_none(), "Should not have input details without cache");
+        assert!(usage.output_tokens_details.is_none(), "Should not have output details");
+    }
+
+    #[test]
+    fn test_anthropic_usage_only_cache_creation() {
+        // Test when only cache_creation_input_tokens is present
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: 300,
+            output_tokens: 150,
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: None,
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(usage.input_tokens, Some(300), "Input tokens should match");
+        assert_eq!(usage.output_tokens, Some(150), "Output tokens should match");
+        
+        // Cache creation tokens don't map to cached_tokens (only read tokens do)
+        assert!(usage.input_tokens_details.is_none(), "Should not have input details with only cache creation");
     }
 }
