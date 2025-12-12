@@ -149,18 +149,6 @@ pub fn check_topk(
     check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
-// Enum for variant status during an evals run
-pub enum VariantStatus {
-    // Still running evals on this variant
-    Active,
-    // Not running evals; variant is confidently within top k_min
-    Include,
-    // Not running evals; variant is confidently outside the top k_max
-    Exclude,
-    // Not running evals; variant failure rate is confidently >= VARIANT_FAILURE_THRESHOLD
-    Failed,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
