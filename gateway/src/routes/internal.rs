@@ -42,6 +42,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::ui::get_config::ui_config_handler),
         )
         .route(
+            "/internal/episodes",
+            get(endpoints::episodes::internal::list_episodes_handler),
+        )
+        .route(
+            "/internal/episodes/bounds",
+            get(endpoints::episodes::internal::query_episode_table_bounds_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
