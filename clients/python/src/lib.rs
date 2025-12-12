@@ -1466,7 +1466,7 @@ impl TensorZeroGateway {
             evaluation_run_id,
             dataset_name,
             datapoint_ids,
-            variant,
+            variants: vec![variant],
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -2703,7 +2703,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_run_id,
                 dataset_name,
                 datapoint_ids,
-                variant,
+                variants: vec![variant],
                 concurrency,
                 inference_cache: inference_cache_enum,
             };

@@ -222,7 +222,7 @@ pub async fn run_evaluation_streaming(
         function_configs,
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: Some(datapoint_ids.clone()),
-        variant: EvaluationVariant::Name(params.variant_name.clone()),
+        variants: vec![EvaluationVariant::Name(params.variant_name.clone())],
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,

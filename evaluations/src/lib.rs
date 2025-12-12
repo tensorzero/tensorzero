@@ -189,7 +189,7 @@ pub async fn run_evaluation(
         function_configs,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
-        variant: EvaluationVariant::Name(args.variant_name),
+        variants: vec![EvaluationVariant::Name(args.variant_name)],
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
@@ -336,7 +336,7 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant = ?args.variant, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), num_variants = %args.variants.len(), concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<u32>,
@@ -420,9 +420,10 @@ pub async fn run_evaluation_core_streaming(
             .clone()
             .unwrap_or_else(|| format!("datapoint_ids[{}]", datapoint_ids.len())),
     );
-    let variant = Arc::new(args.variant);
+    let variants: Vec<Arc<EvaluationVariant>> = args.variants.into_iter().map(Arc::new).collect();
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
+    let num_variants = variants.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
     // Setup stopping manager for adaptive stopping
@@ -431,7 +432,7 @@ pub async fn run_evaluation_core_streaming(
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
-        num_datapoints: dataset_len,
+        num_datapoints: dataset_len * num_variants,
     };
 
     // Send the run info as the first message
@@ -446,85 +447,89 @@ pub async fn run_evaluation_core_streaming(
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
-    // Spawn concurrent tasks for each datapoint
+    // Spawn concurrent tasks for each (datapoint, variant) pair
     for datapoint in dataset {
-        let clients_clone = clients.clone();
-        let function_configs = args.function_configs.clone();
-        let variant = variant.clone();
-        let evaluation_config = evaluation_config.clone();
-        let dataset_name = dataset_name.clone();
-        let function_name = inference_evaluation_config.function_name.clone();
-        let evaluation_name = evaluation_name.clone();
-        let evaluation_run_id_clone = args.evaluation_run_id;
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
-        let inference_cache = args.inference_cache;
-        let tokens_clone = cancellation_tokens_arc.clone();
-        let semaphore_clone = semaphore.clone();
 
-        // Skip feedback for dynamic variants (they're not production-ready)
-        // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
-        let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
-        let abort_handle = join_set.spawn(async move {
-            // Acquire semaphore permit for the entire task (inference + evaluation)
-            let _permit = semaphore_clone.acquire().await?;
+        for variant in &variants {
+            let clients_clone = clients.clone();
+            let function_configs = args.function_configs.clone();
+            let variant = variant.clone();
+            let evaluation_config = evaluation_config.clone();
+            let dataset_name = dataset_name.clone();
+            let function_name = inference_evaluation_config.function_name.clone();
+            let evaluation_name = evaluation_name.clone();
+            let evaluation_run_id_clone = args.evaluation_run_id;
+            let datapoint = datapoint.clone();
+            let inference_cache = args.inference_cache;
+            let tokens_clone = cancellation_tokens_arc.clone();
+            let semaphore_clone = semaphore.clone();
 
-            // Look up function config from table
-            let function_config = function_configs
-                .get(&function_name)
-                .ok_or_else(|| anyhow!("Function '{function_name}' not found in function configs table"))?;
+            // Skip feedback for dynamic variants (they're not production-ready)
+            // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
+            let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
+            let abort_handle = join_set.spawn(async move {
+                // Acquire semaphore permit for the entire task (inference + evaluation)
+                let _permit = semaphore_clone.acquire().await?;
 
-            // Convert Input back to StoredInput, then use reresolve() which delegates
-            // to the TensorZero client. This currently requires us to configure `tensorzero_client` in
-            // HTTPGateway mode for the UI e2e tests to pass (we can't construct a `FetchContext` and
-            // load data from `Input`).
-            //
-            // TODO(#4844): Rethink file loading architecture, so we can do this without requiring a client in HTTP gateway mode.
-            let stored_input = datapoint.input().clone().into_stored_input_without_file_handling()?;
-            let resolved_input = stored_input.reresolve(&clients_clone.tensorzero_client).await?;
-            let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
+                // Look up function config from table
+                let function_config = function_configs
+                    .get(&function_name)
+                    .ok_or_else(|| anyhow!("Function '{function_name}' not found in function configs table"))?;
 
-            let inference_response = Arc::new(
-                infer_datapoint(InferDatapointParams {
-                    clients: &clients_clone,
-                    function_name: &function_name,
-                    variant: &variant,
-                    evaluation_run_id: evaluation_run_id_clone,
-                    dataset_name: &dataset_name,
-                    datapoint: &datapoint,
-                    evaluation_name: &evaluation_name,
-                    function_config,
-                    input: &input,
-                    inference_cache,
-                })
-                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
-            );
+                // Convert Input back to StoredInput, then use reresolve() which delegates
+                // to the TensorZero client. This currently requires us to configure `tensorzero_client` in
+                // HTTPGateway mode for the UI e2e tests to pass (we can't construct a `FetchContext` and
+                // load data from `Input`).
+                //
+                // TODO(#4844): Rethink file loading architecture, so we can do this without requiring a client in HTTP gateway mode.
+                let stored_input = datapoint.input().clone().into_stored_input_without_file_handling()?;
+                let resolved_input = stored_input.reresolve(&clients_clone.tensorzero_client).await?;
+                let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
 
-            let inference_id = inference_response.inference_id();
-            let evaluation_result = evaluate_inference(
-                EvaluateInferenceParams {
-                    inference_response: inference_response.clone(),
-                    datapoint: datapoint.clone(),
-                    input,
-                    evaluation_config,
-                    evaluation_name,
-                    clients: clients_clone.clone(),
-                    evaluation_run_id: evaluation_run_id_clone,
-                    inference_cache,
-                    send_feedback,
-                },
-                tokens_clone.as_ref(),  // Pass cancellation tokens
-            )
-                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
-            debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
+                let inference_response = Arc::new(
+                    infer_datapoint(InferDatapointParams {
+                        clients: &clients_clone,
+                        function_name: &function_name,
+                        variant: &variant,
+                        evaluation_run_id: evaluation_run_id_clone,
+                        dataset_name: &dataset_name,
+                        datapoint: &datapoint,
+                        evaluation_name: &evaluation_name,
+                        function_config,
+                        input: &input,
+                        inference_cache,
+                    })
+                    .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
+                );
 
-            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
-                Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
-                Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
-                evaluation_result,
-            ))
-        });
-        task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
+                let inference_id = inference_response.inference_id();
+                let evaluation_result = evaluate_inference(
+                    EvaluateInferenceParams {
+                        inference_response: inference_response.clone(),
+                        datapoint: datapoint.clone(),
+                        input,
+                        evaluation_config,
+                        evaluation_name,
+                        clients: clients_clone.clone(),
+                        evaluation_run_id: evaluation_run_id_clone,
+                        inference_cache,
+                        send_feedback,
+                    },
+                    tokens_clone.as_ref(),  // Pass cancellation tokens
+                )
+                    .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
+                debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
+
+                Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
+                    Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
+                    Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
+                    evaluation_result,
+                ))
+            });
+            task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
+        }
     }
 
     // Get a shared reference to the evaluation config (which includes evaluators)

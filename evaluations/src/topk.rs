@@ -138,19 +138,6 @@ pub fn check_topk_stopping(
     })
 }
 
-// Enum for variant status during an evals run
-#[expect(dead_code)]
-enum VariantStatus {
-    // Still running evals on this variant
-    Active,
-    // Not running evals; variant is confidently within top k_min
-    Include,
-    // Not running evals; variant is confidently outside the top k_max
-    Exclude,
-    // Not running evals; variant failure rate is confidently >= VARIANT_FAILURE_THRESHOLD
-    Failed,
-}
-
 /// Convenience wrapper to check if a specific k can be identified.
 ///
 /// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
@@ -160,6 +147,18 @@ pub fn check_topk(
     epsilon: Option<f64>,
 ) -> anyhow::Result<TopKStoppingResult> {
     check_topk_stopping(variant_performance, k, k, epsilon)
+}
+
+// Enum for variant status during an evals run
+pub enum VariantStatus {
+    // Still running evals on this variant
+    Active,
+    // Not running evals; variant is confidently within top k_min
+    Include,
+    // Not running evals; variant is confidently outside the top k_max
+    Exclude,
+    // Not running evals; variant failure rate is confidently >= VARIANT_FAILURE_THRESHOLD
+    Failed,
 }
 
 #[cfg(test)]
