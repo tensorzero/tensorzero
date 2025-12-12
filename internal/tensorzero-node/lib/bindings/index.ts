@@ -35,7 +35,6 @@ export * from "./CountFeedbackByTargetIdParams";
 export * from "./CountModelsResponse";
 export * from "./CreateChatDatapointRequest";
 export * from "./CreateDatapointRequest";
-export * from "./CreateDatapointsFromInferenceOutputSource";
 export * from "./CreateDatapointsFromInferenceRequest";
 export * from "./CreateDatapointsFromInferenceRequestParams";
 export * from "./CreateDatapointsRequest";

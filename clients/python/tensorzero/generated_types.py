@@ -43,22 +43,6 @@ class ContentBlockChatOutputText:
     type: Literal["text"] = "text"
 
 
-CreateDatapointsFromInferenceOutputSource = str
-
-
-@dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceIds:
-    """
-    Create datapoints from specific inference IDs.
-    """
-
-    inference_ids: list[str]
-    """
-    The inference IDs to create datapoints from.
-    """
-    type: Literal["inference_ids"] = "inference_ids"
-
-
 @dataclass(kw_only=True)
 class CreateDatapointsResponse:
     """
@@ -972,6 +956,25 @@ class ContentBlockChatOutputUnknown(Unknown):
     """
 
     type: Literal["unknown"] = "unknown"
+
+
+@dataclass(kw_only=True)
+class CreateDatapointsFromInferenceRequestParamsInferenceIds:
+    """
+    Create datapoints from specific inference IDs.
+    """
+
+    inference_ids: list[str]
+    """
+    The inference IDs to create datapoints from.
+    """
+    type: Literal["inference_ids"] = "inference_ids"
+    output_source: InferenceOutputSource | None = None
+    """
+    When creating the datapoint, this specifies the source of the output for the datapoint.
+    If not provided, by default we will use the original inference output as the datapoint's output
+    (equivalent to `inference`).
+    """
 
 
 @dataclass(kw_only=True)
@@ -2049,18 +2052,77 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     Create datapoints from an inference query.
     """
 
-    function_name: str
+    output_source: InferenceOutputSource
     """
-    The function name to filter inferences by.
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
     """
     type: Literal["inference_query"] = "inference_query"
+    after: str | None = None
+    """
+    Optional inference ID to paginate after (exclusive).
+    Returns inferences with IDs after this one (later in time).
+    Cannot be used together with `before` or `offset`.
+    """
+    before: str | None = None
+    """
+    Optional inference ID to paginate before (exclusive).
+    Returns inferences with IDs before this one (earlier in time).
+    Cannot be used together with `after` or `offset`.
+    """
+    episode_id: str | None = None
+    """
+    Optional episode ID to filter inferences by.
+    If provided, only inferences from this episode will be returned.
+    """
+    filter: InferenceFilter | None = None
+    """
+    **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    """
     filters: InferenceFilter | None = None
     """
-    Filters to apply when querying inferences, optional.
+    Optional filter to apply when querying inferences.
+    Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter inferences by.
+    If provided, only inferences from this function will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of inferences to return.
+    Defaults to 20.
+    """
+    offset: int | None = None
+    """
+    The number of inferences to skip before starting to return results.
+    Defaults to 0.
+    """
+    order_by: list[OrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the inferences' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
     variant_name: str | None = None
     """
-    Variant name to filter inferences by, optional.
+    Optional variant name to filter inferences by.
+    If provided, only inferences from this variant will be returned.
     """
 
 
@@ -2227,6 +2289,10 @@ class ListInferencesRequest:
     If provided, only inferences from this episode will be returned.
     """
     filter: InferenceFilter | None = None
+    """
+    **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    """
+    filters: InferenceFilter | None = None
     """
     Optional filter to apply when querying inferences.
     Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).

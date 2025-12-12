@@ -15,7 +15,7 @@ import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   CountModelsResponse,
-  EvaluationRunStatsResponse,
+  CreateDatapointsFromInferenceRequest,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
   Datapoint,
@@ -38,6 +38,11 @@ import type {
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
 } from "~/types/tensorzero";
+
+// This type is not exported from tensorzero-node yet, so define it inline
+type EvaluationRunStatsResponse = {
+  count: number;
+};
 
 /**
  * Roles for input messages.
@@ -800,6 +805,29 @@ export class TensorZeroClient {
     const count_response =
       (await response.json()) as EvaluationRunStatsResponse;
     return Number(count_response.count);
+  }
+
+  /**
+   * Creates datapoints from inferences based on either specific inference IDs or an inference query.
+   * @param datasetName - The name of the dataset to create datapoints in
+   * @param request - The request containing either inference IDs or an inference query with filters
+   * @returns A promise that resolves with the response containing the new datapoint IDs
+   * @throws Error if the request fails
+   */
+  async createDatapointsFromInferences(
+    datasetName: string,
+    request: CreateDatapointsFromInferenceRequest,
+  ): Promise<CreateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/from_inferences`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CreateDatapointsResponse;
   }
 
   private async fetch(

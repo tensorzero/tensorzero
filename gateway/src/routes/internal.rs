@@ -39,7 +39,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+            #[expect(deprecated)]
+            post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/clone",

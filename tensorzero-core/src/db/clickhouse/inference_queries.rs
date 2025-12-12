@@ -516,7 +516,9 @@ fn generate_single_table_query_for_type(
 
     // Handle OutputSource
     match opts.output_source {
-        InferenceOutputSource::Inference => {
+        InferenceOutputSource::None | InferenceOutputSource::Inference => {
+            // For None, we still select the inference output but it will be dropped
+            // when creating the datapoint. This avoids an unnecessary join.
             select_clauses.push("i.output as output".to_string());
         }
         InferenceOutputSource::Demonstration => {

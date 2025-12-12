@@ -179,6 +179,8 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
+    /// No output - used when creating datapoints without output.
+    None,
     /// The inference output is the original output from the inference.
     #[default]
     Inference,
@@ -191,6 +193,7 @@ impl TryFrom<&str> for InferenceOutputSource {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
+            "none" => Ok(InferenceOutputSource::None),
             "inference" => Ok(InferenceOutputSource::Inference),
             "demonstration" => Ok(InferenceOutputSource::Demonstration),
             _ => Err(Error::new(ErrorDetails::InvalidInferenceOutputSource {

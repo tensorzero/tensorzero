@@ -54,13 +54,13 @@ pub use tensorzero_core::db::stored_datapoint::{
 };
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
-    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
-    DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
-    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
-    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
-    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
+    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
+    GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
+    UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -353,7 +353,6 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
     // ================================================================
@@ -1024,12 +1023,8 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError> {
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
+        let request = CreateDatapointsFromInferenceRequest { params };
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/from_inferences")).map_err(|e| TensorZeroError::Other {

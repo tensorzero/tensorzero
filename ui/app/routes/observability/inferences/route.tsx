@@ -30,15 +30,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const episode_id = url.searchParams.get("episode_id") || undefined;
   const search_query = url.searchParams.get("search_query") || undefined;
 
-  // Parse JSON filter if present
-  const filterParam = url.searchParams.get("filter");
-  let filter: InferenceFilter | undefined;
-  if (filterParam) {
+  // Parse JSON filters if present
+  const filtersParam = url.searchParams.get("filters");
+  let filters: InferenceFilter | undefined;
+  if (filtersParam) {
     try {
-      filter = JSON.parse(filterParam) as InferenceFilter;
+      filters = JSON.parse(filtersParam) as InferenceFilter;
     } catch {
-      // Invalid JSON - ignore filter
-      filter = undefined;
+      // Invalid JSON - ignore filters
+      filters = undefined;
     }
   }
 
@@ -50,7 +50,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       function_name,
       variant_name,
       episode_id,
-      filter,
+      filters,
       search_query,
     }),
     countInferencesByFunction(),
@@ -69,7 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   };
 }
 
@@ -84,7 +84,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -100,7 +100,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     if (variant_name) params.set("variant_name", variant_name);
     if (episode_id) params.set("episode_id", episode_id);
     if (search_query) params.set("search_query", search_query);
-    if (filter) params.set("filter", JSON.stringify(filter));
+    if (filters) params.set("filters", JSON.stringify(filters));
     return params;
   };
 
@@ -135,7 +135,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           variant_name={variant_name}
           episode_id={episode_id}
           search_query={search_query}
-          filter={filter}
+          filters={filters}
         />
         <PageButtons
           onPreviousPage={handlePreviousPage}

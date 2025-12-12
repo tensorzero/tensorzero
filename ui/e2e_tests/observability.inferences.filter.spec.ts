@@ -109,8 +109,8 @@ test.describe("Inference Filtering", () => {
     await filterButton.click();
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
-    // Find the Episode ID input field
-    const episodeInput = page.getByPlaceholder("Enter episode ID");
+    // Find the Episode ID input field by its label
+    const episodeInput = page.getByLabel("Episode ID");
     await episodeInput.fill("0196367a-842d-74c2-9e62-67f07369b6ad");
 
     // Apply filters and wait for results
