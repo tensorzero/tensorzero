@@ -1,13 +1,13 @@
-[models.grok_2_1212]
+[models.grok_4_1_fast_non_reasoning]
 routing = ["xai"]
 
-[models.grok_2_1212.providers.xai]
+[models.grok_4_1_fast_non_reasoning.providers.xai]
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"

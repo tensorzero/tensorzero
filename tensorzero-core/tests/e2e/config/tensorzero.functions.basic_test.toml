@@ -629,33 +629,33 @@ max_tokens = 100
 
 [functions.basic_test.variants.xai]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.xai-extra-body]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.xai-extra-headers]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "Bearer invalid_xai_auth" }]
 
 [functions.basic_test.variants.xai-dynamic]
 type = "chat_completion"
-model = "grok_2_1212-dynamic"
+model = "grok_4_1_fast_non_reasoning-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.xai-shorthand]
 type = "chat_completion"
-model = "xai::grok-2-1212"
+model = "xai::grok-4-1-fast-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
