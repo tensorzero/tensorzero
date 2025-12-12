@@ -154,7 +154,6 @@ export * from "./LaunchOptimizationParams";
 export * from "./LaunchOptimizationWorkflowParams";
 export * from "./ListDatapointsRequest";
 export * from "./ListDatasetsResponse";
-export * from "./ListEpisodeInferencesResponse";
 export * from "./ListInferenceMetadataResponse";
 export * from "./ListInferencesRequest";
 export * from "./MetricConfig";

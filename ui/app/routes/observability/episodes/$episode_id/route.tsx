@@ -1,5 +1,7 @@
-import { countInferencesForEpisode } from "~/utils/clickhouse/inference.server";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import {
+  countInferencesForEpisode,
+  listInferencesWithPagination,
+} from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
@@ -31,7 +33,6 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
-import { applyPaginationLogic } from "~/utils/pagination";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -73,7 +74,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const dbClient = await getNativeDatabaseClient();
-  const client = getTensorZeroClient();
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
@@ -101,10 +101,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
     [inferenceResult, feedbacks, num_inferences, num_feedbacks] =
       await Promise.all([
-        client.listEpisodeInferences(episode_id, {
+        listInferencesWithPagination({
+          episode_id,
           before: beforeInference ?? undefined,
           after: afterInference ?? undefined,
-          limit: limit + 1, // Fetch one extra to determine pagination
+          limit,
         }),
         feedbackDataPromise,
         countInferencesForEpisode(episode_id),
@@ -128,10 +129,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       num_feedbacks,
       latestFeedbackByMetric,
     ] = await Promise.all([
-      client.listEpisodeInferences(episode_id, {
+      listInferencesWithPagination({
+        episode_id,
         before: beforeInference ?? undefined,
         after: afterInference ?? undefined,
-        limit: limit + 1, // Fetch one extra to determine pagination
+        limit,
       }),
       feedbackDataPromise,
       dbClient.queryFeedbackBoundsByTargetId({
@@ -144,17 +146,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       queryLatestFeedbackIdByMetric({ target_id: episode_id }),
     ]);
   }
-  // Handle pagination from listEpisodeInferences response
-  const {
-    items: inferences,
-    hasNextPage: hasNextInferencePage,
-    hasPreviousPage: hasPreviousInferencePage,
-  } = applyPaginationLogic(inferenceResult.inferences, limit, {
-    before: beforeInference,
-    after: afterInference,
-  });
-
-  if (inferences.length === 0) {
+  if (inferenceResult.inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
       status: 404,
     });
@@ -162,9 +154,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     episode_id,
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
+    inferences: inferenceResult.inferences,
+    hasNextInferencePage: inferenceResult.hasNextPage,
+    hasPreviousInferencePage: inferenceResult.hasPreviousPage,
     feedbacks,
     feedbackBounds,
     num_inferences,
