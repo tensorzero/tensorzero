@@ -281,7 +281,9 @@ jobs:
         shell: bash
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Generate Python schemas
         run: pnpm generate-python-schemas
@@ -317,7 +319,9 @@ jobs:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install uv
-        run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
       - name: Install Python 3.10
         run: uv python install 3.10
       - name: Set PYO3_PYTHON
@@ -384,7 +388,9 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: uv-lock
         run: |
@@ -628,7 +634,9 @@ jobs:
         shell: bash
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
@@ -780,7 +788,9 @@ jobs:
             ./ui/fixtures/s3-fixtures/
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Download container images
         run: |
@@ -969,7 +979,11 @@ jobs:
           tool: cargo-nextest
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
+          # Without this, the post-install hook tries to prune and save the cache, but ./ci/free-disk-space.sh already nukes /opt/hostedtoolcache/*, so it fails.
+          enable-cache: "false"
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
