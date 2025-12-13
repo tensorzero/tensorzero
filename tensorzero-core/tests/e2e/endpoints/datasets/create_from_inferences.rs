@@ -9,11 +9,14 @@ use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
-use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+use tensorzero_core::db::inferences::{
+    InferenceOutputSource, InferenceQueries, ListInferencesParams,
 };
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsResponse,
+};
+use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequest;
 
 use crate::common::get_gateway_endpoint;
 
@@ -54,8 +57,8 @@ async fn test_create_from_inference_ids_success() {
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
             inference_ids: vec![inference_id1, inference_id2],
+            output_source: Some(InferenceOutputSource::Inference),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response = client
@@ -80,11 +83,13 @@ async fn test_create_from_inference_query_success() {
     // Create datapoints using a query (no filters, just function name)
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-            function_name: "write_haiku".to_string(),
-            variant_name: None,
-            filters: None,
+            query: Box::new(ListInferencesRequest {
+                function_name: Some("write_haiku".to_string()),
+                variant_name: None,
+                output_source: InferenceOutputSource::Inference,
+                ..Default::default()
+            }),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response = client
@@ -123,8 +128,8 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
             inference_ids: vec![inference_id],
+            output_source: Some(InferenceOutputSource::Inference),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response1 = client
@@ -179,8 +184,8 @@ async fn test_create_from_inference_missing_ids_error() {
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
             inference_ids: vec![real_inference_id, fake_inference_id],
+            output_source: Some(InferenceOutputSource::Inference),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response = client
@@ -215,11 +220,14 @@ async fn test_create_from_inference_with_filters() {
 
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-            function_name: "write_haiku".to_string(),
-            variant_name: None,
-            filters: Some(filter),
+            query: Box::new(ListInferencesRequest {
+                function_name: Some("write_haiku".to_string()),
+                variant_name: None,
+                filters: Some(filter),
+                output_source: InferenceOutputSource::Inference,
+                ..Default::default()
+            }),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response = client

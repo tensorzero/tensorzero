@@ -90,6 +90,7 @@ export function DatasetSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-label="Dataset"
             className="group w-full justify-between border"
             disabled={disabled}
             {...buttonProps}

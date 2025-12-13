@@ -32,6 +32,7 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import { useAllFunctionConfigs } from "~/context/config";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
 
@@ -41,14 +42,14 @@ export default function InferencesTable({
   variant_name,
   episode_id,
   search_query,
-  filter,
+  filters,
 }: {
   inferences: InferenceMetadata[];
   function_name: string | undefined;
   variant_name: string | undefined;
   episode_id: string | undefined;
   search_query: string | undefined;
-  filter: InferenceFilter | undefined;
+  filters: InferenceFilter | undefined;
 }) {
   const navigate = useNavigate();
   const functions = useAllFunctionConfigs();
@@ -68,7 +69,7 @@ export default function InferencesTable({
   );
   const [filterAdvanced, setFilterAdvanced] = useState<
     InferenceFilter | undefined
-  >(filter);
+  >(filters);
 
   // Form for the filter sheet (needed for FormLabel in InferenceFilterBuilder)
   const filterForm = useForm();
@@ -80,7 +81,7 @@ export default function InferencesTable({
       setFilterVariantName(variant_name ?? "");
       setFilterEpisodeId(episode_id ?? "");
       setFilterSearchQuery(search_query ?? "");
-      setFilterAdvanced(filter);
+      setFilterAdvanced(filters);
     }
   }, [
     filterOpen,
@@ -88,7 +89,7 @@ export default function InferencesTable({
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   ]);
 
   const handleFilterSubmit = () => {
@@ -111,7 +112,7 @@ export default function InferencesTable({
     }
 
     if (filterAdvanced) {
-      searchParams.set("filter", JSON.stringify(filterAdvanced));
+      searchParams.set("filters", JSON.stringify(filterAdvanced));
     }
 
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
@@ -135,7 +136,7 @@ export default function InferencesTable({
   };
 
   const hasActiveFilters =
-    function_name || variant_name || episode_id || search_query || filter;
+    function_name || variant_name || episode_id || search_query || filters;
 
   return (
     <div>
@@ -242,16 +243,15 @@ export default function InferencesTable({
               <div>
                 <label className="text-sm font-medium">Variant</label>
                 <div className="mt-1 flex items-center gap-2">
-                  <Input
-                    value={filterVariantName}
-                    onChange={(e) => setFilterVariantName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleFilterSubmit();
+                  <div className="flex-1">
+                    <VariantSelector
+                      functionName={filterFunctionName}
+                      value={filterVariantName}
+                      onChange={(value) =>
+                        setFilterVariantName(value === "__all__" ? "" : value)
                       }
-                    }}
-                    placeholder="Enter variant name"
-                  />
+                    />
+                  </div>
                   {filterVariantName && (
                     <Button
                       variant="outline"
@@ -264,9 +264,15 @@ export default function InferencesTable({
               </div>
 
               <div>
-                <label className="text-sm font-medium">Episode ID</label>
+                <label
+                  htmlFor="episode-id-filter"
+                  className="text-sm font-medium"
+                >
+                  Episode ID
+                </label>
                 <div className="mt-1 flex items-center gap-2">
                   <Input
+                    id="episode-id-filter"
                     value={filterEpisodeId}
                     onChange={(e) => setFilterEpisodeId(e.target.value)}
                     onKeyDown={(e) => {
@@ -274,7 +280,7 @@ export default function InferencesTable({
                         handleFilterSubmit();
                       }
                     }}
-                    placeholder="Enter episode ID"
+                    placeholder="00000000-0000-0000-0000-000000000000"
                   />
                   {filterEpisodeId && (
                     <Button
@@ -289,13 +295,19 @@ export default function InferencesTable({
 
               <div>
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">Search Query</label>
+                  <label
+                    htmlFor="search-query-filter"
+                    className="text-sm font-medium"
+                  >
+                    Search Query
+                  </label>
                   <Badge variant="outline" className="text-xs">
                     Experimental
                   </Badge>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <Input
+                    id="search-query-filter"
                     value={filterSearchQuery}
                     onChange={(e) => setFilterSearchQuery(e.target.value)}
                     onKeyDown={(e) => {

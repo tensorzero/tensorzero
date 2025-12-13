@@ -6,7 +6,9 @@ use tensorzero::{
     CreateDatapointsFromInferenceRequestParams, Datapoint, ListDatapointsRequest,
     UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
 };
+use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::datasets::v1::types::DatapointMetadataUpdate;
+use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequest;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Text,
 };
@@ -537,14 +539,16 @@ async fn test_create_datapoints_from_inferences(client: Client) {
 
     // Create datapoints from an inference query
     let params = CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-        function_name: "write_haiku".to_string(),
-        variant_name: Some("better_prompt_haiku_3_5".to_string()),
-        filters: None,
+        query: Box::new(ListInferencesRequest {
+            function_name: Some("write_haiku".to_string()),
+            variant_name: Some("better_prompt_haiku_3_5".to_string()),
+            output_source: InferenceOutputSource::Inference,
+            ..Default::default()
+        }),
     };
-    let output_source = None;
 
     let response = client
-        .create_datapoints_from_inferences(dataset_name.clone(), params, output_source)
+        .create_datapoints_from_inferences(dataset_name.clone(), params)
         .await
         .unwrap();
 

@@ -221,6 +221,12 @@ pub struct ListInferencesRequest {
 
     /// Optional filter to apply when querying inferences.
     /// Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
+    pub filters: Option<InferenceFilter>,
+
+    /// **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    #[deprecated(note = "Use `filters` instead")]
+    #[serde(skip_serializing)]
+    #[ts(skip)]
     pub filter: Option<InferenceFilter>,
 
     /// Optional ordering criteria for the results.
@@ -265,12 +271,29 @@ impl ListInferencesRequest {
             }));
         }
 
+        // Handle deprecated `filter` field - prefer `filters` if both are set
+        #[expect(
+            deprecated,
+            reason = "intentionally accessing deprecated field for backwards compatibility"
+        )]
+        let filters = match (&self.filters, &self.filter) {
+            (Some(filters), _) => Some(filters),
+            (None, Some(filter)) => {
+                tracing::warn!(
+                    "The 'filter' field is deprecated and will be removed in a future release. \
+                     Please use 'filters' instead."
+                );
+                Some(filter)
+            }
+            (None, None) => None,
+        };
+
         Ok(ListInferencesParams {
             ids: None,
             function_name: self.function_name.as_deref(),
             variant_name: self.variant_name.as_deref(),
             episode_id: self.episode_id.as_ref(),
-            filters: self.filter.as_ref(),
+            filters,
             output_source: self.output_source,
             limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
             offset: self.offset.unwrap_or(0),

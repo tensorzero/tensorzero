@@ -9,10 +9,12 @@ use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
-use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::inferences::{
+    InferenceOutputSource, InferenceQueries, ListInferencesParams,
+};
 use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsResponse,
 };
 use tensorzero_core::stored_inference::StoredSample;
 
@@ -60,8 +62,8 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
             inference_ids: vec![inference_id],
+            output_source: Some(InferenceOutputSource::Inference),
         },
-        output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
     };
 
     let response = client

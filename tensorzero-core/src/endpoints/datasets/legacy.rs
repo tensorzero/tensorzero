@@ -316,18 +316,28 @@ struct WithFunctionName {
     function_name: String,
 }
 
-// The handler for the POST `/internal/datasets/:dataset/datapoints` endpoint.
+/// The handler for the POST `/internal/datasets/:dataset/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
 /// based on an existing inference (specified by `inference_id`).
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
+///
+/// DEPRECATED: This endpoint will be removed in 2026.2+.
+/// Use the POST `/v1/datasets/{dataset_name}/from_inferences` endpoint instead.
 #[instrument(name = "insert_datapoint", skip_all)]
-pub async fn insert_from_existing_datapoint_handler(
+#[deprecated(
+    note = "Use the POST `/v1/datasets/{dataset_name}/from_inferences` endpoint instead. This endpoint will be removed in 2026.2+."
+)]
+pub async fn deprecated_create_datapoints_from_inferences_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertPathParams>,
     StructuredJson(existing_inference_info): StructuredJson<ExistingInferenceInfo>,
 ) -> Result<Json<InsertDatapointResponse>, Error> {
+    crate::utils::deprecation_warning(&format!(
+        "The `/internal/datasets/{}/datapoints` endpoint is deprecated and will be removed in 2026.2+. Please use `/v1/datasets/{}/from_inferences` instead.",
+        path_params.dataset_name, path_params.dataset_name
+    ));
     validate_dataset_name(&path_params.dataset_name)?;
     let datapoint_id = insert_from_existing(
         &app_state.config,

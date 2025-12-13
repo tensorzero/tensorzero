@@ -54,7 +54,7 @@ export type ListInferencesRequest = {
    * Optional filter to apply when querying inferences.
    * Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
    */
-  filter?: InferenceFilter;
+  filters?: InferenceFilter;
   /**
    * Optional ordering criteria for the results.
    * Supports multiple sort criteria (e.g., sort by timestamp then by metric).

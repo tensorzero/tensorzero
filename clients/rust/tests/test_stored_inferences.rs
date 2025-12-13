@@ -513,7 +513,7 @@ async fn test_list_inferences_with_tag_filter(client: Client) {
         let request = ListInferencesRequest {
             function_name: Some("basic_test".to_string()),
             limit: Some(100),
-            filter: Some(tensorzero::InferenceFilter::Tag(tensorzero::TagFilter {
+            filters: Some(tensorzero::InferenceFilter::Tag(tensorzero::TagFilter {
                 key: key.clone(),
                 value: value.clone(),
                 comparison_operator: tensorzero::TagComparisonOperator::Equal,
