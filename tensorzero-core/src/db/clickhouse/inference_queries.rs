@@ -967,7 +967,7 @@ mod tests {
         let config = get_e2e_config().await;
 
         let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-            has_demonstration_feedback: true,
+            has_demonstration: true,
         });
 
         let opts = ListInferencesParams {
@@ -989,7 +989,7 @@ mod tests {
         let config = get_e2e_config().await;
 
         let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-            has_demonstration_feedback: false,
+            has_demonstration: false,
         });
 
         let opts = ListInferencesParams {

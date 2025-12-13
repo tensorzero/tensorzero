@@ -213,7 +213,7 @@ test.describe("Inference Filtering", () => {
       .click();
 
     const demoSelect = page.getByRole("combobox", {
-      name: "Has demonstration feedback",
+      name: "Inference has demonstration",
     });
     await expect(demoSelect).toBeVisible();
 
@@ -241,7 +241,7 @@ test.describe("Inference Filtering", () => {
       .click();
 
     const demoSelect = page.getByRole("combobox", {
-      name: "Has demonstration feedback",
+      name: "Inference has demonstration",
     });
     await demoSelect.click();
     await page.getByRole("option", { name: "false" }).click();

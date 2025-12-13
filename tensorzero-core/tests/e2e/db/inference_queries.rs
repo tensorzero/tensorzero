@@ -25,7 +25,7 @@ async fn test_list_inferences_filtered_to_has_demonstrations() {
     let config = get_e2e_config().await;
     let clickhouse = get_clickhouse().await;
     let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-        has_demonstration_feedback: true,
+        has_demonstration: true,
     });
 
     let inferences = clickhouse
@@ -70,7 +70,7 @@ async fn test_list_inferences_filtered_to_no_demonstrations() {
     let config = get_e2e_config().await;
     let clickhouse = get_clickhouse().await;
     let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-        has_demonstration_feedback: false,
+        has_demonstration: false,
     });
 
     let inferences = clickhouse

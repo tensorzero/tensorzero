@@ -44,7 +44,7 @@ const booleanMetricFilterSchema = z.object({
 // Demonstration feedback filter
 const demonstrationFilterSchema = z.object({
   type: z.literal("demonstration_feedback"),
-  has_demonstration_feedback: z.boolean(),
+  has_demonstration: z.boolean(),
 });
 
 // Recursive inference filter schema

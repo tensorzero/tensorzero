@@ -370,7 +370,7 @@ export const DemonstrationFilterRow = memo(function DemonstrationFilterRow({
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="text-fg-secondary text-sm font-medium">
-            Has demonstration feedback
+            Inference has demonstration
           </span>
         </div>
 
@@ -379,11 +379,9 @@ export const DemonstrationFilterRow = memo(function DemonstrationFilterRow({
         </div>
 
         <BooleanValueSelect
-          value={filter.has_demonstration_feedback}
-          onChange={(val) =>
-            onChange({ ...filter, has_demonstration_feedback: val })
-          }
-          ariaLabel="Has demonstration feedback"
+          value={filter.has_demonstration}
+          onChange={(val) => onChange({ ...filter, has_demonstration: val })}
+          ariaLabel="Inference has demonstration"
         />
 
         <DeleteButton

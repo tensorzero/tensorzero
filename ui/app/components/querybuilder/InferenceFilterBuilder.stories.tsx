@@ -60,7 +60,7 @@ const FILLED_INFERENCE_FILTER: InferenceFilter = {
     },
     {
       type: "demonstration_feedback",
-      has_demonstration_feedback: true,
+      has_demonstration: true,
     },
   ],
 };

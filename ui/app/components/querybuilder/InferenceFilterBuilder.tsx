@@ -448,6 +448,6 @@ function createMetricFilter(
 function createDemonstrationFilter(): InferenceFilter {
   return {
     type: "demonstration_feedback",
-    has_demonstration_feedback: true,
+    has_demonstration: true,
   };
 }
