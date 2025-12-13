@@ -18,10 +18,12 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Suspense, use, useState, useEffect } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
+import { Skeleton } from "~/components/ui/skeleton";
+import PageButtons from "~/components/utils/PageButtons";
 import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
@@ -43,15 +45,154 @@ import { useAllFunctionConfigs } from "~/context/config";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 import DatapointFilterBuilder from "~/components/querybuilder/DatapointFilterBuilder";
 
-export default function DatasetRowTable({
-  rows,
+export type DatasetRowsData = {
+  rows: Datapoint[];
+  hasMore: boolean;
+};
+
+// Skeleton rows for loading state - co-located with real rows
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 15 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <Skeleton className="h-4 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-20" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-32" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-28" />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Resolves promise and renders table rows
+function TableBodyContent({
+  data,
   dataset_name,
+  onDeleteClick,
+}: {
+  data: Promise<DatasetRowsData>;
+  dataset_name: string;
+  onDeleteClick: (row: Datapoint) => void;
+}) {
+  const { rows } = use(data);
+
+  if (rows.length === 0) {
+    return <TableEmptyState message="No datapoints found" />;
+  }
+
+  return (
+    <>
+      {rows.map((row) => (
+        <TableRow key={row.id} id={row.id}>
+          <TableCell className="max-w-[200px]">
+            <TableItemShortUuid
+              id={row.id}
+              link={toDatapointUrl(dataset_name, row.id)}
+            />
+          </TableCell>
+          <TableCell>
+            {row.episode_id && (
+              <TableItemShortUuid
+                id={row.episode_id}
+                link={toEpisodeUrl(row.episode_id)}
+              />
+            )}
+          </TableCell>
+          <TableCell>
+            {/* TODO: switch to using undefined instead of null */}
+            <TableItemText text={row.name ?? null} />
+          </TableCell>
+          <TableCell>
+            <TableItemFunction
+              functionName={row.function_name}
+              functionType={row.type}
+              link={toFunctionUrl(row.function_name)}
+            />
+          </TableCell>
+          <TableCell>
+            <TableItemTime timestamp={row.updated_at} />
+          </TableCell>
+          <TableCell>
+            <div className="text-right">
+              <ReadOnlyGuard asChild onClick={() => onDeleteClick(row)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="opacity-60 transition-opacity hover:opacity-100"
+                >
+                  <Trash />
+                </Button>
+              </ReadOnlyGuard>
+            </div>
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Resolves promise and renders pagination
+function PaginationContent({
+  data,
+  limit,
+  offset,
+}: {
+  data: Promise<DatasetRowsData>;
+  limit: number;
+  offset: number;
+}) {
+  const { hasMore } = use(data);
+  const navigate = useNavigate();
+
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset + limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset - limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <PageButtons
+      onPreviousPage={handlePreviousPage}
+      onNextPage={handleNextPage}
+      disablePrevious={offset === 0}
+      disableNext={!hasMore}
+    />
+  );
+}
+
+export default function DatasetRowTable({
+  data,
+  dataset_name,
+  limit,
+  offset,
   function_name,
   search_query,
   filter,
 }: {
-  rows: Datapoint[];
+  data: Promise<DatasetRowsData>;
   dataset_name: string;
+  limit: number;
+  offset: number;
   function_name: string | undefined;
   search_query: string | undefined;
   filter: DatapointFilter | undefined;
@@ -167,63 +308,31 @@ export default function DatasetRowTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
-            <TableEmptyState message="No datapoints found" />
-          ) : (
-            rows.map((row) => (
-              <TableRow key={row.id} id={row.id}>
-                <TableCell className="max-w-[200px]">
-                  <TableItemShortUuid
-                    id={row.id}
-                    link={toDatapointUrl(dataset_name, row.id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  {row.episode_id && (
-                    <TableItemShortUuid
-                      id={row.episode_id}
-                      link={toEpisodeUrl(row.episode_id)}
-                    />
-                  )}
-                </TableCell>
-                <TableCell>
-                  {/* TODO: switch to using undefined instead of null */}
-                  <TableItemText text={row.name ?? null} />
-                </TableCell>
-                <TableCell>
-                  <TableItemFunction
-                    functionName={row.function_name}
-                    functionType={row.type}
-                    link={toFunctionUrl(row.function_name)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TableItemTime timestamp={row.updated_at} />
-                </TableCell>
-                <TableCell>
-                  <div className="text-right">
-                    <ReadOnlyGuard
-                      asChild
-                      onClick={() => {
-                        setDatapointToDelete(row);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="opacity-60 transition-opacity hover:opacity-100"
-                      >
-                        <Trash />
-                      </Button>
-                    </ReadOnlyGuard>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
+          <Suspense fallback={<SkeletonRows />}>
+            <TableBodyContent
+              data={data}
+              dataset_name={dataset_name}
+              onDeleteClick={(row) => {
+                setDatapointToDelete(row);
+                setDeleteDialogOpen(true);
+              }}
+            />
+          </Suspense>
         </TableBody>
       </Table>
+
+      <Suspense
+        fallback={
+          <PageButtons
+            onPreviousPage={() => {}}
+            onNextPage={() => {}}
+            disablePrevious
+            disableNext
+          />
+        }
+      >
+        <PaginationContent data={data} limit={limit} offset={offset} />
+      </Suspense>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

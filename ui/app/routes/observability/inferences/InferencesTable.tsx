@@ -20,7 +20,7 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Suspense, use, useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
@@ -34,16 +34,177 @@ import {
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useAllFunctionConfigs } from "~/context/config";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
+import { Skeleton } from "~/components/ui/skeleton";
+import PageButtons from "~/components/utils/PageButtons";
 
-export default function InferencesTable({
-  inferences,
+export type InferencesData = {
+  inferences: InferenceMetadata[];
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+// Skeleton rows for loading state - co-located with real rows
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 10 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <Skeleton className="h-4 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-32" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-28" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-36" />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Resolves promise and renders table rows
+function TableBodyContent({
+  data,
+}: {
+  data: InferencesData | Promise<InferencesData>;
+}) {
+  const { inferences } = data instanceof Promise ? use(data) : data;
+
+  if (inferences.length === 0) {
+    return <TableEmptyState message="No inferences found" />;
+  }
+
+  return (
+    <>
+      {inferences.map((inference) => (
+        <TableRow key={inference.id} id={inference.id}>
+          <TableCell>
+            <TableItemShortUuid
+              id={inference.id}
+              link={toInferenceUrl(inference.id)}
+            />
+          </TableCell>
+          <TableCell>
+            <TableItemShortUuid
+              id={inference.episode_id}
+              link={toEpisodeUrl(inference.episode_id)}
+            />
+          </TableCell>
+          <TableCell>
+            <TableItemFunction
+              functionName={inference.function_name}
+              functionType={inference.function_type}
+              link={toFunctionUrl(inference.function_name)}
+            />
+          </TableCell>
+          <TableCell>
+            <VariantLink
+              variantName={inference.variant_name}
+              functionName={inference.function_name}
+            >
+              <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                {inference.variant_name}
+              </code>
+            </VariantLink>
+          </TableCell>
+          <TableCell>
+            <TableItemTime
+              timestamp={uuidv7ToTimestamp(inference.id).toISOString()}
+            />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Resolves promise and renders pagination
+function PaginationContent({
+  data,
+  limit,
   function_name,
   variant_name,
   episode_id,
   search_query,
   filter,
 }: {
-  inferences: InferenceMetadata[];
+  data: InferencesData | Promise<InferencesData>;
+  limit: number;
+  function_name: string | undefined;
+  variant_name: string | undefined;
+  episode_id: string | undefined;
+  search_query: string | undefined;
+  filter: InferenceFilter | undefined;
+}) {
+  const { inferences, hasNextPage, hasPreviousPage } =
+    data instanceof Promise ? use(data) : data;
+  const navigate = useNavigate();
+
+  const topInference = inferences.at(0);
+  const bottomInference = inferences.at(inferences.length - 1);
+
+  const buildSearchParams = () => {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    if (function_name) params.set("function_name", function_name);
+    if (variant_name) params.set("variant_name", variant_name);
+    if (episode_id) params.set("episode_id", episode_id);
+    if (search_query) params.set("search_query", search_query);
+    if (filter) params.set("filter", JSON.stringify(filter));
+    return params;
+  };
+
+  const handleNextPage = () => {
+    if (bottomInference) {
+      const params = buildSearchParams();
+      params.set("before", bottomInference.id);
+      navigate(`?${params.toString()}`, {
+        preventScrollReset: true,
+      });
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (topInference) {
+      const params = buildSearchParams();
+      params.set("after", topInference.id);
+      navigate(`?${params.toString()}`, {
+        preventScrollReset: true,
+      });
+    }
+  };
+
+  return (
+    <PageButtons
+      onPreviousPage={handlePreviousPage}
+      onNextPage={handleNextPage}
+      disablePrevious={!hasPreviousPage}
+      disableNext={!hasNextPage}
+    />
+  );
+}
+
+export default function InferencesTable({
+  data,
+  limit,
+  function_name,
+  variant_name,
+  episode_id,
+  search_query,
+  filter,
+}: {
+  data: InferencesData | Promise<InferencesData>;
+  limit: number;
   function_name: string | undefined;
   variant_name: string | undefined;
   episode_id: string | undefined;
@@ -137,6 +298,9 @@ export default function InferencesTable({
   const hasActiveFilters =
     function_name || variant_name || episode_id || search_query || filter;
 
+  // Noop handlers for disabled pagination fallback
+  const noopHandler = () => {};
+
   return (
     <div>
       <Table>
@@ -161,51 +325,32 @@ export default function InferencesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {inferences.length === 0 ? (
-            <TableEmptyState message="No inferences found" />
-          ) : (
-            inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
-                <TableCell>
-                  <TableItemShortUuid
-                    id={inference.id}
-                    link={toInferenceUrl(inference.id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TableItemShortUuid
-                    id={inference.episode_id}
-                    link={toEpisodeUrl(inference.episode_id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TableItemFunction
-                    functionName={inference.function_name}
-                    functionType={inference.function_type}
-                    link={toFunctionUrl(inference.function_name)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <VariantLink
-                    variantName={inference.variant_name}
-                    functionName={inference.function_name}
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {inference.variant_name}
-                    </code>
-                  </VariantLink>
-                </TableCell>
-                <TableCell>
-                  <TableItemTime
-                    timestamp={uuidv7ToTimestamp(inference.id).toISOString()}
-                  />
-                </TableCell>
-                <TableCell />
-              </TableRow>
-            ))
-          )}
+          <Suspense fallback={<SkeletonRows />}>
+            <TableBodyContent data={data} />
+          </Suspense>
         </TableBody>
       </Table>
+
+      <Suspense
+        fallback={
+          <PageButtons
+            onPreviousPage={noopHandler}
+            onNextPage={noopHandler}
+            disablePrevious
+            disableNext
+          />
+        }
+      >
+        <PaginationContent
+          data={data}
+          limit={limit}
+          function_name={function_name}
+          variant_name={variant_name}
+          episode_id={episode_id}
+          search_query={search_query}
+          filter={filter}
+        />
+      </Suspense>
 
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
         <SheetContent

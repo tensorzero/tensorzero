@@ -5,7 +5,6 @@ const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
 
 let cachedLogLevel: LogLevel | null = null;
-let hasLoggedInvalidLogLevel = false;
 
 const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
   debug: 1,
@@ -14,25 +13,24 @@ const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
   error: 4,
 };
 
+export function setLogLevel(level: string | undefined): void {
+  if (
+    level &&
+    (LOG_LEVELS as readonly string[]).includes(level.toLowerCase())
+  ) {
+    cachedLogLevel = level.toLowerCase() as LogLevel;
+  } else if (level) {
+    console.warn(
+      `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${level}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
+    );
+    cachedLogLevel = "info";
+  } else {
+    cachedLogLevel = "info";
+  }
+}
+
 const getLogLevel = (): LogLevel => {
-  if (cachedLogLevel !== null) {
-    return cachedLogLevel;
-  }
-  const level = process.env.TENSORZERO_UI_LOG_LEVEL?.toLowerCase();
-  if (level) {
-    if ((LOG_LEVELS as readonly string[]).includes(level)) {
-      cachedLogLevel = level as LogLevel;
-      return cachedLogLevel;
-    }
-    if (!hasLoggedInvalidLogLevel) {
-      console.warn(
-        `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${process.env.TENSORZERO_UI_LOG_LEVEL}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
-      );
-      hasLoggedInvalidLogLevel = true;
-    }
-  }
-  cachedLogLevel = "info";
-  return cachedLogLevel;
+  return cachedLogLevel ?? "info";
 };
 
 const shouldLog = (level: LogLevel): boolean => {

@@ -13,8 +13,16 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader() {
-  const datasetMetadata = await getTensorZeroClient().listDatasets({});
-  return { datasets: datasetMetadata.datasets };
+  // Don't await - return promise directly for streaming
+  const dataPromise = getTensorZeroClient()
+    .listDatasets({})
+    .then((r) => r.datasets);
+  const countPromise = dataPromise.then((d) => d.length);
+
+  return {
+    data: dataPromise,
+    count: countPromise,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -33,17 +41,17 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
-  const { datasets } = loaderData;
+  const { data, count } = loaderData;
   const navigate = useNavigate();
   return (
     <PageLayout>
-      <PageHeader heading="Datasets" count={datasets.length} />
+      <PageHeader heading="Datasets" count={count} />
       <SectionLayout>
         <DatasetsActions
           onBuildDataset={() => navigate("/datasets/builder")}
           onNewDatapoint={() => navigate("/datapoints/new")}
         />
-        <DatasetTable datasets={datasets} />
+        <DatasetTable data={data} />
       </SectionLayout>
     </PageLayout>
   );

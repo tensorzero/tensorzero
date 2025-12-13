@@ -1,4 +1,7 @@
-import { logger } from "./logger";
+import { logger, setLogLevel } from "./logger";
+
+// Initialize log level from env var (must happen before any logging)
+setLogLevel(process.env.TENSORZERO_UI_LOG_LEVEL);
 
 // This is the only file in which `process.env` should be accessed directly.
 
@@ -12,7 +15,7 @@ class EnvironmentVariableError extends Error {
   }
 }
 
-// Note: TENSORZERO_UI_LOG_LEVEL is handled in logger.ts to avoid circular dependencies.
+// Note: TENSORZERO_UI_LOG_LEVEL is initialized via setLogLevel() at the top of this file.
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_POSTGRES_URL: string | null;
