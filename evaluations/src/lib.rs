@@ -40,11 +40,13 @@ use tokio::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+pub mod betting_confidence_sequences;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
+pub mod topk;
 pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.

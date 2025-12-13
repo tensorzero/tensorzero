@@ -18,9 +18,9 @@ pub use datapoint_queries::DatapointFilter;
 
 // Re-export filter and ordering types from v1 API for backwards compatibility
 pub use crate::endpoints::stored_inferences::v1::types::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
-    OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter, TimeComparisonOperator,
-    TimeFilter,
+    BooleanMetricFilter, DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter,
+    InferenceFilter, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
 };
 
 #[cfg(test)]
@@ -251,6 +251,17 @@ impl InferenceFilter {
                 // NOTE: if the join_alias is NULL, the filter condition will be NULL also
                 // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
+            }
+            InferenceFilter::DemonstrationFeedback(demo_filter) => {
+                let operator = if demo_filter.has_demonstration_feedback {
+                    "IN"
+                } else {
+                    "NOT IN"
+                };
+                let predicate = format!(
+                    "i.id {operator} (SELECT DISTINCT inference_id FROM DemonstrationFeedback)"
+                );
+                Ok(predicate)
             }
             InferenceFilter::Tag(TagFilter {
                 key,
@@ -758,6 +769,118 @@ FROM
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
+LIMIT {p1:UInt64}
+
+FORMAT JSONEachRow";
+        assert_query_equals(&sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_demonstration_feedback_filter_has_feedback() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: true,
+        });
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r"
+SELECT
+    'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)
+ORDER BY toUInt128(i.id) DESC
+LIMIT {p1:UInt64}
+
+FORMAT JSONEachRow";
+        assert_query_equals(&sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_demonstration_feedback_filter_no_feedback() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: false,
+        });
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r"
+SELECT
+    'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
 

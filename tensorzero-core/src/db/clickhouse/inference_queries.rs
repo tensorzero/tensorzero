@@ -8,7 +8,8 @@ use crate::db::clickhouse::query_builder::{
     generate_order_by_sql,
 };
 use crate::db::inferences::{
-    ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource, InferenceQueries,
+    ClickHouseStoredInferenceWithDispreferredOutputs, DEFAULT_INFERENCE_QUERY_LIMIT,
+    InferenceMetadata, InferenceOutputSource, InferenceQueries, ListInferenceMetadataParams,
     ListInferencesParams, PaginationParams,
 };
 use crate::function::FunctionConfigType;
@@ -63,6 +64,120 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         Ok(inferences)
     }
+
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        let (sql, query_params) = generate_list_inference_metadata_sql(params);
+        let query_params_refs: std::collections::HashMap<&str, &str> = query_params
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let response = self
+            .inner
+            .run_query_synchronous(sql, &query_params_refs)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut results: Vec<InferenceMetadata> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to parse InferenceMetadata row: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        // Reverse results for "after" pagination (we queried ASC, but want DESC output)
+        if matches!(params.pagination, Some(PaginationParams::After { .. })) {
+            results.reverse();
+        }
+
+        Ok(results)
+    }
+}
+
+/// Generates the SQL query and parameters for listing inference metadata.
+fn generate_list_inference_metadata_sql(
+    params: &ListInferenceMetadataParams,
+) -> (String, std::collections::HashMap<String, String>) {
+    let limit = if params.limit == 0 {
+        DEFAULT_INFERENCE_QUERY_LIMIT
+    } else {
+        params.limit
+    };
+
+    let mut where_clauses: Vec<String> = Vec::new();
+    let mut query_params: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // Handle pagination
+    let order_direction = match &params.pagination {
+        Some(PaginationParams::Before { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint < toUInt128({cursor_id:UUID})".to_string());
+            "DESC"
+        }
+        Some(PaginationParams::After { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint > toUInt128({cursor_id:UUID})".to_string());
+            "ASC" // For after, we order ASC and then reverse
+        }
+        None => "DESC", // Default: most recent first
+    };
+
+    // Handle function_name filter
+    if let Some(function_name) = &params.function_name {
+        query_params.insert("function_name".to_string(), function_name.clone());
+        where_clauses.push("function_name = {function_name:String}".to_string());
+    }
+
+    // Handle variant_name filter
+    if let Some(variant_name) = &params.variant_name {
+        query_params.insert("variant_name".to_string(), variant_name.clone());
+        where_clauses.push("variant_name = {variant_name:String}".to_string());
+    }
+
+    // Handle episode_id filter
+    if let Some(episode_id) = &params.episode_id {
+        query_params.insert("episode_id".to_string(), episode_id.to_string());
+        where_clauses.push("episode_id = {episode_id:UUID}".to_string());
+    }
+
+    query_params.insert("limit".to_string(), limit.to_string());
+
+    let where_clause = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    let query = format!(
+        r"
+        SELECT
+            uint_to_uuid(id_uint) as id,
+            function_name,
+            variant_name,
+            episode_id,
+            function_type,
+            if(isNull(snapshot_hash), NULL, lower(hex(snapshot_hash))) as snapshot_hash
+        FROM InferenceById FINAL
+        {where_clause}
+        ORDER BY id_uint {order_direction}
+        LIMIT {{limit:UInt64}}
+        FORMAT JSONEachRow
+        "
+    );
+
+    (query, query_params)
 }
 
 /// Escapes a string for JSON without quotes.
@@ -598,8 +713,8 @@ mod tests {
         assert_query_contains, assert_query_does_not_contain,
     };
     use crate::db::clickhouse::query_builder::{
-        FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy, OrderByTerm,
-        OrderDirection, QueryParameter,
+        DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+        OrderBy, OrderByTerm, OrderDirection, QueryParameter,
     };
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
@@ -845,6 +960,50 @@ mod tests {
             name: "p2".to_string(),
             value: "0.5".to_string(),
         }));
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_positive() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: true,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_negative() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration_feedback: false,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
     }
 
     #[tokio::test]
@@ -1334,6 +1493,255 @@ mod tests {
                 ),
                 "Error should mention search relevance ordering conflict with before/after pagination"
             );
+        }
+    }
+
+    mod list_inference_metadata_tests {
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::query_builder::test_util::{
+            assert_query_contains, assert_query_does_not_contain,
+        };
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{
+            InferenceQueries, ListInferenceMetadataParams, PaginationParams,
+        };
+        use std::sync::Arc;
+        use uuid::Uuid;
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_no_pagination() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, _params| {
+                    assert_query_contains(query, "uint_to_uuid(id_uint) as id");
+                    assert_query_contains(query, "FROM InferenceById FINAL");
+                    assert_query_contains(query, "ORDER BY id_uint DESC");
+                    assert_query_does_not_contain(query, "WHERE");
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams::default())
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_before() {
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint < toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint DESC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    pagination: Some(PaginationParams::Before { id: cursor_id }),
+                    limit: 10,
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_after() {
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint > toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint ASC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    pagination: Some(PaginationParams::After { id: cursor_id }),
+                    limit: 10,
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_function_name() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("function_name"), Some(&"test_function"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    function_name: Some("test_function".to_string()),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_variant_name() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("variant_name"), Some(&"test_variant"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    variant_name: Some("test_variant".to_string()),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_episode_id() {
+            let episode_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "WHERE");
+                    assert!(params.get("episode_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    episode_id: Some(episode_id),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_all_filters() {
+            let episode_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("function_name"), Some(&"test_function"));
+                    assert_eq!(params.get("variant_name"), Some(&"test_variant"));
+                    assert!(params.get("episode_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: Some("test_variant".to_string()),
+                    episode_id: Some(episode_id),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
         }
     }
 }

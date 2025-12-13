@@ -6,6 +6,7 @@ import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "../tensorzero.server";
 import { isTensorZeroServerError } from "../tensorzero";
+import { applyPaginationLogic } from "../pagination";
 
 /**
  * Result type for listInferencesWithPagination with pagination info.
@@ -64,48 +65,11 @@ export async function listInferencesWithPagination(params: {
       search_query_experimental: search_query,
     });
 
-    // Determine if there are more pages based on whether we got more than limit results
-    const hasMore = response.inferences.length > limit;
-
-    // Only return up to limit inferences (hide the extra one used for detection)
-    // For 'after' pagination, the extra item is at the BEGINNING after the backend reverses
-    // For 'before' pagination (or no pagination), the extra item is at the END
-    let inferences: typeof response.inferences;
-    if (hasMore) {
-      if (after) {
-        // Extra item is at position 0, so take items from position 1 onwards
-        inferences = response.inferences.slice(1, limit + 1);
-      } else {
-        // Extra item is at the end, so take first 'limit' items
-        inferences = response.inferences.slice(0, limit);
-      }
-    } else {
-      inferences = response.inferences;
-    }
-
-    // Pagination direction logic:
-    // - When using 'before': we're going to older inferences (next page = older)
-    // - When using 'after': we're going to newer inferences (previous page = newer)
-    // - When neither: we're on the first page (most recent)
-    let hasNextPage: boolean;
-    let hasPreviousPage: boolean;
-
-    if (before) {
-      // Going backwards in time (older). hasMore means there are older pages.
-      hasNextPage = hasMore;
-      // We came from a newer page, so there's always a previous (newer) page
-      hasPreviousPage = true;
-    } else if (after) {
-      // Going forwards in time (newer). hasMore means there are newer pages.
-      // But since results are displayed newest first, "previous" button goes to newer
-      hasPreviousPage = hasMore;
-      // We came from an older page, so there's always a next (older) page
-      hasNextPage = true;
-    } else {
-      // Initial page load - showing most recent
-      hasNextPage = hasMore;
-      hasPreviousPage = false;
-    }
+    const {
+      items: inferences,
+      hasNextPage,
+      hasPreviousPage,
+    } = applyPaginationLogic(response.inferences, limit, { before, after });
 
     return {
       inferences,

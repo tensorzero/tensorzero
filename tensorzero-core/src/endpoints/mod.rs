@@ -5,6 +5,7 @@ use crate::error::{Error, ErrorDetails};
 pub mod batch_inference;
 pub mod datasets;
 pub mod embeddings;
+pub mod episodes;
 pub mod fallback;
 pub mod feedback;
 pub mod inference;

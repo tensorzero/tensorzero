@@ -12,7 +12,10 @@ use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
 };
-use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::inferences::{
+    InferenceMetadata, InferenceQueries, ListInferenceMetadataParams, ListInferencesParams,
+    MockInferenceQueries,
+};
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{ConfigQueries, MockConfigQueries};
@@ -58,6 +61,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
+    }
+
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        self.inference_queries.list_inference_metadata(params).await
     }
 }
 

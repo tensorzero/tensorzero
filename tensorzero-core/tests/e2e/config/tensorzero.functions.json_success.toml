@@ -534,7 +534,7 @@ max_tokens = 800
 
 [functions.json_success.variants.xai]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -542,7 +542,7 @@ max_tokens = 100
 
 [functions.json_success.variants.xai-strict]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "strict"
@@ -726,7 +726,7 @@ max_tokens = 100
 
 [functions.json_success.variants.xai_json_mode_off]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
