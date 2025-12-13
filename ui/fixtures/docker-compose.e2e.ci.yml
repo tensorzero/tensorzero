@@ -49,7 +49,15 @@ services:
       gateway-postgres-migrations:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health" ]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health",
+        ]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -75,10 +83,10 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures.sh" ]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
-      test: [ "CMD", "test", "-f", "/load_complete.marker" ]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
@@ -94,14 +102,7 @@ services:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
-      # For mock server during SFT jobs
-      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai/
-      FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks/
-      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
-      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
-    volumes:
-      - ./config:/app/config:ro
     env_file:
       - .env
     ports:
@@ -119,7 +120,7 @@ services:
       mock-inference-provider:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "--tries=1", "http://localhost:4000" ]
+      test: ["CMD", "wget", "--spider", "--tries=1", "http://localhost:4000"]
       start_period: 30s
       start_interval: 1s
       timeout: 1s

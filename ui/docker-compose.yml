@@ -2,8 +2,6 @@ services:
   ui:
     container_name: tensorzero-ui
     image: tensorzero/ui
-    volumes:
-      - ./config:/app/config:ro
     env_file:
       - ${ENV_FILE:-.env}
     ports:
