@@ -118,7 +118,10 @@ interface RunEvaluationStreamingParams {
   functionConfig: string;
   evaluationName: string;
   datasetName: string;
-  variantName: string;
+  /** Exactly one of variantName or internalDynamicVariantConfig must be provided */
+  variantName?: string;
+  /** JSON-serialized UninitializedVariantInfo */
+  internalDynamicVariantConfig?: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
