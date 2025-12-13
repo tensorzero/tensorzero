@@ -41,6 +41,12 @@ const booleanMetricFilterSchema = z.object({
   value: z.boolean(),
 });
 
+// Demonstration feedback filter
+const demonstrationFilterSchema = z.object({
+  type: z.literal("demonstration_feedback"),
+  has_demonstration: z.boolean(),
+});
+
 // Recursive inference filter schema
 export const InferenceFilterSchema: z.ZodTypeAny = z.lazy(() =>
   z.union([
@@ -48,6 +54,7 @@ export const InferenceFilterSchema: z.ZodTypeAny = z.lazy(() =>
       tagFilterSchema,
       floatMetricFilterSchema,
       booleanMetricFilterSchema,
+      demonstrationFilterSchema,
     ]),
     z.object({
       type: z.enum(["and", "or"]),

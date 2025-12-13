@@ -113,10 +113,10 @@ class DeleteDatapointsResponse:
 @dataclass(kw_only=True)
 class DemonstrationFeedbackFilter:
     """
-    Filter by whether an inference has demonstration feedback.
+    Filter by whether an inference has a demonstration.
     """
 
-    has_demonstration_feedback: bool
+    has_demonstration: bool
 
 
 Detail = Literal["low", "high", "auto"]
@@ -470,7 +470,7 @@ class InferenceFilterBooleanMetric(BooleanMetricFilter):
 @dataclass(kw_only=True)
 class InferenceFilterDemonstrationFeedback(DemonstrationFeedbackFilter):
     """
-    Filter by whether an inference has demonstration feedback.
+    Filter by whether an inference has a demonstration.
     """
 
     type: Literal["demonstration_feedback"] = "demonstration_feedback"
