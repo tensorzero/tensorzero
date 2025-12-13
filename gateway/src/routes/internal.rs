@@ -62,6 +62,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             put(endpoints::datasets::update_datapoint_handler),
         )
         .route(
+            "/internal/datasets/{dataset_name}/datapoints/count",
+            get(endpoints::datasets::internal::get_datapoint_count_handler),
+        )
+        .route(
             "/internal/object_storage",
             get(endpoints::object_storage::get_object_handler),
         )

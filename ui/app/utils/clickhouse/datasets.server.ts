@@ -1,6 +1,5 @@
 import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import type { DatasetQueryParams } from "~/types/tensorzero";
-import { getConfig, getFunctionConfig } from "../config/index.server";
 
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
@@ -41,22 +40,4 @@ export async function countRowsForDataset(
 export async function countDatasets(): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
   return await dbClient.countDatasets();
-}
-
-export async function countDatapointsForDatasetFunction(
-  dataset_name: string,
-  function_name: string,
-): Promise<number | null> {
-  const config = await getConfig();
-  const functionConfig = await getFunctionConfig(function_name, config);
-  const function_type = functionConfig?.type;
-  if (!function_type) {
-    return null;
-  }
-  const dbClient = await getNativeDatabaseClient();
-  return dbClient.countDatapointsForDatasetFunction({
-    dataset_name,
-    function_name,
-    function_type,
-  });
 }
