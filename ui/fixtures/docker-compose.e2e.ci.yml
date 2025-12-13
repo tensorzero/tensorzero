@@ -102,6 +102,11 @@ services:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+      # For mock server during SFT jobs
+      OPENAI_BASE_URL: http://mock-inference-provider:3030/openai/
+      FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks/
+      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
+      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     env_file:
       - .env
