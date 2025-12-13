@@ -982,6 +982,8 @@ jobs:
         uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
         with:
           version: "0.6.17"
+          # Without this, the post-install hook tries to prune and save the cache, but ./ci/free-disk-space.sh already nukes /opt/hostedtoolcache/*, so it fails.
+          enable-cache: "false"
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
