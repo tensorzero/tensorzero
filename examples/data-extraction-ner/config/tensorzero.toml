@@ -52,3 +52,27 @@ optimize = "max"
 type = "boolean"
 level = "inference"
 optimize = "max"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 EVALUATIONS                                │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.extract_entities_eval]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.extract_entities_eval.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement]
+type = "llm_judge"
+output_type = "float"
+include = { reference_output = true }
+optimize = "max"
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Prioritizes correctness, schema compliance, completeness, and clarity."
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+json_mode = "strict"
