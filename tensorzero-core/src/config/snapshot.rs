@@ -105,7 +105,6 @@ impl SnapshotHash {
     }
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
 impl std::str::FromStr for SnapshotHash {
     type Err = std::convert::Infallible;
 
