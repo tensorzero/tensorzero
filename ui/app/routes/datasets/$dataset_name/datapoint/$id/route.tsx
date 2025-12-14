@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
+  Await,
   data,
   isRouteErrorResponse,
   Link,
@@ -28,6 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { Skeleton } from "~/components/ui/skeleton";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { useFunctionConfig } from "~/context/config";
 import {
@@ -358,7 +360,87 @@ export const handle: RouteHandle = {
   ],
 };
 
-export async function loader({
+// Skeleton component for the full page while datapoint is loading
+function DatapointPageSkeleton() {
+  return (
+    <>
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-fg-tertiary text-sm">Datapoint</span>
+        <Skeleton className="h-6 w-48" />
+      </div>
+      <SectionsGroup>
+        <SectionLayout>
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        </SectionLayout>
+        <SectionLayout>
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-48" />
+          </div>
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Skeleton className="h-32 w-full" />
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          <Skeleton className="h-32 w-full" />
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <Skeleton className="h-16 w-full" />
+        </SectionLayout>
+      </SectionsGroup>
+    </>
+  );
+}
+
+// Skeleton component for the input section while file resolution is loading
+function InputSkeleton() {
+  return <Skeleton className="h-32 w-full" />;
+}
+
+// Component that syncs resolved input to state and renders InputElement
+function InputSectionContent({
+  resolvedInput,
+  input,
+  setInput,
+  setOriginalInput,
+  isEditing,
+}: {
+  resolvedInput: Input;
+  input: Input;
+  setInput: (input: Input) => void;
+  setOriginalInput: (input: Input) => void;
+  isEditing: boolean;
+}) {
+  // Sync resolved input on mount (only once per resolved input)
+  const lastResolvedInputRef = useRef<Input | null>(null);
+  useEffect(() => {
+    if (lastResolvedInputRef.current !== resolvedInput) {
+      setInput(resolvedInput);
+      setOriginalInput(resolvedInput);
+      lastResolvedInputRef.current = resolvedInput;
+    }
+  }, [resolvedInput, setInput, setOriginalInput]);
+
+  // Use resolved input until state is synced
+  const displayInput =
+    lastResolvedInputRef.current === resolvedInput ? input : resolvedInput;
+
+  return (
+    <InputElement
+      input={displayInput}
+      isEditing={isEditing}
+      onSystemChange={(system) => setInput({ ...displayInput, system })}
+      onMessagesChange={(messages) => setInput({ ...displayInput, messages })}
+    />
+  );
+}
+
+export function loader({
   params,
 }: {
   params: { dataset_name: string; id: string };
@@ -369,24 +451,57 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getTensorZeroClient().getDatapoint(id, dataset_name);
-  if (!datapoint) {
-    throw data(`No datapoint found for ID \`${id}\`.`, {
-      status: 404,
-    });
-  }
 
-  // Load file data for InputElement component
-  const resolvedInput = await loadFileDataForInput(datapoint.input);
+  // NON-BLOCKING: create promise chain for datapoint + resolved input
+  const datapointPromise = getTensorZeroClient()
+    .getDatapoint(id, dataset_name)
+    .then((datapoint) => {
+      if (!datapoint) {
+        throw data(`No datapoint found for ID \`${id}\`.`, {
+          status: 404,
+        });
+      }
+      return datapoint;
+    });
+
+  // Chain file resolution after datapoint fetch
+  const resolvedInputPromise = datapointPromise.then((datapoint) =>
+    loadFileDataForInput(datapoint.input),
+  );
 
   return {
-    datapoint,
-    resolvedInput,
+    datapointPromise,
+    resolvedInputPromise,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint, resolvedInput } = loaderData;
+  const { datapointPromise, resolvedInputPromise } = loaderData;
+
+  return (
+    <PageLayout>
+      <Suspense fallback={<DatapointPageSkeleton />}>
+        <Await resolve={datapointPromise}>
+          {(datapoint) => (
+            <DatapointContent
+              datapoint={datapoint}
+              resolvedInputPromise={resolvedInputPromise}
+            />
+          )}
+        </Await>
+      </Suspense>
+    </PageLayout>
+  );
+}
+
+// Main content component - rendered after datapoint loads
+function DatapointContent({
+  datapoint,
+  resolvedInputPromise,
+}: {
+  datapoint: Datapoint;
+  resolvedInputPromise: Promise<Input>;
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -395,8 +510,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   // We keep track of the original values and current values in the form (when editing).
   // This allows us to detect if there were any changes (to enable/disable the save button) or discard changes if the user cancels the edits
   // When you save, we check `XXX` (`input`, `output`, `tags`) against `originalXXX` and submit `XXX` to the update datapoint endpoint.
-  const [originalInput, setOriginalInput] = useState(resolvedInput);
-  const [input, setInput] = useState<Input>(resolvedInput);
+  //
+  // Input state is initialized with datapoint.input (unresolved) and updated when resolvedInput arrives
+  const [originalInput, setOriginalInput] = useState<Input>(datapoint.input);
+  const [input, setInput] = useState<Input>(datapoint.input);
 
   const [originalOutput, setOriginalOutput] = useState<OutputState>(() =>
     createOutputState(datapoint),
@@ -412,9 +529,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Reset state when datapoint changes (e.g., after save redirect)
+  // Note: Input state will be updated separately by InputSectionContent when resolvedInput arrives
   useEffect(() => {
-    setInput(resolvedInput);
-    setOriginalInput(resolvedInput);
+    // Reset input to unresolved state - it will be updated when resolvedInput arrives
+    setInput(datapoint.input);
+    setOriginalInput(datapoint.input);
     const newOutputState = createOutputState(datapoint);
     setOutput(newOutputState);
     setOriginalOutput(newOutputState);
@@ -422,7 +541,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setOriginalTags(datapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [resolvedInput, datapoint]);
+  }, [datapoint]);
 
   const canSave = useMemo(() => {
     const currentOutputSchema =
@@ -456,7 +575,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
-    setInput(resolvedInput);
+    setInput(originalInput);
     setOutput(createOutputState(datapoint));
     setTags(datapoint.tags || {});
   };
@@ -628,7 +747,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <PageLayout>
+    <>
       <PageHeader
         label="Datapoint"
         name={datapoint.id}
@@ -699,12 +818,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputElement
-            input={input}
-            isEditing={isEditing}
-            onSystemChange={(system) => setInput({ ...input, system })}
-            onMessagesChange={(messages) => setInput({ ...input, messages })}
-          />
+          <Suspense fallback={<InputSkeleton />}>
+            <Await resolve={resolvedInputPromise}>
+              {(resolvedInput) => (
+                <InputSectionContent
+                  resolvedInput={resolvedInput}
+                  input={input}
+                  setInput={setInput}
+                  setOriginalInput={setOriginalInput}
+                  isEditing={isEditing}
+                />
+              )}
+            </Await>
+          </Suspense>
         </SectionLayout>
 
         <SectionLayout>
@@ -770,7 +896,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           onRefresh={lastRequestArgs ? handleRefresh : null}
         />
       )}
-    </PageLayout>
+    </>
   );
 }
 
