@@ -72,12 +72,8 @@ function SkeletonRows() {
 }
 
 // Resolves promise and renders table rows
-function TableBodyContent({
-  data,
-}: {
-  data: InferencesData | Promise<InferencesData>;
-}) {
-  const { inferences } = data instanceof Promise ? use(data) : data;
+function TableBodyContent({ data }: { data: Promise<InferencesData> }) {
+  const { inferences } = use(data);
 
   if (inferences.length === 0) {
     return <TableEmptyState message="No inferences found" />;
@@ -128,7 +124,6 @@ function TableBodyContent({
   );
 }
 
-// Resolves promise and renders pagination
 function PaginationContent({
   data,
   limit,
@@ -138,7 +133,7 @@ function PaginationContent({
   search_query,
   filter,
 }: {
-  data: InferencesData | Promise<InferencesData>;
+  data: Promise<InferencesData>;
   limit: number;
   function_name: string | undefined;
   variant_name: string | undefined;
@@ -146,8 +141,7 @@ function PaginationContent({
   search_query: string | undefined;
   filter: InferenceFilter | undefined;
 }) {
-  const { inferences, hasNextPage, hasPreviousPage } =
-    data instanceof Promise ? use(data) : data;
+  const { inferences, hasNextPage, hasPreviousPage } = use(data);
   const navigate = useNavigate();
 
   const topInference = inferences.at(0);
@@ -203,7 +197,7 @@ export default function InferencesTable({
   search_query,
   filter,
 }: {
-  data: InferencesData | Promise<InferencesData>;
+  data: Promise<InferencesData>;
   limit: number;
   function_name: string | undefined;
   variant_name: string | undefined;
@@ -298,9 +292,6 @@ export default function InferencesTable({
   const hasActiveFilters =
     function_name || variant_name || episode_id || search_query || filter;
 
-  // Noop handlers for disabled pagination fallback
-  const noopHandler = () => {};
-
   return (
     <div>
       <Table>
@@ -334,8 +325,8 @@ export default function InferencesTable({
       <Suspense
         fallback={
           <PageButtons
-            onPreviousPage={noopHandler}
-            onNextPage={noopHandler}
+            onPreviousPage={() => {}}
+            onNextPage={() => {}}
             disablePrevious
             disableNext
           />
