@@ -71,6 +71,7 @@ pub use tensorzero_core::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
     InferenceResponseChunk, InferenceStream,
 };
+pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
@@ -466,6 +467,24 @@ pub trait ClientExt {
     fn config(&self) -> Option<&Config>;
 
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
+
+    /// Gets a config snapshot by hash, or the live config if no hash is provided.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Optional hash of the config snapshot to retrieve. If `None`, returns the live config.
+    ///
+    /// # Returns
+    ///
+    /// A `GetConfigResponse` containing the config snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails or the config snapshot is not found.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<&str>,
+    ) -> Result<GetConfigResponse, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
@@ -1320,6 +1339,59 @@ impl ClientExt for Client {
                 })
                 .into(),
             }),
+        }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<&str>,
+    ) -> Result<GetConfigResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let endpoint = match hash {
+                    Some(h) => format!("internal/config/{h}"),
+                    None => "internal/config".to_string(),
+                };
+                let url = client
+                    .base_url
+                    .join(&endpoint)
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /{endpoint} endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client.http_client.get(url);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    use tensorzero_core::db::ConfigQueries;
+                    let snapshot_hash = match hash {
+                        Some(h) => h.parse().map_err(|_| {
+                            err_to_http(Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                                snapshot_hash: h.to_string(),
+                            }))
+                        })?,
+                        None => gateway.handle.app_state.config.hash.clone(),
+                    };
+                    let snapshot = gateway
+                        .handle
+                        .app_state
+                        .clickhouse_connection_info
+                        .get_config_snapshot(snapshot_hash)
+                        .await
+                        .map_err(err_to_http)?;
+                    Ok(GetConfigResponse {
+                        hash: snapshot.hash.to_string(),
+                        config: snapshot.config,
+                        extra_templates: snapshot.extra_templates,
+                    })
+                })
+                .await
+            }
         }
     }
 
