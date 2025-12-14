@@ -1388,6 +1388,7 @@ impl ClientExt for Client {
                         hash: snapshot.hash.to_string(),
                         config: snapshot.config,
                         extra_templates: snapshot.extra_templates,
+                        tags: snapshot.tags,
                     })
                 })
                 .await

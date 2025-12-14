@@ -76,6 +76,10 @@ pub struct ConfigSnapshot {
     /// uses the compiled templates in `Config.templates`, not these raw strings.
     pub extra_templates: HashMap<String, String>,
 
+    /// User-defined tags for categorizing or labeling this config snapshot.
+    /// Tags are metadata and do not affect the config hash.
+    pub tags: HashMap<String, String>,
+
     __private: (),
 }
 
@@ -141,6 +145,7 @@ impl ConfigSnapshot {
             config: stored_config,
             hash,
             extra_templates,
+            tags: HashMap::new(),
             __private: (),
         })
     }
@@ -168,6 +173,7 @@ impl ConfigSnapshot {
             config: StoredConfig::default(),
             hash: SnapshotHash::new_test(),
             extra_templates: HashMap::new(),
+            tags: HashMap::new(),
             __private: (),
         }
     }
@@ -179,6 +185,7 @@ impl ConfigSnapshot {
     pub fn from_stored(
         config_toml: &str,
         extra_templates: HashMap<String, String>,
+        tags: HashMap<String, String>,
         original_hash: &SnapshotHash,
     ) -> Result<Self, Error> {
         let table: toml::Table = config_toml.parse().map_err(|e| {
@@ -201,6 +208,7 @@ impl ConfigSnapshot {
             config: config.into(),
             hash,
             extra_templates,
+            tags,
             __private: (),
         })
     }
