@@ -51,3 +51,22 @@ pub struct EvaluationRunInfo {
     pub variant_name: String,
     pub last_inference_timestamp: DateTime<Utc>,
 }
+
+// =============================================================================
+// Count Datapoints for Evaluation
+// =============================================================================
+
+/// Query parameters for counting datapoints across evaluation runs.
+#[derive(Debug, Deserialize)]
+pub struct CountDatapointsParams {
+    pub function_name: String,
+    /// Comma-separated list of evaluation run IDs
+    pub evaluation_run_ids: String,
+}
+
+/// Response containing the count of unique datapoints.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DatapointStatsResponse {
+    pub count: u64,
+}

@@ -34,4 +34,11 @@ pub trait EvaluationQueries {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationRunInfoRow>, Error>;
+
+    /// Counts unique datapoints across the specified evaluation runs.
+    async fn count_datapoints_for_evaluation(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<u64, Error>;
 }
