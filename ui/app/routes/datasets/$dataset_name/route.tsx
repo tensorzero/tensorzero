@@ -75,8 +75,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     dataset_name,
-    count: countPromise,
-    data: dataPromise,
+    countPromise,
+    dataPromise,
     limit,
     offset,
     rowsAdded,
@@ -146,8 +146,8 @@ export default function DatasetDetailPage({
 }: Route.ComponentProps) {
   const {
     dataset_name,
-    count,
-    data,
+    countPromise,
+    dataPromise,
     limit,
     offset,
     rowsAdded,
@@ -182,7 +182,7 @@ export default function DatasetDetailPage({
 
   return (
     <PageLayout>
-      <PageHeader heading={`Dataset`} name={dataset_name} count={count}>
+      <PageHeader heading={`Dataset`} name={dataset_name} count={countPromise}>
         <div className="flex justify-start">
           <DeleteButton
             onClick={handleDelete}
@@ -195,7 +195,7 @@ export default function DatasetDetailPage({
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={dataset_name} />
         <DatasetRowTable
-          data={data}
+          data={dataPromise}
           dataset_name={dataset_name}
           limit={limit}
           offset={offset}

@@ -45,8 +45,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const countPromise = boundsPromise.then((b) => Number(b.count));
 
   return {
-    data: dataPromise,
-    count: countPromise,
+    dataPromise,
+    countPromise,
     limit,
   };
 }
@@ -97,14 +97,14 @@ function PaginationContent({
 }
 
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
-  const { data, count, limit } = loaderData;
+  const { dataPromise, countPromise, limit } = loaderData;
 
   return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={count} />
+      <PageHeader heading="Episodes" count={countPromise} />
       <SectionLayout>
         <EpisodeSearchBar />
-        <EpisodesTable data={data} />
+        <EpisodesTable data={dataPromise} />
         <Suspense
           fallback={
             <PageButtons
@@ -115,7 +115,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
             />
           }
         >
-          <PaginationContent data={data} limit={limit} />
+          <PaginationContent data={dataPromise} limit={limit} />
         </Suspense>
       </SectionLayout>
     </PageLayout>

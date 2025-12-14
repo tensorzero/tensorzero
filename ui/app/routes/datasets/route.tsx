@@ -20,8 +20,8 @@ export async function loader() {
   const countPromise = dataPromise.then((d) => d.length);
 
   return {
-    data: dataPromise,
-    count: countPromise,
+    dataPromise,
+    countPromise,
   };
 }
 
@@ -41,17 +41,17 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
-  const { data, count } = loaderData;
+  const { dataPromise, countPromise } = loaderData;
   const navigate = useNavigate();
   return (
     <PageLayout>
-      <PageHeader heading="Datasets" count={count} />
+      <PageHeader heading="Datasets" count={countPromise} />
       <SectionLayout>
         <DatasetsActions
           onBuildDataset={() => navigate("/datasets/builder")}
           onNewDatapoint={() => navigate("/datapoints/new")}
         />
-        <DatasetTable data={data} />
+        <DatasetTable data={dataPromise} />
       </SectionLayout>
     </PageLayout>
   );
