@@ -140,6 +140,7 @@ impl ConfigSnapshot {
                     message: format!("Failed to serialize stored config: {e}"),
                 })
             })?);
+
         let hash = ConfigSnapshot::hash(&stored_config_toml, &extra_templates)?;
         Ok(Self {
             config: stored_config,
@@ -182,6 +183,10 @@ impl ConfigSnapshot {
     ///
     /// This is used when loading a previously stored config snapshot from ClickHouse.
     /// The hash is recomputed from the config and templates to ensure consistency.
+    ///
+    /// Note: We deserialize as `StoredConfig` (not `UninitializedConfig`) to support
+    /// backward compatibility with historical snapshots that may contain deprecated
+    /// fields like `timeouts`.
     pub fn from_stored(
         config_toml: &str,
         extra_templates: HashMap<String, String>,
@@ -195,18 +200,22 @@ impl ConfigSnapshot {
         })?;
 
         let sorted_table = prepare_table_for_snapshot(table);
-        let config = UninitializedConfig::try_from(sorted_table.clone())?;
-        let hash = ConfigSnapshot::hash(&sorted_table, &extra_templates)?;
-        if hash != *original_hash {
-            return Err(Error::new(ErrorDetails::ConfigSnapshotHashMismatch {
-                expected: original_hash.clone(),
-                actual: hash.clone(),
-            }));
-        }
 
+        // Deserialize as StoredConfig to accept deprecated fields (e.g., `timeouts`)
+        let stored_config: StoredConfig =
+            serde_path_to_error::deserialize(sorted_table).map_err(|e| {
+                let path = e.path().clone();
+                Error::new(ErrorDetails::Config {
+                    message: format!("{}: {}", path, e.into_inner().message()),
+                })
+            })?;
+
+        // Use the original hash from the database rather than recomputing it.
+        // Recomputing can produce different hashes due to floating-point serialization
+        // differences (e.g., 0.2 vs 0.20000000298023224) even when the config is identical.
         Ok(Self {
-            config: config.into(),
-            hash,
+            config: stored_config,
+            hash: original_hash.clone(),
             extra_templates,
             tags,
             __private: (),
