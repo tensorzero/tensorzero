@@ -3,9 +3,8 @@ import {
   countInferencesByFunction,
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
-import InferencesTable from "./InferencesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
+import InferencesTable, { type InferencesData } from "./InferencesTable";
+import { data, isRouteErrorResponse } from "react-router";
 import InferenceSearchBar from "./InferenceSearchBar";
 import {
   PageHeader,
@@ -48,73 +47,70 @@ export async function loader({ request }: Route.LoaderArgs) {
   // The fast listInferenceMetadata endpoint now supports function_name, variant_name, and episode_id
   const needsFullInferences = search_query || filter;
 
-  const countsInfo = await countInferencesByFunction();
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  // Create promise for total count - will be streamed to the component
+  const totalInferencesPromise = countInferencesByFunction().then(
+    (countsInfo) => countsInfo.reduce((acc, curr) => acc + curr.count, 0),
+  );
 
-  if (!needsFullInferences) {
-    // Use faster gateway endpoint - now supports simple filters
-    const client = getTensorZeroClient();
-    const metadataResponse = await client.listInferenceMetadata({
+  // Create promise for inferences data - will be streamed to the component
+  const inferencesDataPromise: Promise<InferencesData> = (async () => {
+    if (!needsFullInferences) {
+      // Use faster gateway endpoint - now supports simple filters
+      const client = getTensorZeroClient();
+      const metadataResponse = await client.listInferenceMetadata({
+        before: before || undefined,
+        after: after || undefined,
+        limit: limit + 1, // Fetch one extra to determine if there's a next page
+        function_name,
+        variant_name,
+        episode_id,
+      });
+
+      const {
+        items: inferences,
+        hasNextPage,
+        hasPreviousPage,
+      } = applyPaginationLogic(metadataResponse.inference_metadata, limit, {
+        before,
+        after,
+      });
+
+      return { inferences, hasNextPage, hasPreviousPage };
+    }
+
+    const inferenceResult = await listInferencesWithPagination({
       before: before || undefined,
       after: after || undefined,
-      limit: limit + 1, // Fetch one extra to determine if there's a next page
+      limit,
       function_name,
       variant_name,
       episode_id,
+      filter,
+      search_query,
     });
 
-    const {
-      items: inferences,
-      hasNextPage,
-      hasPreviousPage,
-    } = applyPaginationLogic(metadataResponse.inference_metadata, limit, {
-      before,
-      after,
-    });
+    // Map StoredInference to InferenceMetadata shape for the table
+    const inferences: InferenceMetadata[] = inferenceResult.inferences.map(
+      (inf) => ({
+        id: inf.inference_id,
+        episode_id: inf.episode_id,
+        function_name: inf.function_name,
+        variant_name: inf.variant_name,
+        function_type: inf.type,
+      }),
+    );
 
     return {
       inferences,
-      hasNextPage,
-      hasPreviousPage,
-      limit,
-      totalInferences,
-      function_name,
-      variant_name,
-      episode_id,
-      search_query,
-      filter,
+      hasNextPage: inferenceResult.hasNextPage,
+      hasPreviousPage: inferenceResult.hasPreviousPage,
     };
-  }
-
-  const inferenceResult = await listInferencesWithPagination({
-    before: before || undefined,
-    after: after || undefined,
-    limit,
-    function_name,
-    variant_name,
-    episode_id,
-    filter,
-    search_query,
-  });
-
-  // Map StoredInference to InferenceMetadata shape for the table
-  const inferences: InferenceMetadata[] = inferenceResult.inferences.map(
-    (inf) => ({
-      id: inf.inference_id,
-      episode_id: inf.episode_id,
-      function_name: inf.function_name,
-      variant_name: inf.variant_name,
-      function_type: inf.type,
-    }),
-  );
+  })();
 
   return {
-    inferences,
-    hasNextPage: inferenceResult.hasNextPage,
-    hasPreviousPage: inferenceResult.hasPreviousPage,
+    inferencesData: inferencesDataPromise,
+    totalInferences: totalInferencesPromise,
     limit,
-    totalInferences,
-    // Return filter state for UI
     function_name,
     variant_name,
     episode_id,
@@ -125,11 +121,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
-    inferences,
-    hasNextPage,
-    hasPreviousPage,
-    limit,
+    inferencesData,
     totalInferences,
+    limit,
     function_name,
     variant_name,
     episode_id,
@@ -137,61 +131,19 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     filter,
   } = loaderData;
 
-  const navigate = useNavigate();
-
-  const topInference = inferences.at(0);
-  const bottomInference = inferences.at(inferences.length - 1);
-
-  // Build search params that preserve current filters
-  const buildSearchParams = () => {
-    const params = new URLSearchParams();
-    params.set("limit", String(limit));
-    if (function_name) params.set("function_name", function_name);
-    if (variant_name) params.set("variant_name", variant_name);
-    if (episode_id) params.set("episode_id", episode_id);
-    if (search_query) params.set("search_query", search_query);
-    if (filter) params.set("filter", JSON.stringify(filter));
-    return params;
-  };
-
-  const handleNextPage = () => {
-    if (bottomInference) {
-      const params = buildSearchParams();
-      params.set("before", bottomInference.id);
-      navigate(`?${params.toString()}`, {
-        preventScrollReset: true,
-      });
-    }
-  };
-
-  const handlePreviousPage = () => {
-    if (topInference) {
-      const params = buildSearchParams();
-      params.set("after", topInference.id);
-      navigate(`?${params.toString()}`, {
-        preventScrollReset: true,
-      });
-    }
-  };
-
   return (
     <PageLayout>
       <PageHeader heading="Inferences" count={totalInferences} />
       <SectionLayout>
         <InferenceSearchBar />
         <InferencesTable
-          inferences={inferences}
+          data={inferencesData}
+          limit={limit}
           function_name={function_name}
           variant_name={variant_name}
           episode_id={episode_id}
           search_query={search_query}
           filter={filter}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={!hasPreviousPage}
-          disableNext={!hasNextPage}
         />
       </SectionLayout>
     </PageLayout>
