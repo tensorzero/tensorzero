@@ -53,9 +53,6 @@ services:
   # TensorZero UI provides observability and other features (optional).
   ui:
     image: tensorzero/ui
-    volumes:
-      # Mount our tensorzero.toml file into the container
-      - ./config:/app/config:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
