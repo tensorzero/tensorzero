@@ -6201,7 +6201,6 @@ dependencies = [
  "serde-untagged",
  "serde_json",
  "serde_path_to_error",
- "serde_with",
  "serde_yml",
  "sha2",
  "sqlx 0.8.6",

@@ -13,9 +13,7 @@ use crate::common::get_gateway_endpoint;
 static OPENAI_SPEC: OnceCell<Value> = OnceCell::const_new();
 
 async fn get_openai_spec() -> &'static Value {
-    OPENAI_SPEC
-        .get_or_init(|| async { download_openapi_spec().await })
-        .await
+    OPENAI_SPEC.get_or_init(download_openapi_spec).await
 }
 
 async fn download_openapi_spec() -> Value {
@@ -60,7 +58,7 @@ fn sanitize_openapi_spec(value: &mut serde_yml::Value) {
         Mapping(map) => {
             convert_boolean_bounds(map, "exclusiveMinimum", "minimum");
             convert_boolean_bounds(map, "exclusiveMaximum", "maximum");
-            remove_recursive_anchor(map);
+            map.remove(&serde_yml::Value::String("$recursiveAnchor".into()));   
             dedupe_required_entries(map);
             map.iter_mut()
                 .for_each(|(_, value)| sanitize_openapi_spec(value));
@@ -92,13 +90,6 @@ fn convert_boolean_bounds(map: &mut serde_yml::Mapping, exclusive_key: &str, bou
     map.insert(flag_key, bound_value);
 }
 
-fn remove_recursive_anchor(map: &mut serde_yml::Mapping) {
-    use serde_yml::Value::String as YamlString;
-
-    let key = YamlString("$recursiveAnchor".into());
-    while map.remove(&key).is_some() {}
-}
-
 fn dedupe_required_entries(map: &mut serde_yml::Mapping) {
     use serde_yml::Value::Sequence;
 
@@ -122,7 +113,6 @@ async fn get_component_schema(component_name: &str) -> Option<Value> {
 
     components.get(component_name)?;
 
-    // Build schema with components referenced once to avoid unnecessary clones
     let mut schema = json!({
         "$ref": format!("#/components/schemas/{}", component_name)
     });
@@ -176,10 +166,6 @@ fn assert_valid_schema(schema: &Validator, instance: &Value, context: &str) {
     );
 }
 
-fn warn_schema_missing(schema_name: &str) {
-    println!("{schema_name} schema not found in spec, skipping validation");
-}
-
 fn extend_json_object(target: &mut Value, additions: &Value) {
     let (Some(target_map), Some(additions_map)) = (target.as_object_mut(), additions.as_object())
     else {
@@ -207,7 +193,9 @@ async fn validate_response_against_schema(
             let validator = compile_schema(&schema_value);
             assert_valid_schema(&validator, instance, context);
         }
-        None => warn_schema_missing(schema_description),
+        None => {
+            println!("{schema_description} schema not found in spec, skipping validation");
+        }
     }
 }
 
@@ -269,7 +257,7 @@ async fn test_spec_error_response_400_bad_request() {
 
 #[tokio::test]
 #[ignore]
-async fn test_spec_error_response_404_not_found() {
+async fn test_spec_error_response_invalid_model() {
     let client = Client::new();
 
     // Request with invalid model name
@@ -283,7 +271,6 @@ async fn test_spec_error_response_404_not_found() {
         .await
         .unwrap();
 
-    // Should return an error (likely 400 or 404)
     assert!(
         response.status().is_client_error(),
         "Expected 4xx error for invalid model"
@@ -296,7 +283,7 @@ async fn test_spec_error_response_404_not_found() {
     assert_valid_schema(
         &error_schema,
         &response_json,
-        "404 Not Found error response",
+        "4xx client error response",
     );
 }
 
@@ -429,67 +416,3 @@ async fn test_spec_embeddings_array_input() {
     let response_json: Value = response.json().await.unwrap();
     validate_embeddings_response(&response_json, "Embeddings array input response").await;
 }
-
-// // ============================================================================
-// // STREAMING RESPONSE TESTS
-// // ============================================================================
-
-// async fn get_streaming_chunk_schema() -> Option<Validator> {
-//    get_component_schema_fallback(&[
-//        "ChatCompletionChunk",
-//        "CreateChatCompletionStreamResponse",
-//        "ChatCompletionStreamResponse",
-//    ])
-//    .await
-//    .map(|s| compile_schema(&s))
-// }
-
-// #[tokio::test]
-// #[ignore]
-// async fn test_spec_streaming_response() {
-//    use futures::StreamExt;
-//    use reqwest_eventsource::{Event, RequestBuilderExt};
-
-//    let client = Client::new();
-
-//    let mut response = client
-//        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-//        .json(&json!({
-//            "model": "tensorzero::model_name::openai::gpt-4o-mini",
-//            "messages": [{"role": "user", "content": "Say hello world!"}],
-//            "stream": true
-//        }))
-//        .eventsource()
-//        .unwrap();
-
-//    let mut chunks = vec![];
-//    while let Some(event) = response.next().await {
-//        let event = event.unwrap();
-//        match event {
-//            Event::Open => continue,
-//            Event::Message(message) => {
-//                if message.data == "[DONE]" {
-//                    break;
-//                }
-//                chunks.push(message.data);
-//            }
-//        }
-//    }
-
-//    assert!(!chunks.is_empty(), "Should receive at least one streaming chunk");
-
-//    if let Some(schema) = get_streaming_chunk_schema().await {
-//        for (i, chunk_str) in chunks.iter().enumerate() {
-//            let chunk: Value = serde_json::from_str(chunk_str)
-//                .unwrap_or_else(|e| panic!("Failed to parse chunk {}: {}", i, e));
-
-//            assert_valid_schema(
-//                &schema,
-//                &chunk,
-//                &format!("Streaming chunk #{}", i),
-//            );
-//        }
-//    } else {
-//        eprintln!("Warning: Streaming chunk schema not found in spec, skipping validation");
-//    }
-// }
