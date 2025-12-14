@@ -18,6 +18,7 @@ import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSh
 import { Button } from "~/components/ui/button";
 import { Eye } from "lucide-react";
 import { Suspense, use } from "react";
+import { useLocation } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import type { InferencesData } from "./route";
 
@@ -119,6 +120,8 @@ export default function EpisodeInferenceTable({
   onCloseSheet,
   openSheetInferenceId,
 }: EpisodeInferenceTableProps) {
+  const location = useLocation();
+
   return (
     <>
       <Table>
@@ -132,7 +135,7 @@ export default function EpisodeInferenceTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          <Suspense fallback={<SkeletonRows />}>
+          <Suspense key={location.key} fallback={<SkeletonRows />}>
             <TableBodyContent data={data} onOpenSheet={onOpenSheet} />
           </Suspense>
         </TableBody>

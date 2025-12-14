@@ -243,7 +243,7 @@ export const TagFilterRow = memo(function TagFilterRow({
 export interface FloatMetricFilterRowProps {
   filter: InferenceFilter & { type: "float_metric" };
   metricConfig: MetricConfig;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
 }
 
 export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
@@ -316,7 +316,7 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
 export interface BooleanMetricFilterRowProps {
   filter: InferenceFilter & { type: "boolean_metric" };
   metricConfig: MetricConfig;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
 }
 
 export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({

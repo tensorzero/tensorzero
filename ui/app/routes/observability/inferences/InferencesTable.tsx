@@ -21,7 +21,7 @@ import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter } from "lucide-react";
 import { Suspense, use, useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import {
@@ -50,19 +50,19 @@ function SkeletonRows() {
       {Array.from({ length: 10 }).map((_, i) => (
         <TableRow key={i}>
           <TableCell>
-            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-5 w-24" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-5 w-24" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-5 w-32" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-5 w-28" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-5 w-36" />
           </TableCell>
           <TableCell />
         </TableRow>
@@ -135,11 +135,11 @@ function PaginationContent({
 }: {
   data: Promise<InferencesData>;
   limit: number;
-  function_name: string | undefined;
-  variant_name: string | undefined;
-  episode_id: string | undefined;
-  search_query: string | undefined;
-  filter: InferenceFilter | undefined;
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+  search_query?: string;
+  filter?: InferenceFilter;
 }) {
   const { inferences, hasNextPage, hasPreviousPage } = use(data);
   const navigate = useNavigate();
@@ -203,9 +203,10 @@ export default function InferencesTable({
   variant_name: string | undefined;
   episode_id: string | undefined;
   search_query: string | undefined;
-  filter: InferenceFilter | undefined;
+  filter?: InferenceFilter;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const functions = useAllFunctionConfigs();
 
   const [filterOpen, setFilterOpen] = useState(false);
@@ -316,13 +317,14 @@ export default function InferencesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          <Suspense fallback={<SkeletonRows />}>
+          <Suspense key={location.key} fallback={<SkeletonRows />}>
             <TableBodyContent data={data} />
           </Suspense>
         </TableBody>
       </Table>
 
       <Suspense
+        key={location.key}
         fallback={
           <PageButtons
             onPreviousPage={() => {}}

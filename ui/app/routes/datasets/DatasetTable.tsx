@@ -8,7 +8,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { DatasetMetadata } from "~/types/tensorzero";
-import { Link, useFetcher } from "react-router";
+import { Link, useFetcher, useLocation } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
@@ -241,6 +241,7 @@ export default function DatasetTable({
   data: Promise<DatasetMetadata[]>;
 }) {
   const fetcher = useFetcher();
+  const location = useLocation();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -259,7 +260,7 @@ export default function DatasetTable({
           />
         </div>
       </div>
-      <Suspense fallback={<SkeletonTable />}>
+      <Suspense key={location.key} fallback={<SkeletonTable />}>
         <DatasetTableContent
           data={data}
           globalFilter={globalFilter}

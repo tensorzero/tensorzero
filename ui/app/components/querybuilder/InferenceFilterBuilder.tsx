@@ -38,7 +38,7 @@ const MAX_NESTING_DEPTH = 2;
 
 interface InferenceFilterBuilder {
   inferenceFilter?: InferenceFilter;
-  setInferenceFilter: (filter: InferenceFilter | undefined) => void;
+  setInferenceFilter: (filter?: InferenceFilter) => void;
 }
 
 export default function InferenceFilterBuilder({
@@ -104,7 +104,7 @@ export default function InferenceFilterBuilder({
 // Interfaces for recursive components
 interface FilterNodeProps {
   filter: InferenceFilter;
-  onChange: (newFilter: InferenceFilter | undefined) => void;
+  onChange: (newFilter?: InferenceFilter) => void;
   depth: number;
 }
 

@@ -10,6 +10,7 @@ import {
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { toEpisodeUrl } from "~/utils/urls";
 import { Suspense, use } from "react";
+import { useLocation } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import type { EpisodesData } from "./route";
 
@@ -88,6 +89,8 @@ export default function EpisodesTable({
 }: {
   data: Promise<EpisodesData>;
 }) {
+  const location = useLocation();
+
   return (
     <div>
       <Table>
@@ -99,7 +102,7 @@ export default function EpisodesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          <Suspense fallback={<SkeletonRows />}>
+          <Suspense key={location.key} fallback={<SkeletonRows />}>
             <TableBodyContent data={data} />
           </Suspense>
         </TableBody>

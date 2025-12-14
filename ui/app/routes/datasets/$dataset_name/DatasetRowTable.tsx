@@ -19,7 +19,7 @@ import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter, Trash } from "lucide-react";
 import { Suspense, use, useState, useEffect } from "react";
-import { useFetcher, useNavigate } from "react-router";
+import { useFetcher, useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -199,6 +199,7 @@ export default function DatasetRowTable({
 }) {
   const activeFetcher = useFetcher();
   const navigate = useNavigate();
+  const location = useLocation();
   const functions = useAllFunctionConfigs();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -308,7 +309,7 @@ export default function DatasetRowTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          <Suspense fallback={<SkeletonRows />}>
+          <Suspense key={location.key} fallback={<SkeletonRows />}>
             <TableBodyContent
               data={data}
               dataset_name={dataset_name}
@@ -322,6 +323,7 @@ export default function DatasetRowTable({
       </Table>
 
       <Suspense
+        key={location.key}
         fallback={
           <PageButtons
             onPreviousPage={() => {}}
