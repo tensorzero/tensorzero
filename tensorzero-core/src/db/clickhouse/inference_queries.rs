@@ -169,7 +169,7 @@ fn generate_list_inference_metadata_sql(
             episode_id,
             function_type,
             if(isNull(snapshot_hash), NULL, lower(hex(snapshot_hash))) as snapshot_hash
-        FROM InferenceById FINAL
+        FROM InferenceById
         {where_clause}
         ORDER BY id_uint {order_direction}
         LIMIT {{limit:UInt64}}
@@ -1516,7 +1516,7 @@ mod tests {
             mock.expect_run_query_synchronous()
                 .withf(|query, _params| {
                     assert_query_contains(query, "uint_to_uuid(id_uint) as id");
-                    assert_query_contains(query, "FROM InferenceById FINAL");
+                    assert_query_contains(query, "FROM InferenceById");
                     assert_query_contains(query, "ORDER BY id_uint DESC");
                     assert_query_does_not_contain(query, "WHERE");
                     true
