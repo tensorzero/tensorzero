@@ -103,93 +103,95 @@ test.describe("System Message - Text", () => {
   });
 });
 
-// test.describe("System Message - Template", () => {
-//   test("should add, delete, re-add, and edit system template", async ({
-//     page,
-//   }) => {
-//     // Use answer_question function which has system_schema
-//     // This allows us to add a system template (JSON content)
-//     // Create datapoint
-//     await createDatapointFromInference(page, {
-//       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-//     });
+test.describe("System Message - Template", () => {
+  test("should add, delete, re-add, and edit system template", async ({
+    page,
+  }) => {
+    // Use answer_question function which has system_schema
+    // This allows us to add a system template (JSON content)
+    // Create datapoint
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
 
-//     // Step 1: Delete existing system template and re-add in same edit session
-//     // The inference already has a system message, so we start by deleting it
-//     await page.getByRole("button", { name: "Edit" }).click();
-//     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    // Step 1: Delete existing system template and re-add in same edit session
+    // The inference already has a system message, so we start by deleting it
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-//     const deleteSystemButton = page.getByRole("button", {
-//       name: "Delete system",
-//     });
-//     await expect(deleteSystemButton).toBeVisible();
-//     await deleteSystemButton.click();
+    const deleteSystemButton = page.getByRole("button", {
+      name: "Delete system",
+    });
+    await expect(deleteSystemButton).toBeVisible();
+    await deleteSystemButton.click();
 
-//     // Verify visually that "+ Template" button appears after deletion (still in edit mode)
-//     const systemSection = page.getByTestId("message-system");
+    // Verify visually that "+ Template" button appears after deletion (still in edit mode)
+    const systemSection = page.getByTestId("message-system");
 
-//     const addTemplateButton = systemSection.getByRole("button", {
-//       name: "Template",
-//     });
-//     await expect(addTemplateButton).toBeVisible();
+    const addTemplateButton = systemSection.getByRole("button", {
+      name: "Template",
+    });
+    await expect(addTemplateButton).toBeVisible();
 
-//     // Step 2: Re-add system template (still in same edit session)
-//     await addTemplateButton.click();
+    // Step 2: Re-add system template (still in same edit session)
+    await addTemplateButton.click();
 
-//     let templateEditor = page.locator("div[contenteditable='true']").first();
-//     await templateEditor.waitFor({ state: "visible" });
+    let templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
-//     const templateValue1 = v7();
-//     const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
-//     await templateEditor.fill(templateJson1);
+    const templateValue1 = v7();
+    const templateJson1 = JSON.stringify({ secret: templateValue1 }, null, 2);
+    await templateEditor.fill(templateJson1);
 
-//     // Save
-//     await saveAndWaitForRedirect(page);
+    // Save
+    await saveAndWaitForRedirect(page);
 
-//     // Verify template was added
-//     const templateSection = page
-//       .getByText("Template:")
-//       .first()
-//       .locator("..")
-//       .locator("..")
-//       .locator("..")
-//       .locator("..");
-//     await expect(templateSection).toBeVisible();
-//     let codeContent = await templateSection
-//       .locator(".cm-content")
-//       .textContent();
-//     expect(codeContent).toContain(templateValue1);
+    // Verify template was added
+    const templateSection = page
+      .getByText("Template:")
+      .first()
+      .locator("..")
+      .locator("..")
+      .locator("..")
+      .locator("..");
+    await expect(templateSection).toBeVisible();
+    let codeContent = await templateSection
+      .locator(".cm-content")
+      .textContent();
+    expect(codeContent).toContain(templateValue1);
 
-//     // Step 3: Edit the template content
-//     await page.getByRole("button", { name: "Edit" }).click();
-//     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    // Step 3: Edit the template content
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
-//     templateEditor = page.locator("div[contenteditable='true']").first();
-//     await templateEditor.waitFor({ state: "visible" });
+    templateEditor = page
+      .getByLabel("System template editor")
+      .locator("div[contenteditable='true']");
 
-//     const templateValue2 = v7();
-//     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
-//     await templateEditor.fill(templateJson2);
+    const templateValue2 = v7();
+    const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
+    await templateEditor.fill(templateJson2);
 
-//     await saveAndWaitForRedirect(page);
+    await saveAndWaitForRedirect(page);
 
-//     // Verify template was edited
-//     await expect(templateSection).toBeVisible();
-//     codeContent = await templateSection.locator(".cm-content").textContent();
-//     expect(codeContent).toContain(templateValue2);
-//     expect(codeContent).not.toContain(templateValue1);
+    // Verify template was edited
+    await expect(templateSection).toBeVisible();
+    codeContent = await templateSection.locator(".cm-content").textContent();
+    expect(codeContent).toContain(templateValue2);
+    expect(codeContent).not.toContain(templateValue1);
 
-//     // Reload and verify persistence
-//     await page.reload();
-//     await page.waitForLoadState("networkidle", { timeout: 5000 });
-//     // Wait for Edit button to ensure page is fully loaded
-//     await page
-//       .getByRole("button", { name: "Edit" })
-//       .waitFor({ state: "visible" });
-//     codeContent = await templateSection.locator(".cm-content").textContent();
-//     expect(codeContent).toContain(templateValue2);
-//   });
-// });
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    codeContent = await templateSection.locator(".cm-content").textContent();
+    expect(codeContent).toContain(templateValue2);
+  });
+});
 
 // ============================================================================
 // User Message Content Block Tests
