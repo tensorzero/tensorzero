@@ -1,7 +1,7 @@
 import { Outlet, type RouteHandle } from "react-router";
 
 export const handle: RouteHandle = {
-  crumb: () => ["Datapoints"],
+  crumb: () => [{ label: "Datapoints", noLink: true }],
 };
 
 export default function DatapointsLayout() {

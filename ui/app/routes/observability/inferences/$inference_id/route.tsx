@@ -1,9 +1,13 @@
-import { queryModelInferencesByInferenceId } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import {
+  resolveModelInferences,
+  loadFileDataForStoredInput,
+} from "~/utils/resolve.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -24,8 +28,6 @@ import {
   InferenceDetailContent,
   type InferenceDetailData,
 } from "~/components/inference/InferenceDetailContent";
-import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
-import { loadFileDataForStoredInput } from "~/utils/resolve.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -52,8 +54,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ids: [inference_id],
     output_source: "inference",
   });
-  const modelInferencesPromise =
-    queryModelInferencesByInferenceId(inference_id);
+  const modelInferencesPromise = tensorZeroClient
+    .getModelInferences(inference_id)
+    .then((response) => resolveModelInferences(response.model_inferences));
   const demonstrationFeedbackPromise =
     dbClient.queryDemonstrationFeedbackByInferenceId({
       inference_id,

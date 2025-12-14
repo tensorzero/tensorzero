@@ -9,6 +9,7 @@ lazy_static! {
     /// These are useful for tests which don't need mutable tools.
     pub static ref WEATHER_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "get_temperature".to_string(),
+        key: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: StaticJSONSchema::from_value(json!({
             "type": "object",
@@ -31,6 +32,7 @@ lazy_static! {
     };
     pub static ref QUERY_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "query_articles".to_string(),
+        key: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
         parameters: StaticJSONSchema::from_value(json!({
             "type": "object",

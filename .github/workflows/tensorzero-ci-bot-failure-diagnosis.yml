@@ -40,7 +40,9 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Install mini-swe-agent
         run: 'uv tool install mini-swe-agent --from "git+https://github.com/virajmehta/mini-swe-agent.git@main"'

@@ -3,7 +3,7 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { useWatch, type Control } from "react-hook-form";
 import type { DatasetBuilderFormValues } from "./types";
 import { useFetcher } from "react-router";
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
+import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import { useEffect, useMemo } from "react";
 import { Badge } from "~/components/ui/badge";
 
@@ -16,7 +16,7 @@ export default function OutputSourceSelector({
 }) {
   const fieldName = "output_source";
   const functionFieldName = "function";
-  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+  const metricsFetcher = useFetcher<MetricsWithFeedbackResponse>();
   const functionValue = useWatch({
     control,
     name: functionFieldName,

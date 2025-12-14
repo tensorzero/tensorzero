@@ -137,6 +137,7 @@ mod tests {
                 "get_temperature".to_string(),
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
+                    key: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
                     parameters: StaticJSONSchema::from_value(json!({
                     "type": "object",
@@ -154,6 +155,7 @@ mod tests {
                 "query_articles".to_string(),
                 Arc::new(StaticToolConfig {
                     name: "query_articles".to_string(),
+                    key: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
                     parameters: StaticJSONSchema::from_value(json!({
@@ -1248,6 +1250,81 @@ mod tests {
         let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name(), "get_temperature");
+    }
+
+    /// Test that allowed_tools filtering uses the tool's key (HashMap key), not the display name.
+    /// This is important when a tool has a custom `name` field that differs from its config key.
+    #[test]
+    fn test_strict_tools_available_filters_by_key_not_name() {
+        // Create a tool where key != name (simulating `[tools.my_tool_key]\nname = "display_name"`)
+        let tool_with_custom_name = Arc::new(StaticToolConfig {
+            key: "my_tool_key".to_string(),
+            name: "display_name_for_llm".to_string(),
+            description: "A tool with different key and name".to_string(),
+            parameters: StaticJSONSchema::from_value(json!({
+                "type": "object",
+                "properties": {
+                    "input": {"type": "string"}
+                }
+            }))
+            .expect("Failed to create schema"),
+            strict: false,
+        });
+
+        let config = ToolCallConfig {
+            static_tools_available: vec![FunctionToolConfig::Static(tool_with_custom_name)],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            // allowed_tools should use the KEY, not the display name
+            allowed_tools: AllowedTools {
+                tools: vec!["my_tool_key".to_string()],
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        // strict_tools_available should find the tool by its key
+        let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].key(), "my_tool_key");
+        assert_eq!(tools[0].name(), "display_name_for_llm");
+
+        // Now test that filtering by the display name does NOT work
+        // (this would have been a bug before the fix)
+        let config_with_wrong_filter = ToolCallConfig {
+            static_tools_available: vec![FunctionToolConfig::Static(Arc::new(StaticToolConfig {
+                key: "my_tool_key".to_string(),
+                name: "display_name_for_llm".to_string(),
+                description: "A tool with different key and name".to_string(),
+                parameters: StaticJSONSchema::from_value(json!({
+                    "type": "object",
+                    "properties": {
+                        "input": {"type": "string"}
+                    }
+                }))
+                .expect("Failed to create schema"),
+                strict: false,
+            }))],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            // Try to filter by display name - this should NOT match
+            allowed_tools: AllowedTools {
+                tools: vec!["display_name_for_llm".to_string()],
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        // Should return 0 tools because "display_name_for_llm" is not a valid key
+        let tools: Vec<_> = config_with_wrong_filter
+            .strict_tools_available()
+            .unwrap()
+            .collect();
+        assert_eq!(tools.len(), 0);
     }
 
     /// Test DynamicTool deserialization with untagged (legacy) format for backward compatibility

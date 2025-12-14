@@ -525,7 +525,6 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             }))
             .await?
             .into_iter()
-            .filter(|m| !m.content.is_empty())
             .collect::<Vec<_>>();
         if matches!(
             request.json_mode,

@@ -1,7 +1,6 @@
 import { expect, test, describe } from "vitest";
 import {
   getUsedVariants,
-  getVariantCounts,
   getVariantPerformances,
   getFunctionThroughputByVariant,
 } from "./function";
@@ -527,74 +526,6 @@ describe("getVariantPerformances with variant filtering", () => {
       variant_name,
     });
     expect(result).toBeUndefined();
-  });
-});
-
-describe("getVariantCounts", () => {
-  test("getVariantCounts for extract_entities", async () => {
-    const function_name = "extract_entities";
-    const function_config = {
-      type: "json",
-    } as FunctionConfig;
-    const result = await getVariantCounts({
-      function_name,
-      function_config,
-    });
-    expect(result).toMatchObject([
-      {
-        count: 224,
-        last_used: "2025-04-15T02:34:21.000Z",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        count: 148,
-        last_used: "2025-04-14T22:46:02.000Z",
-        variant_name: "llama_8b_initial_prompt",
-      },
-      {
-        count: 132,
-        last_used: "2025-04-14T23:06:59.000Z",
-        variant_name: "gpt4o_initial_prompt",
-      },
-      {
-        count: 40,
-        last_used: "2024-12-03T13:49:32.000Z",
-        variant_name: "dicl",
-      },
-      {
-        count: 35,
-        last_used: "2024-12-06T03:49:59.000Z",
-        variant_name: "turbo",
-      },
-      {
-        count: 25,
-        last_used: "2024-12-04T08:03:47.000Z",
-        variant_name: "baseline",
-      },
-    ]);
-  });
-
-  test("getVariantCounts for write_haiku", async () => {
-    const function_name = "write_haiku";
-    const function_config = {
-      type: "chat",
-    } as FunctionConfig;
-    const result = await getVariantCounts({
-      function_name,
-      function_config,
-    });
-    expect(result).toMatchObject([
-      {
-        count: 649,
-        last_used: "2025-05-12T21:59:20.000Z",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-      {
-        count: 155,
-        last_used: "2025-04-15T02:33:07.000Z",
-        variant_name: "better_prompt_haiku_3_5",
-      },
-    ]);
   });
 });
 

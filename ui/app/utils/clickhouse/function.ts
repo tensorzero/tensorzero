@@ -1,11 +1,12 @@
 import z from "zod";
-import { getInferenceTableName } from "./common";
 import type {
   FunctionConfig,
   MetricConfig,
   TimeWindow,
 } from "~/types/tensorzero";
+import type { InferenceStatsByVariant } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
+import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
 
 function getTimeWindowInMs(timeWindow: TimeWindow): number {
   switch (timeWindow) {
@@ -325,66 +326,19 @@ ORDER BY
   return parsedRows.length > 0 ? parsedRows : undefined;
 }
 
-const variantCountsSchema = z.object({
-  variant_name: z.string(),
-  count: z.number(),
-  last_used: z.string().datetime(),
-});
-export type VariantCounts = z.infer<typeof variantCountsSchema>;
-
-export async function getVariantCounts(params: {
-  function_name: string;
-  function_config: FunctionConfig;
-}): Promise<VariantCounts[]> {
-  const { function_name, function_config } = params;
-  const inference_table_name = getInferenceTableName(function_config);
-  const query = `
-SELECT
-    variant_name,
-    toUInt32(count()) AS count,
-    formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_used
-FROM ${inference_table_name}
-WHERE function_name = {function_name:String}
-GROUP BY variant_name
-ORDER BY count DESC
-`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name },
-  });
-  const rows = await resultSet.json();
-  const parsedRows = z.array(variantCountsSchema).parse(rows);
-  return parsedRows;
-}
-
 export async function getUsedVariants(
   function_name: string,
 ): Promise<string[]> {
-  const query = `
-  SELECT DISTINCT variant_name
-  FROM (
-    SELECT variant_name
-    FROM ChatInference
-    WHERE function_name = {function_name:String}
-    UNION ALL
-    SELECT variant_name
-    FROM JsonInference
-    WHERE function_name = {function_name:String}
-  )
-`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { function_name },
-  });
-  const rows = await resultSet.json();
+  const response = await getTensorZeroClient().getInferenceStats(
+    function_name,
+    {
+      groupBy: "variant",
+    },
+  );
 
-  const parsedRows = z
-    .array(z.object({ variant_name: z.string() }))
-    .parse(rows)
-    .map((row) => row.variant_name);
-  return parsedRows;
+  return (response.stats_by_variant ?? []).map(
+    (v: InferenceStatsByVariant) => v.variant_name,
+  );
 }
 
 const variantThroughputSchema = z.object({

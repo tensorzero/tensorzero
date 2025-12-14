@@ -94,10 +94,9 @@ describe("getInferenceStats", () => {
   });
 
   test("should return inference count for a function and variant", async () => {
-    const stats = await tensorZeroClient.getInferenceStats(
-      "extract_entities",
-      "gpt4o_initial_prompt",
-    );
+    const stats = await tensorZeroClient.getInferenceStats("extract_entities", {
+      variantName: "gpt4o_initial_prompt",
+    });
     expect(stats.inference_count).toBeGreaterThanOrEqual(132);
   });
 
@@ -109,10 +108,9 @@ describe("getInferenceStats", () => {
 
   test("should throw error for unknown variant", async () => {
     await expect(
-      tensorZeroClient.getInferenceStats(
-        "extract_entities",
-        "nonexistent_variant",
-      ),
+      tensorZeroClient.getInferenceStats("extract_entities", {
+        variantName: "nonexistent_variant",
+      }),
     ).rejects.toThrow();
   });
 });

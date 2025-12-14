@@ -825,7 +825,7 @@ impl EmbeddingProvider for DummyProvider {
         &self,
         request: &EmbeddingRequest,
         _http_client: &TensorzeroHttpClient,
-        _dynamic_api_keys: &InferenceCredentials,
+        dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
@@ -843,6 +843,24 @@ impl EmbeddingProvider for DummyProvider {
         }
         if self.model_name.contains("slow") {
             tokio::time::sleep(Duration::from_secs(30)).await;
+        }
+
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
+        if self.model_name == "test_key"
+            && let Some(api_key) = api_key
+            && api_key.expose_secret() != "good_key"
+        {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Invalid API key for Dummy provider".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
+                status_code: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            }
+            .into());
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();

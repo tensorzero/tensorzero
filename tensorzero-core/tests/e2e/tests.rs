@@ -17,6 +17,7 @@ mod db;
 mod dicl;
 mod dynamic_variants;
 mod endpoints;
+mod evaluations;
 mod experimental_list_inferences;
 mod experimentation;
 mod fallback;
