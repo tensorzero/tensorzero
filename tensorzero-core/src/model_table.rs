@@ -79,7 +79,7 @@ pub trait ProviderKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProviderType {
     Anthropic,
     Azure,
@@ -669,6 +669,12 @@ fn load_credential_with_fallback(
     // If fallback location is specified, construct a WithFallback credential
     if let Some(fallback_location) = location_with_fallback.fallback_location() {
         let fallback_credential = load_credential(fallback_location, provider_type)?;
+        if provider_type.to_string().contains("Azure") {
+            eprintln!(
+                "Deprecation Warning: The default credential for Azure will be `AZURE_API_KEY` \
+                instead of `AZURE_OPENAI_API_KEY` in the future. Using `AZURE_OPENAI_API_KEY` for now."
+            );
+        }
         Ok(Credential::WithFallback {
             default: Box::new(default_credential),
             fallback: Box::new(fallback_credential),
