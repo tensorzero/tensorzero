@@ -670,7 +670,7 @@ fn load_credential_with_fallback(
     if let Some(fallback_location) = location_with_fallback.fallback_location() {
         let fallback_credential = load_credential(fallback_location, provider_type)?;
         if provider_type.to_string().contains("Azure") {
-            eprintln!(
+            tracing::warn!(
                 "Deprecation Warning: The default credential for Azure will be `AZURE_API_KEY` \
                 instead of `AZURE_OPENAI_API_KEY` in the future. Using `AZURE_OPENAI_API_KEY` for now."
             );
