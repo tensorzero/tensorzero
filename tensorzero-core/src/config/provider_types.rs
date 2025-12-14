@@ -11,6 +11,8 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub azure: AzureProviderTypeConfig,
     #[serde(default)]
+    pub azure_anthropic: AzureAnthropicProviderTypeConfig,
+    #[serde(default)]
     pub deepseek: DeepSeekProviderTypeConfig,
     #[serde(default)]
     pub fireworks: FireworksProviderTypeConfig,
@@ -83,6 +85,29 @@ impl Default for AzureDefaults {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "AZURE_OPENAI_API_KEY".to_string(),
+            )),
+        }
+    }
+}
+
+// Azure Anthropic
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct AzureAnthropicProviderTypeConfig {
+    #[serde(default)]
+    pub defaults: AzureAnthropicDefaults,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AzureAnthropicDefaults {
+    pub api_key_location: CredentialLocationWithFallback,
+}
+
+impl Default for AzureAnthropicDefaults {
+    fn default() -> Self {
+        Self {
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                "AZURE_ANTHROPIC_API_KEY".to_string(),
             )),
         }
     }

@@ -45,7 +45,7 @@ use crate::inference::types::{
     current_timestamp,
 };
 use crate::model_table::{
-    AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
+    AnthropicKind, AzureAnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
     GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
     ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
     VLLMKind, XAIKind,
@@ -68,11 +68,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    azure_anthropic::AzureAnthropicProvider, deepseek::DeepSeekProvider,
+    fireworks::FireworksProvider, gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+    gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider, mistral::MistralProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -871,6 +871,7 @@ impl ModelProvider {
             ProviderConfig::AWSBedrock(_) => "aws_bedrock",
             ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
             ProviderConfig::Azure(_) => "azure",
+            ProviderConfig::AzureAnthropic(_) => "azure_anthropic",
             ProviderConfig::Fireworks(_) => "fireworks",
             ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
             ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
@@ -899,6 +900,7 @@ impl ModelProvider {
             // SageMaker doesn't have a meaningful model name concept, as we just invoke an endpoint
             ProviderConfig::AWSSagemaker(_) => None,
             ProviderConfig::Azure(provider) => Some(provider.deployment_id()),
+            ProviderConfig::AzureAnthropic(provider) => Some(provider.deployment_id()),
             ProviderConfig::Fireworks(provider) => Some(provider.model_name()),
             ProviderConfig::GCPVertexAnthropic(provider) => Some(provider.model_id()),
             ProviderConfig::GCPVertexGemini(provider) => Some(provider.model_or_endpoint_id()),
@@ -950,6 +952,8 @@ pub enum ProviderConfig {
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
+    #[serde(rename = "azure_anthropic")]
+    AzureAnthropic(AzureAnthropicProvider),
     DeepSeek(DeepSeekProvider),
     Fireworks(FireworksProvider),
     #[serde(rename = "gcp_vertex_anthropic")]
@@ -995,6 +999,9 @@ impl ProviderConfig {
                     .thought_block_provider_type_suffix()
             )),
             ProviderConfig::Azure(_) => Cow::Borrowed(crate::providers::azure::PROVIDER_TYPE),
+            ProviderConfig::AzureAnthropic(_) => {
+                Cow::Borrowed(crate::providers::azure_anthropic::PROVIDER_TYPE)
+            }
             ProviderConfig::DeepSeek(_) => Cow::Borrowed(crate::providers::deepseek::PROVIDER_TYPE),
             ProviderConfig::Fireworks(_) => {
                 Cow::Borrowed(crate::providers::fireworks::PROVIDER_TYPE)
@@ -1075,6 +1082,14 @@ pub enum UninitializedProviderConfig {
         hosted_provider: HostedProviderKind,
     },
     Azure {
+        deployment_id: String,
+        endpoint: EndpointLocation,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocationWithFallback>,
+    },
+    #[strum(serialize = "azure_anthropic")]
+    #[serde(rename = "azure_anthropic")]
+    AzureAnthropic {
         deployment_id: String,
         endpoint: EndpointLocation,
         #[cfg_attr(test, ts(type = "string | null"))]
@@ -1283,6 +1298,20 @@ impl UninitializedProviderConfig {
                 deployment_id,
                 endpoint,
                 AzureKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )?),
+            UninitializedProviderConfig::AzureAnthropic {
+                deployment_id,
+                endpoint,
+                api_key_location,
+            } => ProviderConfig::AzureAnthropic(AzureAnthropicProvider::new(
+                deployment_id,
+                endpoint,
+                AzureAnthropicKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
                         provider_type_default_credentials,
@@ -1642,6 +1671,11 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::AzureAnthropic(provider) => {
+                provider
+                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::Fireworks(provider) => {
                 provider
                     .infer(request, &clients.http_client, &clients.credentials, self)
@@ -1780,6 +1814,11 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::AzureAnthropic(provider) => {
+                provider
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::Fireworks(provider) => {
                 provider
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
@@ -1901,6 +1940,11 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::AzureAnthropic(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             ProviderConfig::Fireworks(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -2008,6 +2052,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Azure(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::AzureAnthropic(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
