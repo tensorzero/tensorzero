@@ -81,9 +81,10 @@ pub struct AzureDefaults {
 impl Default for AzureDefaults {
     fn default() -> Self {
         Self {
-            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
-                "AZURE_OPENAI_API_KEY".to_string(),
-            )),
+            api_key_location: CredentialLocationWithFallback::WithFallback {
+                default: CredentialLocation::Env("AZURE_API_KEY".to_string()),
+                fallback: CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string()),
+            },
         }
     }
 }

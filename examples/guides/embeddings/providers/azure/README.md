@@ -2,10 +2,10 @@
 
 ## Running the Example
 
-1. Set the `AZURE_OPENAI_API_KEY` environment variable:
+1. Set the `AZURE_API_KEY` environment variable:
 
 ```bash
-export AZURE_OPENAI_API_KEY="..." # Replace with your Azure OpenAI API key
+export AZURE_API_KEY="..." # Replace with your Azure API key
 ```
 
 2. Set your Azure `endpoint` in `config/tensorzero.toml`.

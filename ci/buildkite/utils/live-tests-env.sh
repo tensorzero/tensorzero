@@ -32,9 +32,15 @@ if [ -z "$AZURE_OPENAI_API_BASE" ]; then
     exit 1
 fi
 
-export AZURE_OPENAI_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_API_KEY)
-if [ -z "$AZURE_OPENAI_API_KEY" ]; then
-    echo "Error: AZURE_OPENAI_API_KEY is not set"
+export AZURE_API_KEY=$(buildkite-agent secret get AZURE_API_KEY)
+if [ -z "$AZURE_API_KEY" ]; then
+    export AZURE_OPENAI_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_API_KEY)
+    if [ -z "$AZURE_OPENAI_API_KEY" ]; then
+        echo "Warning: Neither AZURE_API_KEY nor AZURE_OPENAI_API_KEY is set. Azure tests will be skipped."
+    else
+        echo "Warning: Using deprecated AZURE_OPENAI_API_KEY. Please use AZURE_API_KEY instead."
+    fi
+fi
     exit 1
 fi
 

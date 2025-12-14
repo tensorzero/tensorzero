@@ -8,9 +8,15 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let credentials = match std::env::var("AZURE_OPENAI_API_KEY") {
+    let credentials = match std::env::var("AZURE_API_KEY") {
         Ok(key) => HashMap::from([("azure_openai_api_key".to_string(), key)]),
-        Err(_) => HashMap::new(),
+        Err(_) => match std::env::var("AZURE_OPENAI_API_KEY") {
+            Ok(key) => {
+                eprintln!("Deprecation Warning: The default credential for Azure will be `AZURE_API_KEY` instead of `AZURE_OPENAI_API_KEY` in the future. Using `AZURE_OPENAI_API_KEY` for now.");
+                HashMap::from([("azure_openai_api_key".to_string(), key)])
+            }
+            Err(_) => HashMap::new(),
+        },
     };
 
     let standard_providers = vec![E2ETestProvider {
