@@ -12,11 +12,15 @@ import {
 } from "~/components/inference/InferenceDetailContent";
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
+import { Button } from "~/components/ui/button";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 interface InferencePreviewSheetProps {
   inferenceId: string | null;
   isOpen: boolean;
   onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
 }
 
 function getInferenceApiUrl(inferenceId: string) {
@@ -27,6 +31,8 @@ export function InferencePreviewSheet({
   inferenceId,
   isOpen,
   onClose,
+  onPrev,
+  onNext,
 }: InferencePreviewSheetProps) {
   const fetcher = useFetcher<InferenceDetailData>();
   const { toast } = useToast();
@@ -91,6 +97,7 @@ export function InferencePreviewSheet({
     !fetcher.data &&
     inferenceId !== null &&
     lastFetchedInferenceIdRef.current === inferenceId;
+  const showNavigation = Boolean(onPrev || onNext);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -137,6 +144,33 @@ export function InferencePreviewSheet({
             />
           )}
         </div>
+
+        {showNavigation && (
+          <div className="mt-8 border-t pt-4">
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <Button
+                variant="secondary"
+                className="gap-2 transition-all duration-200 hover:scale-[1.02] focus-visible:scale-[1.02] active:scale-[0.98]"
+                onClick={() => onPrev?.()}
+                disabled={!onPrev}
+                aria-label="Go to previous inference"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button
+                variant="secondary"
+                className="gap-2 transition-all duration-200 hover:scale-[1.02] focus-visible:scale-[1.02] active:scale-[0.98]"
+                onClick={() => onNext?.()}
+                disabled={!onNext}
+                aria-label="Go to next inference"
+              >
+                Next
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
