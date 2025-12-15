@@ -1182,5 +1182,5 @@ jobs:
           echo "github.event_name: ${{ github.event_name }}"
       # When running in the merge queue, jobs should never be skipped.
       # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1
