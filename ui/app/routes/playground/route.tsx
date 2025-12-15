@@ -7,7 +7,10 @@ import {
   isRouteErrorResponse,
   useNavigation,
 } from "react-router";
-import { DatasetComboboxSelector } from "~/components/dataset/DatasetComboboxSelector";
+import {
+  DatasetSelector,
+  DatasetSelectorVariant,
+} from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
@@ -341,7 +344,8 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Dataset</Label>
-        <DatasetComboboxSelector
+        <DatasetSelector
+          variant={DatasetSelectorVariant.INPUT}
           placeholder="Select dataset"
           functionName={functionName ?? undefined}
           disabled={!functionName}
