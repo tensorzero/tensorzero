@@ -201,38 +201,6 @@ pub trait ScoringFunction: Send + Sync {
     fn score(&self, evaluations: &crate::evaluators::EvaluationResult) -> Option<f64>;
 }
 
-/// Reason why the top-k evaluation stopped.
-#[derive(Debug, Clone, PartialEq)]
-pub enum GlobalStoppingReason {
-    /// Successfully identified a top-k set of variants
-    TopKFound { k: u32, top_variants: Vec<String> },
-    /// Reached the maximum number of datapoints without identifying top-k
-    MaxDatapointsReached,
-    /// At least one evaluator has a failure rate above the threshold
-    EvaluatorFailed { evaluator_name: String },
-    /// Too many variants failed (>= num_variants - k_min)
-    TooManyVariantsFailed { num_failed: usize },
-}
-
-/// Results from running the adaptive top-k evaluation.
-#[derive(Debug)]
-pub struct AdaptiveEvalStoppingResults {
-    /// Unique ID for this evaluation run
-    pub evaluation_run_id: Uuid,
-    /// Performance confidence sequences for each variant
-    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each variant
-    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each evaluator
-    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final status of each variant
-    pub variant_status: HashMap<String, VariantStatus>,
-    /// Why the evaluation stopped
-    pub stopping_reason: GlobalStoppingReason,
-    /// Number of datapoints processed
-    pub num_datapoints_processed: usize,
-}
-
 /// Update variant statistics and confidence sequences based on evaluation results.
 ///
 /// This function updates:
@@ -240,25 +208,105 @@ pub struct AdaptiveEvalStoppingResults {
 /// - `variant_failures`: Failure rate confidence sequences for each variant
 /// - `evaluator_failures`: Per-evaluator failure rate confidence sequences
 ///
+/// For variant performance, scores are computed using the provided scoring function.
+/// For variant failures, each `Error` result is counted as a failure (1.0) and each
+/// `Success` is counted as a non-failure (0.0).
+/// For evaluator failures, each evaluator error within a `Success` result is counted
+/// as a failure (1.0) for that specific evaluator.
+///
 /// # Arguments
 /// * `variant_name` - Name of the variant being updated
 /// * `results` - Batch results (successes and errors) for the datapoints processed
+/// * `scoring_fn` - Function to convert evaluation results to a single score in [0, 1]
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
 /// * `evaluator_failures` - Map to update with evaluator failure rates
-#[expect(unused_variables)]
+///
+/// # Returns
+/// `Ok(())` on success, or an error if confidence sequence updates fail.
 pub fn compute_updates(
     variant_name: &str,
     results: &[crate::BatchItemResult],
+    scoring_fn: &dyn ScoringFunction,
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
-) {
-    // TODO: Implement compute_updates
-    // This will:
-    // 1. For each Success: extract scores using a scoring function, update variant_performance
-    // 2. For each Error: increment variant_failures
-    // 3. For each Success: check for evaluator errors, update evaluator_failures
+) -> Result<()> {
+    use crate::betting_confidence_sequences::update_betting_cs;
+
+    // Collect observations for variant performance (scores from scoring function)
+    let mut performance_observations: Vec<f64> = Vec::new();
+
+    // Collect observations for variant failures (1.0 = failure, 0.0 = success)
+    let mut failure_observations: Vec<f64> = Vec::new();
+
+    // Collect observations for each evaluator's failure rate
+    let mut evaluator_failure_observations: HashMap<String, Vec<f64>> = HashMap::new();
+
+    for result in results {
+        match result {
+            crate::BatchItemResult::Success(success) => {
+                // Variant didn't fail for this datapoint
+                failure_observations.push(0.0);
+
+                // Compute performance score using the scoring function
+                if let Some(score) = scoring_fn.score(&success.evaluation_result) {
+                    performance_observations.push(score);
+                }
+
+                // Check each evaluator for errors
+                for (evaluator_name, eval_result) in &success.evaluation_result {
+                    let failure_value = match eval_result {
+                        Ok(_) => 0.0,  // Evaluator succeeded
+                        Err(_) => 1.0, // Evaluator failed
+                    };
+                    evaluator_failure_observations
+                        .entry(evaluator_name.clone())
+                        .or_default()
+                        .push(failure_value);
+                }
+            }
+            crate::BatchItemResult::Error(_) => {
+                // Variant failed for this datapoint
+                failure_observations.push(1.0);
+                // Note: We don't update evaluator failures here since we don't have
+                // evaluation results - the failure occurred before evaluation
+            }
+            crate::BatchItemResult::Cancelled => {
+                // Skip cancelled tasks - they don't count toward any statistics
+                continue;
+            }
+        }
+    }
+
+    // Update variant performance confidence sequence
+    if !performance_observations.is_empty()
+        && let Some(cs) = variant_performance.remove(variant_name)
+    {
+        let updated = update_betting_cs(cs, performance_observations, None)?;
+        variant_performance.insert(variant_name.to_string(), updated);
+    }
+
+    // Update variant failures confidence sequence
+    if !failure_observations.is_empty()
+        && let Some(cs) = variant_failures.remove(variant_name)
+    {
+        let updated = update_betting_cs(cs, failure_observations, None)?;
+        variant_failures.insert(variant_name.to_string(), updated);
+    }
+
+    // Update evaluator failures confidence sequences
+    for (evaluator_name, observations) in evaluator_failure_observations {
+        if observations.is_empty() {
+            continue;
+        }
+        if let Some(cs) = evaluator_failures.remove(&evaluator_name) {
+            let updated = update_betting_cs(cs, observations, None)?;
+            evaluator_failures.insert(evaluator_name, updated);
+        }
+    }
+
+    Ok(())
 }
 
 /// Parameters for `process_topk_batch`.
@@ -895,5 +943,205 @@ mod tests {
         let result = check_topk_stopping(&variant_performance, 2, 3, None).unwrap();
         assert!(result.stopped);
         assert_eq!(result.k, Some(3));
+    }
+
+    // ============================================================================
+    // Tests for compute_updates
+    // ============================================================================
+
+    /// Helper to create an initial confidence sequence for testing compute_updates
+    fn create_initial_cs(name: &str) -> MeanBettingConfidenceSequence {
+        MeanBettingConfidenceSequence {
+            name: name.to_string(),
+            mean_regularized: 0.5,
+            variance_regularized: 0.25,
+            count: 0,
+            mean_est: 0.5,
+            cs_lower: 0.0,
+            cs_upper: 1.0,
+            alpha: 0.05,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(101),
+                wealth_upper: vec![1.0; 101],
+                wealth_lower: vec![1.0; 101],
+            },
+        }
+    }
+
+    /// A simple scoring function that returns the first evaluator's value as the score
+    struct FirstEvaluatorScore;
+
+    impl ScoringFunction for FirstEvaluatorScore {
+        fn score(&self, evaluations: &crate::evaluators::EvaluationResult) -> Option<f64> {
+            // Return the first Ok(Some(value)) we find, converted to f64
+            for result in evaluations.values() {
+                if let Ok(Some(value)) = result
+                    && let Some(num) = value.as_f64()
+                {
+                    return Some(num);
+                }
+            }
+            None
+        }
+    }
+
+    #[test]
+    fn test_compute_updates_empty_results() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), create_initial_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        // Empty results should not change any confidence sequences
+        let result = compute_updates(
+            "test_variant",
+            &[],
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Count should still be 0 since no observations were processed
+        assert_eq!(variant_performance["test_variant"].count, 0);
+        assert_eq!(variant_failures["test_variant"].count, 0);
+        assert_eq!(evaluator_failures["evaluator1"].count, 0);
+    }
+
+    #[test]
+    fn test_compute_updates_only_cancelled() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), create_initial_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        // Cancelled results should not affect any statistics
+        let results = vec![
+            crate::BatchItemResult::Cancelled,
+            crate::BatchItemResult::Cancelled,
+        ];
+
+        let result = compute_updates(
+            "test_variant",
+            &results,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Count should still be 0 since cancelled tasks don't count
+        assert_eq!(variant_performance["test_variant"].count, 0);
+        assert_eq!(variant_failures["test_variant"].count, 0);
+        assert_eq!(evaluator_failures["evaluator1"].count, 0);
+    }
+
+    #[test]
+    fn test_compute_updates_variant_failures() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
+            "test_variant".to_string(),
+            create_initial_cs("test_variant"),
+        )]
+        .into_iter()
+        .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+        // Only errors - this should update variant_failures only
+        let results = vec![
+            crate::BatchItemResult::Error(crate::DatapointVariantError {
+                datapoint_id: Uuid::now_v7(),
+                variant: None,
+                message: "test error 1".to_string(),
+            }),
+            crate::BatchItemResult::Error(crate::DatapointVariantError {
+                datapoint_id: Uuid::now_v7(),
+                variant: None,
+                message: "test error 2".to_string(),
+            }),
+        ];
+
+        let result = compute_updates(
+            "test_variant",
+            &results,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // variant_failures should have 2 observations (both 1.0 = failure)
+        assert_eq!(variant_failures["test_variant"].count, 2);
+        // Performance should not be updated since there were no successes
+        assert_eq!(variant_performance["test_variant"].count, 0);
+    }
+
+    #[test]
+    fn test_compute_updates_missing_variant_in_map() {
+        let scoring_fn = FirstEvaluatorScore;
+        // Don't include "test_variant" in any maps - should handle gracefully
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            HashMap::new();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+        let results = vec![crate::BatchItemResult::Error(
+            crate::DatapointVariantError {
+                datapoint_id: Uuid::now_v7(),
+                variant: None,
+                message: "test error".to_string(),
+            },
+        )];
+
+        // Should not panic, just skip updates for missing variants
+        let result = compute_updates(
+            "test_variant",
+            &results,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // No maps should be modified since variant wasn't in any of them
+        assert!(variant_performance.is_empty());
+        assert!(variant_failures.is_empty());
+        assert!(evaluator_failures.is_empty());
     }
 }
