@@ -116,15 +116,9 @@ async fn get_component_schema(component_name: &str) -> Option<Value> {
     let mut schema = json!({
         "$ref": format!("#/components/schemas/{}", component_name)
     });
-
-    schema
-        .as_object_mut()
-        .unwrap()
-        .insert("$defs".to_string(), components.clone());
-    schema
-        .as_object_mut()
-        .unwrap()
-        .insert("components".to_string(), json!({ "schemas": components }));
+    let obj = schema.as_object_mut().unwrap();
+    obj.insert("$defs".to_string(), components.clone());
+    obj.insert("components".to_string(), json!({ "schemas": components }));
 
     Some(schema)
 }
@@ -277,7 +271,7 @@ async fn test_spec_error_response_invalid_model() {
     );
 
     let response_json: Value = response.json().await.unwrap();
-    println!("404 error response: {response_json:?}");
+    println!("{response_json:?}");
     let error_schema = get_error_schema().await;
 
     assert_valid_schema(
@@ -352,9 +346,8 @@ async fn test_spec_chat_completion_finish_reasons() {
         ("length", json!({"max_tokens": 1})),
     ];
 
+    let client = Client::new();
     for (finish_type, params) in test_cases {
-        let client = Client::new();
-
         let mut request = json!({
             "model": "tensorzero::model_name::openai::gpt-4o-mini",
             "messages": [{"role": "user", "content": "Say hello"}]
