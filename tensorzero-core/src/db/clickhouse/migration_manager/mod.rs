@@ -52,11 +52,12 @@ use migrations::migration_0041::Migration0041;
 use migrations::migration_0042::Migration0042;
 use migrations::migration_0043::Migration0043;
 use migrations::migration_0044::Migration0044;
+use migrations::migration_0045::Migration0045;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 38;
+pub const NUM_MIGRATIONS: usize = 39;
 pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!(
@@ -126,6 +127,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0042 { clickhouse }),
         Box::new(Migration0043 { clickhouse }),
         Box::new(Migration0044 { clickhouse }),
+        Box::new(Migration0045 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),

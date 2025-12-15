@@ -259,6 +259,6 @@ async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Err
     Ok(applied_migrations)
 }
 
-fn make_migrator() -> sqlx::migrate::Migrator {
+pub fn make_migrator() -> sqlx::migrate::Migrator {
     migrate!("src/db/postgres/migrations")
 }
