@@ -468,10 +468,10 @@ async fn test_stream_body() {
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();
-        if let reqwest_eventsource::Event::Message(event) = event {
-            if event.data == "[DONE]" {
-                break;
-            }
+        if let reqwest_eventsource::Event::Message(event) = event
+            && event.data == "[DONE]"
+        {
+            break;
         }
     }
 
