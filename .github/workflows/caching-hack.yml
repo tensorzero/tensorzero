@@ -54,8 +54,9 @@ jobs:
           shared-key: "build-gateway-cache"
       - name: Install uv
         if: runner.os == 'windows'
-        run: |
-          powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
       - name: Install Python 3.10
         if: runner.os == 'windows'
         run: |

@@ -226,6 +226,7 @@ export default function InferencesTable({
                       selected={filterFunctionName}
                       onSelect={setFilterFunctionName}
                       functions={functions}
+                      ariaLabel="Function filter"
                     />
                   </div>
                   {filterFunctionName && (

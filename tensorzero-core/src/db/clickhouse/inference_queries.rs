@@ -169,7 +169,7 @@ fn generate_list_inference_metadata_sql(
             episode_id,
             function_type,
             if(isNull(snapshot_hash), NULL, lower(hex(snapshot_hash))) as snapshot_hash
-        FROM InferenceById FINAL
+        FROM InferenceById
         {where_clause}
         ORDER BY id_uint {order_direction}
         LIMIT {{limit:UInt64}}
@@ -713,8 +713,8 @@ mod tests {
         assert_query_contains, assert_query_does_not_contain,
     };
     use crate::db::clickhouse::query_builder::{
-        FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy, OrderByTerm,
-        OrderDirection, QueryParameter,
+        DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+        OrderBy, OrderByTerm, OrderDirection, QueryParameter,
     };
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
@@ -960,6 +960,50 @@ mod tests {
             name: "p2".to_string(),
             value: "0.5".to_string(),
         }));
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_positive() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: true,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_negative() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: false,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
     }
 
     #[tokio::test]
@@ -1472,7 +1516,7 @@ mod tests {
             mock.expect_run_query_synchronous()
                 .withf(|query, _params| {
                     assert_query_contains(query, "uint_to_uuid(id_uint) as id");
-                    assert_query_contains(query, "FROM InferenceById FINAL");
+                    assert_query_contains(query, "FROM InferenceById");
                     assert_query_contains(query, "ORDER BY id_uint DESC");
                     assert_query_does_not_contain(query, "WHERE");
                     true

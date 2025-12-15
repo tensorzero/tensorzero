@@ -17,8 +17,6 @@ import {
   getVariantPerformances,
   getFunctionThroughputByVariant,
 } from "~/utils/clickhouse/function";
-import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
-import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -75,11 +73,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     limit: limit + 1, // Fetch one extra to determine pagination
   });
   const numInferencesPromise = countInferencesForFunction(function_name);
-  const metricsWithFeedbackPromise = queryMetricsWithFeedback({
-    function_name,
-    inference_table: getInferenceTableName(function_config),
-  });
-  const variantCountsPromise = getTensorZeroClient().getInferenceStats(
+  const tensorZeroClient = getTensorZeroClient();
+  const metricsWithFeedbackPromise =
+    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
+  const variantCountsPromise = tensorZeroClient.getInferenceStats(
     function_name,
     {
       groupBy: "variant",

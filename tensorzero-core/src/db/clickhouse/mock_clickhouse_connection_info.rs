@@ -5,8 +5,8 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetQueries, DatasetQueryParams,
-    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
+    DatasetMetadata, DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
@@ -96,12 +96,13 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
 
-    async fn count_datapoints_for_dataset_function(
+    async fn count_datapoints_for_dataset(
         &self,
-        params: &CountDatapointsForDatasetFunctionParams,
-    ) -> Result<u32, Error> {
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error> {
         self.dataset_queries
-            .count_datapoints_for_dataset_function(params)
+            .count_datapoints_for_dataset(dataset_name, function_name)
             .await
     }
 
