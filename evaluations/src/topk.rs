@@ -193,6 +193,30 @@ pub enum VariantStatus {
 /// and the inner map is keyed by variant name.
 pub type BatchResultsByDatapoint = HashMap<Uuid, HashMap<String, BatchItemResult>>;
 
+/// Shared context for top-k evaluation that remains constant across batches.
+///
+/// This struct holds configuration and client references that don't change
+/// during the evaluation run. Per-batch parameters like `batch_ids` and
+/// `variant_status` are passed separately to `process_topk_batch`.
+pub struct TopKContext {
+    /// Clients for inference and database access
+    pub clients: Arc<Clients>,
+    /// Evaluation configuration
+    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Function configs table
+    pub function_configs: Arc<EvaluationFunctionConfigTable>,
+    /// Name of the evaluation
+    pub evaluation_name: Arc<String>,
+    /// Evaluation run ID for tagging
+    pub evaluation_run_id: Uuid,
+    /// Dataset name for tagging
+    pub dataset_name: Arc<String>,
+    /// Cache mode for inference
+    pub inference_cache: CacheEnabledMode,
+    /// Semaphore for concurrency control
+    pub semaphore: Arc<tokio::sync::Semaphore>,
+}
+
 /// Trait for scoring functions that compare variants on a single datapoint.
 ///
 /// A scoring function takes an (implicit) (m × r) matrix of evaluator results for a single datapoint
@@ -363,30 +387,6 @@ pub fn compute_updates(
     Ok(())
 }
 
-/// Parameters for `process_topk_batch`.
-pub struct ProcessTopKBatchParams<'a> {
-    /// Clients for inference and database access
-    pub clients: Arc<Clients>,
-    /// Batch of datapoint IDs to process
-    pub batch_ids: Vec<Uuid>,
-    /// Map of variant names to their current status (only Active variants are processed)
-    pub variant_status: &'a HashMap<String, VariantStatus>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Name of the evaluation
-    pub evaluation_name: Arc<String>,
-    /// Evaluation run ID for tagging
-    pub evaluation_run_id: Uuid,
-    /// Dataset name for tagging
-    pub dataset_name: Arc<String>,
-    /// Cache mode for inference
-    pub inference_cache: CacheEnabledMode,
-    /// Semaphore for concurrency control
-    pub semaphore: Arc<tokio::sync::Semaphore>,
-}
-
 /// Process a batch of datapoints for the top-k evaluation.
 ///
 /// This function:
@@ -397,33 +397,36 @@ pub struct ProcessTopKBatchParams<'a> {
 /// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
 ///
 /// # Arguments
-/// * `params` - Parameters for batch processing
+/// * `ctx` - Shared context containing clients, configs, and evaluation metadata
+/// * `batch_ids` - IDs of datapoints to process in this batch
+/// * `variant_status` - Current status of each variant (only Active variants are processed)
 ///
 /// # Returns
 /// Results grouped by datapoint ID, then by variant name. This structure is optimized
 /// for the scoring function which needs to compare variants on the same datapoint.
 pub async fn process_topk_batch(
-    params: ProcessTopKBatchParams<'_>,
+    topk_context: &TopKContext,
+    batch_ids: Vec<Uuid>,
+    variant_status: &HashMap<String, VariantStatus>,
 ) -> Result<BatchResultsByDatapoint> {
     // Retrieve datapoints from ClickHouse
     let request = GetDatapointsRequest {
-        ids: params.batch_ids.clone(),
+        ids: batch_ids.clone(),
     };
-    let datapoints = get_datapoints(&params.clients.clickhouse_client, None, request)
+    let datapoints = get_datapoints(&topk_context.clients.clickhouse_client, None, request)
         .await?
         .datapoints;
 
     if datapoints.is_empty() {
         tracing::warn!(
-            batch_size = params.batch_ids.len(),
+            batch_size = batch_ids.len(),
             "No datapoints found for batch"
         );
         return Ok(HashMap::new());
     }
 
     // Get active variants
-    let active_variants: Vec<Arc<EvaluationVariant>> = params
-        .variant_status
+    let active_variants: Vec<Arc<EvaluationVariant>> = variant_status
         .iter()
         .filter(|(_, status)| **status == VariantStatus::Active)
         .map(|(name, _)| Arc::new(EvaluationVariant::Name(name.clone())))
@@ -439,14 +442,14 @@ pub async fn process_topk_batch(
 
     // Build params for shared process_batch
     let batch_params = ProcessBatchParams {
-        clients: params.clients,
-        function_configs: params.function_configs,
-        evaluation_config: params.evaluation_config,
-        evaluation_name: params.evaluation_name,
-        evaluation_run_id: params.evaluation_run_id,
-        dataset_name: params.dataset_name,
-        inference_cache: params.inference_cache,
-        semaphore: params.semaphore,
+        clients: topk_context.clients.clone(),
+        function_configs: topk_context.function_configs.clone(),
+        evaluation_config: topk_context.evaluation_config.clone(),
+        evaluation_name: topk_context.evaluation_name.clone(),
+        evaluation_run_id: topk_context.evaluation_run_id,
+        dataset_name: topk_context.dataset_name.clone(),
+        inference_cache: topk_context.inference_cache,
+        semaphore: topk_context.semaphore.clone(),
         cancellation_tokens,
     };
 
