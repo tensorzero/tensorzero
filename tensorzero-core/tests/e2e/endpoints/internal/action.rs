@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{
-    ActionInferenceParams, ActionInput, ActionInputInfo, ActionResponse, Client, ClientExt, Input,
+    ActionInput, ActionInputInfo, ActionResponse, Client, ClientExt, ClientInferenceParams, Input,
     InputMessage, InputMessageContent, Role, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
@@ -51,7 +51,7 @@ model = "action_test_model_{id}"
     // Create the action request
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::Inference(Box::new(ActionInferenceParams {
+        input: ActionInput::Inference(Box::new(ClientInferenceParams {
             function_name: Some(format!("historical_only_func_{id}")),
             input: Input {
                 messages: vec![InputMessage {
@@ -93,7 +93,7 @@ async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
 
     let params = ActionInputInfo {
         snapshot_hash: nonexistent_hash,
-        input: ActionInput::Inference(Box::new(ActionInferenceParams {
+        input: ActionInput::Inference(Box::new(ClientInferenceParams {
             function_name: Some("any_function".to_string()),
             input: Input {
                 messages: vec![InputMessage {
@@ -163,7 +163,7 @@ model = "action_test_model_{id}"
 
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::Inference(Box::new(ActionInferenceParams {
+        input: ActionInput::Inference(Box::new(ClientInferenceParams {
             function_name: Some(format!("stream_test_func_{id}")),
             stream: Some(true), // Request streaming
             input: Input {
