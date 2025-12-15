@@ -89,25 +89,6 @@ pub struct TopKStoppingResult {
     pub top_variants: Vec<String>,
 }
 
-/// Results from running the adaptive top-k evaluation.
-#[derive(Debug)]
-pub struct AdaptiveEvalStoppingResults {
-    /// Unique ID for this evaluation run
-    pub evaluation_run_id: Uuid,
-    /// Performance confidence sequences for each variant
-    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each variant
-    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each evaluator
-    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final status of each variant
-    pub variant_status: HashMap<String, VariantStatus>,
-    /// Why the evaluation stopped
-    pub stopping_reason: GlobalStoppingReason,
-    /// Number of datapoints processed
-    pub num_datapoints_processed: usize,
-}
-
 // ============================================================================
 // Scoring
 // ============================================================================
@@ -550,20 +531,6 @@ pub struct TopKTaskOutput {
     pub stopping_reason: GlobalStoppingReason,
     /// Number of datapoints processed
     pub num_datapoints_processed: usize,
-}
-
-impl From<AdaptiveEvalStoppingResults> for TopKTaskOutput {
-    fn from(results: AdaptiveEvalStoppingResults) -> Self {
-        Self {
-            evaluation_run_id: results.evaluation_run_id,
-            variant_status: results.variant_status,
-            variant_performance: results.variant_performance,
-            variant_failures: results.variant_failures,
-            evaluator_failures: results.evaluator_failures,
-            stopping_reason: results.stopping_reason,
-            num_datapoints_processed: results.num_datapoints_processed,
-        }
-    }
 }
 
 /// Durable step function to fetch and shuffle datapoint IDs.
