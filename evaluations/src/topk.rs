@@ -20,10 +20,14 @@ use tensorzero_core::endpoints::datasets::v1::types::GetDatapointsRequest;
 use tensorzero_core::evaluations::EvaluationConfig;
 use uuid::Uuid;
 
-use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
+use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
+use crate::evaluators::EvaluationResult;
 use crate::stopping::CancellationTokens;
 use crate::types::EvaluationVariant;
-use crate::{Clients, EvaluationFunctionConfigTable};
+use crate::{
+    BatchItemResult, Clients, EvaluationFunctionConfigTable, ProcessBatchParams,
+    collect_batch_result, process_batch,
+};
 
 /// Result of checking the top-k stopping condition.
 #[derive(Debug, Clone)]
@@ -188,8 +192,8 @@ pub enum VariantStatus {
 
 /// Trait for scoring functions that convert evaluator results to a single score.
 ///
-/// Implementations of this trait define how to aggregate results from multiple
-/// evaluators into a single performance score in [0, 1] for each variant.
+/// Implementations of this trait define how to aggregate results from multiple evaluators
+/// over a set of variants into a single performance score in [0, 1] for each variant.
 pub trait ScoringFunction: Send + Sync {
     /// Convert evaluation results to a single score in [0, 1].
     ///
@@ -198,7 +202,7 @@ pub trait ScoringFunction: Send + Sync {
     ///
     /// # Returns
     /// A score in [0, 1], or None if the score cannot be computed (e.g., missing evaluator results)
-    fn score(&self, evaluations: &crate::evaluators::EvaluationResult) -> Option<f64>;
+    fn score(&self, evaluations: &EvaluationResult) -> Option<f64>;
 }
 
 /// Update variant statistics and confidence sequences based on evaluation results.
@@ -226,14 +230,12 @@ pub trait ScoringFunction: Send + Sync {
 /// `Ok(())` on success, or an error if confidence sequence updates fail.
 pub fn compute_updates(
     variant_name: &str,
-    results: &[crate::BatchItemResult],
+    results: &[BatchItemResult],
     scoring_fn: &dyn ScoringFunction,
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
 ) -> Result<()> {
-    use crate::betting_confidence_sequences::update_betting_cs;
-
     // Collect observations for variant performance (scores from scoring function)
     let mut performance_observations: Vec<f64> = Vec::new();
 
@@ -245,7 +247,7 @@ pub fn compute_updates(
 
     for result in results {
         match result {
-            crate::BatchItemResult::Success(success) => {
+            BatchItemResult::Success(success) => {
                 // Variant didn't fail for this datapoint
                 failure_observations.push(0.0);
 
@@ -266,13 +268,13 @@ pub fn compute_updates(
                         .push(failure_value);
                 }
             }
-            crate::BatchItemResult::Error(_) => {
+            BatchItemResult::Error(_) => {
                 // Variant failed for this datapoint
                 failure_observations.push(1.0);
                 // Note: We don't update evaluator failures here since we don't have
                 // evaluation results - the failure occurred before evaluation
             }
-            crate::BatchItemResult::Cancelled => {
+            BatchItemResult::Cancelled => {
                 // Skip cancelled tasks - they don't count toward any statistics
                 continue;
             }
@@ -350,7 +352,7 @@ pub struct ProcessTopKBatchParams<'a> {
 /// Each `BatchItemResult` is either a `Success` with full evaluation data or an `Error` with failure info.
 pub async fn process_topk_batch(
     params: ProcessTopKBatchParams<'_>,
-) -> Result<HashMap<String, Vec<crate::BatchItemResult>>> {
+) -> Result<HashMap<String, Vec<BatchItemResult>>> {
     // Retrieve datapoints from ClickHouse
     let request = GetDatapointsRequest {
         ids: params.batch_ids.clone(),
@@ -384,7 +386,7 @@ pub async fn process_topk_batch(
     let cancellation_tokens = Arc::new(CancellationTokens::default());
 
     // Build params for shared process_batch
-    let batch_params = crate::ProcessBatchParams {
+    let batch_params = ProcessBatchParams {
         clients: params.clients,
         function_configs: params.function_configs,
         evaluation_config: params.evaluation_config,
@@ -397,24 +399,23 @@ pub async fn process_topk_batch(
     };
 
     // Call the shared process_batch from lib.rs
-    let (mut join_set, task_id_map) =
-        crate::process_batch(&batch_params, datapoints, &active_variants);
+    let (mut join_set, task_id_map) = process_batch(&batch_params, datapoints, &active_variants);
 
     // Collect results and group by variant
-    let mut results_by_variant: HashMap<String, Vec<crate::BatchItemResult>> = HashMap::new();
+    let mut results_by_variant: HashMap<String, Vec<BatchItemResult>> = HashMap::new();
 
     while let Some(result) = join_set.join_next_with_id().await {
-        let batch_result = crate::collect_batch_result(result, &task_id_map);
+        let batch_result = collect_batch_result(result, &task_id_map);
 
         // Get variant name for grouping
         let variant_name = match &batch_result {
-            crate::BatchItemResult::Success(success) => get_variant_name(&success.variant),
-            crate::BatchItemResult::Error(error) => error
+            BatchItemResult::Success(success) => get_variant_name(&success.variant),
+            BatchItemResult::Error(error) => error
                 .variant
                 .as_ref()
                 .map(|v| get_variant_name(v))
                 .unwrap_or_else(|| "unknown".to_string()),
-            crate::BatchItemResult::Cancelled => continue, // Skip cancelled tasks
+            BatchItemResult::Cancelled => continue, // Skip cancelled tasks
         };
 
         results_by_variant
@@ -438,6 +439,7 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DatapointVariantError;
     use crate::betting_confidence_sequences::{WealthProcessGridPoints, WealthProcesses};
 
     /// Helper to create a mock confidence sequence with specified bounds
@@ -972,7 +974,7 @@ mod tests {
     struct FirstEvaluatorScore;
 
     impl ScoringFunction for FirstEvaluatorScore {
-        fn score(&self, evaluations: &crate::evaluators::EvaluationResult) -> Option<f64> {
+        fn score(&self, evaluations: &EvaluationResult) -> Option<f64> {
             // Return the first Ok(Some(value)) we find, converted to f64
             for result in evaluations.values() {
                 if let Ok(Some(value)) = result
@@ -1043,10 +1045,7 @@ mod tests {
                 .collect();
 
         // Cancelled results should not affect any statistics
-        let results = vec![
-            crate::BatchItemResult::Cancelled,
-            crate::BatchItemResult::Cancelled,
-        ];
+        let results = vec![BatchItemResult::Cancelled, BatchItemResult::Cancelled];
 
         let result = compute_updates(
             "test_variant",
@@ -1083,12 +1082,12 @@ mod tests {
 
         // Only errors - this should update variant_failures only
         let results = vec![
-            crate::BatchItemResult::Error(crate::DatapointVariantError {
+            BatchItemResult::Error(DatapointVariantError {
                 datapoint_id: Uuid::now_v7(),
                 variant: None,
                 message: "test error 1".to_string(),
             }),
-            crate::BatchItemResult::Error(crate::DatapointVariantError {
+            BatchItemResult::Error(DatapointVariantError {
                 datapoint_id: Uuid::now_v7(),
                 variant: None,
                 message: "test error 2".to_string(),
@@ -1120,13 +1119,11 @@ mod tests {
         let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-        let results = vec![crate::BatchItemResult::Error(
-            crate::DatapointVariantError {
-                datapoint_id: Uuid::now_v7(),
-                variant: None,
-                message: "test error".to_string(),
-            },
-        )];
+        let results = vec![BatchItemResult::Error(DatapointVariantError {
+            datapoint_id: Uuid::now_v7(),
+            variant: None,
+            message: "test error".to_string(),
+        })];
 
         // Should not panic, just skip updates for missing variants
         let result = compute_updates(
