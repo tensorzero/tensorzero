@@ -69,7 +69,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .getByLabel("gpt4o_mini_initial_prompt")
           .getByText("gpt4o_mini_initial_prompt")
           .click();
-        await page.getByPlaceholder("Select model...").click();
+        await page.getByPlaceholder("Select model").click();
         await page.getByRole("option", { name: model }).click();
         await page
           .getByRole("button", { name: "Start Fine-tuning Job" })
@@ -111,7 +111,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page.getByPlaceholder("Select model...").click();
+    await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -156,7 +156,7 @@ model_name = "mock-inference-finetune-1234"
       .filter({ hasText: "Select a variant name" })
       .click();
     await page.getByLabel("honest_answer").getByText("honest_answer").click();
-    await page.getByPlaceholder("Select model...").click();
+    await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -229,7 +229,7 @@ test.describe("Error handling", () => {
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await modelInput.fill("error");
     // Wait for the options to load
@@ -261,7 +261,7 @@ test.describe("should expose configured providers", () => {
       const modelName = "test-name";
       const providerName = formatProvider(provider).name;
 
-      const modelInput = page.getByPlaceholder("Select model...");
+      const modelInput = page.getByPlaceholder("Select model");
       await modelInput.click();
       await modelInput.fill(modelName);
 
@@ -286,7 +286,7 @@ test.describe("should expose configured providers", () => {
 
     const modelName = "test-name";
 
-    const modelInput = page.getByPlaceholder("Select model...");
+    const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await modelInput.fill(modelName);
 
