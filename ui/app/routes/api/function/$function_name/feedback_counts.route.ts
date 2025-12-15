@@ -1,11 +1,8 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
-import { getInferenceTableName } from "~/utils/clickhouse/common";
-import {
-  queryMetricsWithFeedback,
-  type MetricsWithFeedbackData,
-} from "~/utils/clickhouse/feedback";
+import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({
   params,
@@ -13,7 +10,10 @@ export async function loader({
   const functionName = params.function_name;
 
   if (!functionName) {
-    return Response.json({ metrics: [] } as MetricsWithFeedbackData);
+    const emptyResponse: MetricsWithFeedbackResponse = {
+      metrics: [],
+    };
+    return Response.json(emptyResponse);
   }
 
   try {
@@ -24,12 +24,10 @@ export async function loader({
         status: 404,
       });
     }
-    const inferenceTable = getInferenceTableName(functionConfig);
 
-    const result = await queryMetricsWithFeedback({
-      function_name: functionName,
-      inference_table: inferenceTable,
-    });
+    const tensorZeroClient = getTensorZeroClient();
+    const result =
+      await tensorZeroClient.getFunctionMetricsWithFeedback(functionName);
     return Response.json(result);
   } catch (error) {
     logger.error("Error fetching metrics with feedback:", error);

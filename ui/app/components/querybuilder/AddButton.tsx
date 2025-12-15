@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 interface AddButtonProps {
   label: string;
   onClick: () => void;
+  ariaLabel?: string;
 }
 
 export default function AddButton({ label, onClick }: AddButtonProps) {

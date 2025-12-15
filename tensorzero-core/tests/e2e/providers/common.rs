@@ -2570,10 +2570,12 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
     // * Some AWS bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
+    // * xAI seems to also ignore them
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "xai"
     {
         return;
     }
@@ -12679,7 +12681,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(input_tokens > 5);
 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);

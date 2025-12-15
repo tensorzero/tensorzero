@@ -45,7 +45,7 @@ async function checkConfigHash(): Promise<void> {
     const gatewayHash = status.config_hash;
 
     if (gatewayHash !== configCache.config_hash) {
-      logger.info(
+      logger.debug(
         `Config hash changed from ${configCache.config_hash} to ${gatewayHash}, invalidating cache`,
       );
       configCache = undefined;
