@@ -72,7 +72,7 @@ export function DatasetCombobox({
     const count = getItemSuffix(item);
     if (!count) return null;
     return (
-      <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1.5 py-0.5 text-xs">
+      <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
         {count}
       </span>
     );

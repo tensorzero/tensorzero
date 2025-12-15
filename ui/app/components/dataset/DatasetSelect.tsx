@@ -15,6 +15,7 @@ import {
 } from "~/components/ui/command";
 import clsx from "clsx";
 import { ComboboxMenuItems } from "~/components/ui/combobox";
+import { formatCompactNumber } from "~/utils/chart";
 import {
   useDatasetOptions,
   getDatasetItemDataAttributes,
@@ -93,8 +94,8 @@ export function DatasetSelect({
                 {selectedDataset?.name ?? selected}
               </span>
               {selectedDataset && (
-                <span className="bg-bg-tertiary text-fg-tertiary ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs">
-                  {selectedDataset.count.toLocaleString()}
+                <span className="bg-bg-tertiary text-fg-tertiary ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
+                  {formatCompactNumber(selectedDataset.count)}
                 </span>
               )}
             </div>

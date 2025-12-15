@@ -42,6 +42,36 @@ export function formatDetailedNumber(value: number): string {
 }
 
 /**
+ * Format numbers with 3 significant digits and compact notation
+ * Examples: 1, 11, 111, 1.11k, 11.1k, 111k, 1.11M
+ */
+export function formatCompactNumber(value: number): string {
+  if (value === 0) return "0";
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (abs >= 1_000_000_000_000) {
+    const n = abs / 1_000_000_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}T`;
+  }
+  if (abs >= 1_000_000_000) {
+    const n = abs / 1_000_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}B`;
+  }
+  if (abs >= 1_000_000) {
+    const n = abs / 1_000_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}M`;
+  }
+  if (abs >= 1_000) {
+    const n = abs / 1_000;
+    return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}k`;
+  }
+
+  return `${sign}${Math.round(abs)}`;
+}
+
+/**
  * Helper to pad numbers with leading zeros
  */
 function pad(num: number, size: number = 2): string {

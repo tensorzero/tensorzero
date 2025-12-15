@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { Table, TablePlus, TableCheck } from "~/components/icons/Icons";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
+import { formatCompactNumber } from "~/utils/chart";
 
 export function getDatasetItemDataAttributes(item: string) {
   return { "data-dataset-name": item };
@@ -84,7 +85,8 @@ export function useDatasetOptions({
     (item: string | null) => {
       if (!item) return null;
       const dataset = datasetsByName.get(item);
-      return dataset?.count.toLocaleString();
+      if (!dataset) return null;
+      return formatCompactNumber(dataset.count);
     },
     [datasetsByName],
   );
