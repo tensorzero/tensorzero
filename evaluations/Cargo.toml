@@ -25,6 +25,7 @@ uuid = { workspace = true }
 futures = { workspace = true }
 indicatif = "0.18.2"
 durable = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
@@ -38,4 +39,4 @@ default = []
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests"]
 # Enable durable execution for top-k evaluations (requires postgres)
-durable = ["dep:durable"]
+durable = ["dep:durable", "dep:rand"]
