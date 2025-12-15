@@ -21,7 +21,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Input for the action endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ActionInputInfo {
     /// The snapshot hash identifying which config version to use.
     pub snapshot_hash: SnapshotHash,
@@ -31,7 +31,7 @@ pub struct ActionInputInfo {
 }
 
 /// The specific action type to execute.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ActionInput {
     Inference(Box<InferenceParams>),
@@ -39,7 +39,7 @@ pub enum ActionInput {
 }
 
 /// Response from the action endpoint.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ActionResponse {
     Inference(InferenceResponse),
@@ -55,7 +55,19 @@ pub async fn action_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<ActionInputInfo>,
 ) -> Result<Json<ActionResponse>, Error> {
-    let config = get_or_load_config(&app_state, &params.snapshot_hash).await?;
+    let response = action(&app_state, params).await?;
+    Ok(Json(response))
+}
+
+/// Core action execution logic (framework-agnostic).
+///
+/// Executes an inference or feedback action using a historical config snapshot.
+/// This function can be called directly from the Rust client without HTTP overhead.
+pub async fn action(
+    app_state: &AppStateData,
+    params: ActionInputInfo,
+) -> Result<ActionResponse, Error> {
+    let config = get_or_load_config(app_state, &params.snapshot_hash).await?;
 
     match params.input {
         ActionInput::Inference(inference_params) => {
@@ -78,9 +90,7 @@ pub async fn action_handler(
             .await?;
 
             match output {
-                InferenceOutput::NonStreaming(response) => {
-                    Ok(Json(ActionResponse::Inference(response)))
-                }
+                InferenceOutput::NonStreaming(response) => Ok(ActionResponse::Inference(response)),
                 InferenceOutput::Streaming(_) => {
                     // Should not happen since we checked stream=false above
                     Err(Error::new(ErrorDetails::InternalError {
@@ -100,7 +110,7 @@ pub async fn action_handler(
             );
 
             let response = feedback(snapshot_app_state, *feedback_params, None).await?;
-            Ok(Json(ActionResponse::Feedback(response)))
+            Ok(ActionResponse::Feedback(response))
         }
     }
 }

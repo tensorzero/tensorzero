@@ -71,6 +71,9 @@ pub use tensorzero_core::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
     InferenceResponseChunk, InferenceStream,
 };
+pub use tensorzero_core::endpoints::internal::action::{
+    ActionInput, ActionInputInfo, ActionResponse,
+};
 pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
@@ -462,6 +465,28 @@ pub trait ClientExt {
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
     // ================================================================
+    // Action operations
+    // ================================================================
+
+    /// Executes an action (inference or feedback) using a historical config snapshot.
+    ///
+    /// This allows replaying actions with the exact configuration that was used
+    /// at the time the snapshot was created.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The action parameters including the snapshot hash and action type.
+    ///
+    /// # Returns
+    ///
+    /// An `ActionResponse` containing either an inference or feedback response.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError>;
+
+    // ================================================================
     // Config access
     // ================================================================
     fn config(&self) -> Option<&Config>;
@@ -542,6 +567,36 @@ impl ClientExt for Client {
                 .health()
                 .await
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        }
+    }
+
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/action").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/action endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::internal::action::action(
+                        &gateway.handle.app_state,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
         }
     }
 
