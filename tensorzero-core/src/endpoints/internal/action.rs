@@ -22,7 +22,6 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Input for the action endpoint.
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ActionInputInfo {
     /// The snapshot hash identifying which config version to use.
     pub snapshot_hash: SnapshotHash,
