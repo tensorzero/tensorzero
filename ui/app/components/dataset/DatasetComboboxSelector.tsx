@@ -15,14 +15,14 @@ import {
   ComboboxHint,
 } from "~/components/ui/combobox";
 
-type DatasetComboboxSelectorProps = {
+interface DatasetComboboxSelectorProps {
   selected: string | null;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
   placeholder?: string;
   allowCreation?: boolean;
   disabled?: boolean;
-};
+}
 
 export function DatasetComboboxSelector({
   selected,
