@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetButtonSelector } from "~/components/dataset/DatasetButtonSelector";
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
 import { useReadOnly } from "~/context/read-only";
@@ -55,7 +55,7 @@ export function CloneDatapointButton({ datapoint }: CloneDatapointButtonProps) {
   };
 
   const datasetSelector = (
-    <DatasetSelector
+    <DatasetButtonSelector
       selected={selectedDataset}
       onSelect={handleDatasetSelect}
       label="Clone"

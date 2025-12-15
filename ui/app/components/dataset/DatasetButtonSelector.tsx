@@ -19,7 +19,7 @@ import clsx from "clsx";
 import { cn } from "~/utils/common";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 
-interface DatasetSelectorProps {
+type DatasetButtonSelectorProps = {
   selected?: string;
   onSelect: (dataset: string, isNew: boolean) => void;
   functionName?: string;
@@ -30,9 +30,9 @@ interface DatasetSelectorProps {
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
   disabled?: boolean;
-}
+};
 
-export function DatasetSelector({
+export function DatasetButtonSelector({
   selected,
   onSelect,
   functionName,
@@ -43,7 +43,7 @@ export function DatasetSelector({
   className,
   buttonProps,
   disabled = false,
-}: DatasetSelectorProps) {
+}: DatasetButtonSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 

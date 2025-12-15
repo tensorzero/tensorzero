@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { DatasetSelector } from "./DatasetSelector";
+import { DatasetButtonSelector } from "./DatasetButtonSelector";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useArgs } from "storybook/preview-api";
 
@@ -38,8 +38,8 @@ const mockDatasets = [
 ];
 
 const meta = {
-  title: "Dataset/DatasetSelector",
-  component: DatasetSelector,
+  title: "Dataset/DatasetButtonSelector",
+  component: DatasetButtonSelector,
   argTypes: {
     allowCreation: {
       control: "boolean",
@@ -59,7 +59,7 @@ const meta = {
     // Dummy onSelect to satisfy TypeScript - will be overridden in render
     onSelect: () => {},
   },
-} satisfies Meta<typeof DatasetSelector>;
+} satisfies Meta<typeof DatasetButtonSelector>;
 
 export default meta;
 
@@ -77,7 +77,7 @@ export const Default: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetButtonSelector
           {...args}
           selected={selected}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
@@ -99,7 +99,7 @@ export const EmptyDatasets: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetButtonSelector
           {...args}
           selected={selected}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
@@ -121,7 +121,7 @@ export const DisallowCreation: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetButtonSelector
           {...args}
           selected={selected}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
@@ -154,7 +154,7 @@ export const ManyDatasets: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetButtonSelector
           {...args}
           selected={selected}
           onSelect={(dataset) => updateArgs({ selected: dataset })}

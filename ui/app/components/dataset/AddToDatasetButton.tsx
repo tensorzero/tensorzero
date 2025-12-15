@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetButtonSelector } from "~/components/dataset/DatasetButtonSelector";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -101,7 +101,7 @@ export function AddToDatasetButton({
   };
 
   const datasetSelector = (
-    <DatasetSelector
+    <DatasetButtonSelector
       selected={selectedDataset}
       onSelect={(dataset) => {
         setSelectedDataset(dataset);
