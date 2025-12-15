@@ -52,7 +52,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
     // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
     // Test comment feedback on episode
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         internal: false,
@@ -60,8 +60,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
         metric_name: String::from("comment"),
         value: serde_json::to_value("good job!").unwrap(),
         tags: HashMap::from([(String::from("key"), Uuid::now_v7().to_string())]),
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -84,7 +83,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
     // Test comment feedback on episode
     let tag_value = Uuid::now_v7().to_string();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         metric_name: String::from("comment"),
         value: serde_json::to_value("good job!").unwrap(),
@@ -92,8 +91,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
         dryrun: None,
         internal: false,
         inference_id: None,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -299,7 +297,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -307,8 +305,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
         tags: HashMap::from([(String::from("key"), tag_value.clone())]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -332,7 +329,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on Inference
     let tag_value = Uuid::now_v7().to_string();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -340,8 +337,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
         tags: HashMap::from([(String::from("key"), tag_value.clone())]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -407,7 +403,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("demonstration"),
@@ -415,8 +411,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -434,7 +429,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -442,8 +437,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -470,7 +464,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -478,8 +472,7 @@ async fn e2e_test_demonstration_feedback_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -511,7 +504,7 @@ async fn e2e_test_demonstration_feedback_json() {
 
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on an inference
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -519,8 +512,7 @@ async fn e2e_test_demonstration_feedback_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -555,7 +547,7 @@ async fn e2e_test_demonstration_feedback_json() {
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("demonstration"),
@@ -563,8 +555,7 @@ async fn e2e_test_demonstration_feedback_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -582,7 +573,7 @@ async fn e2e_test_demonstration_feedback_json() {
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -590,8 +581,7 @@ async fn e2e_test_demonstration_feedback_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -648,7 +638,7 @@ async fn e2e_test_demonstration_feedback_llm_judge() {
 
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on an inference that requires the dynamic output schema
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -656,8 +646,7 @@ async fn e2e_test_demonstration_feedback_llm_judge() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -696,7 +685,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -704,8 +693,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -751,7 +739,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
 
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on an inference that requires the dynamic output schema
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -759,8 +747,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -795,7 +782,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("demonstration"),
@@ -803,8 +790,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -822,7 +808,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -830,8 +816,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -844,7 +829,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
 
     // Try a demonstration with a value that doesn't match the output schema
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -852,8 +837,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -871,7 +855,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -879,8 +863,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -912,7 +895,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on Inference (string shortcut)
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -920,8 +903,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -953,7 +935,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("demonstration"),
@@ -961,8 +943,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -980,7 +961,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     // Try a tool call demonstration
     // This should fail because the name is incorrect
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -988,8 +969,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1003,7 +983,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 
     // Try a tool call demonstration with correct name incorrect args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_temperature", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1011,8 +991,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1029,7 +1008,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 
     // Try a tool call demonstration with correct name and args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1037,8 +1016,7 @@ async fn e2e_test_demonstration_feedback_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1111,7 +1089,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 
     // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on Inference (string shortcut)
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1119,8 +1097,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1152,7 +1129,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("demonstration"),
@@ -1160,8 +1137,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1179,7 +1155,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     // Try a tool call demonstration
     // This should fail because the name is incorrect
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1187,8 +1163,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1202,7 +1177,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 
     // Try a tool call demonstration with the dynamic tool name and incorrect args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_humidity", "arguments": "tool_input"});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1210,8 +1185,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1228,7 +1202,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 
     // Try a tool call demonstration with the dynamic tool name and correct args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_humidity", "arguments": {"location": "Tokyo"}});
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("demonstration"),
@@ -1236,8 +1210,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1296,7 +1269,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("user_rating"),
@@ -1304,8 +1277,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::from([(String::from("key"), tag_value.clone())]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1326,7 +1298,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
     // Test Float feedback on episode
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("user_rating"),
@@ -1334,8 +1306,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::from([(String::from("key"), tag_value.clone())]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1398,7 +1369,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     );
 
     // Test boolean feedback on episode (should fail)
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("user_rating"),
@@ -1406,8 +1377,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1424,7 +1394,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
     // Test float feedback on inference (should fail)
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("user_rating"),
@@ -1432,8 +1402,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1450,7 +1419,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("brevity_score"),
@@ -1458,8 +1427,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1495,7 +1463,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
     sleep(Duration::from_millis(5500)).await;
 
     // Test float feedback on different metric for inference.
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("brevity_score"),
@@ -1503,8 +1471,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1634,7 +1601,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     let tag_value = Uuid::now_v7().to_string();
     let tag_value2 = Uuid::now_v7().to_string();
     // Running without valid inference_id. Should fail.
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("task_success"),
@@ -1645,8 +1612,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         ]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1669,7 +1635,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
     // No sleeping, we should throttle in the gateway
 
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("task_success"),
@@ -1680,8 +1646,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         ]),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1756,7 +1721,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("task_success"),
@@ -1764,8 +1729,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1781,7 +1745,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     );
 
     // Try string feedback (should fail)
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("task_success"),
@@ -1789,8 +1753,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1807,7 +1770,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
     // Try episode-level feedback on different metric with invalid episode id.
     let episode_id = Uuid::now_v7();
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("goal_achieved"),
@@ -1815,8 +1778,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -1846,7 +1808,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
 
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         episode_id: Some(episode_id),
         inference_id: None,
         metric_name: String::from("goal_achieved"),
@@ -1854,8 +1816,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         tags: HashMap::new(),
         dryrun: None,
         internal: false,
-    })
-    .unwrap();
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -2051,7 +2012,7 @@ async fn test_feedback_internal_tag_auto_injection() {
 
     // Now send feedback with internal=true and a custom tag
     // We should NOT manually set tensorzero::internal - it should be auto-injected
-    let payload = serde_json::to_value(Params {
+    let payload = Params {
         inference_id: Some(inference_id),
         episode_id: None,
         metric_name: String::from("task_success"),
@@ -2059,8 +2020,7 @@ async fn test_feedback_internal_tag_auto_injection() {
         tags: HashMap::from([(String::from("custom_tag"), String::from("custom_value"))]),
         dryrun: None,
         internal: true,
-    })
-    .unwrap();
+    };
 
     let response = client
         .post(get_gateway_endpoint("/feedback"))
