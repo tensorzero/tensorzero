@@ -133,11 +133,13 @@ const ComparisonOperatorSelect = memo(function ComparisonOperatorSelect<
 interface BooleanValueSelectProps {
   value: boolean;
   onChange: (value: boolean) => void;
+  ariaLabel?: string;
 }
 
 const BooleanValueSelect = memo(function BooleanValueSelect({
   value,
   onChange,
+  ariaLabel,
 }: BooleanValueSelectProps) {
   return (
     <div className="w-48">
@@ -145,7 +147,7 @@ const BooleanValueSelect = memo(function BooleanValueSelect({
         onValueChange={(val) => onChange(val === "true")}
         value={value.toString()}
       >
-        <SelectTrigger>
+        <SelectTrigger aria-label={ariaLabel}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -341,11 +343,50 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
         <BooleanValueSelect
           value={filter.value}
           onChange={(val) => onChange({ ...filter, value: val })}
+          ariaLabel="Boolean metric value"
         />
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
           label="Delete metric filter"
+          icon="x"
+        />
+      </div>
+    </div>
+  );
+});
+
+export interface DemonstrationFilterRowProps {
+  filter: InferenceFilter & { type: "demonstration_feedback" };
+  onChange: (newFilter: InferenceFilter | undefined) => void;
+}
+
+export const DemonstrationFilterRow = memo(function DemonstrationFilterRow({
+  filter,
+  onChange,
+}: DemonstrationFilterRowProps) {
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="text-fg-secondary text-sm font-medium">
+            Inference has demonstration
+          </span>
+        </div>
+
+        <div className="text-fg-secondary flex w-14 items-center justify-center text-sm">
+          is
+        </div>
+
+        <BooleanValueSelect
+          value={filter.has_demonstration}
+          onChange={(val) => onChange({ ...filter, has_demonstration: val })}
+          ariaLabel="Inference has demonstration"
+        />
+
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          label="Delete demonstration filter"
           icon="x"
         />
       </div>

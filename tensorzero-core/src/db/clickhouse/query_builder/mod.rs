@@ -253,7 +253,7 @@ impl InferenceFilter {
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
             InferenceFilter::DemonstrationFeedback(demo_filter) => {
-                let operator = if demo_filter.has_demonstration_feedback {
+                let operator = if demo_filter.has_demonstration {
                     "IN"
                 } else {
                     "NOT IN"
@@ -791,7 +791,7 @@ FORMAT JSONEachRow";
     async fn test_demonstration_feedback_filter_has_feedback() {
         let config = get_e2e_config().await;
         let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-            has_demonstration_feedback: true,
+            has_demonstration: true,
         });
         let opts = ListInferencesParams {
             function_name: Some("extract_entities"),
@@ -847,7 +847,7 @@ FORMAT JSONEachRow";
     async fn test_demonstration_feedback_filter_no_feedback() {
         let config = get_e2e_config().await;
         let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
-            has_demonstration_feedback: false,
+            has_demonstration: false,
         });
         let opts = ListInferencesParams {
             function_name: Some("extract_entities"),

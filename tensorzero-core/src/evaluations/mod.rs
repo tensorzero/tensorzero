@@ -290,10 +290,10 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInferenceEvaluationConfig {
-    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
-    function_name: String,
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
+    pub function_name: String,
     #[serde(default)]
-    description: Option<String>,
+    pub description: Option<String>,
 }
 
 /// Deprecated: Use `UninitializedInferenceEvaluationConfig` instead
@@ -383,7 +383,7 @@ impl UninitializedInferenceEvaluationConfig {
 #[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum UninitializedEvaluatorConfig {
+pub enum UninitializedEvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
@@ -391,18 +391,18 @@ enum UninitializedEvaluatorConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeConfig {
+pub struct UninitializedLLMJudgeConfig {
     #[serde(default)]
-    input_format: LLMJudgeInputFormat,
-    variants: HashMap<String, UninitializedLLMJudgeVariantInfo>,
-    output_type: LLMJudgeOutputType,
-    optimize: LLMJudgeOptimize,
+    pub input_format: LLMJudgeInputFormat,
+    pub variants: HashMap<String, UninitializedLLMJudgeVariantInfo>,
+    pub output_type: LLMJudgeOutputType,
+    pub optimize: LLMJudgeOptimize,
     #[serde(default)]
-    include: LLMJudgeIncludeConfig,
+    pub include: LLMJudgeIncludeConfig,
     #[serde(default)]
-    cutoff: Option<f32>,
+    pub cutoff: Option<f32>,
     #[serde(default)]
-    description: Option<String>,
+    pub description: Option<String>,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -563,16 +563,16 @@ impl UninitializedEvaluatorConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct UninitializedLLMJudgeVariantInfo {
+pub struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
-    inner: UninitializedLLMJudgeVariantConfig,
-    timeouts: Option<TimeoutsConfig>,
+    pub inner: UninitializedLLMJudgeVariantConfig,
+    pub timeouts: Option<TimeoutsConfig>,
 }
 
 #[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum UninitializedLLMJudgeVariantConfig {
+pub enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
@@ -586,33 +586,33 @@ enum UninitializedLLMJudgeVariantConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeChatCompletionVariantConfig {
+pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
-    active: Option<bool>,
-    model: Arc<str>,
-    system_instructions: ResolvedTomlPathData,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
-    max_tokens: Option<u32>,
-    presence_penalty: Option<f32>,
-    frequency_penalty: Option<f32>,
-    seed: Option<u32>,
-    json_mode: JsonMode, // This is a JSON function
-    stop_sequences: Option<Vec<String>>,
+    pub active: Option<bool>,
+    pub model: Arc<str>,
+    pub system_instructions: ResolvedTomlPathData,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub seed: Option<u32>,
+    pub json_mode: JsonMode, // This is a JSON function
+    pub stop_sequences: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<String>,
+    pub reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    service_tier: Option<ServiceTier>,
+    pub service_tier: Option<ServiceTier>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    thinking_budget_tokens: Option<i32>,
+    pub thinking_budget_tokens: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    verbosity: Option<String>,
+    pub verbosity: Option<String>,
     #[serde(default)]
-    retries: RetryConfig,
+    pub retries: RetryConfig,
     #[serde(default)]
-    extra_body: Option<ExtraBodyConfig>,
+    pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
-    extra_headers: Option<ExtraHeadersConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 /// Converts a chat completion judge variant config to a chat completion config.
@@ -694,58 +694,58 @@ fn default_timeout() -> f64 {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeBestOfNVariantConfig {
+pub struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
-    active: Option<bool>,
+    pub active: Option<bool>,
     #[serde(default = "default_timeout")]
-    timeout_s: f64,
+    pub timeout_s: f64,
     #[serde(default)]
-    candidates: Vec<String>,
-    evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
+    pub candidates: Vec<String>,
+    pub evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeMixtureOfNVariantConfig {
+pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
-    active: Option<bool>,
+    pub active: Option<bool>,
     #[serde(default = "default_timeout")]
-    timeout_s: f64,
+    pub timeout_s: f64,
     #[serde(default)]
-    candidates: Vec<String>,
-    fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
+    pub candidates: Vec<String>,
+    pub fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeDiclVariantConfig {
+pub struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
-    active: Option<bool>,
-    embedding_model: String,
-    k: u32, // k as in k-nearest neighbors
-    model: String,
-    system_instructions: Option<ResolvedTomlPathData>,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
-    presence_penalty: Option<f32>,
-    frequency_penalty: Option<f32>,
-    max_tokens: Option<u32>,
-    seed: Option<u32>,
-    json_mode: Option<JsonMode>,
-    stop_sequences: Option<Vec<String>>,
+    pub active: Option<bool>,
+    pub embedding_model: String,
+    pub k: u32, // k as in k-nearest neighbors
+    pub model: String,
+    pub system_instructions: Option<ResolvedTomlPathData>,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+    pub json_mode: Option<JsonMode>,
+    pub stop_sequences: Option<Vec<String>>,
     #[serde(default)]
-    extra_body: Option<ExtraBodyConfig>,
+    pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
-    retries: RetryConfig,
+    pub retries: RetryConfig,
     #[serde(default)]
-    extra_headers: Option<ExtraHeadersConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
+pub struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
-    inner: UninitializedLLMJudgeChatCompletionVariantConfig,
+    pub inner: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
 fn get_template_path(
