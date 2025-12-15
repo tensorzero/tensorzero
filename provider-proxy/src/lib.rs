@@ -287,7 +287,7 @@ async fn check_cache<
                             tokio::task::block_in_place(move || {
                                 // Run this synchronously, so that we ensure that the file is written to disk
                                 // before we send a response to the client.
-                                // This ensures that any retires from the caller (e.g. tensorzero e2e tests)
+                                // This ensures that any retries from the caller (e.g. tensorzero e2e tests)
                                 // will happen after the first response was fully written to disk,
                                 // ensuring that newer retries will overwrite the response from older retries on disk.
                                 if let Err(e) = save_cache_body(path, parts, body) {
