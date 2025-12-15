@@ -11,16 +11,13 @@
 //! NOTE: This module is work in progress.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anyhow::Result;
-use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::evaluations::EvaluationConfig;
 use uuid::Uuid;
 
+use crate::BatchItemResult;
 use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
 use crate::evaluators::EvaluationResult;
-use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 
 // ============================================================================
 // Core Types
@@ -370,30 +367,6 @@ pub fn check_topk(
     epsilon: Option<f64>,
 ) -> anyhow::Result<TopKStoppingResult> {
     check_topk_stopping(variant_performance, k, k, epsilon)
-}
-
-/// Shared context for top-k evaluation that remains constant across batches.
-///
-/// This struct holds configuration and client references that don't change
-/// during the evaluation run. Per-batch parameters like `batch_ids` and
-/// `variant_status` are passed separately to `process_topk_batch`.
-pub struct TopKContext {
-    /// Clients for inference and database access
-    pub clients: Arc<Clients>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Name of the evaluation
-    pub evaluation_name: Arc<String>,
-    /// Evaluation run ID for tagging
-    pub evaluation_run_id: Uuid,
-    /// Dataset name for tagging
-    pub dataset_name: Arc<String>,
-    /// Cache mode for inference
-    pub inference_cache: CacheEnabledMode,
-    /// Semaphore for concurrency control
-    pub semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 #[cfg(test)]
