@@ -158,6 +158,65 @@ pub fn check_topk(
     check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
+// ============================================================================
+// Top-K Orchestrator Types and Functions
+// ============================================================================
+
+/// Status of a variant in the top-k evaluation process.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariantStatus {
+    /// Still running evals on this variant
+    Active,
+    /// Not running evals; variant is confidently within top k_min
+    Include,
+    /// Not running evals; variant is confidently outside the top k_max
+    Exclude,
+    /// Not running evals; variant failure rate is confidently >= failure threshold
+    Failed,
+}
+
+/// Result of evaluating a single datapoint for a variant.
+#[derive(Debug)]
+pub struct DatapointEvaluationResult {
+    /// The datapoint ID
+    pub datapoint_id: uuid::Uuid,
+    /// The variant name
+    pub variant_name: String,
+    /// Evaluation results keyed by evaluator name (None if inference failed)
+    pub evaluations: Option<crate::evaluators::EvaluationResult>,
+    /// Error message if inference or evaluation failed
+    pub error: Option<String>,
+}
+
+/// Update variant statistics and confidence sequences based on evaluation results.
+///
+/// This function updates:
+/// - `variant_performance`: Mean performance confidence sequences for each variant
+/// - `variant_failures`: Failure rate confidence sequences for each variant
+/// - `evaluator_failures`: Per-evaluator failure rate confidence sequences
+///
+/// # Arguments
+/// * `variant_name` - Name of the variant being updated
+/// * `results` - Evaluation results for the datapoints processed
+/// * `variant_performance` - Map to update with performance statistics
+/// * `variant_failures` - Map to update with variant failure rates
+/// * `evaluator_failures` - Map to update with evaluator failure rates
+#[expect(unused_variables)]
+pub fn compute_updates(
+    variant_name: &str,
+    results: &[DatapointEvaluationResult],
+    variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
+    evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
+) {
+    // TODO: Implement compute_updates
+    // This will:
+    // 1. Extract scores from evaluation results using a scoring function
+    // 2. Update the betting confidence sequences for variant performance
+    // 3. Track variant failure rates (inference failures)
+    // 4. Track per-evaluator failure rates
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
