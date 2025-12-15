@@ -190,19 +190,40 @@ pub enum VariantStatus {
     Failed,
 }
 
-/// Trait for scoring functions that convert evaluator results to a single score.
+/// Trait for scoring functions that compare variants on a single datapoint.
 ///
-/// Implementations of this trait define how to aggregate results from multiple evaluators
-/// over a set of variants into a single performance score in [0, 1] for each variant.
+/// A scoring function takes an (implicit) (m × r) matrix of evaluator results for a single datapoint
+/// (where m is the number of variants and r is the number of evaluators) and produces an
+/// m-vector of scores, one per variant. This enables cross-variant comparisons such as:
+/// - Ranking variants by how many evaluators they perform best on
+/// - Computing relative performance vs. the best variant on each evaluator
+/// - Applying tournament-style scoring across evaluators
+///
+/// The matrix is represented as references to avoid copying:
+/// - Rows (variants) are keyed by variant name in the outer `HashMap`
+/// - Columns (evaluators) are keyed by evaluator name in each `EvaluationResult`
+///
+/// Implementations must gracefully handle:
+/// - **Missing variants**: Some variants may not have results for this datapoint
+/// - **Evaluator failures**: Individual evaluators may fail (`Err(...)` in `EvaluationResult`)
+/// - **Missing evaluator results**: Some (variant, evaluator) cells may be `Ok(None)`
+///
+/// Common implementations might:
+/// - Extract a single evaluator's score directly (no cross-variant comparison)
+/// - Rank variants by performance on a single evaluator, then normalize ranks
+/// - Count how many evaluators each variant "wins" on, normalized to [0, 1]
 pub trait ScoringFunction: Send + Sync {
-    /// Convert evaluation results to a single score in [0, 1].
+    /// Compute scores for each variant from a single datapoint's evaluation results.
     ///
     /// # Arguments
-    /// * `evaluations` - Results from all evaluators for a single (datapoint, variant) pair
+    /// * `evaluations` - An (m × r) matrix for one datapoint: variant name → &EvaluationResult.
+    ///   Each `EvaluationResult` is a `HashMap<String, Result<Option<Value>>>` mapping
+    ///   evaluator name to result, providing the column alignment.
     ///
     /// # Returns
-    /// A score in [0, 1], or None if the score cannot be computed (e.g., missing evaluator results)
-    fn score(&self, evaluations: &EvaluationResult) -> Option<f64>;
+    /// A map from variant name to score in [0, 1]. Variants for which a score cannot be
+    /// computed (e.g., all evaluators failed) should be omitted from the result.
+    fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64>;
 }
 
 /// Update variant statistics and confidence sequences based on evaluation results.
@@ -212,16 +233,16 @@ pub trait ScoringFunction: Send + Sync {
 /// - `variant_failures`: Failure rate confidence sequences for each variant
 /// - `evaluator_failures`: Per-evaluator failure rate confidence sequences
 ///
-/// For variant performance, scores are computed using the provided scoring function.
+/// For variant performance, scores are computed using the provided scoring function,
+/// which compares variants across evaluators for each datapoint.
 /// For variant failures, each `Error` result is counted as a failure (1.0) and each
 /// `Success` is counted as a non-failure (0.0).
 /// For evaluator failures, each evaluator error within a `Success` result is counted
 /// as a failure (1.0) for that specific evaluator.
 ///
 /// # Arguments
-/// * `variant_name` - Name of the variant being updated
-/// * `results` - Batch results (successes and errors) for the datapoints processed
-/// * `scoring_fn` - Function to convert evaluation results to a single score in [0, 1]
+/// * `results_by_variant` - Batch results grouped by variant name
+/// * `scoring_fn` - Function to convert per-datapoint evaluation matrices to scores
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
 /// * `evaluator_failures` - Map to update with evaluator failure rates
@@ -229,72 +250,114 @@ pub trait ScoringFunction: Send + Sync {
 /// # Returns
 /// `Ok(())` on success, or an error if confidence sequence updates fail.
 pub fn compute_updates(
-    variant_name: &str,
-    results: &[BatchItemResult],
+    results_by_variant: &HashMap<String, Vec<BatchItemResult>>,
     scoring_fn: &dyn ScoringFunction,
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
 ) -> Result<()> {
-    // Collect observations for variant performance (scores from scoring function)
-    let mut performance_observations: Vec<f64> = Vec::new();
+    // Collect observations per variant for performance scores
+    let mut performance_observations: HashMap<String, Vec<f64>> = HashMap::new();
 
-    // Collect observations for variant failures (1.0 = failure, 0.0 = success)
-    let mut failure_observations: Vec<f64> = Vec::new();
+    // Collect observations per variant for failure rates (1.0 = failure, 0.0 = success)
+    let mut failure_observations: HashMap<String, Vec<f64>> = HashMap::new();
 
     // Collect observations for each evaluator's failure rate
     let mut evaluator_failure_observations: HashMap<String, Vec<f64>> = HashMap::new();
 
-    for result in results {
-        match result {
-            BatchItemResult::Success(success) => {
-                // Variant didn't fail for this datapoint
-                failure_observations.push(0.0);
+    // Group successful results by datapoint ID for scoring
+    // datapoint_id -> (variant_name -> &EvaluationResult)
+    let mut results_by_datapoint: HashMap<Uuid, HashMap<String, &EvaluationResult>> =
+        HashMap::new();
 
-                // Compute performance score using the scoring function
-                if let Some(score) = scoring_fn.score(&success.evaluation_result) {
-                    performance_observations.push(score);
-                }
-
-                // Check each evaluator for errors
-                for (evaluator_name, eval_result) in &success.evaluation_result {
-                    let failure_value = match eval_result {
-                        Ok(_) => 0.0,  // Evaluator succeeded
-                        Err(_) => 1.0, // Evaluator failed
-                    };
-                    evaluator_failure_observations
-                        .entry(evaluator_name.clone())
+    // First pass: collect failure observations, evaluator failures, and group by datapoint
+    for (variant_name, results) in results_by_variant {
+        for result in results {
+            match result {
+                BatchItemResult::Success(success) => {
+                    // Variant didn't fail for this datapoint
+                    failure_observations
+                        .entry(variant_name.clone())
                         .or_default()
-                        .push(failure_value);
+                        .push(0.0);
+
+                    // Check each evaluator for errors
+                    for (evaluator_name, eval_result) in &success.evaluation_result {
+                        let failure_value = match eval_result {
+                            Ok(_) => 0.0,  // Evaluator succeeded
+                            Err(_) => 1.0, // Evaluator failed
+                        };
+                        evaluator_failure_observations
+                            .entry(evaluator_name.clone())
+                            .or_default()
+                            .push(failure_value);
+                    }
+
+                    // Group by datapoint ID for scoring
+                    let datapoint_id = success.datapoint.id();
+                    results_by_datapoint
+                        .entry(datapoint_id)
+                        .or_default()
+                        .insert(variant_name.clone(), &success.evaluation_result);
                 }
-            }
-            BatchItemResult::Error(_) => {
-                // Variant failed for this datapoint
-                failure_observations.push(1.0);
-                // Note: We don't update evaluator failures here since we don't have
-                // evaluation results - the failure occurred before evaluation
-            }
-            BatchItemResult::Cancelled => {
-                // Skip cancelled tasks - they don't count toward any statistics
-                continue;
+                BatchItemResult::Error(error) => {
+                    // Variant failed for this datapoint
+                    failure_observations
+                        .entry(variant_name.clone())
+                        .or_default()
+                        .push(1.0);
+                    // Note: We don't update evaluator failures here since we don't have
+                    // evaluation results - the failure occurred before evaluation
+                    // Also don't add to results_by_datapoint since there's no evaluation data
+                    let _ = error; // Silence unused warning
+                }
+                BatchItemResult::Cancelled => {
+                    // Skip cancelled tasks - they don't count toward any statistics
+                    continue;
+                }
             }
         }
     }
 
-    // Update variant performance confidence sequence
-    if !performance_observations.is_empty()
-        && let Some(cs) = variant_performance.remove(variant_name)
-    {
-        let updated = update_betting_cs(cs, performance_observations, None)?;
-        variant_performance.insert(variant_name.to_string(), updated);
+    // Second pass: compute performance scores for each datapoint using the scoring function
+    for evaluations in results_by_datapoint.values() {
+        // Skip if no variants have results for this datapoint
+        if evaluations.is_empty() {
+            continue;
+        }
+
+        // Compute scores for all variants on this datapoint
+        let scores = scoring_fn.score(evaluations);
+
+        // Collect the scores per variant
+        for (variant_name, score) in scores {
+            performance_observations
+                .entry(variant_name)
+                .or_default()
+                .push(score);
+        }
     }
 
-    // Update variant failures confidence sequence
-    if !failure_observations.is_empty()
-        && let Some(cs) = variant_failures.remove(variant_name)
-    {
-        let updated = update_betting_cs(cs, failure_observations, None)?;
-        variant_failures.insert(variant_name.to_string(), updated);
+    // Update variant performance confidence sequences
+    for (variant_name, observations) in performance_observations {
+        if observations.is_empty() {
+            continue;
+        }
+        if let Some(cs) = variant_performance.remove(&variant_name) {
+            let updated = update_betting_cs(cs, observations, None)?;
+            variant_performance.insert(variant_name, updated);
+        }
+    }
+
+    // Update variant failures confidence sequences
+    for (variant_name, observations) in failure_observations {
+        if observations.is_empty() {
+            continue;
+        }
+        if let Some(cs) = variant_failures.remove(&variant_name) {
+            let updated = update_betting_cs(cs, observations, None)?;
+            variant_failures.insert(variant_name, updated);
+        }
     }
 
     // Update evaluator failures confidence sequences
@@ -970,20 +1033,24 @@ mod tests {
         }
     }
 
-    /// A simple scoring function that returns the first evaluator's value as the score
+    /// A simple scoring function that extracts each variant's first evaluator value as its score
     struct FirstEvaluatorScore;
 
     impl ScoringFunction for FirstEvaluatorScore {
-        fn score(&self, evaluations: &EvaluationResult) -> Option<f64> {
-            // Return the first Ok(Some(value)) we find, converted to f64
-            for result in evaluations.values() {
-                if let Ok(Some(value)) = result
-                    && let Some(num) = value.as_f64()
-                {
-                    return Some(num);
+        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+            let mut scores = HashMap::new();
+            for (variant_name, eval_result) in evaluations {
+                // Return the first Ok(Some(value)) we find, converted to f64
+                for result in eval_result.values() {
+                    if let Ok(Some(value)) = result
+                        && let Some(num) = value.as_f64()
+                    {
+                        scores.insert(variant_name.clone(), num);
+                        break;
+                    }
                 }
             }
-            None
+            scores
         }
     }
 
@@ -1008,9 +1075,9 @@ mod tests {
                 .collect();
 
         // Empty results should not change any confidence sequences
+        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = HashMap::new();
         let result = compute_updates(
-            "test_variant",
-            &[],
+            &results_by_variant,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1045,11 +1112,15 @@ mod tests {
                 .collect();
 
         // Cancelled results should not affect any statistics
-        let results = vec![BatchItemResult::Cancelled, BatchItemResult::Cancelled];
+        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
+            "test_variant".to_string(),
+            vec![BatchItemResult::Cancelled, BatchItemResult::Cancelled],
+        )]
+        .into_iter()
+        .collect();
 
         let result = compute_updates(
-            "test_variant",
-            &results,
+            &results_by_variant,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1081,22 +1152,26 @@ mod tests {
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
         // Only errors - this should update variant_failures only
-        let results = vec![
-            BatchItemResult::Error(DatapointVariantError {
-                datapoint_id: Uuid::now_v7(),
-                variant: None,
-                message: "test error 1".to_string(),
-            }),
-            BatchItemResult::Error(DatapointVariantError {
-                datapoint_id: Uuid::now_v7(),
-                variant: None,
-                message: "test error 2".to_string(),
-            }),
-        ];
+        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
+            "test_variant".to_string(),
+            vec![
+                BatchItemResult::Error(DatapointVariantError {
+                    datapoint_id: Uuid::now_v7(),
+                    variant: None,
+                    message: "test error 1".to_string(),
+                }),
+                BatchItemResult::Error(DatapointVariantError {
+                    datapoint_id: Uuid::now_v7(),
+                    variant: None,
+                    message: "test error 2".to_string(),
+                }),
+            ],
+        )]
+        .into_iter()
+        .collect();
 
         let result = compute_updates(
-            "test_variant",
-            &results,
+            &results_by_variant,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1113,22 +1188,26 @@ mod tests {
     #[test]
     fn test_compute_updates_missing_variant_in_map() {
         let scoring_fn = FirstEvaluatorScore;
-        // Don't include "test_variant" in any maps - should handle gracefully
+        // Don't include "test_variant" in confidence sequence maps - should handle gracefully
         let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
             HashMap::new();
         let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-        let results = vec![BatchItemResult::Error(DatapointVariantError {
-            datapoint_id: Uuid::now_v7(),
-            variant: None,
-            message: "test error".to_string(),
-        })];
+        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
+            "test_variant".to_string(),
+            vec![BatchItemResult::Error(DatapointVariantError {
+                datapoint_id: Uuid::now_v7(),
+                variant: None,
+                message: "test error".to_string(),
+            })],
+        )]
+        .into_iter()
+        .collect();
 
         // Should not panic, just skip updates for missing variants
         let result = compute_updates(
-            "test_variant",
-            &results,
+            &results_by_variant,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
