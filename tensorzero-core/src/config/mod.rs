@@ -1743,36 +1743,36 @@ pub struct UninitializedSchemas {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
-    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    pub(super) system_schema: Option<ResolvedTomlPathData>,
-    pub(super) user_schema: Option<ResolvedTomlPathData>,
-    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
+    pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub system_schema: Option<ResolvedTomlPathData>,
+    pub user_schema: Option<ResolvedTomlPathData>,
+    pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    pub(super) schemas: UninitializedSchemas,
+    pub schemas: UninitializedSchemas,
     #[serde(default)]
-    pub(super) tools: Vec<String>, // tool names
+    pub tools: Vec<String>, // tool names
     #[serde(default)]
-    pub(super) tool_choice: ToolChoice,
+    pub tool_choice: ToolChoice,
     #[serde(default)]
-    pub(super) parallel_tool_calls: Option<bool>,
+    pub parallel_tool_calls: Option<bool>,
     #[serde(default)]
-    pub(super) description: Option<String>,
-    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
+    pub description: Option<String>,
+    pub experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
-    pub(super) variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    pub(super) system_schema: Option<ResolvedTomlPathData>,
-    pub(super) user_schema: Option<ResolvedTomlPathData>,
-    pub(super) assistant_schema: Option<ResolvedTomlPathData>,
+    pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
+    pub system_schema: Option<ResolvedTomlPathData>,
+    pub user_schema: Option<ResolvedTomlPathData>,
+    pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
-    pub(super) schemas: UninitializedSchemas,
-    pub(super) output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
+    pub schemas: UninitializedSchemas,
+    pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
-    pub(super) description: Option<String>,
-    pub(super) experimentation: Option<UninitializedExperimentationConfig>,
+    pub description: Option<String>,
+    pub experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
