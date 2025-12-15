@@ -343,6 +343,10 @@ pub fn compute_updates(
             let scores = scoring_fn.score(&evaluations_for_scoring);
 
             for (variant_name, score) in scores {
+                debug_assert!(
+                    (0.0..=1.0).contains(&score),
+                    "ScoringFunction returned score {score} for variant {variant_name}, but scores must be in [0, 1]"
+                );
                 performance_observations
                     .entry(variant_name)
                     .or_default()
