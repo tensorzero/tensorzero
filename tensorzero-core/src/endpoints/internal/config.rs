@@ -1,6 +1,7 @@
 //! Config snapshot endpoints.
 //!
-//! These endpoints allow retrieving config snapshots by hash, or the live config.
+//! These endpoints allow retrieving config snapshots by hash, or the live config,
+//! and writing new config snapshots.
 
 use std::collections::HashMap;
 
@@ -11,9 +12,10 @@ use tracing::instrument;
 
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::stored::StoredConfig;
+use crate::config::write_config_snapshot;
 use crate::db::ConfigQueries;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Response containing a config snapshot.
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,4 +79,46 @@ pub async fn get_config_by_hash_handler(
         .await?;
 
     Ok(Json(GetConfigResponse::from_snapshot(snapshot)))
+}
+
+/// Request body for writing a config snapshot.
+#[derive(Debug, Deserialize)]
+pub struct WriteConfigRequest {
+    /// The config to write.
+    pub config: StoredConfig,
+    /// Templates that should be stored with the config.
+    #[serde(default)]
+    pub extra_templates: HashMap<String, String>,
+    /// User-defined tags for categorizing this config snapshot.
+    /// Tags are merged with any existing tags for the same config hash.
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
+}
+
+/// Response from writing a config snapshot.
+#[derive(Debug, Serialize)]
+pub struct WriteConfigResponse {
+    /// The hash identifying this config version.
+    pub hash: String,
+}
+
+/// Handler for `POST /internal/config`
+///
+/// Writes a config snapshot to the database and returns its hash.
+/// If a config with the same hash already exists, tags are merged
+/// (new tags override existing keys) and created_at is preserved.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "config.write", skip_all)]
+pub async fn write_config_handler(
+    State(app_state): AppState,
+    StructuredJson(request): StructuredJson<WriteConfigRequest>,
+) -> Result<Json<WriteConfigResponse>, Error> {
+    let snapshot =
+        ConfigSnapshot::from_stored_config(request.config, request.extra_templates, request.tags)?;
+
+    let hash = snapshot.hash.to_string();
+
+    write_config_snapshot(&app_state.clickhouse_connection_info, snapshot).await?;
+
+    Ok(Json(WriteConfigResponse { hash }))
 }

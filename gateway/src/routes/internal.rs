@@ -102,7 +102,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         // Config snapshot endpoints
         .route(
             "/internal/config",
-            get(endpoints::internal::config::get_live_config_handler),
+            get(endpoints::internal::config::get_live_config_handler)
+                .post(endpoints::internal::config::write_config_handler),
         )
         .route(
             "/internal/config/{hash}",
