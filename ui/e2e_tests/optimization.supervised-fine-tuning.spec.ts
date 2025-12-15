@@ -57,10 +57,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a function" })
-          .click();
+        await page.getByPlaceholder("Select function").click();
         await page.getByRole("option", { name: "extract_entities" }).click();
         await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
@@ -102,10 +99,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
@@ -153,10 +147,7 @@ model_name = "mock-inference-finetune-1234"
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "image_judger" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByRole("option", { name: "None" }).click();
@@ -202,10 +193,7 @@ model_name = "mock-inference-finetune-1234"
     await page.goto("/optimization/supervised-fine-tuning");
 
     // Select write_haiku function
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Open metric selector
@@ -229,10 +217,7 @@ test.describe("Error handling", () => {
     page,
   }) => {
     await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
+    await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();

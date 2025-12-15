@@ -52,7 +52,7 @@ export function FunctionSelector({
       onSelect={(value) => onSelect?.(value)}
       items={functionNames}
       getItemIcon={getItemIcon}
-      placeholder="Select a function"
+      placeholder="Select function"
       emptyMessage="No functions found"
       ariaLabel={ariaLabel}
     />
