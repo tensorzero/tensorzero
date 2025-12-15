@@ -11,8 +11,19 @@
 //! NOTE: This module is work in progress.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use anyhow::Result;
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::endpoints::datasets::v1::get_datapoints;
+use tensorzero_core::endpoints::datasets::v1::types::GetDatapointsRequest;
+use tensorzero_core::evaluations::EvaluationConfig;
+use uuid::Uuid;
 
 use crate::betting_confidence_sequences::MeanBettingConfidenceSequence;
+use crate::stopping::CancellationTokens;
+use crate::types::EvaluationVariant;
+use crate::{Clients, EvaluationFunctionConfigTable};
 
 /// Result of checking the top-k stopping condition.
 #[derive(Debug, Clone)]
@@ -175,17 +186,51 @@ pub enum VariantStatus {
     Failed,
 }
 
-/// Result of evaluating a single datapoint for a variant.
+/// Trait for scoring functions that convert evaluator results to a single score.
+///
+/// Implementations of this trait define how to aggregate results from multiple
+/// evaluators into a single performance score in [0, 1] for each variant.
+pub trait ScoringFunction: Send + Sync {
+    /// Convert evaluation results to a single score in [0, 1].
+    ///
+    /// # Arguments
+    /// * `evaluations` - Results from all evaluators for a single (datapoint, variant) pair
+    ///
+    /// # Returns
+    /// A score in [0, 1], or None if the score cannot be computed (e.g., missing evaluator results)
+    fn score(&self, evaluations: &crate::evaluators::EvaluationResult) -> Option<f64>;
+}
+
+/// Reason why the top-k evaluation stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GlobalStoppingReason {
+    /// Successfully identified a top-k set of variants
+    TopKFound { k: u32, top_variants: Vec<String> },
+    /// Reached the maximum number of datapoints without identifying top-k
+    MaxDatapointsReached,
+    /// At least one evaluator has a failure rate above the threshold
+    EvaluatorFailed { evaluator_name: String },
+    /// Too many variants failed (>= num_variants - k_min)
+    TooManyVariantsFailed { num_failed: usize },
+}
+
+/// Results from running the adaptive top-k evaluation.
 #[derive(Debug)]
-pub struct DatapointEvaluationResult {
-    /// The datapoint ID
-    pub datapoint_id: uuid::Uuid,
-    /// The variant name
-    pub variant_name: String,
-    /// Evaluation results keyed by evaluator name (None if inference failed)
-    pub evaluations: Option<crate::evaluators::EvaluationResult>,
-    /// Error message if inference or evaluation failed
-    pub error: Option<String>,
+pub struct AdaptiveEvalStoppingResults {
+    /// Unique ID for this evaluation run
+    pub evaluation_run_id: Uuid,
+    /// Performance confidence sequences for each variant
+    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each variant
+    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each evaluator
+    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final status of each variant
+    pub variant_status: HashMap<String, VariantStatus>,
+    /// Why the evaluation stopped
+    pub stopping_reason: GlobalStoppingReason,
+    /// Number of datapoints processed
+    pub num_datapoints_processed: usize,
 }
 
 /// Update variant statistics and confidence sequences based on evaluation results.
@@ -197,24 +242,149 @@ pub struct DatapointEvaluationResult {
 ///
 /// # Arguments
 /// * `variant_name` - Name of the variant being updated
-/// * `results` - Evaluation results for the datapoints processed
+/// * `results` - Batch results (successes and errors) for the datapoints processed
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
 /// * `evaluator_failures` - Map to update with evaluator failure rates
 #[expect(unused_variables)]
 pub fn compute_updates(
     variant_name: &str,
-    results: &[DatapointEvaluationResult],
+    results: &[crate::BatchItemResult],
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
     evaluator_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
 ) {
     // TODO: Implement compute_updates
     // This will:
-    // 1. Extract scores from evaluation results using a scoring function
-    // 2. Update the betting confidence sequences for variant performance
-    // 3. Track variant failure rates (inference failures)
-    // 4. Track per-evaluator failure rates
+    // 1. For each Success: extract scores using a scoring function, update variant_performance
+    // 2. For each Error: increment variant_failures
+    // 3. For each Success: check for evaluator errors, update evaluator_failures
+}
+
+/// Parameters for `process_topk_batch`.
+pub struct ProcessTopKBatchParams<'a> {
+    /// Clients for inference and database access
+    pub clients: Arc<Clients>,
+    /// Batch of datapoint IDs to process
+    pub batch_ids: Vec<Uuid>,
+    /// Map of variant names to their current status (only Active variants are processed)
+    pub variant_status: &'a HashMap<String, VariantStatus>,
+    /// Evaluation configuration
+    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Function configs table
+    pub function_configs: Arc<EvaluationFunctionConfigTable>,
+    /// Name of the evaluation
+    pub evaluation_name: Arc<String>,
+    /// Evaluation run ID for tagging
+    pub evaluation_run_id: Uuid,
+    /// Dataset name for tagging
+    pub dataset_name: Arc<String>,
+    /// Cache mode for inference
+    pub inference_cache: CacheEnabledMode,
+    /// Semaphore for concurrency control
+    pub semaphore: Arc<tokio::sync::Semaphore>,
+}
+
+/// Process a batch of datapoints for the top-k evaluation.
+///
+/// This function:
+/// 1. Retrieves datapoints from ClickHouse by their IDs
+/// 2. For each active variant, runs inference and evaluation using shared `process_batch`
+/// 3. Returns results grouped by variant for subsequent `compute_updates` calls
+///
+/// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
+///
+/// # Arguments
+/// * `params` - Parameters for batch processing
+///
+/// # Returns
+/// A map from variant name to batch results (successes and errors) for all datapoints in the batch.
+/// Each `BatchItemResult` is either a `Success` with full evaluation data or an `Error` with failure info.
+pub async fn process_topk_batch(
+    params: ProcessTopKBatchParams<'_>,
+) -> Result<HashMap<String, Vec<crate::BatchItemResult>>> {
+    // Retrieve datapoints from ClickHouse
+    let request = GetDatapointsRequest {
+        ids: params.batch_ids.clone(),
+    };
+    let datapoints = get_datapoints(&params.clients.clickhouse_client, None, request)
+        .await?
+        .datapoints;
+
+    if datapoints.is_empty() {
+        tracing::warn!(
+            batch_size = params.batch_ids.len(),
+            "No datapoints found for batch"
+        );
+        return Ok(HashMap::new());
+    }
+
+    // Get active variants
+    let active_variants: Vec<Arc<EvaluationVariant>> = params
+        .variant_status
+        .iter()
+        .filter(|(_, status)| **status == VariantStatus::Active)
+        .map(|(name, _)| Arc::new(EvaluationVariant::Name(name.clone())))
+        .collect();
+
+    if active_variants.is_empty() {
+        tracing::debug!("No active variants to process");
+        return Ok(HashMap::new());
+    }
+
+    // Use empty cancellation tokens - top-k has its own stopping logic
+    let cancellation_tokens = Arc::new(CancellationTokens::default());
+
+    // Build params for shared process_batch
+    let batch_params = crate::ProcessBatchParams {
+        clients: params.clients,
+        function_configs: params.function_configs,
+        evaluation_config: params.evaluation_config,
+        evaluation_name: params.evaluation_name,
+        evaluation_run_id: params.evaluation_run_id,
+        dataset_name: params.dataset_name,
+        inference_cache: params.inference_cache,
+        semaphore: params.semaphore,
+        cancellation_tokens,
+    };
+
+    // Call the shared process_batch from lib.rs
+    let (mut join_set, task_id_map) =
+        crate::process_batch(&batch_params, datapoints, &active_variants);
+
+    // Collect results and group by variant
+    let mut results_by_variant: HashMap<String, Vec<crate::BatchItemResult>> = HashMap::new();
+
+    while let Some(result) = join_set.join_next_with_id().await {
+        let batch_result = crate::collect_batch_result(result, &task_id_map);
+
+        // Get variant name for grouping
+        let variant_name = match &batch_result {
+            crate::BatchItemResult::Success(success) => get_variant_name(&success.variant),
+            crate::BatchItemResult::Error(error) => error
+                .variant
+                .as_ref()
+                .map(|v| get_variant_name(v))
+                .unwrap_or_else(|| "unknown".to_string()),
+            crate::BatchItemResult::Cancelled => continue, // Skip cancelled tasks
+        };
+
+        results_by_variant
+            .entry(variant_name)
+            .or_default()
+            .push(batch_result);
+    }
+
+    Ok(results_by_variant)
+}
+
+/// Extract variant name from EvaluationVariant.
+fn get_variant_name(variant: &EvaluationVariant) -> String {
+    match variant {
+        EvaluationVariant::Name(name) => name.clone(),
+        // Dynamic variants don't have names, use a placeholder
+        EvaluationVariant::Info(_) => "dynamic_variant".to_string(),
+    }
 }
 
 #[cfg(test)]
