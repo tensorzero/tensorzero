@@ -1473,7 +1473,7 @@ impl Config {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
                     // Duplicates involving real paths are allowed, since we might mention the same filesystem path
-                    // in multiple paces.
+                    // in multiple places.
                     // However, 'fake' template names (from judges or agent-generated variants) should always be unique
                     if templates
                         .insert(path.path.get_template_key(), path.contents.clone())
