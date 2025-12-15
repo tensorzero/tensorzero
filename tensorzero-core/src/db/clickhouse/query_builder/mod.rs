@@ -273,8 +273,11 @@ impl InferenceFilter {
                 let value_placeholder =
                     add_parameter(value, ClickhouseType::String, params_map, param_idx_counter);
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
+                // Add mapContains check to ensure the tag exists before comparing.
+                // Without this, a != filter would match rows without the tag (since
+                // accessing a missing key returns empty string, and '' != value is true).
                 Ok(format!(
-                    "i.tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                    "(mapContains(i.tags, {key_placeholder}) AND i.tags[{key_placeholder}] {comparison_operator} {value_placeholder})"
                 ))
             }
             InferenceFilter::Time(TimeFilter {
@@ -1559,7 +1562,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE((mapContains(i.tags, {p5:String}) AND i.tags[{p5:String}] = {p6:String}), 0)), 0)), 0))
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
 
@@ -1810,7 +1813,7 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
+    i.function_name = {p0:String} AND (mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String})
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
 
@@ -1876,7 +1879,7 @@ SELECT
 FROM
     ChatInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
+    i.function_name = {p0:String} AND (mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] != {p2:String})
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
 
@@ -1951,7 +1954,7 @@ SELECT
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
+    i.function_name = {p0:String} AND (COALESCE((mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String}), 0) AND COALESCE((mapContains(i.tags, {p3:String}) AND i.tags[{p3:String}] = {p4:String}), 0))
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
 
@@ -2042,7 +2045,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE((mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String}), 0) AND COALESCE(j0.value > {p4:Float64}, 0))
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
 
@@ -2387,7 +2390,7 @@ LEFT JOIN (
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((mapContains(i.tags, {p2:String}) AND i.tags[{p2:String}] = {p3:String}), 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
 
