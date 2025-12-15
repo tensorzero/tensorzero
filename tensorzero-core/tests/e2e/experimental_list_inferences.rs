@@ -356,6 +356,56 @@ async fn test_simple_tag_filter() {
     }
 }
 
+/// Tests that TagComparisonOperator::NotEqual only returns inferences where:
+/// 1. The tag EXISTS
+/// 2. The tag value is NOT equal to the specified value
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tag_filter_not_equal() {
+    let client = make_embedded_gateway().await;
+
+    // Query for extract_entities inferences where tensorzero::evaluation_name != "nonexistent"
+    // Since all tagged inferences have value "entity_extraction", this should return
+    // all inferences that HAVE the tag. Crucially, it should NOT return inferences
+    // without the tag.
+    let filter_node = InferenceFilter::Tag(TagFilter {
+        key: "tensorzero::evaluation_name".to_string(),
+        value: "nonexistent".to_string(),
+        comparison_operator: TagComparisonOperator::NotEqual,
+    });
+    let opts = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_node),
+        limit: 200,
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    assert!(!res.is_empty(), "Expected at least one inference");
+
+    // All returned inferences must have the tag
+    for inference in &res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected a JSON inference");
+        };
+        assert_eq!(json_inference.function_name, "extract_entities");
+
+        // The tag must exist
+        assert!(
+            json_inference
+                .tags
+                .contains_key("tensorzero::evaluation_name"),
+            "Inference should have the tensorzero::evaluation_name tag, but tags are: {:?}",
+            json_inference.tags
+        );
+
+        // The tag value must not be "nonexistent"
+        assert_ne!(
+            json_inference.tags["tensorzero::evaluation_name"], "nonexistent",
+            "Tag value should not be 'nonexistent'"
+        );
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_combined_time_and_tag_filter() {
     let client = make_embedded_gateway().await;
