@@ -292,7 +292,7 @@ pub fn compute_updates(
     // Collect observations for each evaluator's failure rate
     let mut evaluator_failure_observations: HashMap<String, Vec<f64>> = HashMap::new();
 
-    // Single pass: process each datapoint's results
+    // Process each datapoint's results
     for results_by_variant in results_by_datapoint.values() {
         // Build the scoring function input (variant_name -> &EvaluationResult) for this datapoint
         let mut evaluations_for_scoring: HashMap<String, &EvaluationResult> = HashMap::new();
