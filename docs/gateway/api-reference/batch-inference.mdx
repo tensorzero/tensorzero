@@ -63,6 +63,8 @@ The tools must be defined in the configuration file or provided dynamically via 
 Each element in the outer list corresponds to a single inference in the batch.
 Each inner list contains the names of the tools that are allowed for the corresponding inference.
 
+The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
+
 Some providers (notably OpenAI) natively support restricting allowed tools.
 For these providers, we send all tools (both configured and dynamic) to the provider, and separately specify which ones are allowed to be called.
 For providers that do not natively support this feature, we filter the tool list ourselves and only send the allowed tools to the provider.
@@ -178,7 +180,7 @@ If the content block has type `file`, it must have exactly one of the following 
 - Base64-encoded Files
   - `file_type`: must be `base64`
   - `data`: `base64`-encoded data for an embedded file
-  - `mime_type`: the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`)
+  - `mime_type` (optional): the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`). If not provided, TensorZero will attempt to infer the MIME type from the file's magic bytes.
   - `filename` (optional): a filename to associate with the file
 
 See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.

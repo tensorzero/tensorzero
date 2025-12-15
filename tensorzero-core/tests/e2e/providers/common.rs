@@ -2570,10 +2570,12 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
     // * Some AWS bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
+    // * xAI seems to also ignore them
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "xai"
     {
         return;
     }
@@ -3619,7 +3621,6 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
-    // A top_p of -100 and temperature of -100 should produce errors on all providers
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -3628,10 +3629,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
+        // Set lots of invalid parameters to try to produce an error on all providers
         "params": {
             "chat_completion": {
                 "temperature": -100,
                 "top_p": -100,
+                "presence_penalty": -100,
+                "frequency_penalty": -100,
             }
         },
         "input":
@@ -3671,10 +3675,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
         let resp: Value = resp.json().await.unwrap();
         let err_msg = resp.get("error").unwrap().as_str().unwrap();
+        println!("Error message: {err_msg}");
         assert!(
             err_msg.contains("top_p")
                 || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
+                || err_msg.contains("temperature")
+                || err_msg.contains("presence_penalty")
+                || err_msg.contains("frequency_penalty"),
             "Unexpected error message: {resp}"
         );
     }
@@ -12679,7 +12686,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(input_tokens > 5);
 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);

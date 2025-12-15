@@ -1,4 +1,3 @@
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
@@ -10,28 +9,26 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const before = url.searchParams.get("before");
-  const after = url.searchParams.get("after");
-  const limit = Number(url.searchParams.get("limit")) || 10;
+  const before = url.searchParams.get("before") || undefined;
+  const after = url.searchParams.get("after") || undefined;
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam !== null ? Number(limitParam) : 10;
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
-  const databaseClient = await getNativeDatabaseClient();
+  const client = getTensorZeroClient();
 
-  const [episodes, bounds] = await Promise.all([
-    databaseClient.queryEpisodeTable(
-      limit,
-      before || undefined,
-      after || undefined,
-    ),
-    databaseClient.queryEpisodeTableBounds(),
+  const [listEpisodesResponse, bounds] = await Promise.all([
+    client.listEpisodes(limit, before, after),
+    client.queryEpisodeTableBounds(),
   ]);
 
   return {
-    episodes,
+    episodes: listEpisodesResponse.episodes,
     limit,
     bounds,
   };

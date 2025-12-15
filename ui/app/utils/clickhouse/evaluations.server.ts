@@ -15,8 +15,6 @@ import {
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
-  type EvaluationInfoResult,
-  evaluationInfoResultSchema,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
   type ParsedEvaluationResultWithVariant,
@@ -424,48 +422,6 @@ export async function countDatapointsForEvaluation(
   const rows = await result.json<{ count: number }>();
   const parsedRows = rows.map((row) => CountSchema.parse(row));
   return parsedRows[0].count;
-}
-
-export async function getEvaluationRunInfo(
-  limit: number = 100,
-  offset: number = 0,
-) {
-  const query = `
-    SELECT
-        evaluation_run_id,
-        any(evaluation_name) AS evaluation_name,
-        any(inference_function_name) AS function_name,
-        any(variant_name) AS variant_name,
-        any(dataset_name) AS dataset_name,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
-    FROM (
-        SELECT
-            maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
-            maxIf(value, key = 'tensorzero::evaluation_name') AS evaluation_name,
-            maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
-            any(function_name) AS inference_function_name,
-            any(variant_name) AS variant_name,
-            max(toUInt128(inference_id)) AS max_inference_id
-        FROM TagInference FINAL
-        WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
-        GROUP BY inference_id
-    )
-    WHERE NOT startsWith(inference_function_name, 'tensorzero::')
-    GROUP BY evaluation_run_id
-    ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
-    LIMIT {limit:UInt32}
-    OFFSET {offset:UInt32}
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      limit: limit,
-      offset: offset,
-    },
-  });
-  const rows = await result.json<EvaluationInfoResult>();
-  return rows.map((row) => evaluationInfoResultSchema.parse(row));
 }
 
 export async function searchEvaluationRuns(

@@ -25,6 +25,7 @@ interface FunctionSelectorProps {
   onSelect?: (functionName: string) => void;
   functions: { [x: string]: FunctionConfig | undefined };
   hideDefaultFunction?: boolean;
+  ariaLabel?: string;
 }
 
 export function FunctionTypeIcon({ type }: { type: FunctionConfig["type"] }) {
@@ -41,6 +42,7 @@ export function FunctionSelector({
   onSelect,
   functions,
   hideDefaultFunction = false,
+  ariaLabel,
 }: FunctionSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -65,6 +67,7 @@ export function FunctionSelector({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-label={ariaLabel}
             className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border px-3 font-normal hover:cursor-pointer"
           >
             <div className="min-w-0 flex-1">

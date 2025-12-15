@@ -58,6 +58,10 @@ const FILLED_INFERENCE_FILTER: InferenceFilter = {
       value: "mobile",
       comparison_operator: "!=",
     },
+    {
+      type: "demonstration_feedback",
+      has_demonstration: true,
+    },
   ],
 };
 

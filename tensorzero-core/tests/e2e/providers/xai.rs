@@ -14,7 +14,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai".to_string(),
-        model_name: "grok_2_1212".into(),
+        model_name: "grok_4_1_fast_non_reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai-extra-body".to_string(),
-        model_name: "grok_2_1212".into(),
+        model_name: "grok_4_1_fast_non_reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -30,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai-extra-headers".to_string(),
-        model_name: "grok_2_1212".into(),
+        model_name: "grok_4_1_fast_non_reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -39,14 +39,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "xai".to_string(),
-            model_name: "grok_2_1212".into(),
+            model_name: "grok_4_1_fast_non_reasoning".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "xai-strict".to_string(),
-            model_name: "grok_2_1212".into(),
+            model_name: "grok_4_1_fast_non_reasoning".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },
@@ -55,7 +55,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai_json_mode_off".to_string(),
-        model_name: "grok_2_1212".into(),
+        model_name: "grok_4_1_fast_non_reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -63,7 +63,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai".to_string(),
-        model_name: "grok_2_1212".into(),
+        model_name: "grok_4_1_fast_non_reasoning".into(),
         model_provider_name: "xai".into(),
         credentials,
     }];
@@ -71,7 +71,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai-shorthand".to_string(),
-        model_name: "xai::grok-2-1212".into(),
+        model_name: "xai::grok-4-1-fast-non-reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -79,7 +79,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai".to_string(),
-        model_name: "grok-2-1212".into(),
+        model_name: "grok-4-1-fast-non-reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -87,14 +87,17 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai-shorthand".to_string(),
-        model_name: "xai::grok-2-1212".into(),
+        model_name: "xai::grok-4-1-fast-non-reasoning".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "xai".into(),
-        model_info: HashMap::from([("model_name".to_string(), "grok-2-1212".to_string())]),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "grok-4-1-fast-non-reasoning".to_string(),
+        )]),
         use_modal_headers: false,
     }];
 

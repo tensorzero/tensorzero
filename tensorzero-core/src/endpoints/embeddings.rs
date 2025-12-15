@@ -24,7 +24,7 @@ use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;
 use super::inference::InferenceCredentials;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Params {
+pub struct EmbeddingsParams {
     pub input: EmbeddingInput,
     pub model_name: String,
     pub dimensions: Option<u32>,
@@ -44,17 +44,15 @@ pub async fn embeddings(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
-    params: Params,
+    params: EmbeddingsParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
-    if config.gateway.relay.is_some() {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "Embeddings endpoint is not supported in relay mode".to_string(),
-        }));
-    }
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
     span.record("num_inputs", params.input.num_inputs());
+    if let Some(relay) = &config.gateway.relay {
+        return relay.relay_embeddings(params).await;
+    }
     let embedding_model = config
         .embedding_models
         .get(&params.model_name)
@@ -161,7 +159,7 @@ mod tests {
         let config = Arc::new(config);
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
-        let params = Params {
+        let params = EmbeddingsParams {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "test-model".to_string(),
             dimensions: None,
@@ -197,7 +195,7 @@ mod tests {
         let config = Arc::new(Config::default());
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
-        let params = Params {
+        let params = EmbeddingsParams {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "nonexistent-model".to_string(),
             dimensions: None,
