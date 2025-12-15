@@ -38,7 +38,7 @@ export function FunctionSelector({
   );
 
   const getItemIcon = useCallback(
-    (name: string | null) => {
+    (name: string | null, _isSelected: boolean) => {
       if (!name) return <Functions className="h-4 w-4 shrink-0" />;
       const fn = functions[name];
       return fn ? <FunctionTypeIcon type={fn.type} /> : null;
