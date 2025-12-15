@@ -47,6 +47,38 @@ pub struct TopKStoppingResult {
     pub top_variants: Vec<String>,
 }
 
+/// Reason why the top-k evaluation stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GlobalStoppingReason {
+    /// Successfully identified a top-k set of variants
+    TopKFound { k: u32, top_variants: Vec<String> },
+    /// Reached the maximum number of datapoints without identifying top-k
+    MaxDatapointsReached,
+    /// At least one evaluator has a failure rate above the threshold
+    EvaluatorFailed { evaluator_name: String },
+    /// Too many variants failed (>= num_variants - k_min)
+    TooManyVariantsFailed { num_failed: usize },
+}
+
+/// Results from running the adaptive top-k evaluation.
+#[derive(Debug)]
+pub struct AdaptiveEvalStoppingResults {
+    /// Unique ID for this evaluation run
+    pub evaluation_run_id: Uuid,
+    /// Performance confidence sequences for each variant
+    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each variant
+    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each evaluator
+    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final status of each variant
+    pub variant_status: HashMap<String, VariantStatus>,
+    /// Why the evaluation stopped
+    pub stopping_reason: GlobalStoppingReason,
+    /// Number of datapoints processed
+    pub num_datapoints_processed: usize,
+}
+
 // ============================================================================
 // Scoring
 // ============================================================================
