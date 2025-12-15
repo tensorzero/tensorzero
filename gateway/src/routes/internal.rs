@@ -108,4 +108,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/config/{hash}",
             get(endpoints::internal::config::get_config_by_hash_handler),
         )
+        // Action endpoint for executing with historical config snapshots
+        .route(
+            "/internal/action",
+            post(endpoints::internal::action::action_handler),
+        )
 }
