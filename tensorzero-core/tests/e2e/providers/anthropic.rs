@@ -185,7 +185,7 @@ async fn test_thinking_rejected_128k() {
     // since we want to test the current Anthropic behavior.
     let random = Uuid::now_v7();
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": "anthropic::claude-sonnet-4-5-20250929",
         "input":{
             "messages": [
                 {
@@ -333,7 +333,7 @@ async fn test_thinking_inference_extra_header_128k() {
     // that we can pass through the necessary 'anthropic-beta' header to support
     // a large 'max_tokens'
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": "anthropic::claude-sonnet-4-5-20250929",
         "input":{
             "messages": [
                 {
@@ -343,7 +343,7 @@ async fn test_thinking_inference_extra_header_128k() {
             ]},
         "extra_headers": [
             {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "model_name": "anthropic::claude-sonnet-4-5-20250929",
                 "provider_name": "anthropic",
                 "name": "anthropic-beta",
                 "value": "output-128k-2025-02-19"
@@ -351,7 +351,7 @@ async fn test_thinking_inference_extra_header_128k() {
         ],
         "extra_body": [
             {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "model_name": "anthropic::claude-sonnet-4-5-20250929",
                 "provider_name": "anthropic",
                 "pointer": "/stop_sequences",
                 "value": [
@@ -404,7 +404,7 @@ async fn test_thinking_128k() {
     // that we can pass through the necessary 'anthropic-beta' header to support
     // a large 'max_tokens'
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking-128k",
+        "model_name": "claude-sonnet-4-5-20250929-thinking-128k",
         "input":{
             "messages": [
                 {
@@ -430,7 +430,7 @@ async fn test_thinking_128k() {
 pub async fn test_thinking_signature() {
     test_thinking_signature_helper(
         "anthropic-thinking",
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
     )
     .await;
@@ -621,7 +621,7 @@ pub async fn test_thinking_signature_helper(
 #[tokio::test]
 pub async fn test_redacted_thinking() {
     test_redacted_thinking_helper(
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
         "anthropic",
     )
@@ -1031,7 +1031,7 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
-    test_streaming_thinking_helper("anthropic::claude-3-7-sonnet-20250219", "anthropic").await;
+    test_streaming_thinking_helper("anthropic::claude-sonnet-4-5-20250929", "anthropic").await;
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {

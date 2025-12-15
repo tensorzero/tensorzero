@@ -1019,7 +1019,7 @@ async fn test_openai_compatible_stop_sequence() {
     let client = Client::new();
 
     let payload = json!({
-        "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+        "model": "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929",
         "messages": [
             {
                 "role": "user",
