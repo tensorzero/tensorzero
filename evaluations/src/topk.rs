@@ -38,6 +38,19 @@ use crate::{
 };
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/// Default batch size for top-k evaluation
+const DEFAULT_BATCH_SIZE: usize = 100;
+
+/// Default confidence sequence resolution (grid points for mean estimation)
+const DEFAULT_CS_RESOLUTION: usize = 101;
+
+/// Default alpha (significance level) for confidence sequences
+const DEFAULT_ALPHA: f32 = 0.05;
+
+// ============================================================================
 // Core Types
 // ============================================================================
 
@@ -572,15 +585,6 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
 // ============================================================================
 // Durable Task
 // ============================================================================
-
-/// Default batch size for top-k evaluation
-const DEFAULT_BATCH_SIZE: usize = 100;
-
-/// Default confidence sequence resolution (grid points for mean estimation)
-const DEFAULT_CS_RESOLUTION: usize = 101;
-
-/// Default alpha (significance level) for confidence sequences
-const DEFAULT_ALPHA: f32 = 0.05;
 
 /// Serializable parameters for the top-k durable task.
 /// Non-serializable resources (clients, scoring_fn) are passed via State.
