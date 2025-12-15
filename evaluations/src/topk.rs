@@ -15,163 +15,16 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::endpoints::datasets::v1::get_datapoints;
-use tensorzero_core::endpoints::datasets::v1::types::GetDatapointsRequest;
 use tensorzero_core::evaluations::EvaluationConfig;
 use uuid::Uuid;
 
 use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
 use crate::evaluators::EvaluationResult;
-use crate::stopping::CancellationTokens;
-use crate::types::EvaluationVariant;
-use crate::{
-    BatchItemResult, Clients, EvaluationFunctionConfigTable, ProcessBatchParams,
-    collect_batch_result, process_batch,
-};
+use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 
-/// Result of checking the top-k stopping condition.
-#[derive(Debug, Clone)]
-pub struct TopKStoppingResult {
-    /// Whether a top-k set was identified
-    pub stopped: bool,
-    /// The k value for which stopping occurred (if stopped)
-    pub k: Option<u32>,
-    /// Names of variants confidently in the top-k (if stopped)
-    pub top_variants: Vec<String>,
-}
-
-/// Check if we can confidently identify a top-k set of variants.
-///
-/// A variant is "confidently in the top k" if its confidence sequence lower bound
-/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
-/// tolerance `epsilon`. This means we can be confident it's better than at least
-/// (num_variants - k) variants, or at least not more than epsilon worse than those
-/// variants.
-///
-/// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
-/// and working down. We return the largest k for which we can identify a top-k set.
-///
-/// # Arguments
-/// * `variant_performance` - Map from variant name to its performance confidence sequence
-/// * `k_min` - Minimum acceptable k value
-/// * `k_max` - Maximum k value to check
-/// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
-///
-/// # Returns
-/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
-/// if stopping occurred.
-pub fn check_topk_stopping(
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    k_min: u32,
-    k_max: u32,
-    epsilon: Option<f64>,
-) -> anyhow::Result<TopKStoppingResult> {
-    let epsilon = epsilon.unwrap_or(0.0);
-    let num_variants = variant_performance.len();
-
-    // Invalid parameters: return error
-    if k_min == 0 {
-        anyhow::bail!("k_min must be > 0");
-    }
-    if k_max < k_min {
-        anyhow::bail!("k_max ({k_max}) < k_min ({k_min})");
-    }
-    if epsilon < 0.0 {
-        anyhow::bail!("epsilon ({epsilon}) must be >= 0");
-    }
-
-    // Runtime edge cases: log a warning, return empty result
-    if num_variants == 0 {
-        tracing::warn!("check_topk_stopping: no variants provided");
-        return Ok(TopKStoppingResult {
-            stopped: false,
-            k: None,
-            top_variants: vec![],
-        });
-    }
-
-    if k_min as usize > num_variants {
-        tracing::warn!(
-            k_min,
-            num_variants,
-            "check_topk_stopping: k_min > num_variants, can't identify top-k variants"
-        );
-        return Ok(TopKStoppingResult {
-            stopped: false,
-            k: None,
-            top_variants: vec![],
-        });
-    }
-
-    // Collect upper bounds into a sorted vec for binary search
-    let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
-    upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
-    // with tolerance epsilon. This tells us how many variants it "confidently beats".
-    // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
-        .iter()
-        .map(|(name, cs)| {
-            // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
-            let num_beaten_including_self =
-                upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
-            // Subtract 1 if this variant's own upper bound was counted
-            let beats_self = cs.cs_upper - epsilon < cs.cs_lower;
-            let num_beaten = if beats_self {
-                num_beaten_including_self.saturating_sub(1)
-            } else {
-                num_beaten_including_self
-            };
-            (name, num_beaten)
-        })
-        .collect();
-
-    // Sort by num_beaten descending (best variants first)
-    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
-
-    // Check each k from k_max down to k_min
-    // We want the largest k for which we can identify a top-k set
-    for k in (k_min..=k_max).rev() {
-        let k_usize = k as usize;
-        let threshold = num_variants.saturating_sub(k_usize);
-
-        // Check if the top k variants each beat at least (num_variants - k) others
-        if k_usize <= variants_with_n_beaten.len()
-            && variants_with_n_beaten[..k_usize]
-                .iter()
-                .all(|(_, num_beaten)| *num_beaten >= threshold)
-        {
-            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
-                .iter()
-                .map(|(name, _)| (*name).clone())
-                .collect();
-
-            return Ok(TopKStoppingResult {
-                stopped: true,
-                k: Some(k),
-                top_variants,
-            });
-        }
-    }
-
-    Ok(TopKStoppingResult {
-        stopped: false,
-        k: None,
-        top_variants: vec![],
-    })
-}
-
-/// Convenience wrapper to check if a specific k can be identified.
-///
-/// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
-pub fn check_topk(
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    k: u32,
-    epsilon: Option<f64>,
-) -> anyhow::Result<TopKStoppingResult> {
-    check_topk_stopping(variant_performance, k, k, epsilon)
-}
+// ============================================================================
+// Core Types
+// ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,36 +39,27 @@ pub enum VariantStatus {
     Failed,
 }
 
+/// Result of checking the top-k stopping condition.
+#[derive(Debug, Clone)]
+pub struct TopKStoppingResult {
+    /// Whether a top-k set was identified
+    pub stopped: bool,
+    /// The k value for which stopping occurred (if stopped)
+    pub k: Option<u32>,
+    /// Names of variants confidently in the top-k (if stopped)
+    pub top_variants: Vec<String>,
+}
+
+// ============================================================================
+// Scoring
+// ============================================================================
+
 /// Type alias for batch results grouped by datapoint, then by variant.
 ///
 /// This structure is optimized for the scoring function, which needs to compare
 /// variants on the same datapoint. The outer map is keyed by datapoint ID,
 /// and the inner map is keyed by variant name.
 pub type BatchResultsByDatapoint = HashMap<Uuid, HashMap<String, BatchItemResult>>;
-
-/// Shared context for top-k evaluation that remains constant across batches.
-///
-/// This struct holds configuration and client references that don't change
-/// during the evaluation run. Per-batch parameters like `batch_ids` and
-/// `variant_status` are passed separately to `process_topk_batch`.
-pub struct TopKContext {
-    /// Clients for inference and database access
-    pub clients: Arc<Clients>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Name of the evaluation
-    pub evaluation_name: Arc<String>,
-    /// Evaluation run ID for tagging
-    pub evaluation_run_id: Uuid,
-    /// Dataset name for tagging
-    pub dataset_name: Arc<String>,
-    /// Cache mode for inference
-    pub inference_cache: CacheEnabledMode,
-    /// Semaphore for concurrency control
-    pub semaphore: Arc<tokio::sync::Semaphore>,
-}
 
 /// Trait for scoring functions that compare variants on a single datapoint.
 ///
@@ -391,113 +235,165 @@ pub fn compute_updates(
     Ok(())
 }
 
-/// Process a batch of datapoints for the top-k evaluation.
+// ============================================================================
+// Stopping Conditions
+// ============================================================================
+
+/// Check if we can confidently identify a top-k set of variants.
 ///
-/// This function:
-/// 1. Retrieves datapoints from ClickHouse by their IDs
-/// 2. For each active variant, runs inference and evaluation using shared `process_batch`
-/// 3. Returns results grouped by datapoint ID, then by variant name
+/// A variant is "confidently in the top k" if its confidence sequence lower bound
+/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
+/// tolerance `epsilon`. This means we can be confident it's better than at least
+/// (num_variants - k) variants, or at least not more than epsilon worse than those
+/// variants.
 ///
-/// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
+/// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
+/// and working down. We return the largest k for which we can identify a top-k set.
 ///
 /// # Arguments
-/// * `topk_context` - Shared context containing clients, configs, and evaluation metadata
-/// * `batch_ids` - IDs of datapoints to process in this batch
-/// * `variant_status` - Current status of each variant (only Active variants are processed)
+/// * `variant_performance` - Map from variant name to its performance confidence sequence
+/// * `k_min` - Minimum acceptable k value
+/// * `k_max` - Maximum k value to check
+/// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
 ///
 /// # Returns
-/// Results grouped by datapoint ID, then by variant name. This structure is optimized
-/// for the scoring function which needs to compare variants on the same datapoint.
-pub async fn process_topk_batch(
-    topk_context: &TopKContext,
-    batch_ids: Vec<Uuid>,
-    variant_status: &HashMap<String, VariantStatus>,
-) -> Result<BatchResultsByDatapoint> {
-    // Retrieve datapoints from ClickHouse
-    let request = GetDatapointsRequest {
-        ids: batch_ids.clone(),
-    };
-    let datapoints = get_datapoints(&topk_context.clients.clickhouse_client, None, request)
-        .await?
-        .datapoints;
+/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
+/// if stopping occurred.
+pub fn check_topk_stopping(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k_min: u32,
+    k_max: u32,
+    epsilon: Option<f64>,
+) -> anyhow::Result<TopKStoppingResult> {
+    let epsilon = epsilon.unwrap_or(0.0);
+    let num_variants = variant_performance.len();
 
-    if datapoints.is_empty() {
-        tracing::warn!(
-            batch_size = batch_ids.len(),
-            "No datapoints found for batch"
-        );
-        return Ok(HashMap::new());
+    // Invalid parameters: return error
+    if k_min == 0 {
+        anyhow::bail!("k_min must be > 0");
+    }
+    if k_max < k_min {
+        anyhow::bail!("k_max ({k_max}) < k_min ({k_min})");
+    }
+    if epsilon < 0.0 {
+        anyhow::bail!("epsilon ({epsilon}) must be >= 0");
     }
 
-    // Get active variants
-    let active_variants: Vec<Arc<EvaluationVariant>> = variant_status
+    // Runtime edge cases: log a warning, return empty result
+    if num_variants == 0 {
+        tracing::warn!("check_topk_stopping: no variants provided");
+        return Ok(TopKStoppingResult {
+            stopped: false,
+            k: None,
+            top_variants: vec![],
+        });
+    }
+
+    if k_min as usize > num_variants {
+        tracing::warn!(
+            k_min,
+            num_variants,
+            "check_topk_stopping: k_min > num_variants, can't identify top-k variants"
+        );
+        return Ok(TopKStoppingResult {
+            stopped: false,
+            k: None,
+            top_variants: vec![],
+        });
+    }
+
+    // Collect upper bounds into a sorted vec for binary search
+    let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
+    upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
+    // with tolerance epsilon. This tells us how many variants it "confidently beats".
+    // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
+    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
         .iter()
-        .filter(|(_, status)| **status == VariantStatus::Active)
-        .map(|(name, _)| Arc::new(EvaluationVariant::Name(name.clone())))
+        .map(|(name, cs)| {
+            // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
+            let num_beaten_including_self =
+                upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
+            // Subtract 1 if this variant's own upper bound was counted
+            let beats_self = cs.cs_upper - epsilon < cs.cs_lower;
+            let num_beaten = if beats_self {
+                num_beaten_including_self.saturating_sub(1)
+            } else {
+                num_beaten_including_self
+            };
+            (name, num_beaten)
+        })
         .collect();
 
-    if active_variants.is_empty() {
-        tracing::debug!("No active variants to process");
-        return Ok(HashMap::new());
+    // Sort by num_beaten descending (best variants first)
+    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Check each k from k_max down to k_min
+    // We want the largest k for which we can identify a top-k set
+    for k in (k_min..=k_max).rev() {
+        let k_usize = k as usize;
+        let threshold = num_variants.saturating_sub(k_usize);
+
+        // Check if the top k variants each beat at least (num_variants - k) others
+        if k_usize <= variants_with_n_beaten.len()
+            && variants_with_n_beaten[..k_usize]
+                .iter()
+                .all(|(_, num_beaten)| *num_beaten >= threshold)
+        {
+            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
+                .iter()
+                .map(|(name, _)| (*name).clone())
+                .collect();
+
+            return Ok(TopKStoppingResult {
+                stopped: true,
+                k: Some(k),
+                top_variants,
+            });
+        }
     }
 
-    // Use empty cancellation tokens - top-k has its own stopping logic
-    let cancellation_tokens = Arc::new(CancellationTokens::default());
-
-    // Build params for shared process_batch
-    let batch_params = ProcessBatchParams {
-        clients: topk_context.clients.clone(),
-        function_configs: topk_context.function_configs.clone(),
-        evaluation_config: topk_context.evaluation_config.clone(),
-        evaluation_name: topk_context.evaluation_name.clone(),
-        evaluation_run_id: topk_context.evaluation_run_id,
-        dataset_name: topk_context.dataset_name.clone(),
-        inference_cache: topk_context.inference_cache,
-        semaphore: topk_context.semaphore.clone(),
-        cancellation_tokens,
-    };
-
-    // Call the shared process_batch from lib.rs
-    let (mut join_set, task_id_map) = process_batch(&batch_params, datapoints, &active_variants);
-
-    // Collect results and group by datapoint ID, then by variant
-    let mut results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
-
-    while let Some(result) = join_set.join_next_with_id().await {
-        let batch_result = collect_batch_result(result, &task_id_map);
-
-        // Get datapoint ID and variant name for grouping
-        let (datapoint_id, variant_name) = match &batch_result {
-            BatchItemResult::Success(success) => {
-                (success.datapoint.id(), get_variant_name(&success.variant))
-            }
-            BatchItemResult::Error(error) => {
-                let variant_name = error
-                    .variant
-                    .as_ref()
-                    .map(|v| get_variant_name(v))
-                    .unwrap_or_else(|| "unknown".to_string());
-                (error.datapoint_id, variant_name)
-            }
-            BatchItemResult::Cancelled => continue, // Skip cancelled tasks
-        };
-
-        results_by_datapoint
-            .entry(datapoint_id)
-            .or_default()
-            .insert(variant_name, batch_result);
-    }
-
-    Ok(results_by_datapoint)
+    Ok(TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    })
 }
 
-/// Extract variant name from EvaluationVariant.
-fn get_variant_name(variant: &EvaluationVariant) -> String {
-    match variant {
-        EvaluationVariant::Name(name) => name.clone(),
-        // Dynamic variants don't have names, use a placeholder
-        EvaluationVariant::Info(_) => "dynamic_variant".to_string(),
-    }
+/// Convenience wrapper to check if a specific k can be identified.
+///
+/// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
+pub fn check_topk(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k: u32,
+    epsilon: Option<f64>,
+) -> anyhow::Result<TopKStoppingResult> {
+    check_topk_stopping(variant_performance, k, k, epsilon)
+}
+
+/// Shared context for top-k evaluation that remains constant across batches.
+///
+/// This struct holds configuration and client references that don't change
+/// during the evaluation run. Per-batch parameters like `batch_ids` and
+/// `variant_status` are passed separately to `process_topk_batch`.
+pub struct TopKContext {
+    /// Clients for inference and database access
+    pub clients: Arc<Clients>,
+    /// Evaluation configuration
+    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Function configs table
+    pub function_configs: Arc<EvaluationFunctionConfigTable>,
+    /// Name of the evaluation
+    pub evaluation_name: Arc<String>,
+    /// Evaluation run ID for tagging
+    pub evaluation_run_id: Uuid,
+    /// Dataset name for tagging
+    pub dataset_name: Arc<String>,
+    /// Cache mode for inference
+    pub inference_cache: CacheEnabledMode,
+    /// Semaphore for concurrency control
+    pub semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 #[cfg(test)]
