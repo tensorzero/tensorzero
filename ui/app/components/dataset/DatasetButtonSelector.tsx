@@ -6,18 +6,17 @@ import {
 } from "~/components/ui/popover";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import { ChevronDown } from "lucide-react";
-import { Table, TablePlus, TableCheck } from "~/components/icons/Icons";
+import { Table, TablePlus } from "~/components/icons/Icons";
 import {
   Command,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
-  CommandItem,
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
 import { cn } from "~/utils/common";
-import { useDatasetCounts } from "~/hooks/use-dataset-counts";
+import { useDatasetSelector } from "~/hooks/use-dataset-selector";
+import { ComboboxMenuItems } from "~/components/ui/combobox";
 
 interface DatasetButtonSelectorProps {
   selected?: string;
@@ -48,39 +47,39 @@ export function DatasetButtonSelector({
   const [inputValue, setInputValue] = useState("");
 
   const {
-    data: datasets = [],
+    sortedDatasetNames,
     isLoading,
     isError,
-  } = useDatasetCounts(functionName);
+    getItemIcon,
+    getItemSuffix,
+    getItemDataAttributes,
+    getSelectedDataset,
+  } = useDatasetSelector(functionName);
 
-  // Datasets sorted by last updated date for initial display
-  const recentlyUpdatedDatasets = useMemo(
-    () =>
-      [...(datasets ?? [])].sort((a, b) => {
-        return (
-          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-        );
-      }),
-    [datasets],
-  );
-
-  if (inputPlaceholder === undefined) {
+  const computedPlaceholder = useMemo(() => {
+    if (inputPlaceholder) return inputPlaceholder;
     if (allowCreation) {
-      if (recentlyUpdatedDatasets.length > 0) {
-        inputPlaceholder = "Create or find a dataset";
-      } else {
-        inputPlaceholder = "Create a dataset";
-      }
-    } else {
-      inputPlaceholder = "Select a dataset";
+      return sortedDatasetNames.length > 0
+        ? "Create or find dataset"
+        : "Create dataset";
     }
-  }
+    return "Select dataset";
+  }, [inputPlaceholder, allowCreation, sortedDatasetNames.length]);
 
-  // Selected dataset, if an existing one was selected
-  const existingSelectedDataset = useMemo(
-    () => datasets?.find((dataset) => dataset.name === selected),
-    [datasets, selected],
-  );
+  const selectedDataset = getSelectedDataset(selected);
+
+  const showCreateOption =
+    allowCreation &&
+    Boolean(inputValue.trim()) &&
+    !sortedDatasetNames.some(
+      (name) => name.toLowerCase() === inputValue.trim().toLowerCase(),
+    );
+
+  const handleSelectItem = (item: string, isNew: boolean) => {
+    onSelect(item, isNew);
+    setInputValue("");
+    setOpen(false);
+  };
 
   return (
     <div className={clsx("flex flex-col space-y-2", className)}>
@@ -96,7 +95,7 @@ export function DatasetButtonSelector({
           >
             {selected ? (
               <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
-                {existingSelectedDataset ? (
+                {selectedDataset ? (
                   <Table
                     size={16}
                     className="h-4 w-4 shrink-0 text-green-700"
@@ -105,8 +104,13 @@ export function DatasetButtonSelector({
                   <TablePlus className="h-4 w-4 shrink-0 text-blue-600" />
                 )}
                 <span className="truncate font-mono text-sm">
-                  {existingSelectedDataset?.name ?? selected}
+                  {selectedDataset?.name ?? selected}
                 </span>
+                {selectedDataset && (
+                  <span className="bg-bg-tertiary text-fg-tertiary ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs">
+                    {selectedDataset.count.toLocaleString()}
+                  </span>
+                )}
               </div>
             ) : (
               <span className="flex flex-row items-center gap-2">
@@ -138,9 +142,8 @@ export function DatasetButtonSelector({
           align="start"
         >
           <Command>
-            {/* TODO Naming/character constraints/disallow typing certain characters? */}
             <CommandInput
-              placeholder={inputPlaceholder}
+              placeholder={computedPlaceholder}
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"
@@ -159,87 +162,20 @@ export function DatasetButtonSelector({
                 <CommandEmpty className="flex items-center justify-center px-4 py-4 text-sm">
                   No datasets found.
                 </CommandEmpty>
-
-                {recentlyUpdatedDatasets.length > 0 && (
-                  <CommandGroup>
-                    {recentlyUpdatedDatasets.map((dataset) => (
-                      <CommandItem
-                        key={dataset.name}
-                        value={dataset.name}
-                        onSelect={() => {
-                          onSelect(dataset.name, false);
-                          setInputValue("");
-                          setOpen(false);
-                        }}
-                        className="group flex w-full items-center gap-2"
-                        data-dataset-name={dataset.name}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {selected === dataset.name ? (
-                            <TableCheck size={16} className="text-green-700" />
-                          ) : (
-                            <Table size={16} className="text-fg-muted" />
-                          )}
-                          <span
-                            className={clsx(
-                              "group-hover:text-fg-primary truncate font-mono",
-                              selected === dataset.name
-                                ? "font-medium"
-                                : "font-normal",
-                            )}
-                          >
-                            {dataset.name}
-                          </span>
-                        </div>
-                        <span
-                          className={clsx(
-                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
-                            selected === dataset.name
-                              ? "text-fg-secondary font-medium"
-                              : "text-fg-tertiary font-normal",
-                          )}
-                        >
-                          {dataset.count.toLocaleString()}
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
+                <ComboboxMenuItems
+                  items={sortedDatasetNames}
+                  selected={selected}
+                  searchValue={inputValue}
+                  onSelectItem={handleSelectItem}
+                  showCreateOption={showCreateOption}
+                  createHeading="New dataset"
+                  existingHeading="Existing"
+                  getItemIcon={getItemIcon}
+                  getItemSuffix={getItemSuffix}
+                  getItemDataAttributes={getItemDataAttributes}
+                />
               </CommandList>
             )}
-
-            {
-              // If creation is allowed...
-              allowCreation &&
-                // ...and the user has typed something...
-                inputValue.trim() &&
-                // ...and the dataset doesn't exist in the list of recently updated datasets...
-                !recentlyUpdatedDatasets.some(
-                  (dataset) =>
-                    dataset.name.toLowerCase() ===
-                    inputValue.trim().toLowerCase(),
-                ) && (
-                  // ...then show the "New dataset" group
-                  <CommandGroup heading="New dataset">
-                    <CommandItem
-                      value={`create-${inputValue.trim()}`}
-                      onSelect={() => {
-                        onSelect(inputValue.trim(), true);
-                        setInputValue("");
-                        setOpen(false);
-                      }}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center truncate">
-                        <TablePlus className="mr-2 h-4 w-4 text-blue-600" />
-                        <span className="text-fg-primary truncate font-mono text-sm">
-                          {inputValue.trim()}
-                        </span>
-                      </div>
-                    </CommandItem>
-                  </CommandGroup>
-                )
-            }
           </Command>
         </PopoverContent>
       </Popover>

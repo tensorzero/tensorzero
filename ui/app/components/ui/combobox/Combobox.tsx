@@ -3,11 +3,11 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "~/components/ui/popover";
-import { CommandGroup, CommandItem } from "~/components/ui/command";
 import { useCallback, useMemo } from "react";
 import { ComboboxInput } from "./ComboboxInput";
 import { ComboboxContent } from "./ComboboxContent";
 import { ComboboxHint } from "./ComboboxHint";
+import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
 
 type ComboboxProps = {
@@ -79,7 +79,7 @@ export function Combobox({
 
   const showCreateOption =
     allowCreation &&
-    searchValue.trim() &&
+    Boolean(searchValue.trim()) &&
     !items.some(
       (item) => item.toLowerCase() === searchValue.trim().toLowerCase(),
     );
@@ -135,52 +135,18 @@ export function Combobox({
                 {errorMessage}
               </div>
             ) : (
-              <>
-                {showCreateOption && (
-                  <CommandGroup heading={createHeading}>
-                    <CommandItem
-                      value={`create-${searchValue.trim()}`}
-                      onSelect={() =>
-                        handleSelectItem(searchValue.trim(), true)
-                      }
-                      className="flex items-center gap-2"
-                    >
-                      {getItemIcon?.(null, false)}
-                      <span className="truncate font-mono">
-                        {searchValue.trim()}
-                      </span>
-                    </CommandItem>
-                  </CommandGroup>
-                )}
-                {filteredItems.length > 0 && (
-                  <CommandGroup
-                    heading={showCreateOption ? "Existing" : undefined}
-                  >
-                    {filteredItems.map((item) => {
-                      const isSelected = selected === item;
-                      return (
-                        <CommandItem
-                          key={item}
-                          value={item}
-                          onSelect={() => handleSelectItem(item, false)}
-                          className="group flex w-full items-center gap-2"
-                          {...getItemDataAttributes?.(item)}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2">
-                            {getItemIcon?.(item, isSelected)}
-                            <span className="truncate font-mono">{item}</span>
-                          </div>
-                          {getItemSuffix && (
-                            <span className="text-fg-tertiary min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap">
-                              {getItemSuffix(item)}
-                            </span>
-                          )}
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                )}
-              </>
+              <ComboboxMenuItems
+                items={filteredItems}
+                selected={selected}
+                searchValue={searchValue}
+                onSelectItem={handleSelectItem}
+                showCreateOption={showCreateOption}
+                createHeading={createHeading}
+                existingHeading="Existing"
+                getItemIcon={getItemIcon}
+                getItemSuffix={getItemSuffix}
+                getItemDataAttributes={getItemDataAttributes}
+              />
             )}
           </ComboboxContent>
           {creationHint && !showCreateOption && !loading && !error && (
