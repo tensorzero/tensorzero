@@ -26,9 +26,7 @@ use tensorzero_core::evaluations::EvaluationConfig;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::betting_confidence_sequences::{
-    MeanBettingConfidenceSequence, WealthProcessGridPoints, WealthProcesses, update_betting_cs,
-};
+use crate::betting_confidence_sequences::{MeanBettingConfidenceSequence, update_betting_cs};
 use crate::evaluators::EvaluationResult;
 use crate::stopping::CancellationTokens;
 use crate::types::EvaluationVariant;
@@ -445,7 +443,7 @@ fn check_evaluator_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) ->
 }
 
 // ============================================================================
-// Durable Task
+// Durable Top-K Variant Selection Task
 // ============================================================================
 
 /// Serializable parameters for the top-k durable task.
@@ -568,7 +566,7 @@ impl From<AdaptiveEvalStoppingResults> for TopKTaskOutput {
     }
 }
 
-/// Step function to fetch and shuffle datapoint IDs.
+/// Durable step function to fetch and shuffle datapoint IDs.
 async fn fetch_datapoint_ids_step(
     params: FetchDatapointIdsParams,
     state: TopKTaskState,
@@ -606,7 +604,7 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     }
 }
 
-/// Step function to process a batch and update loop state.
+/// Durable step function to process a batch and update loop state.
 async fn process_batch_step(
     params: ProcessBatchStepParams,
     state: TopKTaskState,
@@ -739,25 +737,6 @@ async fn process_batch_step(
     }
 
     Ok(current_state)
-}
-
-/// Create an initial confidence sequence for a named entity.
-fn create_initial_cs(name: &str, resolution: usize, alpha: f32) -> MeanBettingConfidenceSequence {
-    MeanBettingConfidenceSequence {
-        name: name.to_string(),
-        mean_regularized: 0.5,
-        variance_regularized: 0.25,
-        count: 0,
-        mean_est: 0.5,
-        cs_lower: 0.0,
-        cs_upper: 1.0,
-        alpha,
-        wealth: WealthProcesses {
-            grid: WealthProcessGridPoints::Resolution(resolution),
-            wealth_upper: vec![1.0; resolution],
-            wealth_lower: vec![1.0; resolution],
-        },
-    }
 }
 
 /// Update variant statuses based on current confidence sequences and top-k stopping result.
@@ -960,7 +939,11 @@ impl Task<TopKTaskState> for TopKTask {
                 .map(|name| {
                     (
                         name.clone(),
-                        create_initial_cs(name, DEFAULT_CS_RESOLUTION, DEFAULT_ALPHA),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
                     )
                 })
                 .collect(),
@@ -970,7 +953,11 @@ impl Task<TopKTaskState> for TopKTask {
                 .map(|name| {
                     (
                         name.clone(),
-                        create_initial_cs(name, DEFAULT_CS_RESOLUTION, DEFAULT_ALPHA),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
                     )
                 })
                 .collect(),
@@ -979,7 +966,11 @@ impl Task<TopKTaskState> for TopKTask {
                 .map(|name| {
                     (
                         name.clone(),
-                        create_initial_cs(name, DEFAULT_CS_RESOLUTION, DEFAULT_ALPHA),
+                        MeanBettingConfidenceSequence::new(
+                            name.clone(),
+                            DEFAULT_CS_RESOLUTION,
+                            DEFAULT_ALPHA,
+                        ),
                     )
                 })
                 .collect(),
@@ -1106,21 +1097,7 @@ mod tests {
 
     /// Helper to create a fresh confidence sequence with no observations (for testing updates)
     fn mock_fresh_cs(name: &str) -> MeanBettingConfidenceSequence {
-        MeanBettingConfidenceSequence {
-            name: name.to_string(),
-            mean_regularized: 0.5,
-            variance_regularized: 0.25,
-            count: 0,
-            mean_est: 0.5,
-            cs_lower: 0.0,
-            cs_upper: 1.0,
-            alpha: 0.05,
-            wealth: WealthProcesses {
-                grid: WealthProcessGridPoints::Resolution(101),
-                wealth_upper: vec![1.0; 101],
-                wealth_lower: vec![1.0; 101],
-            },
-        }
+        MeanBettingConfidenceSequence::new(name.to_string(), 101, 0.05)
     }
 
     /// Helper to create a mock DatapointVariantResult for testing.

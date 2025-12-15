@@ -166,6 +166,34 @@ pub struct MeanBettingConfidenceSequence {
     pub wealth: WealthProcesses,
 }
 
+impl MeanBettingConfidenceSequence {
+    /// Create a new confidence sequence with no observations.
+    ///
+    /// The sequence starts with wide bounds [0, 1] and neutral priors.
+    ///
+    /// # Arguments
+    /// * `name` - Identifier for this sequence (e.g., variant or evaluator name)
+    /// * `resolution` - Number of grid points for the wealth process (higher = more precise)
+    /// * `alpha` - Significance level (e.g., 0.05 for 95% confidence)
+    pub fn new(name: String, resolution: usize, alpha: f32) -> Self {
+        Self {
+            name,
+            mean_regularized: 0.5,
+            variance_regularized: 0.25,
+            count: 0,
+            mean_est: 0.5,
+            cs_lower: 0.0,
+            cs_upper: 1.0,
+            alpha,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(resolution),
+                wealth_upper: vec![1.0; resolution],
+                wealth_lower: vec![1.0; resolution],
+            },
+        }
+    }
+}
+
 /// Update a confidence sequence with new observations.
 ///
 /// Processes a batch of new observations and returns an updated confidence sequence.
