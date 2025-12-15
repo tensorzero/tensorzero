@@ -13,13 +13,6 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -30,6 +23,9 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { Combobox } from "~/components/ui/combobox";
+import { Evaluation } from "~/components/icons/Icons";
+import { GitBranch } from "lucide-react";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 import { toFunctionUrl } from "~/utils/urls";
 
@@ -198,25 +194,20 @@ function EvaluationForm({
           Evaluation
         </label>
       </div>
-      <Select
+
+      <Combobox
         name="evaluation_name"
-        value={selectedEvaluationName ?? undefined}
-        onValueChange={(value) => {
+        selected={selectedEvaluationName}
+        onSelect={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select an evaluation" />
-        </SelectTrigger>
-        <SelectContent>
-          {evaluation_names.map((evaluation_name) => (
-            <SelectItem key={evaluation_name} value={evaluation_name}>
-              {evaluation_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        items={evaluation_names}
+        icon={Evaluation}
+        placeholder="Select evaluation"
+        emptyMessage="No evaluations found"
+        monospace
+      />
       <div className="mt-4">
         <label
           htmlFor="dataset_name"
@@ -269,29 +260,18 @@ function EvaluationForm({
           Variant
         </label>
       </div>
-      <Select
+
+      <Combobox
         name="variant_name"
-        value={selectedVariantName ?? undefined}
+        selected={selectedVariantName}
+        onSelect={setSelectedVariantName}
+        items={functionConfig ? Object.keys(functionConfig.variants) : []}
+        icon={GitBranch}
+        placeholder="Select variant"
+        emptyMessage="No variants found"
         disabled={!selectedEvaluationName}
-        onValueChange={(value) => setSelectedVariantName(value)}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select a variant" />
-        </SelectTrigger>
-        <SelectContent>
-          {(() => {
-            if (!selectedEvaluationName || !functionConfig) return null;
-
-            const variant_names = Object.keys(functionConfig.variants);
-
-            return variant_names.map((variant_name) => (
-              <SelectItem key={variant_name} value={variant_name}>
-                {variant_name}
-              </SelectItem>
-            ));
-          })()}
-        </SelectContent>
-      </Select>
+        monospace
+      />
       <div className="mt-4">
         <div className="mb-1 flex items-center gap-1.5">
           <label htmlFor="concurrency_limit" className="text-sm font-medium">
