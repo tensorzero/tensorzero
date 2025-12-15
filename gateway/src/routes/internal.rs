@@ -99,4 +99,13 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
         )
+        // Config snapshot endpoints
+        .route(
+            "/internal/config",
+            get(endpoints::internal::config::get_live_config_handler),
+        )
+        .route(
+            "/internal/config/{hash}",
+            get(endpoints::internal::config::get_config_by_hash_handler),
+        )
 }
