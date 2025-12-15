@@ -36,17 +36,6 @@ pub enum VariantStatus {
     Failed,
 }
 
-/// Result of checking the top-k stopping condition.
-#[derive(Debug, Clone)]
-pub struct TopKStoppingResult {
-    /// Whether a top-k set was identified
-    pub stopped: bool,
-    /// The k value for which stopping occurred (if stopped)
-    pub k: Option<u32>,
-    /// Names of variants confidently in the top-k (if stopped)
-    pub top_variants: Vec<String>,
-}
-
 /// Reason why the top-k evaluation stopped.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GlobalStoppingReason {
@@ -58,6 +47,17 @@ pub enum GlobalStoppingReason {
     EvaluatorFailed { evaluator_name: String },
     /// Too many variants failed (>= num_variants - k_min)
     TooManyVariantsFailed { num_failed: usize },
+}
+
+/// Result of checking the top-k stopping condition.
+#[derive(Debug, Clone)]
+pub struct TopKStoppingResult {
+    /// Whether a top-k set was identified
+    pub stopped: bool,
+    /// The k value for which stopping occurred (if stopped)
+    pub k: Option<u32>,
+    /// Names of variants confidently in the top-k (if stopped)
+    pub top_variants: Vec<String>,
 }
 
 /// Results from running the adaptive top-k evaluation.
