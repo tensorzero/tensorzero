@@ -22,6 +22,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
         )
         .route(
+            "/internal/functions/{function_name}/metrics",
+            get(endpoints::functions::internal::get_function_metrics_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/inference-stats",
             get(endpoints::internal::inference_stats::get_inference_stats_handler),
         )
@@ -42,6 +46,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::ui::get_config::ui_config_handler),
         )
         .route(
+            "/internal/episodes",
+            get(endpoints::episodes::internal::list_episodes_handler),
+        )
+        .route(
+            "/internal/episodes/bounds",
+            get(endpoints::episodes::internal::query_episode_table_bounds_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints",
             #[expect(deprecated)]
             post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
@@ -53,6 +65,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
             put(endpoints::datasets::update_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/count",
+            get(endpoints::datasets::internal::get_datapoint_count_handler),
         )
         .route(
             "/internal/object_storage",
@@ -83,5 +99,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
+        )
+        // Config snapshot endpoints
+        .route(
+            "/internal/config",
+            get(endpoints::internal::config::get_live_config_handler),
+        )
+        .route(
+            "/internal/config/{hash}",
+            get(endpoints::internal::config::get_config_by_hash_handler),
         )
 }

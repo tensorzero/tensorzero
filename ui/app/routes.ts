@@ -17,10 +17,6 @@ export default [
 
     ...prefix("datasets", [
       route("counts", "routes/api/datasets/counts.route.ts"),
-      route(
-        "count/dataset/:dataset_name/function/:function_name",
-        "routes/api/datasets/count_dataset_function.route.ts",
-      ),
     ]),
 
     route(

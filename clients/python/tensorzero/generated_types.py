@@ -94,6 +94,15 @@ class DeleteDatapointsResponse:
     """
 
 
+@dataclass(kw_only=True)
+class DemonstrationFeedbackFilter:
+    """
+    Filter by whether an inference has a demonstration.
+    """
+
+    has_demonstration: bool
+
+
 Detail = Literal["low", "high", "auto"]
 
 
@@ -440,6 +449,15 @@ class InferenceFilterBooleanMetric(BooleanMetricFilter):
     """
 
     type: Literal["boolean_metric"] = "boolean_metric"
+
+
+@dataclass(kw_only=True)
+class InferenceFilterDemonstrationFeedback(DemonstrationFeedbackFilter):
+    """
+    Filter by whether an inference has a demonstration.
+    """
+
+    type: Literal["demonstration_feedback"] = "demonstration_feedback"
 
 
 InferenceOutputSource = str
@@ -2197,6 +2215,7 @@ class InferenceFilterNot:
 InferenceFilter = (
     InferenceFilterFloatMetric
     | InferenceFilterBooleanMetric
+    | InferenceFilterDemonstrationFeedback
     | InferenceFilterTag
     | InferenceFilterTime
     | InferenceFilterAnd

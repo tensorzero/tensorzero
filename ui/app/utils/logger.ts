@@ -18,19 +18,27 @@ const getLogLevel = (): LogLevel => {
   if (cachedLogLevel !== null) {
     return cachedLogLevel;
   }
-  const level = process.env.TENSORZERO_UI_LOG_LEVEL?.toLowerCase();
-  if (level) {
-    if ((LOG_LEVELS as readonly string[]).includes(level)) {
-      cachedLogLevel = level as LogLevel;
-      return cachedLogLevel;
-    }
-    if (!hasLoggedInvalidLogLevel) {
-      console.warn(
-        `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${process.env.TENSORZERO_UI_LOG_LEVEL}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
-      );
-      hasLoggedInvalidLogLevel = true;
-    }
+
+  // Browser: default to debug
+  if (typeof process === "undefined" || !process.env) {
+    cachedLogLevel = "debug";
+    return cachedLogLevel;
   }
+
+  // Server: use env var
+  const level = process.env.TENSORZERO_UI_LOG_LEVEL?.toLowerCase();
+  if (level && (LOG_LEVELS as readonly string[]).includes(level)) {
+    cachedLogLevel = level as LogLevel;
+    return cachedLogLevel;
+  }
+
+  if (level && !hasLoggedInvalidLogLevel) {
+    console.warn(
+      `[TensorZero UI] Invalid TENSORZERO_UI_LOG_LEVEL: "${process.env.TENSORZERO_UI_LOG_LEVEL}". Valid values are: debug, info, warn, error. Defaulting to "info".`,
+    );
+    hasLoggedInvalidLogLevel = true;
+  }
+
   cachedLogLevel = "info";
   return cachedLogLevel;
 };

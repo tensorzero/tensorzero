@@ -83,6 +83,14 @@ pub trait FeedbackQueries {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
+
+    /// Query all metrics that have feedback for a function, optionally filtered by variant
+    async fn query_metrics_with_feedback(
+        &self,
+        function_name: &str,
+        inference_table: &str,
+        variant_name: Option<&str>,
+    ) -> Result<Vec<MetricWithFeedback>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -212,4 +220,22 @@ pub struct FeedbackBoundsByType {
     pub float: TableBounds,
     pub comment: TableBounds,
     pub demonstration: TableBounds,
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MetricWithFeedback {
+    pub function_name: String,
+    pub metric_name: String,
+    pub metric_type: MetricType,
+    pub feedback_count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum MetricType {
+    Boolean,
+    Float,
+    Demonstration,
 }

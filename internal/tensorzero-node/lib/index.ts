@@ -2,9 +2,7 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
-  EpisodeByIdRow,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -14,7 +12,6 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  TableBoundsWithCount,
   FeedbackRow,
   FeedbackBounds,
   QueryFeedbackBoundsByTargetIdParams,
@@ -120,7 +117,10 @@ interface RunEvaluationStreamingParams {
   functionConfig: string;
   evaluationName: string;
   datasetName: string;
-  variantName: string;
+  /** Exactly one of variantName or internalDynamicVariantConfig must be provided */
+  variantName?: string;
+  /** JSON-serialized UninitializedVariantInfo */
+  internalDynamicVariantConfig?: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
@@ -213,26 +213,6 @@ export class DatabaseClient {
     );
   }
 
-  async queryEpisodeTable(
-    limit: number,
-    before?: string,
-    after?: string,
-  ): Promise<EpisodeByIdRow[]> {
-    const params = safeStringify({
-      limit,
-      before,
-      after,
-    });
-    const episodeTableString =
-      await this.nativeDatabaseClient.queryEpisodeTable(params);
-    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
-  }
-
-  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
-    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
-    return JSON.parse(bounds) as TableBoundsWithCount;
-  }
-
   async queryFeedbackByTargetId(
     params: QueryFeedbackByTargetIdParams,
   ): Promise<FeedbackRow[]> {
@@ -302,15 +282,6 @@ export class DatabaseClient {
 
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async countDatapointsForDatasetFunction(
-    params: CountDatapointsForDatasetFunctionParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
-      paramsString,
-    );
   }
 
   async getFeedbackByVariant(

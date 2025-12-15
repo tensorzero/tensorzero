@@ -93,6 +93,13 @@ pub enum TagComparisonOperator {
     NotEqual,
 }
 
+/// Filter by whether an inference has a demonstration.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
+#[ts(export)]
+pub struct DemonstrationFeedbackFilter {
+    pub has_demonstration: bool,
+}
+
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
@@ -146,6 +153,10 @@ pub enum InferenceFilter {
     /// Filter by the value of a boolean metric
     #[schemars(title = "InferenceFilterBooleanMetric")]
     BooleanMetric(BooleanMetricFilter),
+
+    /// Filter by whether an inference has a demonstration.
+    #[schemars(title = "InferenceFilterDemonstrationFeedback")]
+    DemonstrationFeedback(DemonstrationFeedbackFilter),
 
     /// Filter by tag key-value pair
     #[schemars(title = "InferenceFilterTag")]

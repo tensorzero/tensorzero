@@ -18,7 +18,9 @@ import type {
   CreateDatapointsFromInferenceRequest,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
+  MetricsWithFeedbackResponse,
   Datapoint,
+  GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetModelLatencyResponse,
@@ -37,11 +39,13 @@ import type {
   ListInferenceMetadataResponse,
   StatusResponse,
   TimeWindow,
+  TableBoundsWithCount,
   UiConfig,
   UpdateDatapointRequest,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
+  ListEpisodesResponse,
 } from "~/types/tensorzero";
 
 // This type is not exported from tensorzero-node yet, so define it inline
@@ -284,58 +288,6 @@ export const FeedbackResponseSchema = z.object({
   feedback_id: z.string(),
 });
 export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
-
-/**
- * Schema for tool parameters in a datapoint
- */
-export const ToolParamsSchema = z.record(ZodJsonValueSchema);
-export type ToolParams = z.infer<typeof ToolParamsSchema>;
-
-/**
- * Base schema for datapoints with common fields
- */
-const BaseDatapointSchema = z.object({
-  function_name: z.string(),
-  id: z.string().uuid(),
-  episode_id: z.string().uuid().nullish(),
-  input: InputSchema,
-  output: ZodJsonValueSchema,
-  tags: z.record(z.string()).optional(),
-  auxiliary: z.string().optional(),
-  is_custom: z.boolean(),
-  source_inference_id: z.string().uuid().nullish(),
-  name: z.string().nullish(),
-  staled_at: z.string().datetime().nullish(),
-});
-
-/**
- * Schema for chat inference datapoints
- */
-export const ChatInferenceDatapointSchema = BaseDatapointSchema.extend({
-  tool_params: ToolParamsSchema.optional(),
-});
-export type ChatInferenceDatapoint = z.infer<
-  typeof ChatInferenceDatapointSchema
->;
-
-/**
- * Schema for JSON inference datapoints
- */
-export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
-  output_schema: ZodJsonValueSchema,
-});
-export type JsonInferenceDatapoint = z.infer<
-  typeof JsonInferenceDatapointSchema
->;
-
-/**
- * Combined schema for any type of datapoint
- */
-export const DatapointSchema = z.union([
-  ChatInferenceDatapointSchema,
-  JsonInferenceDatapointSchema,
-]);
-export type ZodDatapoint = z.infer<typeof DatapointSchema>;
 
 /**
  * Schema for datapoint response
@@ -679,6 +631,33 @@ export class TensorZeroClient {
     return (await response.json()) as CreateDatapointsResponse;
   }
 
+  /**
+   * Fetches datapoint count for a dataset, optionally filtered by function name.
+   * @param datasetName - The name of the dataset to get count for
+   * @param options - Optional parameters for filtering
+   * @param options.functionName - Optional function name to filter by
+   * @returns A promise that resolves with the datapoint count
+   * @throws Error if the request fails
+   */
+  async getDatapointCount(
+    datasetName: string,
+    options?: { functionName?: string },
+  ): Promise<GetDatapointCountResponse> {
+    const searchParams = new URLSearchParams();
+    if (options?.functionName) {
+      searchParams.append("function_name", options.functionName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/count${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetDatapointCountResponse;
+  }
+
   async getObject(storagePath: ZodStoragePath): Promise<string> {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
@@ -811,6 +790,32 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InferenceWithFeedbackStatsResponse;
+  }
+
+  /**
+   * Fetches metrics with feedback for a function, optionally filtered by variant.
+   * @param functionName - The name of the function to get metrics for
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with metrics and their feedback counts
+   * @throws Error if the request fails
+   */
+  async getFunctionMetricsWithFeedback(
+    functionName: string,
+    variantName?: string,
+  ): Promise<MetricsWithFeedbackResponse> {
+    const searchParams = new URLSearchParams();
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/metrics${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as MetricsWithFeedbackResponse;
   }
 
   /**
@@ -961,6 +966,53 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as ListInferenceMetadataResponse;
+  }
+
+  /**
+   * Lists episodes with pagination support.
+   * @param limit - Maximum number of episodes to return
+   * @param before - Return episodes before this episode_id (for pagination)
+   * @param after - Return episodes after this episode_id (for pagination)
+   * @returns A promise that resolves with an array of episodes
+   * @throws Error if the request fails
+   */
+  async listEpisodes(
+    limit: number,
+    before?: string,
+    after?: string,
+  ): Promise<ListEpisodesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    if (before) {
+      searchParams.append("before", before);
+    }
+    if (after) {
+      searchParams.append("after", after);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/episodes?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListEpisodesResponse;
+  }
+
+  /**
+   * Queries episode table bounds (first_id, last_id, and count).
+   * @returns A promise that resolves with the bounds information
+   * @throws Error if the request fails
+   */
+  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+    const endpoint = `/internal/episodes/bounds`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as TableBoundsWithCount;
   }
 
   private async fetch(
