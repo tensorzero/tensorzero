@@ -734,8 +734,8 @@ jobs:
     # the main 'validate' job)
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
-    # This needs to pull from Docker Hub, so skip for external PR CI
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository) || inputs.is_merge_group }}
+    # This needs to pull from Docker Hub, so only run in the merge queue, or when running on a PR from the main repository
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
@@ -1185,7 +1185,11 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
+      - name: Print all job results
+        run: |
+          echo "'needs': ${{ toJson(needs) }}"
+          echo "github.event_name: ${{ github.event_name }}"
       # When running in the merge queue, jobs should never be skipped.
       # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1
