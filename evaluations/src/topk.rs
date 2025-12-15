@@ -37,149 +37,9 @@ use crate::{
     collect_batch_result, process_batch,
 };
 
-/// Result of checking the top-k stopping condition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopKStoppingResult {
-    /// Whether a top-k set was identified
-    pub stopped: bool,
-    /// The k value for which stopping occurred (if stopped)
-    pub k: Option<u32>,
-    /// Names of variants confidently in the top-k (if stopped)
-    pub top_variants: Vec<String>,
-}
-
-/// Check if we can confidently identify a top-k set of variants.
-///
-/// A variant is "confidently in the top k" if its confidence sequence lower bound
-/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
-/// tolerance `epsilon`. This means we can be confident it's better than at least
-/// (num_variants - k) variants, or at least not more than epsilon worse than those
-/// variants.
-///
-/// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
-/// and working down. We return the largest k for which we can identify a top-k set.
-///
-/// # Arguments
-/// * `variant_performance` - Map from variant name to its performance confidence sequence
-/// * `k_min` - Minimum acceptable k value
-/// * `k_max` - Maximum k value to check
-/// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
-///
-/// # Returns
-/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
-/// if stopping occurred.
-pub fn check_topk_stopping(
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    k_min: u32,
-    k_max: u32,
-    epsilon: Option<f64>,
-) -> anyhow::Result<TopKStoppingResult> {
-    let epsilon = epsilon.unwrap_or(0.0);
-    let num_variants = variant_performance.len();
-
-    // Invalid parameters: return error
-    if k_min == 0 {
-        anyhow::bail!("k_min must be > 0");
-    }
-    if k_max < k_min {
-        anyhow::bail!("k_max ({k_max}) < k_min ({k_min})");
-    }
-    if epsilon < 0.0 {
-        anyhow::bail!("epsilon ({epsilon}) must be >= 0");
-    }
-
-    // Runtime edge cases: log a warning, return empty result
-    if num_variants == 0 {
-        tracing::warn!("check_topk_stopping: no variants provided");
-        return Ok(TopKStoppingResult {
-            stopped: false,
-            k: None,
-            top_variants: vec![],
-        });
-    }
-
-    if k_min as usize > num_variants {
-        tracing::warn!(
-            k_min,
-            num_variants,
-            "check_topk_stopping: k_min > num_variants, can't identify top-k variants"
-        );
-        return Ok(TopKStoppingResult {
-            stopped: false,
-            k: None,
-            top_variants: vec![],
-        });
-    }
-
-    // Collect upper bounds into a sorted vec for binary search
-    let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
-    upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
-    // with tolerance epsilon. This tells us how many variants it "confidently beats".
-    // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
-        .iter()
-        .map(|(name, cs)| {
-            // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
-            let num_beaten_including_self =
-                upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
-            // Subtract 1 if this variant's own upper bound was counted
-            let beats_self = cs.cs_upper - epsilon < cs.cs_lower;
-            let num_beaten = if beats_self {
-                num_beaten_including_self.saturating_sub(1)
-            } else {
-                num_beaten_including_self
-            };
-            (name, num_beaten)
-        })
-        .collect();
-
-    // Sort by num_beaten descending (best variants first)
-    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
-
-    // Check each k from k_max down to k_min
-    // We want the largest k for which we can identify a top-k set
-    for k in (k_min..=k_max).rev() {
-        let k_usize = k as usize;
-        let threshold = num_variants.saturating_sub(k_usize);
-
-        // Check if the top k variants each beat at least (num_variants - k) others
-        if k_usize <= variants_with_n_beaten.len()
-            && variants_with_n_beaten[..k_usize]
-                .iter()
-                .all(|(_, num_beaten)| *num_beaten >= threshold)
-        {
-            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
-                .iter()
-                .map(|(name, _)| (*name).clone())
-                .collect();
-
-            return Ok(TopKStoppingResult {
-                stopped: true,
-                k: Some(k),
-                top_variants,
-            });
-        }
-    }
-
-    Ok(TopKStoppingResult {
-        stopped: false,
-        k: None,
-        top_variants: vec![],
-    })
-}
-
-/// Convenience wrapper to check if a specific k can be identified.
-///
-/// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
-pub fn check_topk(
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    k: u32,
-    epsilon: Option<f64>,
-) -> anyhow::Result<TopKStoppingResult> {
-    check_topk_stopping(variant_performance, k, k, epsilon)
-}
+// ============================================================================
+// Core Types
+// ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,37 +54,59 @@ pub enum VariantStatus {
     Failed,
 }
 
+/// Reason why the top-k evaluation stopped.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GlobalStoppingReason {
+    /// Successfully identified a top-k set of variants
+    TopKFound { k: u32, top_variants: Vec<String> },
+    /// Reached the maximum number of datapoints without identifying top-k
+    MaxDatapointsReached,
+    /// At least one evaluator has a failure rate above the threshold
+    EvaluatorFailed { evaluator_name: String },
+    /// Too many variants failed (>= num_variants - k_min)
+    TooManyVariantsFailed { num_failed: usize },
+}
+
+/// Result of checking the top-k stopping condition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopKStoppingResult {
+    /// Whether a top-k set was identified
+    pub stopped: bool,
+    /// The k value for which stopping occurred (if stopped)
+    pub k: Option<u32>,
+    /// Names of variants confidently in the top-k (if stopped)
+    pub top_variants: Vec<String>,
+}
+
+/// Results from running the adaptive top-k evaluation.
+#[derive(Debug)]
+pub struct AdaptiveEvalStoppingResults {
+    /// Unique ID for this evaluation run
+    pub evaluation_run_id: Uuid,
+    /// Performance confidence sequences for each variant
+    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each variant
+    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Failure rate confidence sequences for each evaluator
+    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final status of each variant
+    pub variant_status: HashMap<String, VariantStatus>,
+    /// Why the evaluation stopped
+    pub stopping_reason: GlobalStoppingReason,
+    /// Number of datapoints processed
+    pub num_datapoints_processed: usize,
+}
+
+// ============================================================================
+// Scoring
+// ============================================================================
+
 /// Type alias for batch results grouped by datapoint, then by variant.
 ///
 /// This structure is optimized for the scoring function, which needs to compare
 /// variants on the same datapoint. The outer map is keyed by datapoint ID,
 /// and the inner map is keyed by variant name.
 pub type BatchResultsByDatapoint = HashMap<Uuid, HashMap<String, BatchItemResult>>;
-
-/// Shared context for top-k evaluation that remains constant across batches.
-///
-/// This struct holds configuration and client references that don't change
-/// during the evaluation run. Per-batch parameters like `batch_ids` and
-/// `variant_status` are passed separately to `process_topk_batch`.
-#[derive(Clone)]
-pub struct TopKContext {
-    /// Clients for inference and database access
-    pub clients: Arc<Clients>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Name of the evaluation
-    pub evaluation_name: Arc<String>,
-    /// Evaluation run ID for tagging
-    pub evaluation_run_id: Uuid,
-    /// Dataset name for tagging
-    pub dataset_name: Arc<String>,
-    /// Cache mode for inference
-    pub inference_cache: CacheEnabledMode,
-    /// Semaphore for concurrency control
-    pub semaphore: Arc<tokio::sync::Semaphore>,
-}
 
 /// Trait for scoring functions that compare variants on a single datapoint.
 ///
@@ -400,6 +282,184 @@ pub fn compute_updates(
     Ok(())
 }
 
+// ============================================================================
+// Stopping Conditions
+// ============================================================================
+
+/// Check if we can confidently identify a top-k set of variants.
+///
+/// A variant is "confidently in the top k" if its confidence sequence lower bound
+/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
+/// tolerance `epsilon`. This means we can be confident it's better than at least
+/// (num_variants - k) variants, or at least not more than epsilon worse than those
+/// variants.
+///
+/// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
+/// and working down. We return the largest k for which we can identify a top-k set.
+///
+/// # Arguments
+/// * `variant_performance` - Map from variant name to its performance confidence sequence
+/// * `k_min` - Minimum acceptable k value
+/// * `k_max` - Maximum k value to check
+/// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
+///
+/// # Returns
+/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
+/// if stopping occurred.
+pub fn check_topk_stopping(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k_min: u32,
+    k_max: u32,
+    epsilon: Option<f64>,
+) -> anyhow::Result<TopKStoppingResult> {
+    let epsilon = epsilon.unwrap_or(0.0);
+    let num_variants = variant_performance.len();
+
+    // Invalid parameters: return error
+    if k_min == 0 {
+        anyhow::bail!("k_min must be > 0");
+    }
+    if k_max < k_min {
+        anyhow::bail!("k_max ({k_max}) < k_min ({k_min})");
+    }
+    if epsilon < 0.0 {
+        anyhow::bail!("epsilon ({epsilon}) must be >= 0");
+    }
+
+    // Runtime edge cases: log a warning, return empty result
+    if num_variants == 0 {
+        tracing::warn!("check_topk_stopping: no variants provided");
+        return Ok(TopKStoppingResult {
+            stopped: false,
+            k: None,
+            top_variants: vec![],
+        });
+    }
+
+    if k_min as usize > num_variants {
+        tracing::warn!(
+            k_min,
+            num_variants,
+            "check_topk_stopping: k_min > num_variants, can't identify top-k variants"
+        );
+        return Ok(TopKStoppingResult {
+            stopped: false,
+            k: None,
+            top_variants: vec![],
+        });
+    }
+
+    // Collect upper bounds into a sorted vec for binary search
+    let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
+    upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
+    // with tolerance epsilon. This tells us how many variants it "confidently beats".
+    // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
+    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
+        .iter()
+        .map(|(name, cs)| {
+            // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
+            let num_beaten_including_self =
+                upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
+            // Subtract 1 if this variant's own upper bound was counted
+            let beats_self = cs.cs_upper - epsilon < cs.cs_lower;
+            let num_beaten = if beats_self {
+                num_beaten_including_self.saturating_sub(1)
+            } else {
+                num_beaten_including_self
+            };
+            (name, num_beaten)
+        })
+        .collect();
+
+    // Sort by num_beaten descending (best variants first)
+    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Check each k from k_max down to k_min
+    // We want the largest k for which we can identify a top-k set
+    for k in (k_min..=k_max).rev() {
+        let k_usize = k as usize;
+        let threshold = num_variants.saturating_sub(k_usize);
+
+        // Check if the top k variants each beat at least (num_variants - k) others
+        if k_usize <= variants_with_n_beaten.len()
+            && variants_with_n_beaten[..k_usize]
+                .iter()
+                .all(|(_, num_beaten)| *num_beaten >= threshold)
+        {
+            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
+                .iter()
+                .map(|(name, _)| (*name).clone())
+                .collect();
+
+            return Ok(TopKStoppingResult {
+                stopped: true,
+                k: Some(k),
+                top_variants,
+            });
+        }
+    }
+
+    Ok(TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    })
+}
+
+/// Convenience wrapper to check if a specific k can be identified.
+///
+/// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
+pub fn check_topk(
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    k: u32,
+    epsilon: Option<f64>,
+) -> anyhow::Result<TopKStoppingResult> {
+    check_topk_stopping(variant_performance, k, k, epsilon)
+}
+
+/// Check if a variant should be marked as failed based on its failure rate confidence sequence.
+fn check_variant_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
+    // Variant is failed if the lower bound of its failure rate CI exceeds the threshold
+    cs.cs_lower > threshold
+}
+
+/// Check if an evaluator has failed based on its failure rate confidence sequence.
+fn check_evaluator_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
+    // Evaluator is failed if the lower bound of its failure rate CI exceeds the threshold
+    cs.cs_lower > threshold
+}
+
+// ============================================================================
+// Batch Processing
+// ============================================================================
+
+/// Shared context for top-k evaluation that remains constant across batches.
+///
+/// This struct holds configuration and client references that don't change
+/// during the evaluation run. Per-batch parameters like `batch_ids` and
+/// `variant_status` are passed separately to `process_topk_batch`.
+#[derive(Clone)]
+pub struct TopKContext {
+    /// Clients for inference and database access
+    pub clients: Arc<Clients>,
+    /// Evaluation configuration
+    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Function configs table
+    pub function_configs: Arc<EvaluationFunctionConfigTable>,
+    /// Name of the evaluation
+    pub evaluation_name: Arc<String>,
+    /// Evaluation run ID for tagging
+    pub evaluation_run_id: Uuid,
+    /// Dataset name for tagging
+    pub dataset_name: Arc<String>,
+    /// Cache mode for inference
+    pub inference_cache: CacheEnabledMode,
+    /// Semaphore for concurrency control
+    pub semaphore: Arc<tokio::sync::Semaphore>,
+}
+
 /// Process a batch of datapoints for the top-k evaluation.
 ///
 /// This function:
@@ -509,40 +569,8 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     }
 }
 
-/// Reason why the top-k evaluation stopped.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum GlobalStoppingReason {
-    /// Successfully identified a top-k set of variants
-    TopKFound { k: u32, top_variants: Vec<String> },
-    /// Reached the maximum number of datapoints without identifying top-k
-    MaxDatapointsReached,
-    /// At least one evaluator has a failure rate above the threshold
-    EvaluatorFailed { evaluator_name: String },
-    /// Too many variants failed (>= num_variants - k_min)
-    TooManyVariantsFailed { num_failed: usize },
-}
-
-/// Results from running the adaptive top-k evaluation.
-#[derive(Debug)]
-pub struct AdaptiveEvalStoppingResults {
-    /// Unique ID for this evaluation run
-    pub evaluation_run_id: Uuid,
-    /// Performance confidence sequences for each variant
-    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each variant
-    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each evaluator
-    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final status of each variant
-    pub variant_status: HashMap<String, VariantStatus>,
-    /// Why the evaluation stopped
-    pub stopping_reason: GlobalStoppingReason,
-    /// Number of datapoints processed
-    pub num_datapoints_processed: usize,
-}
-
 // ============================================================================
-// Top-K Orchestrator Types and Implementation
+// Durable Task
 // ============================================================================
 
 /// Default batch size for top-k evaluation
@@ -553,95 +581,6 @@ const DEFAULT_CS_RESOLUTION: usize = 101;
 
 /// Default alpha (significance level) for confidence sequences
 const DEFAULT_ALPHA: f32 = 0.05;
-
-/// Create an initial confidence sequence for a named entity.
-fn create_initial_cs(name: &str, resolution: usize, alpha: f32) -> MeanBettingConfidenceSequence {
-    MeanBettingConfidenceSequence {
-        name: name.to_string(),
-        mean_regularized: 0.5,
-        variance_regularized: 0.25,
-        count: 0,
-        mean_est: 0.5,
-        cs_lower: 0.0,
-        cs_upper: 1.0,
-        alpha,
-        wealth: WealthProcesses {
-            grid: WealthProcessGridPoints::Resolution(resolution),
-            wealth_upper: vec![1.0; resolution],
-            wealth_lower: vec![1.0; resolution],
-        },
-    }
-}
-
-/// Check if a variant should be marked as failed based on its failure rate confidence sequence.
-fn check_variant_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
-    // Variant is failed if the lower bound of its failure rate CI exceeds the threshold
-    cs.cs_lower > threshold
-}
-
-/// Check if an evaluator has failed based on its failure rate confidence sequence.
-fn check_evaluator_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
-    // Evaluator is failed if the lower bound of its failure rate CI exceeds the threshold
-    cs.cs_lower > threshold
-}
-
-/// Update variant statuses based on current confidence sequences and top-k stopping result.
-fn update_variant_statuses(
-    variant_status: &mut HashMap<String, VariantStatus>,
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
-    variant_failure_threshold: Option<f64>,
-    stopping_result: &TopKStoppingResult,
-    k_max: u32,
-) {
-    let num_variants = variant_status.len();
-
-    for (name, status) in variant_status.iter_mut() {
-        // Skip already-stopped variants
-        if *status != VariantStatus::Active {
-            continue;
-        }
-
-        // Check for failure based on failure rate
-        if let Some(threshold) = variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(name)
-            && check_variant_failed(failure_cs, threshold)
-        {
-            *status = VariantStatus::Failed;
-            continue;
-        }
-
-        // If top-k stopping occurred, update based on inclusion in top set
-        if stopping_result.stopped {
-            if stopping_result.top_variants.contains(name) {
-                *status = VariantStatus::Include;
-            } else {
-                *status = VariantStatus::Exclude;
-            }
-            continue;
-        }
-
-        // Check if variant can be excluded early (its upper bound is below k_max others' lower bounds)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_better = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && other_cs.cs_lower > perf_cs.cs_upper
-                })
-                .count();
-
-            // If at least (num_variants - k_max) variants are definitely better,
-            // this variant cannot be in the top k_max
-            if num_definitely_better >= num_variants.saturating_sub(k_max as usize) {
-                *status = VariantStatus::Exclude;
-            }
-        }
-    }
-}
-
-// ============================================================================
-// Durable Top-K Task Implementation
-// ============================================================================
 
 /// Serializable parameters for the top-k durable task.
 /// Non-serializable resources (clients, scoring_fn) are passed via State.
@@ -734,6 +673,128 @@ impl From<AdaptiveEvalStoppingResults> for TopKTaskOutput {
             num_datapoints_processed: results.num_datapoints_processed,
         }
     }
+}
+
+/// Create an initial confidence sequence for a named entity.
+fn create_initial_cs(name: &str, resolution: usize, alpha: f32) -> MeanBettingConfidenceSequence {
+    MeanBettingConfidenceSequence {
+        name: name.to_string(),
+        mean_regularized: 0.5,
+        variance_regularized: 0.25,
+        count: 0,
+        mean_est: 0.5,
+        cs_lower: 0.0,
+        cs_upper: 1.0,
+        alpha,
+        wealth: WealthProcesses {
+            grid: WealthProcessGridPoints::Resolution(resolution),
+            wealth_upper: vec![1.0; resolution],
+            wealth_lower: vec![1.0; resolution],
+        },
+    }
+}
+
+/// Update variant statuses based on current confidence sequences and top-k stopping result.
+fn update_variant_statuses(
+    variant_status: &mut HashMap<String, VariantStatus>,
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failure_threshold: Option<f64>,
+    stopping_result: &TopKStoppingResult,
+    k_max: u32,
+) {
+    let num_variants = variant_status.len();
+
+    for (name, status) in variant_status.iter_mut() {
+        // Skip already-stopped variants
+        if *status != VariantStatus::Active {
+            continue;
+        }
+
+        // Check for failure based on failure rate
+        if let Some(threshold) = variant_failure_threshold
+            && let Some(failure_cs) = variant_failures.get(name)
+            && check_variant_failed(failure_cs, threshold)
+        {
+            *status = VariantStatus::Failed;
+            continue;
+        }
+
+        // If top-k stopping occurred, update based on inclusion in top set
+        if stopping_result.stopped {
+            if stopping_result.top_variants.contains(name) {
+                *status = VariantStatus::Include;
+            } else {
+                *status = VariantStatus::Exclude;
+            }
+            continue;
+        }
+
+        // Check if variant can be excluded early (its upper bound is below k_max others' lower bounds)
+        if let Some(perf_cs) = variant_performance.get(name) {
+            let num_definitely_better = variant_performance
+                .iter()
+                .filter(|(other_name, other_cs)| {
+                    *other_name != name && other_cs.cs_lower > perf_cs.cs_upper
+                })
+                .count();
+
+            // If at least (num_variants - k_max) variants are definitely better,
+            // this variant cannot be in the top k_max
+            if num_definitely_better >= num_variants.saturating_sub(k_max as usize) {
+                *status = VariantStatus::Exclude;
+            }
+        }
+    }
+}
+
+/// Determine the stopping reason based on final loop state.
+fn determine_stopping_reason(
+    loop_state: &TopKLoopState,
+    params: &TopKTaskParams,
+    _total_datapoints: usize,
+) -> GlobalStoppingReason {
+    // Check if we identified a top-k set
+    let stopping_result = check_topk_stopping(
+        &loop_state.variant_performance,
+        params.k_min,
+        params.k_max,
+        params.epsilon,
+    );
+
+    if let Ok(result) = stopping_result
+        && result.stopped
+    {
+        return GlobalStoppingReason::TopKFound {
+            k: result.k.unwrap_or(0),
+            top_variants: result.top_variants,
+        };
+    }
+
+    // Check for evaluator failure
+    if let Some(threshold) = params.evaluator_failure_threshold {
+        for (evaluator_name, cs) in &loop_state.evaluator_failures {
+            if check_evaluator_failed(cs, threshold) {
+                return GlobalStoppingReason::EvaluatorFailed {
+                    evaluator_name: evaluator_name.clone(),
+                };
+            }
+        }
+    }
+
+    // Check for too many variant failures
+    let num_failed = loop_state
+        .variant_status
+        .values()
+        .filter(|s| **s == VariantStatus::Failed)
+        .count();
+    let num_variants = loop_state.variant_status.len();
+    if num_failed >= num_variants.saturating_sub(params.k_min as usize) {
+        return GlobalStoppingReason::TooManyVariantsFailed { num_failed };
+    }
+
+    // Default: max datapoints reached
+    GlobalStoppingReason::MaxDatapointsReached
 }
 
 /// The durable top-k evaluation task.
@@ -1002,60 +1063,19 @@ impl Task<TopKTaskState> for TopKTask {
     }
 }
 
-/// Determine the stopping reason based on final loop state.
-fn determine_stopping_reason(
-    loop_state: &TopKLoopState,
-    params: &TopKTaskParams,
-    _total_datapoints: usize,
-) -> GlobalStoppingReason {
-    // Check if we identified a top-k set
-    let stopping_result = check_topk_stopping(
-        &loop_state.variant_performance,
-        params.k_min,
-        params.k_max,
-        params.epsilon,
-    );
-
-    if let Ok(result) = stopping_result
-        && result.stopped
-    {
-        return GlobalStoppingReason::TopKFound {
-            k: result.k.unwrap_or(0),
-            top_variants: result.top_variants,
-        };
-    }
-
-    // Check for evaluator failure
-    if let Some(threshold) = params.evaluator_failure_threshold {
-        for (evaluator_name, cs) in &loop_state.evaluator_failures {
-            if check_evaluator_failed(cs, threshold) {
-                return GlobalStoppingReason::EvaluatorFailed {
-                    evaluator_name: evaluator_name.clone(),
-                };
-            }
-        }
-    }
-
-    // Check for too many variant failures
-    let num_failed = loop_state
-        .variant_status
-        .values()
-        .filter(|s| **s == VariantStatus::Failed)
-        .count();
-    let num_variants = loop_state.variant_status.len();
-    if num_failed >= num_variants.saturating_sub(params.k_min as usize) {
-        return GlobalStoppingReason::TooManyVariantsFailed { num_failed };
-    }
-
-    // Default: max datapoints reached
-    GlobalStoppingReason::MaxDatapointsReached
-}
+// ============================================================================
+// Tests
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::DatapointVariantError;
     use crate::betting_confidence_sequences::{WealthProcessGridPoints, WealthProcesses};
+
+    // ------------------------------------------------------------------------
+    // Test Helpers
+    // ------------------------------------------------------------------------
 
     /// Helper to create a mock confidence sequence with specified bounds
     fn mock_cs(
@@ -1082,6 +1102,50 @@ mod tests {
             },
         )
     }
+
+    /// Helper to create an initial confidence sequence for testing compute_updates
+    fn create_test_cs(name: &str) -> MeanBettingConfidenceSequence {
+        MeanBettingConfidenceSequence {
+            name: name.to_string(),
+            mean_regularized: 0.5,
+            variance_regularized: 0.25,
+            count: 0,
+            mean_est: 0.5,
+            cs_lower: 0.0,
+            cs_upper: 1.0,
+            alpha: 0.05,
+            wealth: WealthProcesses {
+                grid: WealthProcessGridPoints::Resolution(101),
+                wealth_upper: vec![1.0; 101],
+                wealth_lower: vec![1.0; 101],
+            },
+        }
+    }
+
+    /// A simple scoring function that extracts each variant's first evaluator value as its score
+    struct FirstEvaluatorScore;
+
+    impl ScoringFunction for FirstEvaluatorScore {
+        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+            let mut scores = HashMap::new();
+            for (variant_name, eval_result) in evaluations {
+                // Return the first Ok(Some(value)) we find, converted to f64
+                for result in eval_result.values() {
+                    if let Ok(Some(value)) = result
+                        && let Some(num) = value.as_f64()
+                    {
+                        scores.insert(variant_name.clone(), num);
+                        break;
+                    }
+                }
+            }
+            scores
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Tests for check_topk_stopping
+    // ------------------------------------------------------------------------
 
     /// Test that empty input returns no stopping (graceful handling).
     #[test]
@@ -1562,67 +1626,23 @@ mod tests {
         assert_eq!(result.k, Some(3));
     }
 
-    // ============================================================================
+    // ------------------------------------------------------------------------
     // Tests for compute_updates
-    // ============================================================================
-
-    /// Helper to create an initial confidence sequence for testing compute_updates
-    fn create_initial_cs(name: &str) -> MeanBettingConfidenceSequence {
-        MeanBettingConfidenceSequence {
-            name: name.to_string(),
-            mean_regularized: 0.5,
-            variance_regularized: 0.25,
-            count: 0,
-            mean_est: 0.5,
-            cs_lower: 0.0,
-            cs_upper: 1.0,
-            alpha: 0.05,
-            wealth: WealthProcesses {
-                grid: WealthProcessGridPoints::Resolution(101),
-                wealth_upper: vec![1.0; 101],
-                wealth_lower: vec![1.0; 101],
-            },
-        }
-    }
-
-    /// A simple scoring function that extracts each variant's first evaluator value as its score
-    struct FirstEvaluatorScore;
-
-    impl ScoringFunction for FirstEvaluatorScore {
-        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
-            let mut scores = HashMap::new();
-            for (variant_name, eval_result) in evaluations {
-                // Return the first Ok(Some(value)) we find, converted to f64
-                for result in eval_result.values() {
-                    if let Ok(Some(value)) = result
-                        && let Some(num) = value.as_f64()
-                    {
-                        scores.insert(variant_name.clone(), num);
-                        break;
-                    }
-                }
-            }
-            scores
-        }
-    }
+    // ------------------------------------------------------------------------
 
     #[test]
     fn test_compute_updates_empty_results() {
         let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), create_initial_cs("evaluator1"))]
+            [("evaluator1".to_string(), create_test_cs("evaluator1"))]
                 .into_iter()
                 .collect();
 
@@ -1646,20 +1666,16 @@ mod tests {
     #[test]
     fn test_compute_updates_only_cancelled() {
         let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), create_initial_cs("evaluator1"))]
+            [("evaluator1".to_string(), create_test_cs("evaluator1"))]
                 .into_iter()
                 .collect();
 
@@ -1687,18 +1703,14 @@ mod tests {
     #[test]
     fn test_compute_updates_variant_failures() {
         let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [(
-            "test_variant".to_string(),
-            create_initial_cs("test_variant"),
-        )]
-        .into_iter()
-        .collect();
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), create_test_cs("test_variant"))]
+                .into_iter()
+                .collect();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
         // Create two errors for two different datapoints
