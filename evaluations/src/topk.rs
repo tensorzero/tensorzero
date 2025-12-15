@@ -89,6 +89,25 @@ pub struct TopKStoppingResult {
     pub top_variants: Vec<String>,
 }
 
+/// Output from a completed top-k evaluation task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopKTaskOutput {
+    /// Unique ID for this evaluation run
+    pub evaluation_run_id: Uuid,
+    /// Final variant statuses
+    pub variant_status: HashMap<String, VariantStatus>,
+    /// Final performance confidence sequences
+    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final variant failure rate confidence sequences
+    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final evaluator failure rate confidence sequences
+    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Why the evaluation stopped
+    pub stopping_reason: GlobalStoppingReason,
+    /// Number of datapoints processed
+    pub num_datapoints_processed: usize,
+}
+
 // ============================================================================
 // Scoring
 // ============================================================================
@@ -512,25 +531,6 @@ struct ProcessBatchStepParams {
     dataset_name: String,
     inference_cache: CacheEnabledMode,
     concurrency: usize,
-}
-
-/// Serializable output for the top-k task.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopKTaskOutput {
-    /// Unique ID for this evaluation run
-    pub evaluation_run_id: Uuid,
-    /// Final variant statuses
-    pub variant_status: HashMap<String, VariantStatus>,
-    /// Final performance confidence sequences
-    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final variant failure rate confidence sequences
-    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final evaluator failure rate confidence sequences
-    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Why the evaluation stopped
-    pub stopping_reason: GlobalStoppingReason,
-    /// Number of datapoints processed
-    pub num_datapoints_processed: usize,
 }
 
 /// Durable step function to fetch and shuffle datapoint IDs.
