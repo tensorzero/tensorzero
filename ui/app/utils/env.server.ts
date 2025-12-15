@@ -12,6 +12,7 @@ class EnvironmentVariableError extends Error {
   }
 }
 
+// Note: TENSORZERO_UI_LOG_LEVEL is handled in logger.ts to avoid circular dependencies.
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_POSTGRES_URL: string | null;
@@ -25,7 +26,6 @@ interface Env {
 }
 
 let _env: Env | undefined;
-let hasLoggedEvaluationsPathDeprecation = false;
 let hasLoggedConfigPathDeprecation = false;
 
 /**
@@ -39,18 +39,9 @@ export function getEnv(): Env {
     return _env;
   }
 
-  if (
-    process.env.TENSORZERO_EVALUATIONS_PATH &&
-    !hasLoggedEvaluationsPathDeprecation
-  ) {
-    logger.warn(
-      "Deprecation Warning: The TensorZero Evaluations binary is now built into the UI itself. The environment variable `TENSORZERO_EVALUATIONS_PATH` is no longer needed and will be ignored moving forward.",
-    );
-    hasLoggedEvaluationsPathDeprecation = true;
-  }
-
   const TENSORZERO_CLICKHOUSE_URL = getClickhouseUrl();
   const TENSORZERO_GATEWAY_URL = process.env.TENSORZERO_GATEWAY_URL;
+
   // This error is thrown on startup in tensorzero.server.ts
   if (!TENSORZERO_GATEWAY_URL) {
     throw new EnvironmentVariableError(

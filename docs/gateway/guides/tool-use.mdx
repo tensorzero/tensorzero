@@ -322,6 +322,8 @@ See "Advanced Usage" below for information on how to customize the tool calling 
 
 You can restrict the set of tools that can be called at inference time by using the `allowed_tools` parameter.
 
+The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
+
 For example, suppose your TensorZero function has access to several tools, but you only want to allow the `get_temperature` tool to be called during a particular inference.
 You can achieve this by setting `allowed_tools=["get_temperature"]` in your inference request.
 

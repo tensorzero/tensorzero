@@ -13,8 +13,8 @@ use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTe
 use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetOutputSource, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
+    DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams, GetDatapointParams,
+    GetDatapointsParams, GetDatasetMetadataParams,
 };
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
@@ -108,7 +108,8 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 null as staled_at,
                 subquery.id as source_inference_id,
                 false as is_custom,
-                subquery.name as name
+                subquery.name as name,
+                snapshot_hash
             FROM (
                 {source_query}
             ) AS subquery
@@ -251,28 +252,41 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(count)
     }
 
-    async fn count_datapoints_for_dataset_function(
+    async fn count_datapoints_for_dataset(
         &self,
-        params: &CountDatapointsForDatasetFunctionParams,
-    ) -> Result<u32, Error> {
-        let query = "
-        SELECT toUInt32(count()) as count
-        FROM {table:Identifier}
-        WHERE dataset_name = {dataset_name:String}
-            AND function_name = {function_name:String}";
-
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error> {
         let mut query_params = HashMap::new();
-        let table_name = params.function_type.table_name();
-        query_params.insert("table", table_name.as_str());
-        query_params.insert("dataset_name", params.dataset_name.as_str());
-        query_params.insert("function_name", params.function_name.as_str());
 
-        let response = self
-            .run_query_synchronous(query.to_string(), &query_params)
-            .await?;
+        let function_name_clause = match function_name {
+            Some(fn_name) => {
+                query_params.insert("function_name", fn_name);
+                "AND function_name = {function_name:String}"
+            }
+            None => "",
+        };
+        let query = format!(
+            "SELECT toUInt64(count()) as count
+            FROM (
+                SELECT 1 FROM ChatInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                    {function_name_clause}
+                    AND staled_at IS NULL
+                UNION ALL
+                SELECT 1 FROM JsonInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                    {function_name_clause}
+                    AND staled_at IS NULL
+            )"
+        );
+
+        query_params.insert("dataset_name", dataset_name);
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
 
         let count_str = response.response.trim();
-        let count: u32 = count_str.parse().map_err(|e: ParseIntError| {
+        let count: u64 = count_str.parse().map_err(|e: ParseIntError| {
             Error::new(ErrorDetails::ClickHouseDeserialization {
                 message: e.to_string(),
             })
@@ -1600,7 +1614,8 @@ mod tests {
                     null as staled_at,
                     subquery.id as source_inference_id,
                     false as is_custom,
-                    subquery.name as name
+                    subquery.name as name,
+                    snapshot_hash
                 FROM (",
                 );
                 assert_query_contains(
@@ -2885,20 +2900,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_count_datapoints_for_dataset_function_chat_executes_successfully() {
+    async fn test_count_datapoints_for_dataset_chat_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(
                     query,
-                    "SELECT toUInt32(count()) as count
-                    FROM {table:Identifier}
-                    WHERE dataset_name = {dataset_name:String}
-                    AND function_name = {function_name:String}",
+                    "
+                    SELECT toUInt64(count()) as count
+                    FROM (
+                        SELECT 1 FROM ChatInferenceDatapoint FINAL
+                        WHERE dataset_name = {dataset_name:String}
+                            AND function_name = {function_name:String}
+                            AND staled_at IS NULL
+                        UNION ALL
+                        SELECT 1 FROM JsonInferenceDatapoint FINAL
+                        WHERE dataset_name = {dataset_name:String}
+                            AND function_name = {function_name:String}
+                            AND staled_at IS NULL
+                    )",
                 );
 
-                assert_eq!(parameters.get("table"), Some(&"ChatInferenceDatapoint"));
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
                 assert_eq!(parameters.get("function_name"), Some(&"test_function"));
 
@@ -2914,64 +2937,16 @@ mod tests {
                 })
             });
 
-        let params = CountDatapointsForDatasetFunctionParams {
-            dataset_name: "test_dataset".to_string(),
-            function_name: "test_function".to_string(),
-            function_type: DatapointKind::Chat,
-        };
-
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn
-            .count_datapoints_for_dataset_function(&params)
+            .count_datapoints_for_dataset(
+                /* dataset_name= */ "test_dataset",
+                /* function_name= */ Some("test_function"),
+            )
             .await
             .unwrap();
 
         assert_eq!(result, 42, "Should return 42 datapoints");
-    }
-
-    #[tokio::test]
-    async fn test_count_datapoints_for_dataset_function_json_executes_successfully() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .withf(|query, parameters| {
-                assert_query_contains(
-                    query,
-                    "SELECT toUInt32(count()) as count
-                    FROM {table:Identifier}
-                    WHERE dataset_name = {dataset_name:String}
-                    AND function_name = {function_name:String}",
-                );
-
-                assert_eq!(parameters.get("table"), Some(&"JsonInferenceDatapoint"));
-                assert_eq!(parameters.get("dataset_name"), Some(&"my_dataset"));
-                assert_eq!(parameters.get("function_name"), Some(&"my_function"));
-
-                true
-            })
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from("17"),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = CountDatapointsForDatasetFunctionParams {
-            dataset_name: "my_dataset".to_string(),
-            function_name: "my_function".to_string(),
-            function_type: DatapointKind::Json,
-        };
-
-        let result = conn
-            .count_datapoints_for_dataset_function(&params)
-            .await
-            .unwrap();
-
-        assert_eq!(result, 17, "Should return 17 datapoints");
     }
 
     #[tokio::test]

@@ -21,13 +21,11 @@ import {
 } from "~/components/icons/Icons";
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
-import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
   countWorkflowEvaluationProjects,
   countWorkflowEvaluationRuns,
 } from "~/utils/clickhouse/workflow_evaluations.server";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
@@ -104,19 +102,19 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
-  const nativeDatabaseClient = await getNativeDatabaseClient();
+  const httpClient = getTensorZeroClient();
 
   // Create the promises
   const countsInfoPromise = countInferencesByFunction();
-  const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
-  const datasetMetadataPromise = getTensorZeroClient().listDatasets({});
-  const numEvaluationRunsPromise = countTotalEvaluationRuns();
+  const episodesPromise = httpClient.queryEpisodeTableBounds();
+  const datasetMetadataPromise = httpClient.listDatasets({});
+  const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
   const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
   const numWorkflowEvaluationRunProjectsPromise =
     countWorkflowEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
-  const numModelsUsedPromise = getTensorZeroClient()
+  const numModelsUsedPromise = httpClient
     .countDistinctModelsUsed()
     .then((response) => response.model_count);
 

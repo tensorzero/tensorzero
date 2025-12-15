@@ -16,6 +16,7 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
 pub mod datasets;
+pub mod evaluation_queries;
 pub mod feedback;
 pub mod inference_stats;
 pub mod inferences;
@@ -38,6 +39,7 @@ pub trait HealthCheckable {
 }
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait SelectQueries {
     async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 

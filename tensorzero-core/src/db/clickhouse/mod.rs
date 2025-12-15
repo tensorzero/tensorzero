@@ -28,6 +28,7 @@ use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;
+pub mod evaluation_queries;
 pub mod feedback;
 pub mod inference_queries;
 pub mod inference_stats;
@@ -339,11 +340,13 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         struct ConfigSnapshotRow {
             config: String,
             extra_templates: HashMap<String, String>,
+            #[serde(default)]
+            tags: HashMap<String, String>,
         }
 
         let hash_str = snapshot_hash.to_string();
         let query = format!(
-            "SELECT config, extra_templates \
+            "SELECT config, extra_templates, tags \
              FROM ConfigSnapshot FINAL \
              WHERE hash = toUInt256('{hash_str}') \
              LIMIT 1 \
@@ -364,7 +367,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
             })
         })?;
 
-        ConfigSnapshot::from_stored(&row.config, row.extra_templates, &snapshot_hash)
+        ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
 }
 

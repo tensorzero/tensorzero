@@ -5,14 +5,17 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatasetMetadata, DatasetQueries, DatasetQueryParams,
-    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
+    DatasetMetadata, DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
 };
-use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::inferences::{
+    InferenceMetadata, InferenceQueries, ListInferenceMetadataParams, ListInferencesParams,
+    MockInferenceQueries,
+};
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{ConfigQueries, MockConfigQueries};
@@ -59,6 +62,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
     }
+
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        self.inference_queries.list_inference_metadata(params).await
+    }
 }
 
 #[async_trait]
@@ -86,12 +96,13 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
 
-    async fn count_datapoints_for_dataset_function(
+    async fn count_datapoints_for_dataset(
         &self,
-        params: &CountDatapointsForDatasetFunctionParams,
-    ) -> Result<u32, Error> {
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error> {
         self.dataset_queries
-            .count_datapoints_for_dataset_function(params)
+            .count_datapoints_for_dataset(dataset_name, function_name)
             .await
     }
 

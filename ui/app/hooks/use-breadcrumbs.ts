@@ -26,7 +26,12 @@ export function useBreadcrumbs(): {
               isIdentifier,
               // Only show a link for this crumb if it's the last/only breadcrumb for the segment
               // Example: evaluation run adds two crumbs: "Runs" and the run ID. "Runs" would not be a link, since there's no dedicated runs page.
-              href: i === arr.length - 1 ? match.pathname : undefined,
+              // Also skip link if noLink is explicitly set (for routes without an index page)
+              href:
+                i === arr.length - 1 &&
+                !(typeof crumb !== "string" && crumb.noLink)
+                  ? match.pathname
+                  : undefined,
             };
           }) ?? [],
       ),
