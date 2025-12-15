@@ -82,7 +82,7 @@ pub async fn get_config_by_hash_handler(
 }
 
 /// Request body for writing a config snapshot.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WriteConfigRequest {
     /// The config to write.
     pub config: StoredConfig,
@@ -96,7 +96,7 @@ pub struct WriteConfigRequest {
 }
 
 /// Response from writing a config snapshot.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WriteConfigResponse {
     /// The hash identifying this config version.
     pub hash: String,
