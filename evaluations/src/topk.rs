@@ -445,144 +445,6 @@ fn check_evaluator_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) ->
 }
 
 // ============================================================================
-// Batch Processing
-// ============================================================================
-
-/// Shared context for top-k evaluation that remains constant across batches.
-///
-/// This struct holds configuration and client references that don't change
-/// during the evaluation run. Per-batch parameters like `batch_ids` and
-/// `variant_status` are passed separately to `process_topk_batch`.
-#[derive(Clone)]
-pub struct TopKContext {
-    /// Clients for inference and database access
-    pub clients: Arc<Clients>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Name of the evaluation
-    pub evaluation_name: Arc<String>,
-    /// Evaluation run ID for tagging
-    pub evaluation_run_id: Uuid,
-    /// Dataset name for tagging
-    pub dataset_name: Arc<String>,
-    /// Cache mode for inference
-    pub inference_cache: CacheEnabledMode,
-    /// Semaphore for concurrency control
-    pub semaphore: Arc<tokio::sync::Semaphore>,
-}
-
-/// Process a batch of datapoints for the top-k evaluation.
-///
-/// This function:
-/// 1. Retrieves datapoints from ClickHouse by their IDs
-/// 2. For each active variant, runs inference and evaluation using shared `process_batch`
-/// 3. Returns results grouped by datapoint ID, then by variant name
-///
-/// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
-///
-/// # Arguments
-/// * `topk_context` - Shared context containing clients, configs, and evaluation metadata
-/// * `batch_ids` - IDs of datapoints to process in this batch
-/// * `variant_status` - Current status of each variant (only Active variants are processed)
-///
-/// # Returns
-/// Results grouped by datapoint ID, then by variant name. This structure is optimized
-/// for the scoring function which needs to compare variants on the same datapoint.
-pub async fn process_topk_batch(
-    topk_context: &TopKContext,
-    batch_ids: Vec<Uuid>,
-    variant_status: &HashMap<String, VariantStatus>,
-) -> Result<BatchResultsByDatapoint> {
-    // Retrieve datapoints from ClickHouse
-    let request = GetDatapointsRequest {
-        ids: batch_ids.clone(),
-    };
-    let datapoints = get_datapoints(&topk_context.clients.clickhouse_client, None, request)
-        .await?
-        .datapoints;
-
-    if datapoints.is_empty() {
-        tracing::warn!(
-            batch_size = batch_ids.len(),
-            "No datapoints found for batch"
-        );
-        return Ok(HashMap::new());
-    }
-
-    // Get active variants
-    let active_variants: Vec<Arc<EvaluationVariant>> = variant_status
-        .iter()
-        .filter(|(_, status)| **status == VariantStatus::Active)
-        .map(|(name, _)| Arc::new(EvaluationVariant::Name(name.clone())))
-        .collect();
-
-    if active_variants.is_empty() {
-        tracing::debug!("No active variants to process");
-        return Ok(HashMap::new());
-    }
-
-    // Use empty cancellation tokens - top-k has its own stopping logic
-    let cancellation_tokens = Arc::new(CancellationTokens::default());
-
-    // Build params for shared process_batch
-    let batch_params = ProcessBatchParams {
-        clients: topk_context.clients.clone(),
-        function_configs: topk_context.function_configs.clone(),
-        evaluation_config: topk_context.evaluation_config.clone(),
-        evaluation_name: topk_context.evaluation_name.clone(),
-        evaluation_run_id: topk_context.evaluation_run_id,
-        dataset_name: topk_context.dataset_name.clone(),
-        inference_cache: topk_context.inference_cache,
-        semaphore: topk_context.semaphore.clone(),
-        cancellation_tokens,
-    };
-
-    // Call the shared process_batch from lib.rs
-    let (mut join_set, task_id_map) = process_batch(&batch_params, datapoints, &active_variants);
-
-    // Collect results and group by datapoint ID, then by variant
-    let mut results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
-
-    while let Some(result) = join_set.join_next_with_id().await {
-        let batch_result = collect_batch_result(result, &task_id_map);
-
-        // Get datapoint ID and variant name for grouping
-        let (datapoint_id, variant_name) = match &batch_result {
-            BatchItemResult::Success(success) => {
-                (success.datapoint.id(), get_variant_name(&success.variant))
-            }
-            BatchItemResult::Error(error) => {
-                let variant_name = error
-                    .variant
-                    .as_ref()
-                    .map(|v| get_variant_name(v))
-                    .unwrap_or_else(|| "unknown".to_string());
-                (error.datapoint_id, variant_name)
-            }
-            BatchItemResult::Cancelled => continue, // Skip cancelled tasks
-        };
-
-        results_by_datapoint
-            .entry(datapoint_id)
-            .or_default()
-            .insert(variant_name, batch_result);
-    }
-
-    Ok(results_by_datapoint)
-}
-
-/// Extract variant name from EvaluationVariant.
-fn get_variant_name(variant: &EvaluationVariant) -> String {
-    match variant {
-        EvaluationVariant::Name(name) => name.clone(),
-        // Dynamic variants don't have names, use a placeholder
-        EvaluationVariant::Info(_) => "dynamic_variant".to_string(),
-    }
-}
-
-// ============================================================================
 // Durable Task
 // ============================================================================
 
@@ -735,6 +597,15 @@ async fn fetch_datapoint_ids_step(
     Ok(ids)
 }
 
+/// Extract variant name from EvaluationVariant.
+fn get_variant_name(variant: &EvaluationVariant) -> String {
+    match variant {
+        EvaluationVariant::Name(name) => name.clone(),
+        // Dynamic variants don't have names, use a placeholder
+        EvaluationVariant::Info(_) => "dynamic_variant".to_string(),
+    }
+}
+
 /// Step function to process a batch and update loop state.
 async fn process_batch_step(
     params: ProcessBatchStepParams,
@@ -742,26 +613,86 @@ async fn process_batch_step(
 ) -> anyhow::Result<TopKLoopState> {
     let mut current_state = params.loop_state;
 
-    // Rebuild TopKContext from params and state
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
-    let topk_context = TopKContext {
-        clients: state.clients.clone(),
-        evaluation_config: state.evaluation_config.clone(),
-        function_configs: state.function_configs.clone(),
-        evaluation_name: Arc::new(params.evaluation_name),
-        evaluation_run_id: params.evaluation_run_id,
-        dataset_name: Arc::new(params.dataset_name),
-        inference_cache: params.inference_cache,
-        semaphore,
+    // Retrieve datapoints from ClickHouse
+    let request = GetDatapointsRequest {
+        ids: params.batch_ids.clone(),
     };
+    let datapoints = get_datapoints(&state.clients.clickhouse_client, None, request)
+        .await?
+        .datapoints;
 
-    // Process the batch
-    let results = process_topk_batch(
-        &topk_context,
-        params.batch_ids.clone(),
-        &current_state.variant_status,
-    )
-    .await?;
+    // Process the batch if we have datapoints and active variants
+    let results: BatchResultsByDatapoint = if datapoints.is_empty() {
+        tracing::warn!(
+            batch_size = params.batch_ids.len(),
+            "No datapoints found for batch"
+        );
+        HashMap::new()
+    } else {
+        // Get active variants
+        let active_variants: Vec<Arc<EvaluationVariant>> = current_state
+            .variant_status
+            .iter()
+            .filter(|(_, status)| **status == VariantStatus::Active)
+            .map(|(name, _)| Arc::new(EvaluationVariant::Name(name.clone())))
+            .collect();
+
+        if active_variants.is_empty() {
+            tracing::debug!("No active variants to process");
+            HashMap::new()
+        } else {
+            // Use empty cancellation tokens - top-k has its own stopping logic
+            let cancellation_tokens = Arc::new(CancellationTokens::default());
+
+            // Build params for shared process_batch
+            let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
+            let batch_params = ProcessBatchParams {
+                clients: state.clients.clone(),
+                function_configs: state.function_configs.clone(),
+                evaluation_config: state.evaluation_config.clone(),
+                evaluation_name: Arc::new(params.evaluation_name.clone()),
+                evaluation_run_id: params.evaluation_run_id,
+                dataset_name: Arc::new(params.dataset_name.clone()),
+                inference_cache: params.inference_cache,
+                semaphore,
+                cancellation_tokens,
+            };
+
+            // Call the shared process_batch from lib.rs
+            let (mut join_set, task_id_map) =
+                process_batch(&batch_params, datapoints, &active_variants);
+
+            // Collect results and group by datapoint ID, then by variant
+            let mut results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
+
+            while let Some(result) = join_set.join_next_with_id().await {
+                let batch_result = collect_batch_result(result, &task_id_map);
+
+                // Get datapoint ID and variant name for grouping
+                let (datapoint_id, variant_name) = match &batch_result {
+                    BatchItemResult::Success(success) => {
+                        (success.datapoint.id(), get_variant_name(&success.variant))
+                    }
+                    BatchItemResult::Error(error) => {
+                        let variant_name = error
+                            .variant
+                            .as_ref()
+                            .map(|v| get_variant_name(v))
+                            .unwrap_or_else(|| "unknown".to_string());
+                        (error.datapoint_id, variant_name)
+                    }
+                    BatchItemResult::Cancelled => continue, // Skip cancelled tasks
+                };
+
+                results_by_datapoint
+                    .entry(datapoint_id)
+                    .or_default()
+                    .insert(variant_name, batch_result);
+            }
+
+            results_by_datapoint
+        }
+    };
 
     // Update confidence sequences
     compute_updates(
