@@ -2,24 +2,18 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  CountDatapointsForDatasetFunctionParams,
   DatasetQueryParams,
-  EpisodeByIdRow,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
-  ModelLatencyDatapoint,
-  ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  TableBoundsWithCount,
   FeedbackRow,
   FeedbackBounds,
-  TimeWindow,
   QueryFeedbackBoundsByTargetIdParams,
   QueryFeedbackByTargetIdParams,
   CountFeedbackByTargetIdParams,
@@ -123,7 +117,10 @@ interface RunEvaluationStreamingParams {
   functionConfig: string;
   evaluationName: string;
   datasetName: string;
-  variantName: string;
+  /** Exactly one of variantName or internalDynamicVariantConfig must be provided */
+  variantName?: string;
+  /** JSON-serialized UninitializedVariantInfo */
+  internalDynamicVariantConfig?: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
@@ -216,50 +213,6 @@ export class DatabaseClient {
     );
   }
 
-  async getModelUsageTimeseries(
-    timeWindow: TimeWindow,
-    maxPeriods: number,
-  ): Promise<ModelUsageTimePoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-      max_periods: maxPeriods,
-    });
-    const modelUsageTimeseriesString =
-      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
-    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
-  }
-
-  async getModelLatencyQuantiles(
-    timeWindow: TimeWindow,
-  ): Promise<ModelLatencyDatapoint[]> {
-    const params = safeStringify({
-      time_window: timeWindow,
-    });
-    const modelLatencyQuantilesString =
-      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
-    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
-  }
-
-  async queryEpisodeTable(
-    limit: number,
-    before?: string,
-    after?: string,
-  ): Promise<EpisodeByIdRow[]> {
-    const params = safeStringify({
-      limit,
-      before,
-      after,
-    });
-    const episodeTableString =
-      await this.nativeDatabaseClient.queryEpisodeTable(params);
-    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
-  }
-
-  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
-    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
-    return JSON.parse(bounds) as TableBoundsWithCount;
-  }
-
   async queryFeedbackByTargetId(
     params: QueryFeedbackByTargetIdParams,
   ): Promise<FeedbackRow[]> {
@@ -329,15 +282,6 @@ export class DatabaseClient {
 
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async countDatapointsForDatasetFunction(
-    params: CountDatapointsForDatasetFunctionParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
-      paramsString,
-    );
   }
 
   async getFeedbackByVariant(

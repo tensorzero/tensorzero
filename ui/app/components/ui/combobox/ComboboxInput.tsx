@@ -19,6 +19,7 @@ interface ComboboxInputProps {
   open: boolean;
   icon: IconComponent;
   iconClassName?: string;
+  ariaLabel?: string;
 }
 
 export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
@@ -36,6 +37,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       open,
       icon: Icon,
       iconClassName,
+      ariaLabel,
     },
     ref,
   ) {
@@ -58,6 +60,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           onBlur={onBlur}
           placeholder={placeholder}
           disabled={disabled}
+          aria-label={ariaLabel}
           className={clsx("cursor-text pr-8 pl-9", monospace && "font-mono")}
         />
         <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">

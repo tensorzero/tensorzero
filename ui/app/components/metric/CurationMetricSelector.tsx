@@ -32,7 +32,7 @@ import { Input } from "~/components/ui/input";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
+import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import clsx from "clsx";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 import { Skeleton } from "../ui/skeleton";
@@ -73,7 +73,7 @@ export default function CurationMetricSelector<
   isLoading = false,
   onMetricsLoadingChange,
 }: CurationMetricSelectorProps<T>) {
-  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+  const metricsFetcher = useFetcher<MetricsWithFeedbackResponse>();
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");

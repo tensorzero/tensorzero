@@ -73,14 +73,6 @@ pub struct DatasetMetadata {
 
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
-pub struct CountDatapointsForDatasetFunctionParams {
-    pub dataset_name: String,
-    pub function_name: String,
-    pub function_type: DatapointKind,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
 /// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,
@@ -153,11 +145,12 @@ pub trait DatasetQueries {
     /// Returns the number of rows written.
     async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error>;
 
-    /// Counts datapoints for a specific dataset and function
-    async fn count_datapoints_for_dataset_function(
+    /// Counts datapoints for a dataset, optionally filtered by function name.
+    async fn count_datapoints_for_dataset(
         &self,
-        params: &CountDatapointsForDatasetFunctionParams,
-    ) -> Result<u32, Error>;
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error>;
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`

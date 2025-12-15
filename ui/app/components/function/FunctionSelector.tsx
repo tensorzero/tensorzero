@@ -22,6 +22,7 @@ interface FunctionSelectorProps {
   functions: { [x: string]: FunctionConfig | undefined };
   hideDefaultFunction?: boolean;
   disabled?: boolean;
+  ariaLabel?: string;
 }
 
 export function FunctionTypeIcon({ type }: { type: FunctionConfig["type"] }) {
@@ -39,6 +40,7 @@ export function FunctionSelector({
   functions,
   hideDefaultFunction = false,
   disabled = false,
+  ariaLabel,
 }: FunctionSelectorProps) {
   const {
     open,
@@ -101,6 +103,7 @@ export function FunctionSelector({
             monospace
             open={open}
             icon={getIcon()}
+            ariaLabel={ariaLabel}
           />
         </PopoverAnchor>
         <PopoverContent
