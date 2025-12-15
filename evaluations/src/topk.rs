@@ -60,19 +60,19 @@ pub struct TopKStoppingResult {
     pub top_variants: Vec<String>,
 }
 
-/// Results from running the adaptive top-k evaluation.
+/// Output from a completed top-k evaluation task.
 #[derive(Debug)]
-pub struct AdaptiveEvalStoppingResults {
+pub struct TopKTaskOutput {
     /// Unique ID for this evaluation run
     pub evaluation_run_id: Uuid,
-    /// Performance confidence sequences for each variant
-    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each variant
-    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Failure rate confidence sequences for each evaluator
-    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
-    /// Final status of each variant
+    /// Final variant statuses
     pub variant_status: HashMap<String, VariantStatus>,
+    /// Final performance confidence sequences
+    pub variant_performance: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final variant failure rate confidence sequences
+    pub variant_failures: HashMap<String, MeanBettingConfidenceSequence>,
+    /// Final evaluator failure rate confidence sequences
+    pub evaluator_failures: HashMap<String, MeanBettingConfidenceSequence>,
     /// Why the evaluation stopped
     pub stopping_reason: GlobalStoppingReason,
     /// Number of datapoints processed
