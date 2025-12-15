@@ -56,7 +56,7 @@ export function ComboboxMenuItems({
                   <span className="truncate font-mono">{item}</span>
                 </div>
                 {getItemSuffix && (
-                  <span className="text-fg-tertiary min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap">
+                  <span className="text-fg-tertiary min-w-8 flex-shrink-0 text-right font-mono text-sm whitespace-nowrap">
                     {getItemSuffix(item)}
                   </span>
                 )}
