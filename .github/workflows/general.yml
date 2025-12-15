@@ -1164,6 +1164,7 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        ui-storybook-tests,
         mock-optimization-tests,
         run-merge-queue-checks,
       ]
