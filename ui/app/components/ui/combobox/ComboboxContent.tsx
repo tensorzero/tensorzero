@@ -15,11 +15,7 @@ export const ComboboxContent = forwardRef<HTMLDivElement, ComboboxContentProps>(
     return (
       <Command ref={ref} shouldFilter={false}>
         <CommandList>
-          {showEmpty && (
-            <CommandEmpty className="text-fg-tertiary flex items-center justify-center py-6 text-sm">
-              {emptyMessage}
-            </CommandEmpty>
-          )}
+          {showEmpty && <CommandEmpty>{emptyMessage}</CommandEmpty>}
           {children}
         </CommandList>
       </Command>

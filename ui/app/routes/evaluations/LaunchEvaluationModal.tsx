@@ -22,10 +22,7 @@ import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
-import {
-  DatasetSelector,
-  DatasetSelectorVariant,
-} from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { Combobox } from "~/components/ui/combobox";
 import { Evaluation } from "~/components/icons/Icons";
 import { GitBranch } from "lucide-react";
@@ -225,13 +222,11 @@ function EvaluationForm({
         value={selectedDatasetName ?? undefined}
       />
 
-      <DatasetSelector
-        variant={DatasetSelectorVariant.INPUT}
+      <DatasetCombobox
         placeholder="Select dataset"
         functionName={function_name ?? undefined}
         selected={selectedDatasetName}
         onSelect={(name) => setSelectedDatasetName(name)}
-        allowCreation={false}
         disabled={!selectedEvaluationName}
       />
 

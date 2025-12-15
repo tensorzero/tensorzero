@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import {
-  DatasetSelector,
-  DatasetSelectorVariant,
-} from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
@@ -154,8 +151,7 @@ export function NewDatapointForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2" data-testid="dataset-selector">
             <Label htmlFor="dataset">Dataset</Label>
-            <DatasetSelector
-              variant={DatasetSelectorVariant.INPUT}
+            <DatasetCombobox
               placeholder="Select dataset"
               selected={selectedDataset}
               onSelect={(dataset) => setSelectedDataset(dataset)}
