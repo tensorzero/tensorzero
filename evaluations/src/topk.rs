@@ -173,10 +173,6 @@ pub fn check_topk(
     check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
-// ============================================================================
-// Top-K Orchestrator Types and Functions
-// ============================================================================
-
 /// Status of a variant in the top-k evaluation process.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariantStatus {
@@ -189,6 +185,13 @@ pub enum VariantStatus {
     /// Not running evals; variant failure rate is confidently >= failure threshold
     Failed,
 }
+
+/// Type alias for batch results grouped by datapoint, then by variant.
+///
+/// This structure is optimized for the scoring function, which needs to compare
+/// variants on the same datapoint. The outer map is keyed by datapoint ID,
+/// and the inner map is keyed by variant name.
+pub type BatchResultsByDatapoint = HashMap<Uuid, HashMap<String, BatchItemResult>>;
 
 /// Trait for scoring functions that compare variants on a single datapoint.
 ///
@@ -241,7 +244,7 @@ pub trait ScoringFunction: Send + Sync {
 /// as a failure (1.0) for that specific evaluator.
 ///
 /// # Arguments
-/// * `results_by_variant` - Batch results grouped by variant name
+/// * `results_by_datapoint` - Batch results grouped by datapoint ID, then by variant name
 /// * `scoring_fn` - Function to convert per-datapoint evaluation matrices to scores
 /// * `variant_performance` - Map to update with performance statistics
 /// * `variant_failures` - Map to update with variant failure rates
@@ -250,7 +253,7 @@ pub trait ScoringFunction: Send + Sync {
 /// # Returns
 /// `Ok(())` on success, or an error if confidence sequence updates fail.
 pub fn compute_updates(
-    results_by_variant: &HashMap<String, Vec<BatchItemResult>>,
+    results_by_datapoint: &BatchResultsByDatapoint,
     scoring_fn: &dyn ScoringFunction,
     variant_performance: &mut HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &mut HashMap<String, MeanBettingConfidenceSequence>,
@@ -265,14 +268,12 @@ pub fn compute_updates(
     // Collect observations for each evaluator's failure rate
     let mut evaluator_failure_observations: HashMap<String, Vec<f64>> = HashMap::new();
 
-    // Group successful results by datapoint ID for scoring
-    // datapoint_id -> (variant_name -> &EvaluationResult)
-    let mut results_by_datapoint: HashMap<Uuid, HashMap<String, &EvaluationResult>> =
-        HashMap::new();
+    // Single pass: process each datapoint's results
+    for results_by_variant in results_by_datapoint.values() {
+        // Build the scoring function input (variant_name -> &EvaluationResult) for this datapoint
+        let mut evaluations_for_scoring: HashMap<String, &EvaluationResult> = HashMap::new();
 
-    // First pass: collect failure observations, evaluator failures, and group by datapoint
-    for (variant_name, results) in results_by_variant {
-        for result in results {
+        for (variant_name, result) in results_by_variant {
             match result {
                 BatchItemResult::Success(success) => {
                     // Variant didn't fail for this datapoint
@@ -293,14 +294,11 @@ pub fn compute_updates(
                             .push(failure_value);
                     }
 
-                    // Group by datapoint ID for scoring
-                    let datapoint_id = success.datapoint.id();
-                    results_by_datapoint
-                        .entry(datapoint_id)
-                        .or_default()
+                    // Add to scoring input
+                    evaluations_for_scoring
                         .insert(variant_name.clone(), &success.evaluation_result);
                 }
-                BatchItemResult::Error(error) => {
+                BatchItemResult::Error(_) => {
                     // Variant failed for this datapoint
                     failure_observations
                         .entry(variant_name.clone())
@@ -308,8 +306,6 @@ pub fn compute_updates(
                         .push(1.0);
                     // Note: We don't update evaluator failures here since we don't have
                     // evaluation results - the failure occurred before evaluation
-                    // Also don't add to results_by_datapoint since there's no evaluation data
-                    let _ = error; // Silence unused warning
                 }
                 BatchItemResult::Cancelled => {
                     // Skip cancelled tasks - they don't count toward any statistics
@@ -317,24 +313,17 @@ pub fn compute_updates(
                 }
             }
         }
-    }
 
-    // Second pass: compute performance scores for each datapoint using the scoring function
-    for evaluations in results_by_datapoint.values() {
-        // Skip if no variants have results for this datapoint
-        if evaluations.is_empty() {
-            continue;
-        }
+        // Compute performance scores for this datapoint if we have any successful evaluations
+        if !evaluations_for_scoring.is_empty() {
+            let scores = scoring_fn.score(&evaluations_for_scoring);
 
-        // Compute scores for all variants on this datapoint
-        let scores = scoring_fn.score(evaluations);
-
-        // Collect the scores per variant
-        for (variant_name, score) in scores {
-            performance_observations
-                .entry(variant_name)
-                .or_default()
-                .push(score);
+            for (variant_name, score) in scores {
+                performance_observations
+                    .entry(variant_name)
+                    .or_default()
+                    .push(score);
+            }
         }
     }
 
@@ -403,7 +392,7 @@ pub struct ProcessTopKBatchParams<'a> {
 /// This function:
 /// 1. Retrieves datapoints from ClickHouse by their IDs
 /// 2. For each active variant, runs inference and evaluation using shared `process_batch`
-/// 3. Returns results grouped by variant for subsequent `compute_updates` calls
+/// 3. Returns results grouped by datapoint ID, then by variant name
 ///
 /// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
 ///
@@ -411,11 +400,11 @@ pub struct ProcessTopKBatchParams<'a> {
 /// * `params` - Parameters for batch processing
 ///
 /// # Returns
-/// A map from variant name to batch results (successes and errors) for all datapoints in the batch.
-/// Each `BatchItemResult` is either a `Success` with full evaluation data or an `Error` with failure info.
+/// Results grouped by datapoint ID, then by variant name. This structure is optimized
+/// for the scoring function which needs to compare variants on the same datapoint.
 pub async fn process_topk_batch(
     params: ProcessTopKBatchParams<'_>,
-) -> Result<HashMap<String, Vec<BatchItemResult>>> {
+) -> Result<BatchResultsByDatapoint> {
     // Retrieve datapoints from ClickHouse
     let request = GetDatapointsRequest {
         ids: params.batch_ids.clone(),
@@ -464,30 +453,35 @@ pub async fn process_topk_batch(
     // Call the shared process_batch from lib.rs
     let (mut join_set, task_id_map) = process_batch(&batch_params, datapoints, &active_variants);
 
-    // Collect results and group by variant
-    let mut results_by_variant: HashMap<String, Vec<BatchItemResult>> = HashMap::new();
+    // Collect results and group by datapoint ID, then by variant
+    let mut results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
 
     while let Some(result) = join_set.join_next_with_id().await {
         let batch_result = collect_batch_result(result, &task_id_map);
 
-        // Get variant name for grouping
-        let variant_name = match &batch_result {
-            BatchItemResult::Success(success) => get_variant_name(&success.variant),
-            BatchItemResult::Error(error) => error
-                .variant
-                .as_ref()
-                .map(|v| get_variant_name(v))
-                .unwrap_or_else(|| "unknown".to_string()),
+        // Get datapoint ID and variant name for grouping
+        let (datapoint_id, variant_name) = match &batch_result {
+            BatchItemResult::Success(success) => {
+                (success.datapoint.id(), get_variant_name(&success.variant))
+            }
+            BatchItemResult::Error(error) => {
+                let variant_name = error
+                    .variant
+                    .as_ref()
+                    .map(|v| get_variant_name(v))
+                    .unwrap_or_else(|| "unknown".to_string());
+                (error.datapoint_id, variant_name)
+            }
             BatchItemResult::Cancelled => continue, // Skip cancelled tasks
         };
 
-        results_by_variant
-            .entry(variant_name)
+        results_by_datapoint
+            .entry(datapoint_id)
             .or_default()
-            .push(batch_result);
+            .insert(variant_name, batch_result);
     }
 
-    Ok(results_by_variant)
+    Ok(results_by_datapoint)
 }
 
 /// Extract variant name from EvaluationVariant.
@@ -1075,9 +1069,9 @@ mod tests {
                 .collect();
 
         // Empty results should not change any confidence sequences
-        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = HashMap::new();
+        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
         let result = compute_updates(
-            &results_by_variant,
+            &results_by_datapoint,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1112,15 +1106,13 @@ mod tests {
                 .collect();
 
         // Cancelled results should not affect any statistics
-        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
-            "test_variant".to_string(),
-            vec![BatchItemResult::Cancelled, BatchItemResult::Cancelled],
-        )]
-        .into_iter()
-        .collect();
+        // In the new structure, we group by datapoint, then by variant
+        // Cancelled tasks are skipped entirely in process_topk_batch,
+        // so an empty map represents the case of only cancelled tasks
+        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
 
         let result = compute_updates(
-            &results_by_variant,
+            &results_by_datapoint,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1151,27 +1143,44 @@ mod tests {
         .collect();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-        // Only errors - this should update variant_failures only
-        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
-            "test_variant".to_string(),
-            vec![
-                BatchItemResult::Error(DatapointVariantError {
-                    datapoint_id: Uuid::now_v7(),
-                    variant: None,
-                    message: "test error 1".to_string(),
-                }),
-                BatchItemResult::Error(DatapointVariantError {
-                    datapoint_id: Uuid::now_v7(),
-                    variant: None,
-                    message: "test error 2".to_string(),
-                }),
-            ],
-        )]
+        // Create two errors for two different datapoints
+        let datapoint_id_1 = Uuid::now_v7();
+        let datapoint_id_2 = Uuid::now_v7();
+
+        // Structure: datapoint_id -> variant_name -> result
+        let results_by_datapoint: BatchResultsByDatapoint = [
+            (
+                datapoint_id_1,
+                [(
+                    "test_variant".to_string(),
+                    BatchItemResult::Error(DatapointVariantError {
+                        datapoint_id: datapoint_id_1,
+                        variant: None,
+                        message: "test error 1".to_string(),
+                    }),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            (
+                datapoint_id_2,
+                [(
+                    "test_variant".to_string(),
+                    BatchItemResult::Error(DatapointVariantError {
+                        datapoint_id: datapoint_id_2,
+                        variant: None,
+                        message: "test error 2".to_string(),
+                    }),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+        ]
         .into_iter()
         .collect();
 
         let result = compute_updates(
-            &results_by_variant,
+            &results_by_datapoint,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
@@ -1194,20 +1203,26 @@ mod tests {
         let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
 
-        let results_by_variant: HashMap<String, Vec<BatchItemResult>> = [(
-            "test_variant".to_string(),
-            vec![BatchItemResult::Error(DatapointVariantError {
-                datapoint_id: Uuid::now_v7(),
-                variant: None,
-                message: "test error".to_string(),
-            })],
+        let datapoint_id = Uuid::now_v7();
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [(
+                "test_variant".to_string(),
+                BatchItemResult::Error(DatapointVariantError {
+                    datapoint_id,
+                    variant: None,
+                    message: "test error".to_string(),
+                }),
+            )]
+            .into_iter()
+            .collect(),
         )]
         .into_iter()
         .collect();
 
         // Should not panic, just skip updates for missing variants
         let result = compute_updates(
-            &results_by_variant,
+            &results_by_datapoint,
             &scoring_fn,
             &mut variant_performance,
             &mut variant_failures,
