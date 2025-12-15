@@ -56,7 +56,7 @@ async fn start_target_server(
     (addr, handle)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_provider_proxy() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
@@ -182,7 +182,7 @@ async fn test_provider_proxy() {
     assert_eq!(bad_gateway_response.status(), 502);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_read_old_write_new() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
