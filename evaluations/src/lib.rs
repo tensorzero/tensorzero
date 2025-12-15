@@ -29,7 +29,7 @@ use tensorzero_core::endpoints::datasets::v1::{
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_core::utils::{deprecation_warning, spawn_ignoring_shutdown};
+use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
 };
@@ -96,7 +96,7 @@ pub struct Clients {
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = ?args.variant_name, variant_names = ?args.variant_names, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -121,21 +121,6 @@ pub async fn run_evaluation(
             "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
         );
     }
-
-    // Build variants list from either variant_name or variant_names
-    let variants: Vec<EvaluationVariant> = match (args.variant_name, args.variant_names) {
-        (Some(name), None) => {
-            deprecation_warning(
-                "`--variant-name` is deprecated. Please use `--variant-names` instead.",
-            );
-            vec![EvaluationVariant::Name(name)]
-        }
-        (None, Some(names)) => names.into_iter().map(EvaluationVariant::Name).collect(),
-        (None, None) => bail!("Either --variant-name or --variant-names must be provided"),
-        (Some(_), Some(_)) => {
-            bail!("Cannot provide both --variant-name and --variant-names")
-        }
-    };
 
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
@@ -204,7 +189,7 @@ pub async fn run_evaluation(
         function_configs,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
-        variants,
+        variant: EvaluationVariant::Name(args.variant_name),
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
@@ -351,7 +336,7 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), num_variants = %args.variants.len(), concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<u32>,
@@ -433,7 +418,8 @@ pub async fn run_evaluation_core_streaming(
             .clone()
             .unwrap_or_else(|| format!("datapoint_ids[{}]", datapoint_ids.len())),
     );
-    let variants: Vec<Arc<EvaluationVariant>> = args.variants.into_iter().map(Arc::new).collect();
+    let variant = Arc::new(args.variant);
+    let variants = [variant]; // Single-element array for process_batch
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
 

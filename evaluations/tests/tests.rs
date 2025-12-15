@@ -81,8 +81,7 @@ async fn run_evaluations_json() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: None,
-        variant_names: Some(vec!["gpt_4o_mini".to_string()]),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         // This test relies on the cache (see below), so we need to enable it
@@ -356,8 +355,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![Uuid::now_v7()]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
@@ -385,8 +383,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: None,
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
@@ -419,15 +416,13 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     let evaluation_run_id = Uuid::now_v7();
 
     // Test: Both datapoint_ids and max_datapoints provided should fail
-    // Also tests variant_names with multiple variants
     let args = Args {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
-        variant_name: None,
-        variant_names: Some(vec!["gpt_4o_mini".to_string(), "dummy_error".to_string()]),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
@@ -485,7 +480,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         evaluation_run_id,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
-        variants: vec![EvaluationVariant::Name("gpt_4o_mini".to_string())],
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         concurrency: 10,
         inference_cache: CacheEnabledMode::On,
     };
@@ -550,8 +545,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: None,
         datapoint_ids: Some(selected_ids.clone()),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -645,8 +639,7 @@ async fn run_exact_match_evaluation_chat() {
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: None,
         datapoint_ids: Some(datapoint_ids.clone()),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -787,8 +780,7 @@ async fn run_llm_judge_evaluation_chat() {
         dataset_name: None,
         datapoint_ids: Some(datapoint_ids.clone()),
         evaluation_name: "haiku_without_outputs".to_string(),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
@@ -1016,8 +1008,7 @@ async fn run_image_evaluation() {
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         evaluation_name: "images".to_string(),
-        variant_name: Some("honest_answer".to_string()),
-        variant_names: None,
+        variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::WriteOnly,
@@ -1239,8 +1230,7 @@ async fn check_invalid_image_evaluation() {
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         evaluation_name: "bad_images".to_string(),
-        variant_name: Some("honest_answer".to_string()),
-        variant_names: None,
+        variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -1351,8 +1341,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         evaluation_name: "haiku_without_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
@@ -1398,8 +1387,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
@@ -1428,7 +1416,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
 
 #[tokio::test]
 async fn test_parse_args() {
-    // Test that --evaluation-name is required
+    // Test default values
     let args = Args::try_parse_from(["test"]).unwrap_err();
     assert!(
         args.to_string()
@@ -1438,151 +1426,9 @@ async fn test_parse_args() {
         args.to_string()
             .contains("--evaluation-name <EVALUATION_NAME>")
     );
+    assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
-    // Test --variant-name and --variant-names are mutually exclusive
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--variant-names",
-        "variant1,variant2",
-        "--dataset-name",
-        "my-dataset",
-    ])
-    .unwrap_err();
-    assert!(
-        args.to_string()
-            .contains("cannot be used with '--variant-names")
-    );
-
-    // Test --variant-name with single variant
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--dataset-name",
-        "my-dataset",
-    ])
-    .unwrap();
-    assert_eq!(args.variant_name, Some("my-variant".to_string()));
-    assert_eq!(args.variant_names, None);
-
-    // Test --variant-names with single variant
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-names",
-        "single_variant",
-        "--dataset-name",
-        "my-dataset",
-    ])
-    .unwrap();
-    assert_eq!(args.variant_name, None);
-    assert_eq!(args.variant_names, Some(vec!["single_variant".to_string()]));
-
-    // Test --variant-names parses multiple variants correctly
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-names",
-        "variant1,variant2,variant3",
-        "--dataset-name",
-        "my-dataset",
-    ])
-    .unwrap();
-    assert_eq!(args.variant_name, None);
-    assert_eq!(
-        args.variant_names,
-        Some(vec![
-            "variant1".to_string(),
-            "variant2".to_string(),
-            "variant3".to_string()
-        ])
-    );
-
-    // Test --dataset-name and --datapoint-ids are mutually exclusive
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--dataset-name",
-        "my-dataset",
-        "--datapoint-ids",
-        "018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e",
-    ])
-    .unwrap_err();
-    assert!(
-        args.to_string()
-            .contains("cannot be used with '--datapoint-ids")
-    );
-
-    // Test --dataset-name alone
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--dataset-name",
-        "my-dataset",
-    ])
-    .unwrap();
-    assert_eq!(args.dataset_name, Some("my-dataset".to_string()));
-    assert_eq!(args.datapoint_ids, None);
-
-    // Test --datapoint-ids with single ID
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--datapoint-ids",
-        "018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e",
-    ])
-    .unwrap();
-    assert_eq!(args.dataset_name, None);
-    assert_eq!(
-        args.datapoint_ids,
-        Some(vec![
-            Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e").unwrap()
-        ])
-    );
-
-    // Test --datapoint-ids parses multiple IDs correctly
-    let args = Args::try_parse_from([
-        "test",
-        "--evaluation-name",
-        "my-evaluation",
-        "--variant-name",
-        "my-variant",
-        "--datapoint-ids",
-        "018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e,018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f",
-    ])
-    .unwrap();
-    assert_eq!(args.dataset_name, None);
-    let datapoint_ids = args.datapoint_ids.unwrap();
-    assert_eq!(datapoint_ids.len(), 2);
-    assert_eq!(
-        datapoint_ids[0],
-        Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e").unwrap()
-    );
-    assert_eq!(
-        datapoint_ids[1],
-        Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f").unwrap()
-    );
-
-    // ==================== Default values and other options ====================
-
-    // Test default values for optional arguments
+    // Test required arguments plus dataset-name (x-or with datapoint-ids)
     let args = Args::try_parse_from([
         "test",
         "--evaluation-name",
@@ -1594,11 +1440,39 @@ async fn test_parse_args() {
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.variant_name, "my-variant");
+    assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
+    assert!(args.datapoint_ids.unwrap_or_default().is_empty());
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
     assert_eq!(args.format, OutputFormat::Pretty);
     assert_eq!(args.inference_cache, CacheEnabledMode::On);
+
+    // Test required arguments plus datapoint-ids (x-or with dataset-name)
+    let args = Args::try_parse_from([
+        "test",
+        "--evaluation-name",
+        "my-evaluation",
+        "--variant-name",
+        "my-variant",
+        "--datapoint-ids",
+        "018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e,018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f",
+    ])
+    .unwrap();
+    let datapoint_ids: Vec<Uuid> = args.datapoint_ids.unwrap_or_default();
+    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.variant_name, "my-variant");
+    assert_eq!(args.dataset_name, None);
+    assert_eq!(datapoint_ids.len(), 2);
+    assert_eq!(
+        datapoint_ids[0],
+        Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e").unwrap()
+    );
+    assert_eq!(
+        datapoint_ids[1],
+        Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f").unwrap()
+    );
 
     // Test all arguments
     let args = Args::try_parse_from([
@@ -1628,7 +1502,7 @@ async fn test_parse_args() {
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
     assert!(args.datapoint_ids.unwrap_or_default().is_empty());
-    assert_eq!(args.variant_name, Some("my-variant".to_string()));
+    assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
         args.gateway_url,
@@ -1718,8 +1592,7 @@ async fn run_evaluations_errors() {
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("dummy_error".to_string()),
-        variant_names: None,
+        variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -2145,8 +2018,7 @@ async fn run_evaluations_best_of_3() {
         evaluation_name: "best_of_3".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -2339,8 +2211,7 @@ async fn run_evaluations_mixture_of_3() {
         evaluation_name: "mixture_of_3".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -2536,8 +2407,7 @@ async fn run_evaluations_dicl() {
         evaluation_name: "dicl".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -2828,7 +2698,7 @@ async fn test_evaluation_with_dynamic_variant() {
         function_configs,
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
-        variants: vec![EvaluationVariant::Info(Box::new(dynamic_variant))],
+        variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
         evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
@@ -2890,7 +2760,7 @@ async fn test_max_datapoints_parameter() {
         function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variants: vec![EvaluationVariant::Name("gpt_4o_mini".to_string())],
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
@@ -2975,7 +2845,7 @@ async fn test_precision_targets_parameter() {
         function_configs,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variants: vec![EvaluationVariant::Name("gpt_4o_mini".to_string())],
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name,
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
@@ -3076,8 +2946,7 @@ async fn test_cli_args_max_datapoints() {
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
@@ -3137,8 +3006,7 @@ async fn test_cli_args_precision_targets() {
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        variant_name: Some("gpt_4o_mini".to_string()),
-        variant_names: None,
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
