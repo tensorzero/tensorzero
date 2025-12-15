@@ -69,7 +69,7 @@ export function DatasetComboboxSelector({
   }, [recentlyUpdatedDatasets, searchValue]);
 
   const existingSelectedDataset = useMemo(
-    () => datasets?.find((dataset) => dataset.name === selected),
+    () => datasets.find((dataset) => dataset.name === selected),
     [datasets, selected],
   );
 
