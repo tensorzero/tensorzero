@@ -397,7 +397,7 @@ pub fn compute_updates(
 /// Uses the same semaphore-based concurrency control as `run_evaluation_core_streaming`.
 ///
 /// # Arguments
-/// * `ctx` - Shared context containing clients, configs, and evaluation metadata
+/// * `topk_context` - Shared context containing clients, configs, and evaluation metadata
 /// * `batch_ids` - IDs of datapoints to process in this batch
 /// * `variant_status` - Current status of each variant (only Active variants are processed)
 ///
