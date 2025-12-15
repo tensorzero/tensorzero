@@ -3,6 +3,13 @@ import { useCallback, useRef, useState } from "react";
 const COMMAND_MENU_KEYS = ["ArrowDown", "ArrowUp", "Enter"];
 const RADIX_POPPER_SELECTOR = "[data-radix-popper-content-wrapper]";
 
+/**
+ * Shared state and handlers for combobox behavior.
+ *
+ * Currently used by the Combobox component. Can be exported in the future for
+ * custom combobox implementations that require specialized rendering or behavior
+ * beyond what the base component provides.
+ */
 export function useCombobox() {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
