@@ -108,23 +108,6 @@ type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
-[models."claude-sonnet-4-5-20250929-thinking-128k"]
-routing = ["anthropic"]
-
-[models."claude-sonnet-4-5-20250929-thinking-128k".providers.anthropic]
-type = "anthropic"
-model_name = "claude-sonnet-4-5-20250929"
-extra_headers = [{ name = "anthropic-beta", value = "output-128k-2025-02-19" }]
-extra_body = [
-    # We use a budget tokens of 1024 to make sure that it doesn't think for too long,
-    # since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
-    # to 128k in 'test_thinking_128k'
-    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
-    { pointer = "/stop_sequences", value = [
-        "my_custom_stop",
-    ] },
-]
-
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws_bedrock"]
 
