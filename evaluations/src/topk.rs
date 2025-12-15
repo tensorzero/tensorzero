@@ -646,6 +646,33 @@ pub struct TopKLoopState {
     pub batch_index: usize,
 }
 
+/// Parameters for the fetch_datapoint_ids step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FetchDatapointIdsParams {
+    function_name: String,
+    dataset_name: String,
+    max_datapoints: Option<usize>,
+}
+
+/// Parameters for the process_batch step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProcessBatchStepParams {
+    batch_ids: Vec<Uuid>,
+    loop_state: TopKLoopState,
+    k_min: u32,
+    k_max: u32,
+    epsilon: Option<f64>,
+    variant_failure_threshold: Option<f64>,
+    evaluator_failure_threshold: Option<f64>,
+    batch_idx: usize,
+    // TopKContext fields that need to be passed through
+    evaluation_name: String,
+    evaluation_run_id: Uuid,
+    dataset_name: String,
+    inference_cache: CacheEnabledMode,
+    concurrency: usize,
+}
+
 /// Serializable output for the top-k task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopKTaskOutput {
@@ -677,6 +704,110 @@ impl From<AdaptiveEvalStoppingResults> for TopKTaskOutput {
             num_datapoints_processed: results.num_datapoints_processed,
         }
     }
+}
+
+/// Step function to fetch and shuffle datapoint IDs.
+async fn fetch_datapoint_ids_step(
+    params: FetchDatapointIdsParams,
+    state: TopKTaskState,
+) -> anyhow::Result<Vec<Uuid>> {
+    let request = ListDatapointsRequest {
+        function_name: Some(params.function_name),
+        limit: params.max_datapoints.map(|n| n as u32),
+        offset: Some(0),
+        ..Default::default()
+    };
+    let datapoints = list_datapoints(
+        &state.clients.clickhouse_client,
+        params.dataset_name,
+        request,
+    )
+    .await?
+    .datapoints;
+
+    let mut ids: Vec<Uuid> = datapoints.iter().map(|d| d.id()).collect();
+
+    // Shuffle for randomization
+    use rand::seq::SliceRandom;
+    let mut rng = rand::rng();
+    ids.shuffle(&mut rng);
+
+    Ok(ids)
+}
+
+/// Step function to process a batch and update loop state.
+async fn process_batch_step(
+    params: ProcessBatchStepParams,
+    state: TopKTaskState,
+) -> anyhow::Result<TopKLoopState> {
+    let mut current_state = params.loop_state;
+
+    // Rebuild TopKContext from params and state
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
+    let topk_context = TopKContext {
+        clients: state.clients.clone(),
+        evaluation_config: state.evaluation_config.clone(),
+        function_configs: state.function_configs.clone(),
+        evaluation_name: Arc::new(params.evaluation_name),
+        evaluation_run_id: params.evaluation_run_id,
+        dataset_name: Arc::new(params.dataset_name),
+        inference_cache: params.inference_cache,
+        semaphore,
+    };
+
+    // Process the batch
+    let results = process_topk_batch(
+        &topk_context,
+        params.batch_ids.clone(),
+        &current_state.variant_status,
+    )
+    .await?;
+
+    // Update confidence sequences
+    compute_updates(
+        &results,
+        state.scoring_fn.as_ref(),
+        &mut current_state.variant_performance,
+        &mut current_state.variant_failures,
+        &mut current_state.evaluator_failures,
+    )?;
+
+    current_state.num_datapoints_processed += params.batch_ids.len();
+    current_state.batch_index = params.batch_idx + 1;
+
+    // Check top-k stopping condition
+    let stopping_result = check_topk_stopping(
+        &current_state.variant_performance,
+        params.k_min,
+        params.k_max,
+        params.epsilon,
+    )?;
+
+    // Update variant statuses
+    update_variant_statuses(
+        &mut current_state.variant_status,
+        &current_state.variant_performance,
+        &current_state.variant_failures,
+        params.variant_failure_threshold,
+        &stopping_result,
+        params.k_max,
+    );
+
+    // Check for evaluator failure
+    if let Some(threshold) = params.evaluator_failure_threshold {
+        for (evaluator_name, cs) in &current_state.evaluator_failures {
+            if check_evaluator_failed(cs, threshold) {
+                info!(
+                    evaluator_name = %evaluator_name,
+                    "Evaluator failure threshold exceeded"
+                );
+                // Mark all active variants as failed due to evaluator
+                // (The stopping reason will be set in the output)
+            }
+        }
+    }
+
+    Ok(current_state)
 }
 
 /// Create an initial confidence sequence for a named entity.
@@ -860,31 +991,17 @@ impl Task<TopKTaskState> for TopKTask {
         );
 
         // CHECKPOINT 1: Fetch and shuffle datapoint IDs
+        let fetch_params = FetchDatapointIdsParams {
+            function_name: inference_config.function_name.clone(),
+            dataset_name: params.dataset_name.clone(),
+            max_datapoints: params.max_datapoints,
+        };
         let datapoint_ids: Vec<Uuid> = ctx
-            .step("fetch_datapoint_ids", || async {
-                let request = ListDatapointsRequest {
-                    function_name: Some(inference_config.function_name.clone()),
-                    limit: params.max_datapoints.map(|n| n as u32),
-                    offset: Some(0),
-                    ..Default::default()
-                };
-                let datapoints = list_datapoints(
-                    &state.clients.clickhouse_client,
-                    params.dataset_name.clone(),
-                    request,
-                )
-                .await?
-                .datapoints;
-
-                let mut ids: Vec<Uuid> = datapoints.iter().map(|d| d.id()).collect();
-
-                // Shuffle for randomization
-                use rand::seq::SliceRandom;
-                let mut rng = rand::rng();
-                ids.shuffle(&mut rng);
-
-                Ok(ids)
-            })
+            .step(
+                "fetch_datapoint_ids",
+                fetch_params,
+                fetch_datapoint_ids_step,
+            )
             .await?;
 
         let total_datapoints = datapoint_ids.len();
@@ -939,19 +1056,6 @@ impl Task<TopKTaskState> for TopKTask {
             batch_index: 0,
         };
 
-        // Build the shared context for batch processing
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
-        let topk_context = TopKContext {
-            clients: state.clients.clone(),
-            evaluation_config: state.evaluation_config.clone(),
-            function_configs: state.function_configs.clone(),
-            evaluation_name: Arc::new(params.evaluation_name.clone()),
-            evaluation_run_id,
-            dataset_name: Arc::new(params.dataset_name.clone()),
-            inference_cache: params.inference_cache,
-            semaphore,
-        };
-
         // Process batches
         let batches: Vec<Vec<Uuid>> = datapoint_ids
             .chunks(batch_size)
@@ -975,74 +1079,27 @@ impl Task<TopKTaskState> for TopKTask {
             );
 
             // CHECKPOINT 2: Process batch and update state
+            let batch_step_params = ProcessBatchStepParams {
+                batch_ids,
+                loop_state: loop_state.clone(),
+                k_min: params.k_min,
+                k_max: params.k_max,
+                epsilon: params.epsilon,
+                variant_failure_threshold: params.variant_failure_threshold,
+                evaluator_failure_threshold: params.evaluator_failure_threshold,
+                batch_idx,
+                evaluation_name: params.evaluation_name.clone(),
+                evaluation_run_id,
+                dataset_name: params.dataset_name.clone(),
+                inference_cache: params.inference_cache,
+                concurrency: params.concurrency,
+            };
             loop_state = ctx
-                .step(&format!("batch_{batch_idx}"), || {
-                    let topk_context = topk_context.clone();
-                    let scoring_fn = state.scoring_fn.clone();
-                    let batch_ids = batch_ids.clone();
-                    let mut current_state = loop_state.clone();
-                    let k_min = params.k_min;
-                    let k_max = params.k_max;
-                    let epsilon = params.epsilon;
-                    let variant_failure_threshold = params.variant_failure_threshold;
-                    let evaluator_failure_threshold = params.evaluator_failure_threshold;
-
-                    async move {
-                        // Process the batch
-                        let results = process_topk_batch(
-                            &topk_context,
-                            batch_ids.clone(),
-                            &current_state.variant_status,
-                        )
-                        .await?;
-
-                        // Update confidence sequences
-                        compute_updates(
-                            &results,
-                            scoring_fn.as_ref(),
-                            &mut current_state.variant_performance,
-                            &mut current_state.variant_failures,
-                            &mut current_state.evaluator_failures,
-                        )?;
-
-                        current_state.num_datapoints_processed += batch_ids.len();
-                        current_state.batch_index = batch_idx + 1;
-
-                        // Check top-k stopping condition
-                        let stopping_result = check_topk_stopping(
-                            &current_state.variant_performance,
-                            k_min,
-                            k_max,
-                            epsilon,
-                        )?;
-
-                        // Update variant statuses
-                        update_variant_statuses(
-                            &mut current_state.variant_status,
-                            &current_state.variant_performance,
-                            &current_state.variant_failures,
-                            variant_failure_threshold,
-                            &stopping_result,
-                            k_max,
-                        );
-
-                        // Check for evaluator failure
-                        if let Some(threshold) = evaluator_failure_threshold {
-                            for (evaluator_name, cs) in &current_state.evaluator_failures {
-                                if check_evaluator_failed(cs, threshold) {
-                                    info!(
-                                        evaluator_name = %evaluator_name,
-                                        "Evaluator failure threshold exceeded"
-                                    );
-                                    // Mark all active variants as failed due to evaluator
-                                    // (The stopping reason will be set in the output)
-                                }
-                            }
-                        }
-
-                        Ok(current_state)
-                    }
-                })
+                .step(
+                    &format!("batch_{batch_idx}"),
+                    batch_step_params,
+                    process_batch_step,
+                )
                 .await?;
         }
 
