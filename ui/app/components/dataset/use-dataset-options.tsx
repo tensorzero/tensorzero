@@ -67,14 +67,14 @@ export function useDatasetOptions({
   const getItemIcon = useCallback(
     (item: string | null, isSelected: boolean) => {
       if (!item) {
-        return <TablePlus className="h-4 w-4 text-blue-600" />;
+        return <TablePlus size={16} className="text-blue-600" />;
       }
       const exists = datasetsByName.has(item);
       if (isSelected && exists) {
         return <TableCheck size={16} className="text-green-700" />;
       }
       if (isSelected && !exists) {
-        return <TablePlus className="h-4 w-4 text-blue-600" />;
+        return <TablePlus size={16} className="text-blue-600" />;
       }
       return <Table size={16} className="text-fg-muted" />;
     },

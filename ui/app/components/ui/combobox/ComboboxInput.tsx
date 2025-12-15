@@ -58,7 +58,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           )}
         />
         <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2">
-          {suffix && <span className="text-fg-tertiary text-sm">{suffix}</span>}
+          {suffix}
           <ChevronDown
             className={clsx("text-fg-tertiary h-4 w-4", open && "-rotate-180")}
           />

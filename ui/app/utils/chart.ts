@@ -43,7 +43,7 @@ export function formatDetailedNumber(value: number): string {
 
 /**
  * Format numbers with 3 significant digits and compact notation
- * Examples: 1, 11, 111, 1.11k, 11.1k, 111k, 1.11M
+ * Examples: 0.12, 1.23, 12.3, 123, 1.23k, 12.3k, 123k, 1.23M
  */
 export function formatCompactNumber(value: number): string {
   if (value === 0) return "0";
@@ -68,7 +68,18 @@ export function formatCompactNumber(value: number): string {
     return `${sign}${n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2)}k`;
   }
 
-  return `${sign}${Math.round(abs)}`;
+  // For numbers < 1000, use 3 significant digits
+  if (abs >= 100) {
+    return `${sign}${Math.round(abs)}`;
+  }
+  if (abs >= 10) {
+    return `${sign}${abs.toFixed(1).replace(/\.0$/, "")}`;
+  }
+  if (abs >= 1) {
+    return `${sign}${abs.toFixed(2).replace(/\.?0+$/, "")}`;
+  }
+  // For decimals < 1, show up to 2 decimal places
+  return `${sign}${abs.toFixed(2).replace(/\.?0+$/, "")}`;
 }
 
 /**

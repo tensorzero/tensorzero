@@ -41,14 +41,24 @@ export function DatasetCombobox({
     shouldShowCreateOption,
   } = useDatasetOptions({ functionName, placeholder, allowCreation });
 
-  const combobox = useCombobox();
+  const {
+    open,
+    searchValue,
+    commandRef,
+    getInputValue,
+    closeDropdown,
+    handleKeyDown,
+    handleInputChange,
+    handleBlur,
+    handleClick,
+  } = useCombobox();
 
   const filteredItems = useMemo(
-    () => filterItems(combobox.searchValue),
-    [filterItems, combobox.searchValue],
+    () => filterItems(searchValue),
+    [filterItems, searchValue],
   );
 
-  const showCreateOption = shouldShowCreateOption(combobox.searchValue);
+  const showCreateOption = shouldShowCreateOption(searchValue);
   const showCreateHint =
     allowCreation && !showCreateOption && !isLoading && !isError;
   const showMenu = !isLoading && !isError;
@@ -56,19 +66,19 @@ export function DatasetCombobox({
   const handleSelectItem = useCallback(
     (item: string, isNew: boolean) => {
       onSelect(item, isNew);
-      combobox.closeDropdown();
+      closeDropdown();
     },
-    [onSelect, combobox],
+    [onSelect, closeDropdown],
   );
 
   const inputPrefix = useMemo(() => {
-    const item = selected && !combobox.searchValue ? selected : null;
-    const isSelected = Boolean(selected && !combobox.searchValue);
+    const item = selected && !searchValue ? selected : null;
+    const isSelected = Boolean(selected && !searchValue);
     return getItemIcon(item, isSelected);
-  }, [selected, combobox.searchValue, getItemIcon]);
+  }, [selected, searchValue, getItemIcon]);
 
   const inputSuffix = useMemo(() => {
-    const item = selected && !combobox.searchValue ? selected : null;
+    const item = selected && !searchValue ? selected : null;
     const count = getItemSuffix(item);
     if (!count) return null;
     return (
@@ -76,20 +86,20 @@ export function DatasetCombobox({
         {count}
       </span>
     );
-  }, [selected, combobox.searchValue, getItemSuffix]);
+  }, [selected, searchValue, getItemSuffix]);
 
   return (
-    <Popover open={combobox.open}>
+    <Popover open={open}>
       <PopoverAnchor asChild>
         <ComboboxInput
-          value={combobox.getInputValue(selected)}
-          onChange={combobox.handleInputChange}
-          onKeyDown={combobox.handleKeyDown}
-          onClick={combobox.handleClick}
-          onBlur={combobox.handleBlur}
+          value={getInputValue(selected)}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onClick={handleClick}
+          onBlur={handleBlur}
           placeholder={computedPlaceholder}
           disabled={disabled}
-          open={combobox.open}
+          open={open}
           prefix={inputPrefix}
           suffix={inputSuffix}
         />
@@ -101,7 +111,7 @@ export function DatasetCombobox({
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <Command ref={combobox.commandRef} shouldFilter={false}>
+        <Command ref={commandRef} shouldFilter={false}>
           {isLoading && (
             <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
               Loading datasets...
@@ -120,7 +130,7 @@ export function DatasetCombobox({
               <ComboboxMenuItems
                 items={filteredItems}
                 selected={selected}
-                searchValue={combobox.searchValue}
+                searchValue={searchValue}
                 onSelectItem={handleSelectItem}
                 showCreateOption={showCreateOption}
                 createHeading="New dataset"
