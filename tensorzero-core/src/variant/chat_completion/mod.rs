@@ -1,5 +1,6 @@
 use chrono::Duration;
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -201,7 +202,7 @@ impl ChatCompletionConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
@@ -210,14 +211,14 @@ pub struct UninitializedInputWrappers {
     system: Option<ResolvedTomlPathData>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
     pub path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
@@ -226,7 +227,7 @@ pub struct UninitializedChatTemplates {
     pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {

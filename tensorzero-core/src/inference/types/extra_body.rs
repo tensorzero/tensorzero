@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::export_schema;
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]

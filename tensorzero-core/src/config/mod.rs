@@ -18,6 +18,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snapshot::SnapshotHash;
 use std::borrow::Cow;
@@ -113,7 +114,7 @@ pub struct Config {
     pub hash: SnapshotHash,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
@@ -122,7 +123,7 @@ pub struct NonStreamingTimeouts {
     pub total_ms: Option<u64>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
@@ -133,7 +134,7 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
@@ -2024,7 +2025,7 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
@@ -2036,7 +2037,7 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Clone, Debug, TensorZeroDeserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
