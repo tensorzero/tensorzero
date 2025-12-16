@@ -373,7 +373,7 @@ pub fn check_topk_stopping(
     // For each variant, count how many other variants' upper bounds its lower bound exceedsm
     // with tolerance epsilon. This tells us how many variants it "confidently beats".
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
+    let mut variants_with_num_beaten: Vec<(&String, usize)> = variant_performance
         .iter()
         .map(|(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
@@ -391,7 +391,7 @@ pub fn check_topk_stopping(
         .collect();
 
     // Sort by num_beaten descending (best variants first)
-    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
+    variants_with_num_beaten.sort_by(|a, b| b.1.cmp(&a.1));
 
     // Check each k from k_max down to k_min
     // We want the largest k for which we can identify a top-k set
@@ -400,12 +400,12 @@ pub fn check_topk_stopping(
         let threshold = num_variants.saturating_sub(k_usize);
 
         // Check if the top k variants each beat at least (num_variants - k) others
-        if k_usize <= variants_with_n_beaten.len()
-            && variants_with_n_beaten[..k_usize]
+        if k_usize <= variants_with_num_beaten.len()
+            && variants_with_num_beaten[..k_usize]
                 .iter()
                 .all(|(_, num_beaten)| *num_beaten >= threshold)
         {
-            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
+            let top_variants: Vec<String> = variants_with_num_beaten[..k_usize]
                 .iter()
                 .map(|(name, _)| (*name).clone())
                 .collect();
