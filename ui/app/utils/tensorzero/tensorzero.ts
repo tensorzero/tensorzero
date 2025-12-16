@@ -19,11 +19,13 @@ import type {
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
+  FeedbackRow,
   MetricsWithFeedbackResponse,
   Datapoint,
   GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetFeedbackByTargetIdResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
@@ -330,6 +332,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as FeedbackResponse;
+  }
+
+  /**
+   * Queries feedback for a given target ID with pagination support.
+   * @param targetId - The target ID (inference_id or episode_id) to query feedback for
+   * @param options - Optional pagination parameters
+   * @returns A promise that resolves with a list of feedback rows
+   * @throws Error if the request fails
+   */
+  async getFeedbackByTargetId(
+    targetId: string,
+    options?: {
+      before?: string;
+      after?: string;
+      limit?: number;
+    },
+  ): Promise<FeedbackRow[]> {
+    const params = new URLSearchParams();
+    if (options?.before) params.set("before", options.before);
+    if (options?.after) params.set("after", options.after);
+    if (options?.limit) params.set("limit", options.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}${queryString ? `?${queryString}` : ""}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as GetFeedbackByTargetIdResponse;
+    return body.feedback;
   }
 
   /**
