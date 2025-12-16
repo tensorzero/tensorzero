@@ -64,7 +64,7 @@ export function EvaluationCombobox({
       items={filteredEvaluations}
       icon={Evaluation}
       placeholder={placeholder}
-      emptyMessage="No evaluations found."
+      emptyMessage="No evaluations found"
       disabled={isDisabled}
       monospace
       clearable
