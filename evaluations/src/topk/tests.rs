@@ -41,6 +41,47 @@ fn mock_cs_with_bounds(
     )
 }
 
+// ============================================================================
+// Tests for check_global_stopping
+// ============================================================================
+
+fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
+    TopKTaskParams {
+        evaluation_name: "eval".to_string(),
+        dataset_name: "dataset".to_string(),
+        variant_names: variant_names.into_iter().map(|s| s.to_string()).collect(),
+        k_min: 1,
+        k_max: 2,
+        epsilon: None,
+        max_datapoints: None,
+        batch_size: Some(1),
+        variant_failure_threshold: Some(0.5),
+        evaluator_failure_threshold: Some(0.2),
+        concurrency: 1,
+        inference_cache: CacheEnabledMode::On,
+    }
+}
+
+fn empty_loop_state(variant_names: &[&str]) -> TopKLoopState {
+    TopKLoopState {
+        variant_status: variant_names
+            .iter()
+            .map(|name| ((*name).to_string(), VariantStatus::Active))
+            .collect(),
+        variant_performance: variant_names
+            .iter()
+            .map(|name| {
+                let (_, cs) = mock_cs_with_bounds(name, 0.4, 0.6);
+                ((*name).to_string(), cs)
+            })
+            .collect(),
+        variant_failures: HashMap::new(),
+        evaluator_failures: HashMap::new(),
+        num_datapoints_processed: 0,
+        batch_index: 0,
+    }
+}
+
 /// Helper to create a fresh confidence sequence with no observations (for testing updates)
 fn mock_fresh_cs(name: &str) -> MeanBettingConfidenceSequence {
     MeanBettingConfidenceSequence::new(name.to_string(), 101, 0.05)
@@ -1922,4 +1963,102 @@ fn test_update_variant_statuses_global_stopping() {
     // Variants not in top_variants should be Exclude
     assert_eq!(variant_status["c"], VariantStatus::Exclude);
     assert_eq!(variant_status["d"], VariantStatus::Exclude);
+}
+
+#[test]
+fn test_check_global_stopping_prefers_topk() {
+    let params = default_params_with_variants(vec!["a", "b"]);
+    let mut loop_state = empty_loop_state(&["a", "b"]);
+    loop_state.variant_performance = [
+        mock_cs_with_bounds("a", 0.7, 0.9),
+        mock_cs_with_bounds("b", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+    loop_state.evaluator_failures = [("eval1".to_string(), mock_cs_with_bounds("eval1", 0.3, 0.4))]
+        .into_iter()
+        .map(|(name, (_, cs))| (name, cs))
+        .collect();
+
+    let reason = check_global_stopping(&loop_state, &params);
+    match reason {
+        Some(GlobalStoppingReason::TopKFound { k, top_variants }) => {
+            assert_eq!(k, 2);
+            assert_eq!(top_variants, vec!["a".to_string(), "b".to_string()]);
+        }
+        other => panic!("expected TopKFound, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_check_global_stopping_evaluators_failed() {
+    let mut params = default_params_with_variants(vec!["a", "b"]);
+    params.evaluator_failure_threshold = Some(0.2);
+    let mut loop_state = empty_loop_state(&["a", "b"]);
+    loop_state.evaluator_failures = [
+        (
+            "eval_one".to_string(),
+            mock_cs_with_bounds("eval_one", 0.25, 0.3),
+        ),
+        (
+            "eval_two".to_string(),
+            mock_cs_with_bounds("eval_two", 0.4, 0.5),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, (_, cs))| (name, cs))
+    .collect();
+    loop_state.variant_performance = [
+        mock_cs_with_bounds("a", 0.3, 0.4),
+        mock_cs_with_bounds("b", 0.35, 0.45),
+    ]
+    .into_iter()
+    .collect();
+
+    let reason = check_global_stopping(&loop_state, &params);
+    match reason {
+        Some(GlobalStoppingReason::EvaluatorsFailed { evaluator_names }) => {
+            let mut names = evaluator_names.clone();
+            names.sort();
+            assert_eq!(names, vec!["eval_one".to_string(), "eval_two".to_string()]);
+        }
+        other => panic!("expected EvaluatorsFailed, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_check_global_stopping_too_many_variant_failures() {
+    let mut params = default_params_with_variants(vec!["a", "b", "c"]);
+    params.k_min = 1;
+    let mut loop_state = empty_loop_state(&["a", "b", "c"]);
+    loop_state.variant_status = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Failed),
+        ("c".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+    loop_state.variant_performance = [
+        mock_cs_with_bounds("a", 0.2, 0.3),
+        mock_cs_with_bounds("b", 0.3, 0.4),
+        mock_cs_with_bounds("c", 0.4, 0.5),
+    ]
+    .into_iter()
+    .collect();
+
+    let reason = check_global_stopping(&loop_state, &params);
+    match reason {
+        Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed }) => {
+            assert_eq!(num_failed, 2);
+        }
+        other => panic!("expected TooManyVariantsFailed, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_check_global_stopping_none_when_running() {
+    let params = default_params_with_variants(vec!["a", "b"]);
+    let loop_state = empty_loop_state(&["a", "b"]);
+    let reason = check_global_stopping(&loop_state, &params);
+    assert!(reason.is_none());
 }
