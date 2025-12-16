@@ -2005,6 +2005,14 @@ fn test_check_global_stopping_evaluators_failed() {
     let mut params = default_params_with_variants(variant_names.clone());
     params.evaluator_failure_threshold = Some(0.2);
     let mut loop_state = empty_loop_state(&variant_names);
+    loop_state.variant_status = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Failed),
+        ("c".to_string(), VariantStatus::Failed),
+        ("d".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
     loop_state.evaluator_failures = [
         (
             "eval_one".to_string(),
