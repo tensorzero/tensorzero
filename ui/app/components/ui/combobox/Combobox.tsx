@@ -117,8 +117,14 @@ export function Combobox({
                       className="flex items-center gap-2"
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate font-mono">{item}</span>
-                      {getItemAnnotation?.(item)}
+                      <span className="flex min-w-0 items-baseline">
+                        <span className="truncate font-mono">{item}</span>
+                        {getItemAnnotation && (
+                          <span className="ml-1.5 shrink-0">
+                            {getItemAnnotation(item)}
+                          </span>
+                        )}
+                      </span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

@@ -55,7 +55,7 @@ export function EvaluationCombobox({
   const placeholder =
     filteredEvaluations.length === 0
       ? "No evaluations for this function"
-      : "Select evaluation...";
+      : "Select evaluation";
 
   return (
     <Combobox

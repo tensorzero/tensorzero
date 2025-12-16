@@ -62,11 +62,13 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
         />
         {annotation && value && (
           <div className="pointer-events-none absolute inset-y-0 left-9 flex items-center">
-            <span className="invisible font-mono text-sm">{value}</span>
-            <span className="ml-1">{annotation}</span>
+            <span className="invisible font-mono text-base md:text-sm">
+              {value}
+            </span>
+            <span className="ml-1.5">{annotation}</span>
           </div>
         )}
-        <div className="absolute inset-y-0 right-3 flex items-center gap-1">
+        <div className="absolute inset-y-0 right-3 flex items-center gap-1.5">
           {clearable && (
             <button
               type="button"
