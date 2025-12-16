@@ -636,6 +636,58 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     }
 }
 
+/// Update variant statuses based on current confidence sequences and top-k stopping result.
+fn update_variant_statuses(
+    variant_status: &mut HashMap<String, VariantStatus>,
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failure_threshold: Option<f64>,
+    stopping_result: &TopKStoppingResult,
+    k_max: u32,
+) {
+    for (name, status) in variant_status.iter_mut() {
+        // Skip already-stopped variants
+        if *status != VariantStatus::Active {
+            continue;
+        }
+
+        // Check for failure based on failure rate
+        if let Some(threshold) = variant_failure_threshold
+            && let Some(failure_cs) = variant_failures.get(name)
+            && check_variant_failed(failure_cs, threshold)
+        {
+            *status = VariantStatus::Failed;
+            continue;
+        }
+
+        // If top-k stopping occurred, update based on inclusion in top set
+        if stopping_result.stopped {
+            if stopping_result.top_variants.contains(name) {
+                *status = VariantStatus::Include;
+            } else {
+                *status = VariantStatus::Exclude;
+            }
+            continue;
+        }
+
+        // Check if variant can be excluded early (its upper bound is below k_max others' lower bounds)
+        if let Some(perf_cs) = variant_performance.get(name) {
+            let num_definitely_better = variant_performance
+                .iter()
+                .filter(|(other_name, other_cs)| {
+                    *other_name != name && other_cs.cs_lower > perf_cs.cs_upper
+                })
+                .count();
+
+            // If at least (num_variants - k_max) variants are definitely better,
+            // this variant cannot be in the top k_max
+            if num_definitely_better >= k_max as usize {
+                *status = VariantStatus::Exclude;
+            }
+        }
+    }
+}
+
 /// Durable step function to process a batch and update loop state.
 async fn process_batch_step(
     params: ProcessBatchStepParams,
@@ -776,58 +828,6 @@ async fn process_batch_step(
     }
 
     Ok(current_state)
-}
-
-/// Update variant statuses based on current confidence sequences and top-k stopping result.
-fn update_variant_statuses(
-    variant_status: &mut HashMap<String, VariantStatus>,
-    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
-    variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
-    variant_failure_threshold: Option<f64>,
-    stopping_result: &TopKStoppingResult,
-    k_max: u32,
-) {
-    for (name, status) in variant_status.iter_mut() {
-        // Skip already-stopped variants
-        if *status != VariantStatus::Active {
-            continue;
-        }
-
-        // Check for failure based on failure rate
-        if let Some(threshold) = variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(name)
-            && check_variant_failed(failure_cs, threshold)
-        {
-            *status = VariantStatus::Failed;
-            continue;
-        }
-
-        // If top-k stopping occurred, update based on inclusion in top set
-        if stopping_result.stopped {
-            if stopping_result.top_variants.contains(name) {
-                *status = VariantStatus::Include;
-            } else {
-                *status = VariantStatus::Exclude;
-            }
-            continue;
-        }
-
-        // Check if variant can be excluded early (its upper bound is below k_max others' lower bounds)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_better = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && other_cs.cs_lower > perf_cs.cs_upper
-                })
-                .count();
-
-            // If at least (num_variants - k_max) variants are definitely better,
-            // this variant cannot be in the top k_max
-            if num_definitely_better >= k_max as usize {
-                *status = VariantStatus::Exclude;
-            }
-        }
-    }
 }
 
 /// Determine the stopping reason based on final loop state.
