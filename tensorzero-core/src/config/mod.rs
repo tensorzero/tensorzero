@@ -874,7 +874,7 @@ async fn process_config_input(
             let gateway_config = gateway.load(object_store_info.as_ref())?;
 
             // Initialize templates from ALL functions (including built-in)
-            let all_template_paths = Config::get_templates(&all_functions);
+            let all_template_paths = Config::get_templates(&all_functions)?;
             if gateway_config.template_filesystem_access.enabled {
                 deprecation_warning(
                     "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
@@ -1466,18 +1466,32 @@ impl Config {
     /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates(
         functions: &HashMap<String, Arc<FunctionConfig>>,
-    ) -> HashMap<String, String> {
+    ) -> Result<HashMap<String, String>, Error> {
         let mut templates = HashMap::new();
 
         for function in functions.values() {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
-                    templates.insert(path.path.get_template_key(), path.contents.clone());
+                    // Duplicates involving real paths are allowed, since we might mention the same filesystem path
+                    // in multiple places.
+                    // However, 'fake' template names (from judges or agent-generated variants) should always be unique
+                    if templates
+                        .insert(path.path.get_template_key(), path.contents.clone())
+                        .is_some()
+                        && !path.path.is_real_path()
+                    {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Duplicate template path: {}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                                path.path.get_template_key()
+                            ),
+                        }));
+                    }
                 }
             }
         }
-        templates
+        Ok(templates)
     }
 
     pub fn get_evaluation(&self, evaluation_name: &str) -> Result<Arc<EvaluationConfig>, Error> {
