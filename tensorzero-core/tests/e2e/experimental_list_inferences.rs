@@ -713,3 +713,129 @@ pub async fn test_query_by_ids_with_order_by_metric_errors() {
     let err_msg = format!("{:?}", res.unwrap_err());
     assert!(err_msg.contains("not supported"));
 }
+
+/// Tests that float metric filters only return inferences that HAVE the metric.
+/// A filter like `metric >= 0` should NOT match inferences without the metric.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_float_metric_filter_excludes_rows_without_metric() {
+    let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences for the function (without filter)
+    let opts_no_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_no_filter = client
+        .experimental_list_inferences(opts_no_filter)
+        .await
+        .unwrap();
+    let total_count = res_no_filter.len();
+
+    // Now filter by jaccard_similarity >= 0 (should match ALL rows that have the metric)
+    let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "jaccard_similarity".to_string(),
+        value: 0.0,
+        comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+    });
+    let opts_with_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_node),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_with_filter = client
+        .experimental_list_inferences(opts_with_filter)
+        .await
+        .unwrap();
+
+    // The filtered count should be LESS than total count because not all inferences
+    // have the jaccard_similarity metric
+    assert!(
+        res_with_filter.len() < total_count,
+        "Filter should return fewer results than total. Got {} with filter, {} total. \
+         If they're equal, the filter is incorrectly matching rows without the metric.",
+        res_with_filter.len(),
+        total_count
+    );
+
+    // Verify the filter actually returned some results (not empty)
+    assert!(
+        !res_with_filter.is_empty(),
+        "Expected at least one inference with jaccard_similarity metric"
+    );
+}
+
+/// Tests that boolean metric filters with value=false only return inferences that HAVE the metric.
+/// A filter like `exact_match = false` should NOT match inferences without the metric.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_boolean_metric_filter_false_excludes_rows_without_metric() {
+    let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences for the function (without filter)
+    let opts_no_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_no_filter = client
+        .experimental_list_inferences(opts_no_filter)
+        .await
+        .unwrap();
+    let total_count = res_no_filter.len();
+
+    // Filter by exact_match = true (only rows with metric value true)
+    let filter_true = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let opts_true = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_true),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_true = client
+        .experimental_list_inferences(opts_true)
+        .await
+        .unwrap();
+
+    // Filter by exact_match = false (only rows with metric value false)
+    let filter_false = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: false,
+    });
+    let opts_false = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_false),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_false = client
+        .experimental_list_inferences(opts_false)
+        .await
+        .unwrap();
+
+    // The sum of true + false results should be LESS than total count
+    // because not all inferences have the exact_match metric
+    let sum_with_metric = res_true.len() + res_false.len();
+    assert!(
+        sum_with_metric < total_count,
+        "Sum of true ({}) + false ({}) = {} should be less than total ({}). \
+         If they're equal, the filter is incorrectly matching rows without the metric.",
+        res_true.len(),
+        res_false.len(),
+        sum_with_metric,
+        total_count
+    );
+
+    // Verify we got some results for each filter
+    assert!(
+        !res_true.is_empty(),
+        "Expected at least one inference with exact_match = true"
+    );
+    assert!(
+        !res_false.is_empty(),
+        "Expected at least one inference with exact_match = false"
+    );
+}
