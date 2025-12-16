@@ -333,11 +333,12 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           selected={functionName}
           onSelect={(value) =>
             // If the function is changed, we should reset all selectors since
-            // the variant is no longer valid and the dataset may not be.
+            // the variant, dataset, and evaluation are no longer valid.
             updateSearchParams({
               functionName: value,
               variants: null,
               datasetName: null,
+              evaluation: null,
             })
           }
           functions={useAllFunctionConfigs()}

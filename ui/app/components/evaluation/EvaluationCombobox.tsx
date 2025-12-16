@@ -22,7 +22,8 @@ export function EvaluationCombobox({
     if (!functionName) return [];
     return Object.entries(evaluations)
       .filter(([, config]) => config?.function_name === functionName)
-      .map(([name]) => name);
+      .map(([name]) => name)
+      .sort();
   }, [evaluations, functionName]);
 
   const handleSelect = useCallback(
@@ -40,7 +41,7 @@ export function EvaluationCombobox({
     (item: string) => {
       const config = evaluations[item];
       if (!config) return null;
-      const evaluatorNames = Object.keys(config.evaluators);
+      const evaluatorNames = Object.keys(config.evaluators).sort();
       if (evaluatorNames.length === 0) return null;
       return (
         <span className="text-muted-foreground truncate text-xs">
