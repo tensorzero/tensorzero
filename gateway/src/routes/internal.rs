@@ -114,4 +114,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/inferences/count",
             post(endpoints::internal::count_inferences::count_inferences_handler),
         )
+        // Action endpoint for executing with historical config snapshots
+        .route(
+            "/internal/action",
+            post(endpoints::internal::action::action_handler),
+        )
 }

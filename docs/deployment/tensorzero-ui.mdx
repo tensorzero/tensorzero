@@ -38,9 +38,6 @@ You can easily run the TensorZero UI using Docker Compose:
 services:
   ui:
     image: tensorzero/ui
-    # Mount your configuration folder (e.g. tensorzero.toml) to /app/config
-    volumes:
-      - ./config:/app/config:ro
     # Add your environment variables the .env file
     env_file:
       - ${ENV_FILE:-.env}
