@@ -16,7 +16,8 @@ async function createDatasetAndWait(page: Page) {
   const responsePromise = page.waitForURL(/\/datasets\/.*\?rowsAdded=/, {
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: /Create Dataset/ }).click();
+  // Use type="submit" selector for stability - button text may vary
+  await page.locator('button[type="submit"]').click();
   await responsePromise;
 }
 
@@ -69,6 +70,14 @@ test.describe("Dataset Builder", () => {
     await page.getByRole("combobox", { name: "Function" }).click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
+    // Wait for count to load and capture unfiltered count
+    const countText = page.getByText(/\d+ matching inferences/);
+    await expect(countText).toBeVisible();
+    const unfilteredText = await countText.textContent();
+    const unfilteredCount = parseInt(
+      unfilteredText?.match(/(\d+)/)?.[1] || "0",
+    );
+
     // Select variant (wait for it to be enabled after function selection)
     const variantCombobox = page.getByRole("combobox", { name: "Variant" });
     await expect(variantCombobox).toBeEnabled();
@@ -76,6 +85,15 @@ test.describe("Dataset Builder", () => {
     await page
       .getByRole("option", { name: "initial_prompt_gpt4o_mini" })
       .click();
+
+    // Wait for count to update after variant selection
+    // The count should be less than before (variant filter reduces results)
+    await expect(async () => {
+      const newText = await countText.textContent();
+      const filteredCount = parseInt(newText?.match(/(\d+)/)?.[1] || "0");
+      expect(filteredCount).toBeLessThan(unfilteredCount);
+      expect(filteredCount).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
 
     // Create dataset
     await createDatasetAndWait(page);
@@ -87,13 +105,6 @@ test.describe("Dataset Builder", () => {
 
     // Verify datapoints exist
     await expect(page.locator("tbody tr").first()).toBeVisible();
-
-    // Click on first datapoint ID to navigate to datapoint page
-    await page.locator("tbody tr td:first-child a").first().click();
-
-    // Verify we're on a datapoint page and it shows the correct variant
-    await expect(page).toHaveURL(/\/datapoint\//);
-    await expect(page.getByText("initial_prompt_gpt4o_mini")).toBeVisible();
   });
 
   test("should create dataset filtered by tag", async ({ page }) => {
