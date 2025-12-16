@@ -43,12 +43,12 @@ export function MetricBadge({
       className={clsx(
         baseClasses,
         failsThreshold
-          ? "bg-red-100 text-red-700"
+          ? "bg-red-100 text-red-500"
           : "bg-gray-100 text-gray-900",
       )}
     >
       {label && (
-        <span className={failsThreshold ? "text-red-500" : "text-gray-500"}>
+        <span className={failsThreshold ? "text-red-700" : "text-gray-500"}>
           {label}
         </span>
       )}
