@@ -997,7 +997,7 @@ export class TensorZeroClient {
   async getEpisodeInferenceCount(
     episode_id: string,
   ): Promise<GetEpisodeInferenceCountResponse> {
-    const endpoint = `/internal/episodes/${episode_id}/inference-stats`;
+    const endpoint = `/internal/episodes/${episode_id}/inference-count`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
