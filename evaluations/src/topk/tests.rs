@@ -41,10 +41,6 @@ fn mock_cs_with_bounds(
     )
 }
 
-// ============================================================================
-// Tests for check_global_stopping
-// ============================================================================
-
 fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
     TopKTaskParams {
         evaluation_name: "eval".to_string(),
@@ -1964,6 +1960,10 @@ fn test_update_variant_statuses_global_stopping() {
     assert_eq!(variant_status["c"], VariantStatus::Exclude);
     assert_eq!(variant_status["d"], VariantStatus::Exclude);
 }
+
+// ============================================================================
+// Tests for check_global_stopping
+// ============================================================================
 
 #[test]
 fn test_check_global_stopping_prefers_topk() {
