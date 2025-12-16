@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use tracing::info;
 use uuid::Uuid;
 
 use crate::BatchItemResult;
@@ -281,7 +282,18 @@ pub fn compute_updates(
 /// variants.
 ///
 /// We check for each k in the range [k_min, k_max] (inclusive), starting from k_max
-/// and working down. We return the largest k for which we can identify a top-k set.
+/// and working down. We return the largest k for which we can identify a top-k set,
+/// if such a k exists.
+///
+/// When epsilon > 0, it's possible for more than k variants to meet the stopping
+/// threshold. In this case, we select the top k by:
+/// 1. Highest `mean_est` (point estimate)
+/// 2. Highest `cs_lower` (lower confidence bound) as tiebreaker
+/// 3. Highest `cs_upper` (upper confidence bound) as final tiebreaker
+///
+/// If there are still ties at the k boundary after all tiebreakers (i.e., variants
+/// with identical point estimates and confidence bounds), we return the enlarged set
+/// containing all tied variants and log an info message.
 ///
 /// # Arguments
 /// * `variant_performance` - Map from variant name to its performance confidence sequence
@@ -290,8 +302,8 @@ pub fn compute_updates(
 /// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
 ///
 /// # Returns
-/// A `TopKStoppingResult` indicating whether stopping occurred and which variants are in the top-k
-/// if stopping occurred.
+/// A `TopKStoppingResult` indicating whether stopping occurred and, if it did, which variants are
+/// in the top-k. Note that `top_variants.len()` may exceed `k` if there are ties at the boundary.
 pub fn check_topk_stopping(
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     k_min: u32,
@@ -339,10 +351,10 @@ pub fn check_topk_stopping(
     let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    // For each variant, count how many other variants' upper bounds its lower bound exceedsm
+    // For each variant, count how many other variants' upper bounds its lower bound exceeds
     // with tolerance epsilon. This tells us how many variants it "confidently beats".
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_n_beaten: Vec<(&String, usize)> = variant_performance
+    let mut variants_with_stats: Vec<(&String, usize, f64, f64, f64)> = variant_performance
         .iter()
         .map(|(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
@@ -355,12 +367,21 @@ pub fn check_topk_stopping(
             } else {
                 num_beaten_including_self
             };
-            (name, num_beaten)
+            (name, num_beaten, cs.mean_est, cs.cs_lower, cs.cs_upper)
         })
         .collect();
 
-    // Sort by num_beaten descending (best variants first)
-    variants_with_n_beaten.sort_by(|a, b| b.1.cmp(&a.1));
+    // Sort by:
+    // 1. num_beaten descending (most important - determines if variant qualifies)
+    // 2. mean_est descending (primary tiebreaker)
+    // 3. cs_lower descending (secondary tiebreaker)
+    // 4. cs_upper descending (tertiary tiebreaker)
+    variants_with_stats.sort_by(|a, b| {
+        b.1.cmp(&a.1) // num_beaten descending
+            .then_with(|| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)) // mean_est descending
+            .then_with(|| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal)) // cs_lower descending
+            .then_with(|| b.4.partial_cmp(&a.4).unwrap_or(std::cmp::Ordering::Equal)) // cs_upper descending
+    });
 
     // Check each k from k_max down to k_min
     // We want the largest k for which we can identify a top-k set
@@ -368,16 +389,55 @@ pub fn check_topk_stopping(
         let k_usize = k as usize;
         let threshold = num_variants.saturating_sub(k_usize);
 
-        // Check if the top k variants each beat at least (num_variants - k) others
-        if k_usize <= variants_with_n_beaten.len()
-            && variants_with_n_beaten[..k_usize]
-                .iter()
-                .all(|(_, num_beaten)| *num_beaten >= threshold)
-        {
-            let top_variants: Vec<String> = variants_with_n_beaten[..k_usize]
-                .iter()
-                .map(|(name, _)| (*name).clone())
-                .collect();
+        // Check if at least k variants beat the threshold
+        let num_qualifying = variants_with_stats
+            .iter()
+            .filter(|(_, num_beaten, _, _, _)| *num_beaten >= threshold)
+            .count();
+
+        if num_qualifying >= k_usize {
+            // We have at least k qualifying variants
+            // Take the top k, but check for ties at the boundary
+            let kth_variant = &variants_with_stats[k_usize - 1];
+            let kth_stats = (kth_variant.1, kth_variant.2, kth_variant.3, kth_variant.4);
+
+            // Find all variants that are tied with the kth variant
+            // (same num_beaten, mean_est, cs_lower, cs_upper)
+            let mut top_variants: Vec<String> = Vec::new();
+            let mut num_tied_at_boundary = 0;
+
+            for (name, num_beaten, mean_est, cs_lower, cs_upper) in &variants_with_stats {
+                if *num_beaten < threshold {
+                    // This variant doesn't qualify
+                    break;
+                }
+
+                let is_tied_with_kth = *num_beaten == kth_stats.0
+                    && (*mean_est - kth_stats.1).abs() < f64::EPSILON
+                    && (*cs_lower - kth_stats.2).abs() < f64::EPSILON
+                    && (*cs_upper - kth_stats.3).abs() < f64::EPSILON;
+
+                if top_variants.len() < k_usize {
+                    // Still filling the top k
+                    top_variants.push((*name).clone());
+                } else if is_tied_with_kth {
+                    // This variant is tied with the kth variant, include it
+                    top_variants.push((*name).clone());
+                    num_tied_at_boundary += 1;
+                } else {
+                    // Not tied, stop here
+                    break;
+                }
+            }
+
+            if num_tied_at_boundary > 0 {
+                info!(
+                    k = k,
+                    num_returned = top_variants.len(),
+                    num_tied_at_boundary = num_tied_at_boundary,
+                    "Top-k stopping condition met with ties at boundary; returning enlarged set"
+                );
+            }
 
             return Ok(TopKStoppingResult {
                 stopped: true,
@@ -1464,5 +1524,150 @@ mod tests {
         let result = check_topk_stopping(&variant_performance, 2, 3, None).unwrap();
         assert!(result.stopped);
         assert_eq!(result.k, Some(3));
+    }
+
+    /// Test tiebreaking by mean_est when num_beaten is equal.
+    #[test]
+    fn test_check_topk_stopping_tiebreak_by_mean_est() {
+        // With large epsilon, all variants beat all others (num_beaten = 2 for each)
+        // Tiebreaker should be mean_est descending
+        // Note: mock_cs_with_bounds sets mean_est = (cs_lower + cs_upper) / 2
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs_with_bounds("a", 0.1, 0.3), // mean_est = 0.2
+            mock_cs_with_bounds("b", 0.4, 0.6), // mean_est = 0.5
+            mock_cs_with_bounds("c", 0.7, 0.9), // mean_est = 0.8
+        ]
+        .into_iter()
+        .collect();
+
+        // With epsilon = 1.0, all beat all others
+        // For top-1, should return "c" (highest mean_est)
+        let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+        assert_eq!(result.top_variants.len(), 1);
+        assert!(result.top_variants.contains(&"c".to_string()));
+
+        // For top-2, should return "c" and "b" (top two by mean_est)
+        let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert_eq!(result.top_variants.len(), 2);
+        assert!(result.top_variants.contains(&"c".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+    }
+
+    /// Test tiebreaking by cs_lower when mean_est is equal.
+    #[test]
+    fn test_check_topk_stopping_tiebreak_by_cs_lower() {
+        // Create variants with same mean_est but different cs_lower
+        // mean_est = (cs_lower + cs_upper) / 2, so we need to adjust both bounds
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            HashMap::new();
+
+        // All have mean_est = 0.5, but different cs_lower
+        let (name_a, mut cs_a) = mock_cs_with_bounds("a", 0.3, 0.7); // mean_est = 0.5, cs_lower = 0.3
+        cs_a.mean_est = 0.5;
+        variant_performance.insert(name_a, cs_a);
+
+        let (name_b, mut cs_b) = mock_cs_with_bounds("b", 0.4, 0.6); // mean_est = 0.5, cs_lower = 0.4
+        cs_b.mean_est = 0.5;
+        variant_performance.insert(name_b, cs_b);
+
+        let (name_c, mut cs_c) = mock_cs_with_bounds("c", 0.2, 0.8); // mean_est = 0.5, cs_lower = 0.2
+        cs_c.mean_est = 0.5;
+        variant_performance.insert(name_c, cs_c);
+
+        // With epsilon = 1.0, all beat all others
+        // For top-1, should return "b" (highest cs_lower since mean_est is tied)
+        let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+        assert_eq!(result.top_variants.len(), 1);
+        assert!(result.top_variants.contains(&"b".to_string()));
+    }
+
+    /// Test that identical variants at the k boundary cause an enlarged result set.
+    #[test]
+    fn test_check_topk_stopping_ties_at_boundary_enlarges_set() {
+        // Create 4 variants: one clear winner, then 3 identical variants
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            HashMap::new();
+
+        // Clear winner
+        let (name_a, cs_a) = mock_cs_with_bounds("a", 0.8, 0.9);
+        variant_performance.insert(name_a, cs_a);
+
+        // Three identical variants (same bounds, same mean_est)
+        let (name_b, cs_b) = mock_cs_with_bounds("b", 0.4, 0.6);
+        variant_performance.insert(name_b, cs_b);
+
+        let (name_c, cs_c) = mock_cs_with_bounds("c", 0.4, 0.6);
+        variant_performance.insert(name_c, cs_c);
+
+        let (name_d, cs_d) = mock_cs_with_bounds("d", 0.4, 0.6);
+        variant_performance.insert(name_d, cs_d);
+
+        // With epsilon = 1.0, all beat all others (num_beaten = 3 each)
+        // For top-2: "a" is clearly first, but b/c/d are tied for second
+        // Should return all 4 variants (enlarged set)
+        let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert_eq!(result.top_variants.len(), 4); // Enlarged due to ties
+        assert!(result.top_variants.contains(&"a".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+        assert!(result.top_variants.contains(&"c".to_string()));
+        assert!(result.top_variants.contains(&"d".to_string()));
+    }
+
+    /// Test that non-identical variants at the k boundary do NOT enlarge the set.
+    #[test]
+    fn test_check_topk_stopping_no_ties_at_boundary() {
+        // Create 4 variants with distinct mean_est values
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs_with_bounds("a", 0.7, 0.9), // mean_est = 0.8
+            mock_cs_with_bounds("b", 0.5, 0.7), // mean_est = 0.6
+            mock_cs_with_bounds("c", 0.3, 0.5), // mean_est = 0.4
+            mock_cs_with_bounds("d", 0.1, 0.3), // mean_est = 0.2
+        ]
+        .into_iter()
+        .collect();
+
+        // With epsilon = 1.0, all beat all others
+        // For top-2, should return exactly 2 variants (a and b by mean_est)
+        let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(2));
+        assert_eq!(result.top_variants.len(), 2); // No enlargement
+        assert!(result.top_variants.contains(&"a".to_string()));
+        assert!(result.top_variants.contains(&"b".to_string()));
+    }
+
+    /// Test identical variants (all have same bounds).
+    #[test]
+    fn test_check_topk_stopping_all_identical_variants() {
+        // All variants have identical confidence sequences
+        let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            mock_cs_with_bounds("a", 0.4, 0.6),
+            mock_cs_with_bounds("b", 0.4, 0.6),
+            mock_cs_with_bounds("c", 0.4, 0.6),
+        ]
+        .into_iter()
+        .collect();
+
+        // With epsilon = 0, no one beats anyone (intervals are identical)
+        // Only k=3 is viable (need to beat >= 0)
+        let result = check_topk_stopping(&variant_performance, 1, 3, None).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(3));
+        assert_eq!(result.top_variants.len(), 3);
+
+        // With epsilon = 1.0, all beat all others, but for top-1, all are tied
+        // Should return all 3 (enlarged set)
+        let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.k, Some(1));
+        assert_eq!(result.top_variants.len(), 3); // All tied
     }
 }
