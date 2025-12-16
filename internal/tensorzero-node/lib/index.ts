@@ -116,7 +116,10 @@ interface RunEvaluationStreamingParams {
   /** JSON-serialized EvaluationFunctionConfig */
   functionConfig: string;
   evaluationName: string;
-  datasetName: string;
+  /** Exactly one of datasetName or datapointIds must be provided */
+  datasetName?: string;
+  /** Specific datapoint IDs to evaluate (alternative to datasetName) */
+  datapointIds?: string[];
   /** Exactly one of variantName or internalDynamicVariantConfig must be provided */
   variantName?: string;
   /** JSON-serialized UninitializedVariantInfo */

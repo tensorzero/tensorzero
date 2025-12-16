@@ -177,7 +177,6 @@ pub async fn run_evaluation_streaming(
         "read_only" => CacheEnabledMode::ReadOnly,
         "write_only" => CacheEnabledMode::WriteOnly,
         other => {
-            let _ = callback.abort();
             return Err(napi::Error::from_reason(format!(
                 "Invalid inference cache setting '{other}'"
             )));
@@ -256,7 +255,6 @@ pub async fn run_evaluation_streaming(
         {
             Ok(result) => result,
             Err(error) => {
-                let _ = callback.abort();
                 return Err(napi::Error::from_reason(format!(
                     "Failed to start evaluation run: {error}"
                 )));
@@ -304,7 +302,6 @@ pub async fn run_evaluation_streaming(
             ),
         });
         let _ = send_event(&callback, &fatal_event);
-        let _ = callback.abort();
         return Err(napi::Error::from_reason(format!(
             "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
         )));
@@ -313,8 +310,6 @@ pub async fn run_evaluation_streaming(
     let complete_event =
         EvaluationRunEvent::Complete(EvaluationRunCompleteEvent { evaluation_run_id });
     send_event(&callback, &complete_event)?;
-
-    let _ = callback.abort();
 
     Ok(())
 }
