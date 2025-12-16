@@ -699,10 +699,7 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     }
 
     // If base_path is a directory, walk it
-    for entry in walkdir::WalkDir::new(base_path)
-        .follow_links(false)
-        .into_iter()
-    {
+    for entry in walkdir::WalkDir::new(base_path).follow_links(false) {
         match entry {
             Ok(entry) => {
                 let path = entry.path();
