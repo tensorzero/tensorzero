@@ -1194,3 +1194,470 @@ fn test_check_topk_stopping_all_identical_variants() {
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 3); // All tied
 }
+
+// ============================================================================
+// Tests for update_variant_statuses
+// ============================================================================
+
+/// Test that already-stopped variants (non-Active) are skipped and not modified.
+#[test]
+fn test_update_variant_statuses_skips_non_active() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("active".to_string(), VariantStatus::Active),
+        ("included".to_string(), VariantStatus::Include),
+        ("excluded".to_string(), VariantStatus::Exclude),
+        ("failed".to_string(), VariantStatus::Failed),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("active", 0.5, 0.7),
+        mock_cs_with_bounds("included", 0.5, 0.7),
+        mock_cs_with_bounds("excluded", 0.5, 0.7),
+        mock_cs_with_bounds("failed", 0.5, 0.7),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    // No stopping, no failure threshold - only early exclusion logic applies
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        1,
+    );
+
+    // Non-active variants should remain unchanged
+    assert_eq!(variant_status["included"], VariantStatus::Include);
+    assert_eq!(variant_status["excluded"], VariantStatus::Exclude);
+    assert_eq!(variant_status["failed"], VariantStatus::Failed);
+    // Active variant should still be active (no early exclusion with single variant logic)
+    assert_eq!(variant_status["active"], VariantStatus::Active);
+}
+
+/// Test that variants are marked as Failed when failure rate exceeds threshold.
+#[test]
+fn test_update_variant_statuses_marks_failed() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("high_failure".to_string(), VariantStatus::Active),
+        ("low_failure".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("high_failure", 0.5, 0.7),
+        mock_cs_with_bounds("low_failure", 0.5, 0.7),
+    ]
+    .into_iter()
+    .collect();
+
+    // high_failure has cs_lower = 0.3 (above 0.2 threshold)
+    // low_failure has cs_lower = 0.1 (below 0.2 threshold)
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("high_failure", 0.3, 0.5), // cs_lower = 0.3 > 0.2
+        mock_cs_with_bounds("low_failure", 0.1, 0.3),  // cs_lower = 0.1 < 0.2
+    ]
+    .into_iter()
+    .collect();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        Some(0.2), // failure threshold
+        &stopping_result,
+        1,
+    );
+
+    assert_eq!(variant_status["high_failure"], VariantStatus::Failed);
+    assert_eq!(variant_status["low_failure"], VariantStatus::Active);
+}
+
+/// Test that variants are marked Include/Exclude based on top-k stopping result.
+#[test]
+fn test_update_variant_statuses_topk_stopping() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("winner".to_string(), VariantStatus::Active),
+        ("loser_a".to_string(), VariantStatus::Active),
+        ("loser_b".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("winner", 0.7, 0.9),
+        mock_cs_with_bounds("loser_a", 0.3, 0.5),
+        mock_cs_with_bounds("loser_b", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    // Top-k stopping identified "winner" as the top variant
+    let stopping_result = TopKStoppingResult {
+        stopped: true,
+        k: Some(1),
+        top_variants: vec!["winner".to_string()],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        1,
+    );
+
+    assert_eq!(variant_status["winner"], VariantStatus::Include);
+    assert_eq!(variant_status["loser_a"], VariantStatus::Exclude);
+    assert_eq!(variant_status["loser_b"], VariantStatus::Exclude);
+}
+
+/// Test that variants in top-k set are marked Include (with k > 1).
+#[test]
+fn test_update_variant_statuses_topk_stopping_multiple_winners() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("winner_a".to_string(), VariantStatus::Active),
+        ("winner_b".to_string(), VariantStatus::Active),
+        ("loser".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("winner_a", 0.7, 0.9),
+        mock_cs_with_bounds("winner_b", 0.6, 0.8),
+        mock_cs_with_bounds("loser", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    // Top-2 stopping identified both winners
+    let stopping_result = TopKStoppingResult {
+        stopped: true,
+        k: Some(2),
+        top_variants: vec!["winner_a".to_string(), "winner_b".to_string()],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        2,
+    );
+
+    assert_eq!(variant_status["winner_a"], VariantStatus::Include);
+    assert_eq!(variant_status["winner_b"], VariantStatus::Include);
+    assert_eq!(variant_status["loser"], VariantStatus::Exclude);
+}
+
+/// Test early exclusion when variant's upper bound is below k_max others' lower bounds.
+#[test]
+fn test_update_variant_statuses_early_exclusion() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("good_a".to_string(), VariantStatus::Active),
+        ("good_b".to_string(), VariantStatus::Active),
+        ("bad".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // "bad" has upper bound 0.4, while "good_a" and "good_b" have lower bounds 0.5 and 0.6
+    // So 2 variants are definitely better than "bad"
+    // With k_max=2, "bad" cannot be in top-2 and should be excluded
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("good_a", 0.5, 0.7), // cs_lower = 0.5 > bad's cs_upper
+        mock_cs_with_bounds("good_b", 0.6, 0.8), // cs_lower = 0.6 > bad's cs_upper
+        mock_cs_with_bounds("bad", 0.2, 0.4),    // cs_upper = 0.4 < both others' cs_lower
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    // No stopping yet
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        2, // k_max = 2
+    );
+
+    // "bad" should be excluded because 2 variants are definitely better
+    // and k_max = 2, so "bad" cannot be in top-2
+    assert_eq!(variant_status["bad"], VariantStatus::Exclude);
+    // good_a and good_b should still be active (no stopping occurred)
+    assert_eq!(variant_status["good_a"], VariantStatus::Active);
+    assert_eq!(variant_status["good_b"], VariantStatus::Active);
+}
+
+/// Test that early exclusion does NOT happen when fewer than k_max variants are better.
+#[test]
+fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("good".to_string(), VariantStatus::Active),
+        ("uncertain".to_string(), VariantStatus::Active),
+        ("bad".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // "bad" has upper bound 0.4
+    // Only "good" (cs_lower = 0.5) is definitely better
+    // "uncertain" overlaps with "bad"
+    // With k_max=2, we need 2 variants definitely better to exclude "bad"
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("good", 0.5, 0.7), // definitely better than bad
+        mock_cs_with_bounds("uncertain", 0.3, 0.6), // overlaps with bad
+        mock_cs_with_bounds("bad", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        2, // k_max = 2
+    );
+
+    // "bad" should NOT be excluded - only 1 variant is definitely better, need >= 2
+    assert_eq!(variant_status["bad"], VariantStatus::Active);
+    assert_eq!(variant_status["good"], VariantStatus::Active);
+    assert_eq!(variant_status["uncertain"], VariantStatus::Active);
+}
+
+/// Test that failure check takes priority over top-k stopping.
+#[test]
+fn test_update_variant_statuses_failure_takes_priority() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("failing_winner".to_string(), VariantStatus::Active),
+        ("healthy_loser".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("failing_winner", 0.7, 0.9),
+        mock_cs_with_bounds("healthy_loser", 0.3, 0.5),
+    ]
+    .into_iter()
+    .collect();
+
+    // "failing_winner" has high failure rate
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("failing_winner", 0.3, 0.5), // cs_lower = 0.3 > 0.2 threshold
+        mock_cs_with_bounds("healthy_loser", 0.05, 0.15), // cs_lower = 0.05 < 0.2 threshold
+    ]
+    .into_iter()
+    .collect();
+
+    // Top-k stopping would mark "failing_winner" as Include
+    let stopping_result = TopKStoppingResult {
+        stopped: true,
+        k: Some(1),
+        top_variants: vec!["failing_winner".to_string()],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        Some(0.2), // failure threshold
+        &stopping_result,
+        1,
+    );
+
+    // Failure check happens before top-k check, so "failing_winner" should be Failed
+    assert_eq!(variant_status["failing_winner"], VariantStatus::Failed);
+    // "healthy_loser" is not in top variants, so it should be Exclude
+    assert_eq!(variant_status["healthy_loser"], VariantStatus::Exclude);
+}
+
+/// Test with no failure threshold set (None) - failure check is skipped.
+#[test]
+fn test_update_variant_statuses_no_failure_threshold() {
+    let mut variant_status: HashMap<String, VariantStatus> =
+        [("high_failure".to_string(), VariantStatus::Active)]
+            .into_iter()
+            .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_bounds("high_failure", 0.5, 0.7)]
+            .into_iter()
+            .collect();
+
+    // High failure rate, but no threshold set
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_bounds("high_failure", 0.5, 0.7)] // cs_lower = 0.5
+            .into_iter()
+            .collect();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None, // no failure threshold
+        &stopping_result,
+        1,
+    );
+
+    // Without threshold, failure check is skipped - variant stays Active
+    assert_eq!(variant_status["high_failure"], VariantStatus::Active);
+}
+
+/// Test that variants not in variant_failures map are not marked as failed.
+#[test]
+fn test_update_variant_statuses_missing_failure_cs() {
+    let mut variant_status: HashMap<String, VariantStatus> =
+        [("variant".to_string(), VariantStatus::Active)]
+            .into_iter()
+            .collect();
+
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+        [mock_cs_with_bounds("variant", 0.5, 0.7)]
+            .into_iter()
+            .collect();
+
+    // No failure CS for "variant"
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        Some(0.2), // threshold set, but no failure CS
+        &stopping_result,
+        1,
+    );
+
+    // Without failure CS, failure check doesn't apply
+    assert_eq!(variant_status["variant"], VariantStatus::Active);
+}
+
+/// Test that variants not in variant_performance map don't cause errors in early exclusion.
+#[test]
+fn test_update_variant_statuses_missing_performance_cs() {
+    let mut variant_status: HashMap<String, VariantStatus> =
+        [("variant".to_string(), VariantStatus::Active)]
+            .into_iter()
+            .collect();
+
+    // No performance CS for "variant"
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        1,
+    );
+
+    // Without performance CS, early exclusion check doesn't apply
+    assert_eq!(variant_status["variant"], VariantStatus::Active);
+}
+
+/// Test early exclusion with k_max = 1 (most restrictive).
+#[test]
+fn test_update_variant_statuses_early_exclusion_k_max_1() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("best".to_string(), VariantStatus::Active),
+        ("worst".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // "worst" has upper bound 0.4, "best" has lower bound 0.5
+    // 1 variant is definitely better, and k_max = 1
+    // So "worst" cannot be in top-1 and should be excluded
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("best", 0.5, 0.7),
+        mock_cs_with_bounds("worst", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        None,
+        &stopping_result,
+        1, // k_max = 1
+    );
+
+    // "worst" should be excluded (1 variant definitely better, k_max = 1)
+    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
+    assert_eq!(variant_status["best"], VariantStatus::Active);
+}
