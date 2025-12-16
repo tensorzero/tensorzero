@@ -1295,7 +1295,7 @@ impl TensorZeroGateway {
                 && !existing.is_none()
             {
                 return Err(PyValueError::new_err(
-                    "You must specify `output_source` either at the root or inside the `request` parameter but not both.",
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
                 ));
             }
             params.setattr("output_source", source)?;
