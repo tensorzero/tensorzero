@@ -22,6 +22,7 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
+import { Checkbox } from "~/components/ui/checkbox";
 
 interface MergedFunctionData {
   function_name: string;
@@ -36,11 +37,15 @@ const columnHelper = createColumnHelper<MergedFunctionData>();
 export default function FunctionsTable({
   functions,
   countsInfo,
+  showInternalFunctions,
+  onToggleShowInternalFunctions,
 }: {
   functions: {
     [x: string]: FunctionConfig | undefined;
   };
   countsInfo: FunctionCountInfo[];
+  showInternalFunctions: boolean;
+  onToggleShowInternalFunctions: (value: boolean) => void;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -132,8 +137,8 @@ export default function FunctionsTable({
 
   return (
     <div>
-      <div className="mb-4">
-        <div className="relative">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-md">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
           <input
             type="text"
@@ -143,6 +148,16 @@ export default function FunctionsTable({
             className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
           />
         </div>
+        <label className="text-fg-muted flex items-center gap-2 text-sm font-medium">
+          <Checkbox
+            id="show-internal-functions"
+            checked={showInternalFunctions}
+            onCheckedChange={(checked) =>
+              onToggleShowInternalFunctions(checked === true)
+            }
+          />
+          Show internal functions
+        </label>
       </div>
       <Table>
         <TableHeader>
