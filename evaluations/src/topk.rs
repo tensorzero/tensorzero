@@ -205,8 +205,12 @@ pub fn compute_updates(
                     // evaluation results - the failure occurred before evaluation
                 }
                 BatchItemResult::Cancelled => {
-                    // Skip cancelled tasks - they don't count toward any statistics
-                    continue;
+                    // Cancellation should never occur in top-k evaluation since we use empty
+                    // cancellation tokens (cancellation is only used for adaptive stopping
+                    // with precision_targets in lib.rs)
+                    anyhow::bail!(
+                        "Unexpected cancelled task in top-k evaluation. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"
+                    );
                 }
             }
         }
