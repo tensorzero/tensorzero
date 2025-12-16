@@ -110,6 +110,7 @@ services:
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
       TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
+      VITE_TENSORZERO_FF_PLAYGROUND_EVALS: ${VITE_TENSORZERO_FF_PLAYGROUND_EVALS:-1}
     env_file:
       - .env
     ports:
@@ -157,6 +158,7 @@ services:
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
       # Force cache on for tests
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
+      VITE_TENSORZERO_FF_PLAYGROUND_EVALS: ${VITE_TENSORZERO_FF_PLAYGROUND_EVALS:-1}
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

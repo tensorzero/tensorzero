@@ -52,6 +52,7 @@ import {
 } from "@tanstack/react-query";
 import { toDatapointUrl } from "~/utils/urls";
 import clsx from "clsx";
+import { getFeatureFlags } from "~/utils/feature_flags";
 
 const DEFAULT_LIMIT = 5;
 
@@ -253,7 +254,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
-  const selectedEvaluation = currentSearchParams.get("evaluation");
+  const { PLAYGROUND_EVALS } = getFeatureFlags();
+  const selectedEvaluation = PLAYGROUND_EVALS
+    ? currentSearchParams.get("evaluation")
+    : null;
   const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -367,18 +371,20 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           disabled={!functionName || !datasetName}
         />
       </div>
-      <div className="flex max-w-180 flex-col gap-2">
-        <Label>Evaluation</Label>
-        <EvaluationCombobox
-          selected={selectedEvaluation}
-          onSelect={(value) =>
-            updateSearchParams({ evaluation: value ?? null })
-          }
-          evaluations={config.evaluations}
-          functionName={functionName}
-          disabled={!functionName || !datasetName || variants.length === 0}
-        />
-      </div>
+      {PLAYGROUND_EVALS && (
+        <div className="flex max-w-180 flex-col gap-2">
+          <Label>Evaluation</Label>
+          <EvaluationCombobox
+            selected={selectedEvaluation}
+            onSelect={(value) =>
+              updateSearchParams({ evaluation: value ?? null })
+            }
+            evaluations={config.evaluations}
+            functionName={functionName}
+            disabled={!functionName || !datasetName || variants.length === 0}
+          />
+        </div>
+      )}
       {datapoints &&
         datapoints.length > 0 &&
         datasetName &&
