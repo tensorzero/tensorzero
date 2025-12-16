@@ -1499,11 +1499,12 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
     assert_eq!(variant_status["uncertain"], VariantStatus::Active);
 }
 
-/// Test that failure check takes priority over top-k stopping.
+/// Test that failure check takes priority over top-k stopping (both Include and Exclude).
 #[test]
 fn test_update_variant_statuses_failure_takes_priority() {
     let mut variant_status: HashMap<String, VariantStatus> = [
         ("failing_winner".to_string(), VariantStatus::Active),
+        ("failing_loser".to_string(), VariantStatus::Active),
         ("healthy_loser".to_string(), VariantStatus::Active),
     ]
     .into_iter()
@@ -1511,20 +1512,22 @@ fn test_update_variant_statuses_failure_takes_priority() {
 
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("failing_winner", 0.7, 0.9),
+        mock_cs_with_bounds("failing_loser", 0.1, 0.3),
         mock_cs_with_bounds("healthy_loser", 0.3, 0.5),
     ]
     .into_iter()
     .collect();
 
-    // "failing_winner" has high failure rate
+    // "failing_winner" and "failing_loser" both have high failure rates
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
         mock_cs_with_bounds("failing_winner", 0.3, 0.5), // cs_lower = 0.3 > 0.2 threshold
+        mock_cs_with_bounds("failing_loser", 0.25, 0.4), // cs_lower = 0.25 > 0.2 threshold
         mock_cs_with_bounds("healthy_loser", 0.05, 0.15), // cs_lower = 0.05 < 0.2 threshold
     ]
     .into_iter()
     .collect();
 
-    // Top-k stopping would mark "failing_winner" as Include
+    // Top-k stopping would mark "failing_winner" as Include, others as Exclude
     let stopping_result = TopKStoppingResult {
         stopped: true,
         k: Some(1),
@@ -1545,9 +1548,11 @@ fn test_update_variant_statuses_failure_takes_priority() {
         &params,
     );
 
-    // Failure check happens before top-k check, so "failing_winner" should be Failed
+    // Failure check happens before top-k check, so "failing_winner" should be Failed (not Include)
     assert_eq!(variant_status["failing_winner"], VariantStatus::Failed);
-    // "healthy_loser" is not in top variants, so it should be Exclude
+    // "failing_loser" should also be Failed (not Exclude)
+    assert_eq!(variant_status["failing_loser"], VariantStatus::Failed);
+    // "healthy_loser" is not in top variants and not failing, so it should be Exclude
     assert_eq!(variant_status["healthy_loser"], VariantStatus::Exclude);
 }
 
