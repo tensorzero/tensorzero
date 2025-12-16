@@ -72,8 +72,8 @@ pub enum GlobalStoppingReason {
     TopKFound { k: u32, top_variants: Vec<String> },
     /// Exhausted all available datapoints (limited by dataset size or max_datapoints config)
     DatasetExhausted,
-    /// At least one evaluator has a failure rate above the threshold
-    EvaluatorFailed { evaluator_name: String },
+    /// One or more evaluators have a failure rate above the threshold
+    EvaluatorsFailed { evaluator_names: Vec<String> },
     /// Too many variants failed (>= num_variants - k_min)
     TooManyVariantsFailed { num_failed: usize },
 }
@@ -555,8 +555,6 @@ pub struct TopKLoopState {
     pub num_datapoints_processed: usize,
     /// Current batch index
     pub batch_index: usize,
-    /// Name of failed evaluator (if any) - causes early termination
-    pub failed_evaluator: Option<String>,
 }
 
 /// Parameters for the fetch_datapoint_ids step.
@@ -860,29 +858,14 @@ async fn process_batch_step(
         &status_params,
     );
 
-    // Check for evaluator failure
-    if let Some(threshold) = params.evaluator_failure_threshold {
-        for (evaluator_name, cs) in &current_state.evaluator_failures {
-            if cs.cs_lower > threshold {
-                info!(
-                    evaluator_name = %evaluator_name,
-                    "Evaluator failure threshold exceeded"
-                );
-                current_state.failed_evaluator = Some(evaluator_name.clone());
-                break;
-            }
-        }
-    }
-
     Ok(current_state)
 }
 
-/// Determine the stopping reason based on final loop state.
-fn determine_stopping_reason(
+/// Check global stopping conditions in order of precedence
+fn check_global_stopping(
     loop_state: &TopKLoopState,
     params: &TopKTaskParams,
-    total_datapoints: usize,
-) -> GlobalStoppingReason {
+) -> Option<GlobalStoppingReason> {
     // Check if we identified a top-k set
     let stopping_result = check_topk_stopping(
         &loop_state.variant_performance,
@@ -894,17 +877,25 @@ fn determine_stopping_reason(
     if let Ok(result) = stopping_result
         && result.stopped
     {
-        return GlobalStoppingReason::TopKFound {
+        return Some(GlobalStoppingReason::TopKFound {
             k: result.k.unwrap_or(0),
             top_variants: result.top_variants,
-        };
+        });
     }
 
-    // Check for evaluator failure
-    if let Some(evaluator_name) = &loop_state.failed_evaluator {
-        return GlobalStoppingReason::EvaluatorFailed {
-            evaluator_name: evaluator_name.clone(),
-        };
+    // Check for evaluator failures
+    if let Some(threshold) = params.evaluator_failure_threshold {
+        let failed_evaluators: Vec<String> = loop_state
+            .evaluator_failures
+            .iter()
+            .filter(|(_, cs)| cs.cs_lower > threshold)
+            .map(|(name, _)| name.clone())
+            .collect();
+        if !failed_evaluators.is_empty() {
+            return Some(GlobalStoppingReason::EvaluatorsFailed {
+                evaluator_names: failed_evaluators,
+            });
+        }
     }
 
     // Check for too many variant failures
@@ -915,33 +906,11 @@ fn determine_stopping_reason(
         .count();
     let num_variants = loop_state.variant_status.len();
     if num_failed >= num_variants.saturating_sub(params.k_min as usize) {
-        return GlobalStoppingReason::TooManyVariantsFailed { num_failed };
+        return Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed });
     }
 
     // If we processed all available datapoints without a conclusive result
-    if loop_state.num_datapoints_processed >= total_datapoints {
-        return GlobalStoppingReason::DatasetExhausted;
-    }
-
-    // Fallback: we stopped for some other reason (e.g., all variants became non-active
-    // through early exclusion). This is actually a form of completion.
-    // Re-check top-k one more time - if all variants are Include/Exclude, we have a result.
-    let included: Vec<String> = loop_state
-        .variant_status
-        .iter()
-        .filter(|(_, s)| **s == VariantStatus::Include)
-        .map(|(name, _)| name.clone())
-        .collect();
-
-    if !included.is_empty() {
-        return GlobalStoppingReason::TopKFound {
-            k: included.len() as u32,
-            top_variants: included,
-        };
-    }
-
-    // Should not reach here in normal operation, but default to dataset exhausted
-    GlobalStoppingReason::DatasetExhausted
+    None
 }
 
 /// The durable top-k evaluation task.
@@ -1087,7 +1056,6 @@ impl Task<TopKTaskState> for TopKTask {
                 .collect(),
             num_datapoints_processed: 0,
             batch_index: 0,
-            failed_evaluator: None,
         };
 
         // Process batches
@@ -1096,27 +1064,10 @@ impl Task<TopKTaskState> for TopKTask {
             .map(|chunk| chunk.to_vec())
             .collect();
 
+        let mut stopping_reason: Option<GlobalStoppingReason> = None;
+
         for (batch_idx, batch_ids) in batches.into_iter().enumerate() {
-            // Check if an evaluator has failed
-            if loop_state.failed_evaluator.is_some() {
-                break;
-            }
-
-            // Check if all active variants are gone
-            let has_active = loop_state
-                .variant_status
-                .values()
-                .any(|s| *s == VariantStatus::Active);
-            if !has_active {
-                break;
-            }
-
-            debug!(
-                batch_number = batch_idx + 1,
-                batch_size = batch_ids.len(),
-                "Processing batch"
-            );
-
+            let current_batch_size = batch_ids.len();
             // CHECKPOINT 2: Process batch and update state
             let batch_step_params = ProcessBatchStepParams {
                 batch_ids,
@@ -1140,10 +1091,21 @@ impl Task<TopKTaskState> for TopKTask {
                     process_batch_step,
                 )
                 .await?;
+
+            debug!(
+                batch_number = batch_idx + 1,
+                batch_size = current_batch_size,
+                "Processing batch"
+            );
+
+            if let Some(reason) = check_global_stopping(&loop_state, &params) {
+                stopping_reason = Some(reason);
+                break;
+            }
         }
 
-        // Determine final stopping reason
-        let stopping_reason = determine_stopping_reason(&loop_state, &params, total_datapoints);
+        // If we exited without an explicit stopping reason then assign reason DatasetExhausted.
+        let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
 
         info!(
             stopping_reason = ?stopping_reason,
