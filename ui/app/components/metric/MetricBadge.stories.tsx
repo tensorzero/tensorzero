@@ -62,3 +62,47 @@ export const LongLabel: Story = {
     value: 0.823,
   },
 };
+
+// Threshold examples - shows red when value fails threshold
+export const NumberFailsMaxThreshold: Story = {
+  args: {
+    label: "accuracy",
+    value: 0.5,
+    optimize: "max",
+    cutoff: 0.8,
+  },
+};
+
+export const NumberPassesMaxThreshold: Story = {
+  args: {
+    label: "accuracy",
+    value: 0.9,
+    optimize: "max",
+    cutoff: 0.8,
+  },
+};
+
+export const NumberFailsMinThreshold: Story = {
+  args: {
+    label: "latency_ms",
+    value: 500,
+    optimize: "min",
+    cutoff: 200,
+  },
+};
+
+export const BooleanFailsMax: Story = {
+  args: {
+    label: "exact_match",
+    value: false,
+    optimize: "max",
+  },
+};
+
+export const BooleanPassesMax: Story = {
+  args: {
+    label: "exact_match",
+    value: true,
+    optimize: "max",
+  },
+};
