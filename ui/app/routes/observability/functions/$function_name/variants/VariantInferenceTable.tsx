@@ -7,14 +7,15 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { StoredInference } from "~/types/tensorzero";
+import type { InferenceMetadata } from "~/types/tensorzero";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
+import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 
 export default function VariantInferenceTable({
   inferences,
 }: {
-  inferences: StoredInference[];
+  inferences: InferenceMetadata[];
 }) {
   return (
     <Table>
@@ -30,11 +31,11 @@ export default function VariantInferenceTable({
           <TableEmptyState message="No inferences found" />
         ) : (
           inferences.map((inference) => (
-            <TableRow key={inference.inference_id} id={inference.inference_id}>
+            <TableRow key={inference.id} id={inference.id}>
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
-                  id={inference.inference_id}
-                  link={toInferenceUrl(inference.inference_id)}
+                  id={inference.id}
+                  link={toInferenceUrl(inference.id)}
                 />
               </TableCell>
               <TableCell>
@@ -44,7 +45,7 @@ export default function VariantInferenceTable({
                 />
               </TableCell>
               <TableCell>
-                <TableItemTime timestamp={inference.timestamp} />
+                <TableItemTime timestamp={uuidv7ToTimestamp(inference.id)} />
               </TableCell>
             </TableRow>
           ))

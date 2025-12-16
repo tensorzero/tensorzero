@@ -1289,7 +1289,7 @@ async fn test_get_all_templates() {
         .expect("Failed to load config");
 
     // Get all templates
-    let templates = Config::get_templates(&config.functions);
+    let templates = Config::get_templates(&config.functions).unwrap();
 
     // Check if all expected templates are present
     assert_eq!(

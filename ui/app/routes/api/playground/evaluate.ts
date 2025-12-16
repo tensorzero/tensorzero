@@ -24,14 +24,24 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const body = await request.json();
-  const { evaluationName, variantName, datapointIds } = body as {
+  const { evaluationName, variantName, variantConfig, datapointIds } = body as {
     evaluationName: string;
-    variantName: string;
+    variantName?: string;
+    /** JSON-serialized VariantInfo for edited variants */
+    variantConfig?: string;
     datapointIds: string[];
   };
 
-  if (!evaluationName || !variantName || !datapointIds?.length) {
+  if (!evaluationName || !datapointIds?.length) {
     return new Response("Missing required fields", { status: 400 });
+  }
+
+  // Exactly one of variantName or variantConfig must be provided
+  if ((!variantName && !variantConfig) || (variantName && variantConfig)) {
+    return new Response(
+      "Exactly one of variantName or variantConfig must be provided",
+      { status: 400 },
+    );
   }
 
   const env = getEnv();
@@ -74,6 +84,7 @@ export async function action({ request }: Route.ActionArgs) {
           evaluationName,
           datapointIds,
           variantName,
+          internalDynamicVariantConfig: variantConfig,
           concurrency: 5,
           inferenceCache: "on",
           onEvent: sendEvent,

@@ -1,4 +1,4 @@
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
+import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import {
   Select,
   SelectItem,
@@ -10,7 +10,7 @@ import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { useConfig } from "~/context/config";
 
 type MetricSelectorProps = {
-  metricsWithFeedback: MetricsWithFeedbackData;
+  metricsWithFeedback: MetricsWithFeedbackResponse;
   selectedMetric: string;
   onMetricChange: (metric: string) => void;
 };

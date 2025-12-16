@@ -8,6 +8,7 @@ import {
   getClientInferenceQueryKey,
   getClientInferenceQueryFunction,
 } from "./utils";
+import { variantInfoToUninitializedVariantInfo } from "~/routes/api/tensorzero/inference.utils";
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
 import { memo, useState, useEffect, useRef } from "react";
@@ -58,20 +59,14 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
       queryKey: getClientInferenceQueryKey(props),
       queryFn: getClientInferenceQueryFunction(props),
       refetchOnMount: false,
+      refetchOnWindowFocus: false,
       refetchInterval: false,
       retry: false,
     });
 
     // Run evaluation when inference is ready and evaluation is selected
     useEffect(() => {
-      // Only run for builtin variants with completed inference (not during refetch)
-      if (
-        variant.type !== "builtin" ||
-        !selectedEvaluation ||
-        !query.isSuccess ||
-        !query.data ||
-        query.isRefetching
-      ) {
+      if (!selectedEvaluation || !query.isSuccess || query.isRefetching) {
         if (!selectedEvaluation) {
           setEvalState({ status: "idle" });
         }
@@ -79,21 +74,29 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
       }
 
       // Abort any previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
       setEvalState({ status: "loading" });
 
       const runEval = async () => {
         try {
+          // For builtin variants, pass variantName; for edited variants, pass variantConfig
+          const variantPayload =
+            variant.type === "builtin"
+              ? { variantName: variant.name }
+              : {
+                  variantConfig: JSON.stringify(
+                    variantInfoToUninitializedVariantInfo(variant.config),
+                  ),
+                };
+
           const response = await fetch("/api/playground/evaluate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               evaluationName: selectedEvaluation,
-              variantName: variant.name,
+              ...variantPayload,
               datapointIds: [datapoint.id],
             }),
             signal: abortControllerRef.current?.signal,
@@ -114,6 +117,47 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
           const decoder = new TextDecoder();
           let buffer = "";
 
+          const processLine = (line: string) => {
+            if (!line.trim()) return;
+            try {
+              const event = JSON.parse(line) as EvaluationEvent;
+              if (
+                event.type === "success" &&
+                event.datapoint?.id === datapoint.id
+              ) {
+                setEvalState({
+                  status: "success",
+                  result: {
+                    evaluations: event.evaluations ?? {},
+                    evaluatorErrors: event.evaluator_errors ?? {},
+                  },
+                });
+              } else if (
+                event.type === "error" &&
+                event.datapoint?.id === datapoint.id
+              ) {
+                setEvalState({
+                  status: "error",
+                  error: event.error || "Evaluation failed",
+                });
+              } else if (event.type === "fatal_error") {
+                setEvalState({
+                  status: "error",
+                  error: event.message || "Evaluation failed",
+                });
+              } else if (event.type === "complete") {
+                // If still loading after stream completes, no result was returned for this datapoint
+                setEvalState((prev) =>
+                  prev.status === "loading"
+                    ? { status: "error", error: "No evaluation result received" }
+                    : prev,
+                );
+              }
+            } catch {
+              // Ignore parse errors for malformed lines
+            }
+          };
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -123,41 +167,18 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
             buffer = lines.pop() || "";
 
             for (const line of lines) {
-              if (!line.trim()) continue;
-              try {
-                const event = JSON.parse(line) as EvaluationEvent;
-                if (
-                  event.type === "success" &&
-                  event.datapoint?.id === datapoint.id
-                ) {
-                  setEvalState({
-                    status: "success",
-                    result: {
-                      evaluations: event.evaluations ?? {},
-                      evaluatorErrors: event.evaluator_errors ?? {},
-                    },
-                  });
-                } else if (
-                  event.type === "error" &&
-                  event.datapoint?.id === datapoint.id
-                ) {
-                  setEvalState({
-                    status: "error",
-                    error: event.error || "Evaluation failed",
-                  });
-                } else if (event.type === "fatal_error") {
-                  setEvalState({
-                    status: "error",
-                    error: event.message || "Evaluation failed",
-                  });
-                }
-              } catch {
-                // Skip malformed JSON
-              }
+              processLine(line);
             }
           }
+
+          // Process any remaining data in buffer after stream ends
+          if (buffer.trim()) {
+            processLine(buffer);
+          }
         } catch (err) {
-          if (err instanceof Error && err.name === "AbortError") return;
+          if (err instanceof Error && err.name === "AbortError") {
+            return;
+          }
           setEvalState({
             status: "error",
             error: err instanceof Error ? err.message : "Unknown error",
@@ -177,7 +198,6 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
       datapoint.id,
       query.isSuccess,
       query.isRefetching,
-      query.data,
     ]);
 
     const loadingIndicator = (

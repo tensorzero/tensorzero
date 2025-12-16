@@ -5,5 +5,5 @@ export type EvaluationRunStartEvent = {
   num_datapoints: number;
   evaluation_name: string;
   dataset_name: string | null;
-  variant_name: string;
+  variant_name: string | null;
 };

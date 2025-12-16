@@ -12,11 +12,16 @@ use crate::client::{
     ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk, InferenceResponseChunk,
 };
 use crate::config::UninitializedRelayConfig;
+use crate::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use crate::endpoints::inference::InferenceCredentials;
+use crate::endpoints::openai_compatible::types::embeddings::{
+    OpenAICompatibleEmbeddingParams, OpenAIEmbedding, OpenAIEmbeddingResponse,
+};
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
     ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    TextChunk,
+    TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -132,6 +137,64 @@ impl TensorzeroRelay {
 }
 
 impl TensorzeroRelay {
+    pub async fn relay_embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, Error> {
+        let params = OpenAICompatibleEmbeddingParams {
+            input: params.input,
+            model: format!("tensorzero::embedding_model_name::{}", params.model_name),
+            dimensions: params.dimensions,
+            encoding_format: params.encoding_format,
+            tensorzero_dryrun: None,
+            tensorzero_credentials: params.credentials,
+            tensorzero_cache_options: None,
+        };
+
+        let api_key = self
+            .credentials
+            .get_api_key(&params.tensorzero_credentials)
+            .map_err(|e| e.log())?
+            .cloned();
+
+        let res = self
+            .client
+            .http_embeddings(params, api_key)
+            .await
+            .map_err(|e| {
+                // TODO - include `raw_request`/`raw_response` here
+                Error::new(ErrorDetails::InferenceClient {
+                    message: e.to_string(),
+                    status_code: None,
+                    provider_type: "tensorzero_relay".to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                })
+            })?;
+        match res.response {
+            OpenAIEmbeddingResponse::List { data, model, usage } => Ok(EmbeddingResponse {
+                embeddings: data
+                    .into_iter()
+                    .map(|embedding| match embedding {
+                        OpenAIEmbedding::Embedding {
+                            embedding,
+                            index: _,
+                        } => embedding,
+                    })
+                    .collect(),
+                usage: usage
+                    .map(|usage| Usage {
+                        input_tokens: usage.prompt_tokens,
+                        output_tokens: match (usage.total_tokens, usage.prompt_tokens) {
+                            (Some(total), Some(prompt)) => Some(total - prompt),
+                            _ => None,
+                        },
+                    })
+                    .unwrap_or_default(),
+                model,
+            }),
+        }
+    }
     pub async fn relay_streaming<'a>(
         &self,
         model_name: &str,
@@ -148,19 +211,16 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                // TODO - include `raw_request`/`raw_response` here
-                Error::new(ErrorDetails::InferenceClient {
+                Error::new(ErrorDetails::Inference {
                     message: e.to_string(),
-                    status_code: None,
-                    provider_type: "tensorzero_relay".to_string(),
-                    raw_request: None,
-                    raw_response: None,
                 })
             })?;
 
         let InferenceOutput::Streaming(streaming) = res.response else {
-            return Err(Error::new(ErrorDetails::Inference {
-                message: "Expected streaming inference response".to_string(),
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Expected streaming inference response. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
             }));
         };
 
@@ -218,13 +278,8 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                // TODO - fix raw_request/raw_response here
-                Error::new(ErrorDetails::InferenceClient {
+                Error::new(ErrorDetails::Inference {
                     message: e.to_string(),
-                    status_code: None,
-                    provider_type: "tensorzero_relay".to_string(),
-                    raw_request: None,
-                    raw_response: None,
                 })
             })?;
 
@@ -438,9 +493,8 @@ impl TensorzeroRelay {
                     .unwrap_or_default(),
             },
             output_schema: request.output_schema.cloned(),
-            // TODO - implement extra_body and extra_headers
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: prepare_relay_extra_body(&request.extra_body),
+            extra_headers: prepare_relay_extra_headers(&request.extra_headers),
             credentials: clients
                 .credentials
                 .iter()

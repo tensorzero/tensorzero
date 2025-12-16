@@ -189,6 +189,6 @@ max_tokens = 100
 
 [functions.weather_helper.variants.xai]
 type = "chat_completion"
-model = "grok_2_1212"
+model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100

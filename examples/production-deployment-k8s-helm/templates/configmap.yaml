@@ -7,4 +7,4 @@ metadata:
 data:
   {{- range $key, $value := .Values.configMap.data }}
   {{ $key }}: {{ $value | quote }}
-  {{- end }} 
+  {{- end }}

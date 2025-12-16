@@ -444,14 +444,14 @@ routing = ["openai"]
 type = "openai"
 model_name = "o3-mini"
 
-[models."grok_2_1212"]
+[models."grok_4_1_fast_non_reasoning"]
 routing = ["xai"]
 
-[models."grok_2_1212".providers.xai]
+[models."grok_4_1_fast_non_reasoning".providers.xai]
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 
-[models."grok_2_1212-dynamic"]
+[models."grok_4_1_fast_non_reasoning-dynamic"]
 routing = ["xai"]
 
 [provider_types.gcp_vertex_gemini.batch]
@@ -459,9 +459,9 @@ storage_type = "cloud_storage"
 input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
 output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
 
-[models."grok_2_1212-dynamic".providers.xai]
+[models."grok_4_1_fast_non_reasoning-dynamic".providers.xai]
 type = "xai"
-model_name = "grok-2-1212"
+model_name = "grok-4-1-fast-non-reasoning"
 api_key_location = "dynamic::xai_api_key"
 
 [models."meta-llama/Meta-Llama-3-70B-Instruct"]
@@ -754,7 +754,7 @@ type = "openai"
 model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+provider_tools = [{ type = "web_search" }] # built-in OpenAI web search tool
 
 [models.reasoner.providers.dummy]
 type = "dummy"
