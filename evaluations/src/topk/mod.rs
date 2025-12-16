@@ -624,15 +624,23 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     }
 }
 
+/// Parameters for updating variant statuses during top-k evaluation.
+struct VariantStatusParams {
+    k_min: u32,
+    k_max: u32,
+    epsilon: f64,
+    variant_failure_threshold: Option<f64>,
+}
+
 /// Update variant statuses based on current confidence sequences and top-k stopping result.
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
-    variant_failure_threshold: Option<f64>,
     stopping_result: &TopKStoppingResult,
-    k_max: u32,
+    params: &VariantStatusParams,
 ) {
+    let num_variants = variant_status.len();
     for (name, status) in variant_status.iter_mut() {
         // Skip already-stopped variants
         if *status != VariantStatus::Active {
@@ -640,7 +648,7 @@ fn update_variant_statuses(
         }
 
         // Check for failure based on failure rate
-        if let Some(threshold) = variant_failure_threshold
+        if let Some(threshold) = params.variant_failure_threshold
             && let Some(failure_cs) = variant_failures.get(name)
             && failure_cs.cs_lower > threshold
         {
@@ -658,19 +666,38 @@ fn update_variant_statuses(
             continue;
         }
 
-        // Check if variant can be excluded early (its upper bound is below k_max others' lower bounds)
+        // Check if variant can be excluded early because it's confidently outside the top k_max
+        // (its upper bound is below (lower_bound_j + epsilon) for k_max other variants j)
         if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_better = variant_performance
+            let num_definitely_worse_than = variant_performance
                 .iter()
                 .filter(|(other_name, other_cs)| {
-                    *other_name != name && other_cs.cs_lower > perf_cs.cs_upper
+                    *other_name != name && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
                 })
                 .count();
 
-            // If at least (num_variants - k_max) variants are definitely better,
+            // If at least k_max variants are definitely better,
             // this variant cannot be in the top k_max
-            if num_definitely_better >= k_max as usize {
+            if num_definitely_worse_than >= params.k_max as usize {
                 *status = VariantStatus::Exclude;
+                continue;
+            }
+        }
+
+        // Check if variant can be included early because it's confidently within the top k_min
+        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other variants j)
+        if let Some(perf_cs) = variant_performance.get(name) {
+            let num_definitely_better_than = variant_performance
+                .iter()
+                .filter(|(other_name, other_cs)| {
+                    *other_name != name && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
+                })
+                .count();
+
+            // If this variant beats at least (num_variants - k_min) others,
+            // it's confidently in the top k_min
+            if num_definitely_better_than >= num_variants - params.k_min as usize {
+                *status = VariantStatus::Include;
             }
         }
     }
@@ -792,13 +819,18 @@ async fn process_batch_step(
     )?;
 
     // Update variant statuses
+    let status_params = VariantStatusParams {
+        k_min: params.k_min,
+        k_max: params.k_max,
+        epsilon: params.epsilon.unwrap_or(0.0),
+        variant_failure_threshold: params.variant_failure_threshold,
+    };
     update_variant_statuses(
         &mut current_state.variant_status,
         &current_state.variant_performance,
         &current_state.variant_failures,
-        params.variant_failure_threshold,
         &stopping_result,
-        params.k_max,
+        &status_params,
     );
 
     // Check for evaluator failure

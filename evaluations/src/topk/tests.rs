@@ -1229,13 +1229,18 @@ fn test_update_variant_statuses_skips_non_active() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        1,
+        &params,
     );
 
     // Non-active variants should remain unchanged
@@ -1278,13 +1283,18 @@ fn test_update_variant_statuses_marks_failed() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: Some(0.2),
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        Some(0.2), // failure threshold
         &stopping_result,
-        1,
+        &params,
     );
 
     assert_eq!(variant_status["high_failure"], VariantStatus::Failed);
@@ -1319,13 +1329,18 @@ fn test_update_variant_statuses_topk_stopping() {
         top_variants: vec!["winner".to_string()],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        1,
+        &params,
     );
 
     assert_eq!(variant_status["winner"], VariantStatus::Include);
@@ -1361,13 +1376,18 @@ fn test_update_variant_statuses_topk_stopping_multiple_winners() {
         top_variants: vec!["winner_a".to_string(), "winner_b".to_string()],
     };
 
+    let params = VariantStatusParams {
+        k_min: 2,
+        k_max: 2,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        2,
+        &params,
     );
 
     assert_eq!(variant_status["winner_a"], VariantStatus::Include);
@@ -1406,13 +1426,18 @@ fn test_update_variant_statuses_early_exclusion() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 2,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        2, // k_max = 2
+        &params,
     );
 
     // "bad" should be excluded because 2 variants are definitely better
@@ -1454,13 +1479,18 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 2,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        2, // k_max = 2
+        &params,
     );
 
     // "bad" should NOT be excluded - only 1 variant is definitely better, need >= 2
@@ -1501,13 +1531,18 @@ fn test_update_variant_statuses_failure_takes_priority() {
         top_variants: vec!["failing_winner".to_string()],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: Some(0.2),
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        Some(0.2), // failure threshold
         &stopping_result,
-        1,
+        &params,
     );
 
     // Failure check happens before top-k check, so "failing_winner" should be Failed
@@ -1541,17 +1576,23 @@ fn test_update_variant_statuses_no_failure_threshold() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None, // no failure threshold
         &stopping_result,
-        1,
+        &params,
     );
 
-    // Without threshold, failure check is skipped - variant stays Active
-    assert_eq!(variant_status["high_failure"], VariantStatus::Active);
+    // Without threshold, failure check is skipped.
+    // Single variant with k_min=1 triggers early inclusion (beats >= 0 others).
+    assert_eq!(variant_status["high_failure"], VariantStatus::Include);
 }
 
 /// Test that variants not in variant_failures map are not marked as failed.
@@ -1576,17 +1617,23 @@ fn test_update_variant_statuses_missing_failure_cs() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: Some(0.2),
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        Some(0.2), // threshold set, but no failure CS
         &stopping_result,
-        1,
+        &params,
     );
 
-    // Without failure CS, failure check doesn't apply
-    assert_eq!(variant_status["variant"], VariantStatus::Active);
+    // Without failure CS, failure check doesn't apply.
+    // Single variant with k_min=1 triggers early inclusion (beats >= 0 others).
+    assert_eq!(variant_status["variant"], VariantStatus::Include);
 }
 
 /// Test that variants not in variant_performance map don't cause errors in early exclusion.
@@ -1607,13 +1654,18 @@ fn test_update_variant_statuses_missing_performance_cs() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        1,
+        &params,
     );
 
     // Without performance CS, early exclusion check doesn't apply
@@ -1648,16 +1700,22 @@ fn test_update_variant_statuses_early_exclusion_k_max_1() {
         top_variants: vec![],
     };
 
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
     update_variant_statuses(
         &mut variant_status,
         &variant_performance,
         &variant_failures,
-        None,
         &stopping_result,
-        1, // k_max = 1
+        &params,
     );
 
     // "worst" should be excluded (1 variant definitely better, k_max = 1)
     assert_eq!(variant_status["worst"], VariantStatus::Exclude);
-    assert_eq!(variant_status["best"], VariantStatus::Active);
+    // "best" beats 1 other, needs >= (2 - 1) = 1, so gets early inclusion
+    assert_eq!(variant_status["best"], VariantStatus::Include);
 }
