@@ -493,18 +493,6 @@ pub fn check_topk(
     check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
-/// Check if a variant should be marked as failed based on its failure rate confidence sequence.
-fn check_variant_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
-    // Variant is failed if the lower bound of its failure rate CI exceeds the threshold
-    cs.cs_lower > threshold
-}
-
-/// Check if an evaluator has failed based on its failure rate confidence sequence.
-fn check_evaluator_failed(cs: &MeanBettingConfidenceSequence, threshold: f64) -> bool {
-    // Evaluator is failed if the lower bound of its failure rate CI exceeds the threshold
-    cs.cs_lower > threshold
-}
-
 // ============================================================================
 // Durable Top-K Variant Selection Task
 // ============================================================================
@@ -654,7 +642,7 @@ fn update_variant_statuses(
         // Check for failure based on failure rate
         if let Some(threshold) = variant_failure_threshold
             && let Some(failure_cs) = variant_failures.get(name)
-            && check_variant_failed(failure_cs, threshold)
+            && failure_cs.cs_lower > threshold
         {
             *status = VariantStatus::Failed;
             continue;
@@ -816,7 +804,7 @@ async fn process_batch_step(
     // Check for evaluator failure
     if let Some(threshold) = params.evaluator_failure_threshold {
         for (evaluator_name, cs) in &current_state.evaluator_failures {
-            if check_evaluator_failed(cs, threshold) {
+            if cs.cs_lower > threshold {
                 info!(
                     evaluator_name = %evaluator_name,
                     "Evaluator failure threshold exceeded"
