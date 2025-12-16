@@ -23,8 +23,9 @@ test.describe("New Datapoint Page", () => {
     ).toBeVisible();
 
     // Select dataset (create new)
-    await page.getByTestId("dataset-selector").getByRole("combobox").click();
-    await page.getByPlaceholder(/dataset/i).fill(datasetName);
+    const datasetInput = page.getByPlaceholder("Select dataset");
+    await datasetInput.click();
+    await datasetInput.fill(datasetName);
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
 
     // Select function (chat type)
@@ -137,8 +138,9 @@ test.describe("New Datapoint Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Select dataset (create new)
-    await page.getByTestId("dataset-selector").getByRole("combobox").click();
-    await page.getByPlaceholder(/dataset/i).fill(datasetName);
+    const datasetInput = page.getByPlaceholder("Select dataset");
+    await datasetInput.click();
+    await datasetInput.fill(datasetName);
     await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
 
     // Select function (JSON type)
@@ -232,8 +234,9 @@ test.describe("New Datapoint Page", () => {
     await page.waitForLoadState("networkidle");
 
     // Select dataset first
-    await page.getByTestId("dataset-selector").getByRole("combobox").click();
-    await page.getByPlaceholder(/dataset/i).fill("test_switch");
+    const datasetInput = page.getByPlaceholder("Select dataset");
+    await datasetInput.click();
+    await datasetInput.fill("test_switch");
     await page
       .locator("[cmdk-item]")
       .filter({ hasText: "test_switch" })

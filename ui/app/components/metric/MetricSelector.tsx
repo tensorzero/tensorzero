@@ -83,9 +83,7 @@ export default function MetricSelector({
               className="h-9"
             />
             <CommandList>
-              <CommandEmpty className="px-4 py-2 text-sm">
-                No metrics found.
-              </CommandEmpty>
+              <CommandEmpty>No metrics found</CommandEmpty>
               <CommandGroup heading="Metrics">
                 {filteredMetrics.map(([metricName, metricConfig]) => (
                   <CommandItem

@@ -1,65 +1,36 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { DatasetSelector } from "./DatasetSelector";
+import { DatasetSelect } from "./DatasetSelect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useArgs } from "storybook/preview-api";
-
-// Ordered incorrectly to test sorting
-const mockDatasets = [
-  {
-    name: "test_dataset",
-    count: 3250,
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-  },
-  {
-    name: "evaluation_set",
-    count: 850,
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
-  },
-  {
-    name: "training_data_v2",
-    count: 42100,
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
-  },
-  {
-    name: "validation_set",
-    count: 1200,
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(), // 1 week ago
-  },
-  {
-    name: "production_data",
-    count: 15420,
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 minutes ago
-  },
-  {
-    name: "long_dataset_name_that_should_still_be_displayed_gracefully_somehow",
-    count: 1,
-    lastUpdated: new Date(Date.now()).toISOString(), // now
-  },
-];
+import { mockDatasets, createManyDatasets } from "./dataset-stories-fixtures";
 
 const meta = {
-  title: "Dataset/DatasetSelector",
-  component: DatasetSelector,
+  title: "Dataset/DatasetSelect",
+  component: DatasetSelect,
   argTypes: {
     allowCreation: {
       control: "boolean",
       description: "Allow creating new datasets",
     },
-    label: {
+    placeholder: {
       control: "text",
       description: "Placeholder text when no dataset is selected",
+    },
+    disabled: {
+      control: "boolean",
+      description: "Disable the select",
     },
   },
   parameters: {
     controls: {
-      exclude: ["onSelect", "selected", "className", "buttonProps"],
+      exclude: ["onSelect", "selected", "functionName"],
     },
   },
   args: {
-    // Dummy onSelect to satisfy TypeScript - will be overridden in render
     onSelect: () => {},
+    selected: null,
   },
-} satisfies Meta<typeof DatasetSelector>;
+} satisfies Meta<typeof DatasetSelect>;
 
 export default meta;
 
@@ -68,7 +39,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     allowCreation: true,
-    label: "Select a dataset",
+    placeholder: "Select dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -77,9 +48,31 @@ export const Default: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetSelect
           {...args}
-          selected={selected}
+          selected={selected ?? null}
+          onSelect={(dataset) => updateArgs({ selected: dataset })}
+        />
+      </QueryClientProvider>
+    );
+  },
+};
+
+export const WithSelection: Story = {
+  args: {
+    allowCreation: true,
+    placeholder: "Select dataset",
+  },
+  render: function Render(args) {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["DATASETS_COUNT", undefined], mockDatasets);
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelect
+          {...args}
+          selected={selected ?? "test_dataset"}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
@@ -90,7 +83,7 @@ export const Default: Story = {
 export const EmptyDatasets: Story = {
   args: {
     allowCreation: true,
-    label: "Select a dataset",
+    placeholder: "Select dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -99,9 +92,9 @@ export const EmptyDatasets: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetSelect
           {...args}
-          selected={selected}
+          selected={selected ?? null}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
@@ -112,7 +105,7 @@ export const EmptyDatasets: Story = {
 export const DisallowCreation: Story = {
   args: {
     allowCreation: false,
-    label: "Select a dataset",
+    placeholder: "Select dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -121,9 +114,9 @@ export const DisallowCreation: Story = {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetSelect
           {...args}
-          selected={selected}
+          selected={selected ?? null}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
@@ -131,32 +124,43 @@ export const DisallowCreation: Story = {
   },
 };
 
-// TODO: we should handle extremely long lists (1000+) of datasets gracefully (e.g. truncate what we render)
+export const Disabled: Story = {
+  args: {
+    allowCreation: true,
+    placeholder: "Select dataset",
+    disabled: true,
+  },
+  render: function Render(args) {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["DATASETS_COUNT", undefined], mockDatasets);
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DatasetSelect {...args} selected="test_dataset" onSelect={() => {}} />
+      </QueryClientProvider>
+    );
+  },
+};
+
+// TODO: we should handle extremely long lists (1000+) of datasets gracefully (e.g. virtualization)
 export const ManyDatasets: Story = {
   args: {
     allowCreation: true,
-    label: "Select a dataset",
+    placeholder: "Select dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
     const queryClient = new QueryClient();
-    const repeatedMockDatasets = Array.from({ length: 100 }, (_, i) => ({
-      name: `test_dataset_${i + 1}`,
-      count: i + 1,
-      lastUpdated: new Date(
-        Date.now() - 1000 * 60 * 60 * (i + 1),
-      ).toISOString(),
-    }));
     queryClient.setQueryData(
       ["DATASETS_COUNT", undefined],
-      repeatedMockDatasets,
+      createManyDatasets(100),
     );
 
     return (
       <QueryClientProvider client={queryClient}>
-        <DatasetSelector
+        <DatasetSelect
           {...args}
-          selected={selected}
+          selected={selected ?? null}
           onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>

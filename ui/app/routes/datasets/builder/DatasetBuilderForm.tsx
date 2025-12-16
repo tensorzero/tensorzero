@@ -149,7 +149,8 @@ export function DatasetBuilderForm() {
             control={form.control}
             name="dataset"
             label="Dataset"
-            placeholder="Select a dataset"
+            placeholder="Select dataset"
+            allowCreation
             onSelect={(dataset, isNew) => {
               setIsNewDataset(isNew);
             }}

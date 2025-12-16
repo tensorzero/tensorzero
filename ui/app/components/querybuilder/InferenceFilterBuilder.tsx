@@ -382,9 +382,7 @@ const AddMetricPopover = memo(function AddMetricPopover({
             className="h-9"
           />
           <CommandList>
-            <CommandEmpty className="px-4 py-2 text-sm">
-              No metrics found.
-            </CommandEmpty>
+            <CommandEmpty>No metrics found</CommandEmpty>
             <CommandGroup>
               {Object.entries(metrics)
                 .filter(

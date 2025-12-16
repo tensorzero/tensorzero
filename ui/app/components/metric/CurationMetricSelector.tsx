@@ -233,9 +233,7 @@ export default function CurationMetricSelector<
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty className="px-4 py-2 text-sm">
-                        No metrics found.
-                      </CommandEmpty>
+                      <CommandEmpty>No metrics found</CommandEmpty>
                       <CommandGroup
                         heading={
                           <div className="text-fg-tertiary flex w-full items-center justify-between">

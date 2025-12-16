@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -101,7 +101,7 @@ export function AddToDatasetButton({
   };
 
   const datasetSelector = (
-    <DatasetSelector
+    <DatasetSelect
       selected={selectedDataset}
       onSelect={(dataset) => {
         setSelectedDataset(dataset);
@@ -111,11 +111,8 @@ export function AddToDatasetButton({
           setOutputDialogOpen(true);
         }
       }}
-      buttonProps={{
-        size: "sm",
-      }}
-      label="Add to dataset"
-      labelClassName="text-fg-primary font-medium"
+      placeholder="Add to dataset"
+      allowCreation
       disabled={isReadOnly}
     />
   );

@@ -1,6 +1,6 @@
 import type { Control, FieldPath, FieldValues } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 
 interface DatasetFormFieldProps<T extends FieldValues> {
   control: Control<T>;
@@ -13,7 +13,7 @@ interface DatasetFormFieldProps<T extends FieldValues> {
 
 /**
  * This component should be used with react-hook-form only.
- * For standard RR7 forms we can just use the DatasetSelector component directly.
+ * For standard RR7 forms we can just use DatasetCombobox or DatasetSelect directly.
  */
 export function DatasetFormField<T extends FieldValues>({
   control,
@@ -31,13 +31,13 @@ export function DatasetFormField<T extends FieldValues>({
         <FormItem>
           <FormLabel>{label}</FormLabel>
           <div className="grid gap-x-8 md:grid-cols-2">
-            <DatasetSelector
+            <DatasetCombobox
               selected={field.value}
               onSelect={(value, isNew) => {
                 field.onChange(value);
                 onSelect?.(value, isNew);
               }}
-              label={placeholder}
+              placeholder={placeholder}
               allowCreation={allowCreation}
             />
           </div>
