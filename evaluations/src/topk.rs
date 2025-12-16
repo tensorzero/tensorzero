@@ -70,9 +70,7 @@ pub enum VariantStatus {
 pub enum GlobalStoppingReason {
     /// Successfully identified a top-k set of variants
     TopKFound { k: u32, top_variants: Vec<String> },
-    /// Reached the configured maximum number of datapoints
-    MaxDatapointsReached,
-    /// Exhausted all available datapoints in the dataset
+    /// Exhausted all available datapoints (limited by dataset size or max_datapoints config)
     DatasetExhausted,
     /// At least one evaluator has a failure rate above the threshold
     EvaluatorFailed { evaluator_name: String },
@@ -873,13 +871,6 @@ fn determine_stopping_reason(
         return GlobalStoppingReason::TooManyVariantsFailed { num_failed };
     }
 
-    // Distinguish between hitting max_datapoints limit vs exhausting the dataset
-    if let Some(max) = params.max_datapoints
-        && loop_state.num_datapoints_processed >= max
-    {
-        return GlobalStoppingReason::MaxDatapointsReached;
-    }
-
     // If we processed all available datapoints without a conclusive result
     if loop_state.num_datapoints_processed >= total_datapoints {
         return GlobalStoppingReason::DatasetExhausted;
@@ -983,6 +974,15 @@ impl Task<TopKTaskState> for TopKTask {
             total_datapoints = total_datapoints,
             "Loaded and shuffled datapoint IDs"
         );
+
+        // Log if fewer datapoints are available than the configured max
+        if let Some(max) = params.max_datapoints
+            && total_datapoints < max
+        {
+            info!(
+                "Dataset contains {total_datapoints} datapoints, fewer than max_datapoints ({max})"
+            );
+        }
 
         if total_datapoints == 0 {
             return Err(durable::TaskError::Failed(anyhow::anyhow!(
