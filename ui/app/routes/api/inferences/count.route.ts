@@ -90,7 +90,11 @@ export function useInferenceCountFetcher(params: {
 
   // Debounced fetch effect
   useEffect(() => {
-    if (!requestBody) return;
+    if (!requestBody) {
+      // Clear pending state when disabled
+      setIsPendingDebounce(false);
+      return;
+    }
 
     const requestBodyJson = JSON.stringify(requestBody);
 
@@ -117,6 +121,7 @@ export function useInferenceCountFetcher(params: {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+        setIsPendingDebounce(false);
       }
     };
   }, [requestBody, countFetcher]);
