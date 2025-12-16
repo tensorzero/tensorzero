@@ -27,7 +27,7 @@ export async function action({ request }: Route.ActionArgs) {
   const { evaluationName, variantName, variantConfig, datapointIds } = body as {
     evaluationName: string;
     variantName?: string;
-    /** JSON-serialized VariantInfo for edited variants */
+    /** JSON-serialized UninitializedVariantInfo for edited variants */
     variantConfig?: string;
     datapointIds: string[];
   };
