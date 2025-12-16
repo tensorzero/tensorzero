@@ -10,6 +10,13 @@ import {
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
+import { Suspense, use } from "react";
+
+export type EpisodesData = {
+  episodes: EpisodeByIdRow[];
+  bounds: TableBoundsWithCount;
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -22,20 +29,36 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const client = getTensorZeroClient();
 
-  const [listEpisodesResponse, bounds] = await Promise.all([
-    client.listEpisodes(limit, before, after),
-    client.queryEpisodeTableBounds(),
-  ]);
+  // Don't await - return promises for streaming
+  const episodesPromise = client
+    .listEpisodes(limit, before, after)
+    .then((r) => r.episodes);
+  const boundsPromise = client.queryEpisodeTableBounds();
+
+  // Combine into single promise for pagination logic
+  const dataPromise: Promise<EpisodesData> = Promise.all([
+    episodesPromise,
+    boundsPromise,
+  ]).then(([episodes, bounds]) => ({ episodes, bounds }));
+
+  // Derive count promise from bounds - convert bigint to number for serialization
+  const countPromise = boundsPromise.then((b) => Number(b.count));
 
   return {
-    episodes: listEpisodesResponse.episodes,
+    dataPromise,
+    countPromise,
     limit,
-    bounds,
   };
 }
 
-export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
-  const { episodes, limit, bounds } = loaderData;
+function PaginationContent({
+  data,
+  limit,
+}: {
+  data: Promise<EpisodesData>;
+  limit: number;
+}) {
+  const { episodes, bounds } = use(data);
   const navigate = useNavigate();
 
   const topEpisode = episodes.at(0);
@@ -64,17 +87,36 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
     !bounds?.first_id || bounds.first_id === bottomEpisode?.episode_id;
 
   return (
+    <PageButtons
+      onPreviousPage={handlePreviousPage}
+      onNextPage={handleNextPage}
+      disablePrevious={disablePrevious}
+      disableNext={disableNext}
+    />
+  );
+}
+
+export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
+  const { dataPromise, countPromise, limit } = loaderData;
+
+  return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={bounds.count} />
+      <PageHeader heading="Episodes" count={countPromise} />
       <SectionLayout>
         <EpisodeSearchBar />
-        <EpisodesTable episodes={episodes} />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={disablePrevious}
-          disableNext={disableNext}
-        />
+        <EpisodesTable data={dataPromise} />
+        <Suspense
+          fallback={
+            <PageButtons
+              onPreviousPage={() => {}}
+              onNextPage={() => {}}
+              disablePrevious
+              disableNext
+            />
+          }
+        >
+          <PaginationContent data={dataPromise} limit={limit} />
+        </Suspense>
       </SectionLayout>
     </PageLayout>
   );

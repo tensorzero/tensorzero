@@ -22,7 +22,7 @@ url = { workspace = true }
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-git2 = { workspace = true }
+git2 = { workspace = true, optional = true }
 mime = { workspace = true }
 tempfile = { version = "3.21.0" }
 paste = { version = "1.0.15", optional = true }
@@ -42,10 +42,11 @@ tracing-subscriber = "0.3.22"
 # Forward this feature to 'tensorzero-core', so that our types will generate
 # the appropriate pyo3 attributes.
 pyo3 = ["dep:pyo3", "tensorzero-core/pyo3"]
-default = []
+default = ["git"]
 # Forward this feature to 'tensorzero-core', so that our embedded
 # client can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests", "dep:paste"]
+git = ["dep:git2", "tensorzero-core/git"]
 
 # Ignore the `pyo3` crate (used by our own `pyo3` feature above)
 [package.metadata.cargo-machete]

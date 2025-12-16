@@ -26,4 +26,3 @@ fi
 
 echo "✅ Schema is in sync"
 exit 0
-
