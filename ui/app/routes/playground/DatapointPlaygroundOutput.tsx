@@ -58,6 +58,7 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
     const query = useQuery({
       queryKey: getClientInferenceQueryKey(props),
       queryFn: getClientInferenceQueryFunction(props),
+      // Only re-fetch when the user explicitly requests it
       refetchOnMount: false,
       refetchOnWindowFocus: false,
       refetchInterval: false,
@@ -338,6 +339,7 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
       </div>
     );
   },
+  // TODO: Remove custom comparison and make props stable instead
   (prevProps, nextProps) => {
     return (
       prevProps.datapoint.id === nextProps.datapoint.id &&
