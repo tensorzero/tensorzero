@@ -28,6 +28,11 @@ type ComboboxProps = {
   disabled?: boolean;
   monospace?: boolean;
   name?: string;
+  /** Show clear button and call onClear when clicked */
+  clearable?: boolean;
+  onClear?: () => void;
+  /** Render custom suffix for each item in dropdown */
+  getItemSuffix?: (item: string) => React.ReactNode;
 };
 
 export function Combobox({
@@ -40,6 +45,9 @@ export function Combobox({
   disabled = false,
   monospace = false,
   name,
+  clearable = false,
+  onClear,
+  getItemSuffix,
 }: ComboboxProps) {
   const {
     open,
@@ -67,6 +75,10 @@ export function Combobox({
     [onSelect, closeDropdown],
   );
 
+  const handleClear = useCallback(() => {
+    onClear?.();
+  }, [onClear]);
+
   return (
     <div className="w-full">
       {name && <input type="hidden" name={name} value={selected ?? ""} />}
@@ -83,6 +95,8 @@ export function Combobox({
             monospace={monospace}
             open={open}
             icon={Icon}
+            clearable={clearable && !!selected}
+            onClear={handleClear}
           />
         </PopoverAnchor>
         <PopoverContent
@@ -112,6 +126,7 @@ export function Combobox({
                       >
                         {item}
                       </span>
+                      {getItemSuffix?.(item)}
                     </CommandItem>
                   ))}
                 </CommandGroup>

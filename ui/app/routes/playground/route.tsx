@@ -9,7 +9,7 @@ import {
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
-import { EvaluationSelector } from "~/components/evaluation/EvaluationSelector";
+import { EvaluationCombobox } from "~/components/evaluation/EvaluationCombobox";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
   useFunctionConfig,
@@ -367,7 +367,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       </div>
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Evaluation</Label>
-        <EvaluationSelector
+        <EvaluationCombobox
           selected={selectedEvaluation}
           onSelect={(value) =>
             updateSearchParams({ evaluation: value ?? null })

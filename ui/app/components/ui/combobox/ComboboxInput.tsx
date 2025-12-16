@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { Input } from "~/components/ui/input";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import clsx from "clsx";
 import type { IconProps } from "~/components/icons/Icons";
 
@@ -17,6 +17,8 @@ type ComboboxInputProps = {
   monospace?: boolean;
   open: boolean;
   icon: IconComponent;
+  clearable?: boolean;
+  onClear?: () => void;
 };
 
 export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
@@ -32,6 +34,8 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       monospace = false,
       open,
       icon: Icon,
+      clearable = false,
+      onClear,
     },
     ref,
   ) {
@@ -53,11 +57,31 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           onBlur={onBlur}
           placeholder={placeholder}
           disabled={disabled}
-          className={clsx("cursor-text pr-8 pl-9", monospace && "font-mono")}
+          className={clsx(
+            "cursor-text pl-9",
+            clearable ? "pr-14" : "pr-8",
+            monospace && "font-mono",
+          )}
         />
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+        <div className="absolute inset-y-0 right-3 flex items-center gap-1">
+          {clearable && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear?.();
+              }}
+              className="text-fg-muted hover:text-fg-primary rounded p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+              aria-label="Clear selection"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
           <ChevronDown
-            className={clsx("text-fg-tertiary h-4 w-4", open && "-rotate-180")}
+            className={clsx(
+              "text-fg-tertiary h-4 w-4 transition duration-300 ease-out",
+              open && "-rotate-180",
+            )}
           />
         </div>
       </div>
