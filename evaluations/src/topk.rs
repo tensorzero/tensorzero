@@ -236,8 +236,12 @@ pub fn compute_updates(
                     // evaluation results - the failure occurred before evaluation
                 }
                 BatchItemResult::Cancelled => {
-                    // Skip cancelled tasks - they don't count toward any statistics
-                    continue;
+                    // Cancellation should never occur in top-k evaluation since we use empty
+                    // cancellation tokens (cancellation is only used for adaptive stopping
+                    // with precision_targets in lib.rs)
+                    anyhow::bail!(
+                        "Unexpected cancelled task in top-k evaluation. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"
+                    );
                 }
             }
         }
@@ -613,7 +617,7 @@ async fn process_batch_step(
             // Use empty cancellation tokens - top-k has its own stopping logic
             let cancellation_tokens = Arc::new(CancellationTokens::default());
 
-            // Build params for shared process_batch
+            // Build params for process_batch() call
             let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
             let batch_params = ProcessBatchParams {
                 clients: state.clients.clone(),
@@ -627,7 +631,7 @@ async fn process_batch_step(
                 cancellation_tokens,
             };
 
-            // Call the shared process_batch from lib.rs
+            // Call process_batch() from lib.rs
             let (mut join_set, task_id_map) =
                 process_batch(&batch_params, datapoints, &active_variants);
 
@@ -650,7 +654,14 @@ async fn process_batch_step(
                             .unwrap_or_else(|| "unknown".to_string());
                         (error.datapoint_id, variant_name)
                     }
-                    BatchItemResult::Cancelled => continue, // Skip cancelled tasks
+                    BatchItemResult::Cancelled => {
+                        // Cancellation should never occur in top-k evaluation since we use empty
+                        // cancellation tokens (cancellation is only used for adaptive stopping
+                        // with precision_targets in lib.rs)
+                        anyhow::bail!(
+                            "Unexpected cancelled task in top-k evaluation. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"
+                        );
+                    }
                 };
 
                 results_by_datapoint
@@ -1170,6 +1181,397 @@ mod tests {
             scores
         }
     }
+    // ============================================================================
+    // Tests for compute_updates
+    // ============================================================================
+
+    /// Test that compute_updates handles empty results gracefully (no changes to CS maps).
+    #[test]
+    fn test_compute_updates_empty_results() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        // Empty results should not change any confidence sequences
+        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Count should still be 0 since no observations were processed
+        assert_eq!(variant_performance["test_variant"].count, 0);
+        assert_eq!(variant_failures["test_variant"].count, 0);
+        assert_eq!(evaluator_failures["evaluator1"].count, 0);
+    }
+
+    /// Test that cancelled tasks are skipped and don't affect any confidence sequences.
+    #[test]
+    fn test_compute_updates_only_cancelled() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        // Cancelled results should not affect any statistics
+        // In the new structure, we group by datapoint, then by variant
+        // Cancelled tasks are skipped entirely in process_topk_batch,
+        // so an empty map represents the case of only cancelled tasks
+        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
+
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Count should still be 0 since cancelled tasks don't count
+        assert_eq!(variant_performance["test_variant"].count, 0);
+        assert_eq!(variant_failures["test_variant"].count, 0);
+        assert_eq!(evaluator_failures["evaluator1"].count, 0);
+    }
+
+    /// Test that variant-level errors (BatchItemResult::Error) update failure CS but not performance/evaluator CS.
+    #[test]
+    fn test_compute_updates_variant_failures() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+        // Create two errors for two different datapoints
+        let datapoint_id_1 = Uuid::now_v7();
+        let datapoint_id_2 = Uuid::now_v7();
+
+        // Structure: datapoint_id -> variant_name -> result
+        let results_by_datapoint: BatchResultsByDatapoint = [
+            (
+                datapoint_id_1,
+                [(
+                    "test_variant".to_string(),
+                    BatchItemResult::Error(DatapointVariantError {
+                        datapoint_id: datapoint_id_1,
+                        variant: None,
+                        message: "test error 1".to_string(),
+                    }),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            (
+                datapoint_id_2,
+                [(
+                    "test_variant".to_string(),
+                    BatchItemResult::Error(DatapointVariantError {
+                        datapoint_id: datapoint_id_2,
+                        variant: None,
+                        message: "test error 2".to_string(),
+                    }),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // variant_failures should have 2 observations (both 1.0 = failure)
+        assert_eq!(variant_failures["test_variant"].count, 2);
+        // Performance should not be updated since there were no successes
+        assert_eq!(variant_performance["test_variant"].count, 0);
+    }
+
+    /// Test that results for variants not in the CS maps are silently ignored.
+    #[test]
+    fn test_compute_updates_missing_variant_in_map() {
+        let scoring_fn = FirstEvaluatorScore;
+        // Don't include "test_variant" in confidence sequence maps - should handle gracefully
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            HashMap::new();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+        let datapoint_id = Uuid::now_v7();
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [(
+                "test_variant".to_string(),
+                BatchItemResult::Error(DatapointVariantError {
+                    datapoint_id,
+                    variant: None,
+                    message: "test error".to_string(),
+                }),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        // Should not panic, just skip updates for missing variants
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // No maps should be modified since variant wasn't in any of them
+        assert!(variant_performance.is_empty());
+        assert!(variant_failures.is_empty());
+        assert!(evaluator_failures.is_empty());
+    }
+
+    /// Test that successful evaluations update performance and evaluator CS correctly.
+    #[test]
+    fn test_compute_updates_successful_evaluations() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
+            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
+        ]
+        .into_iter()
+        .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
+            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
+            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
+        ]
+        .into_iter()
+        .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        let datapoint_id = Uuid::now_v7();
+
+        // Both variants succeed with different scores
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [
+                (
+                    "variant_a".to_string(),
+                    mock_success(
+                        datapoint_id,
+                        "variant_a",
+                        [("evaluator1".to_string(), Ok(Some(json!(0.8))))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                ),
+                (
+                    "variant_b".to_string(),
+                    mock_success(
+                        datapoint_id,
+                        "variant_b",
+                        [("evaluator1".to_string(), Ok(Some(json!(0.6))))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Both variants should have 1 performance observation
+        assert_eq!(variant_performance["variant_a"].count, 1);
+        assert_eq!(variant_performance["variant_b"].count, 1);
+        // Both variants should have 1 failure observation (0.0 = success)
+        assert_eq!(variant_failures["variant_a"].count, 1);
+        assert_eq!(variant_failures["variant_b"].count, 1);
+        // Evaluator should have 2 observations (one per variant)
+        assert_eq!(evaluator_failures["evaluator1"].count, 2);
+    }
+
+    /// Test that evaluator errors within successful inferences update evaluator failure CS.
+    #[test]
+    fn test_compute_updates_evaluator_failures() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+                .into_iter()
+                .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = [
+            ("evaluator1".to_string(), mock_fresh_cs("evaluator1")),
+            ("evaluator2".to_string(), mock_fresh_cs("evaluator2")),
+        ]
+        .into_iter()
+        .collect();
+
+        let datapoint_id = Uuid::now_v7();
+
+        // Variant succeeds but one evaluator fails
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [(
+                "test_variant".to_string(),
+                mock_success(
+                    datapoint_id,
+                    "test_variant",
+                    [
+                        ("evaluator1".to_string(), Ok(Some(json!(0.7)))),
+                        (
+                            "evaluator2".to_string(),
+                            Err(anyhow::anyhow!("evaluator error")),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // Variant succeeded so variant_failures should have 1 observation (0.0)
+        assert_eq!(variant_failures["test_variant"].count, 1);
+        // Performance should be updated (scoring function uses first successful evaluator)
+        assert_eq!(variant_performance["test_variant"].count, 1);
+        // evaluator1 succeeded, evaluator2 failed
+        assert_eq!(evaluator_failures["evaluator1"].count, 1);
+        assert_eq!(evaluator_failures["evaluator2"].count, 1);
+    }
+
+    /// Test mixed scenario: one variant succeeds, one fails - verify correct CS updates for each.
+    #[test]
+    fn test_compute_updates_mixed_success_and_failure() {
+        let scoring_fn = FirstEvaluatorScore;
+        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
+            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
+        ]
+        .into_iter()
+        .collect();
+        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
+            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
+            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
+        ]
+        .into_iter()
+        .collect();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+                .into_iter()
+                .collect();
+
+        let datapoint_id = Uuid::now_v7();
+
+        // variant_a succeeds, variant_b fails
+        let results_by_datapoint: BatchResultsByDatapoint = [(
+            datapoint_id,
+            [
+                (
+                    "variant_a".to_string(),
+                    mock_success(
+                        datapoint_id,
+                        "variant_a",
+                        [("evaluator1".to_string(), Ok(Some(json!(0.9))))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                ),
+                (
+                    "variant_b".to_string(),
+                    BatchItemResult::Error(DatapointVariantError {
+                        datapoint_id,
+                        variant: None,
+                        message: "variant error".to_string(),
+                    }),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
+        let result = compute_updates(
+            &results_by_datapoint,
+            &scoring_fn,
+            &mut variant_performance,
+            &mut variant_failures,
+            &mut evaluator_failures,
+        );
+
+        assert!(result.is_ok());
+        // variant_a succeeded: performance and failures updated
+        assert_eq!(variant_performance["variant_a"].count, 1);
+        assert_eq!(variant_failures["variant_a"].count, 1);
+        // variant_b failed: only failures updated (count as failure), no performance
+        assert_eq!(variant_performance["variant_b"].count, 0);
+        assert_eq!(variant_failures["variant_b"].count, 1);
+        // evaluator only ran for variant_a
+        assert_eq!(evaluator_failures["evaluator1"].count, 1);
+    }
 
     // ============================================================================
     // Tests for check_topk_stopping
@@ -1656,397 +2058,5 @@ mod tests {
         let result = check_topk_stopping(&variant_performance, 2, 3, None).unwrap();
         assert!(result.stopped);
         assert_eq!(result.k, Some(3));
-    }
-
-    // ============================================================================
-    // Tests for compute_updates
-    // ============================================================================
-
-    /// Test that compute_updates handles empty results gracefully (no changes to CS maps).
-    #[test]
-    fn test_compute_updates_empty_results() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
-                .into_iter()
-                .collect();
-
-        // Empty results should not change any confidence sequences
-        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // Count should still be 0 since no observations were processed
-        assert_eq!(variant_performance["test_variant"].count, 0);
-        assert_eq!(variant_failures["test_variant"].count, 0);
-        assert_eq!(evaluator_failures["evaluator1"].count, 0);
-    }
-
-    /// Test that cancelled tasks are skipped and don't affect any confidence sequences.
-    #[test]
-    fn test_compute_updates_only_cancelled() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
-                .into_iter()
-                .collect();
-
-        // Cancelled results should not affect any statistics
-        // In the new structure, we group by datapoint, then by variant
-        // Cancelled tasks are skipped entirely in process_topk_batch,
-        // so an empty map represents the case of only cancelled tasks
-        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
-
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // Count should still be 0 since cancelled tasks don't count
-        assert_eq!(variant_performance["test_variant"].count, 0);
-        assert_eq!(variant_failures["test_variant"].count, 0);
-        assert_eq!(evaluator_failures["evaluator1"].count, 0);
-    }
-
-    /// Test that variant-level errors (BatchItemResult::Error) update failure CS but not performance/evaluator CS.
-    #[test]
-    fn test_compute_updates_variant_failures() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-
-        // Create two errors for two different datapoints
-        let datapoint_id_1 = Uuid::now_v7();
-        let datapoint_id_2 = Uuid::now_v7();
-
-        // Structure: datapoint_id -> variant_name -> result
-        let results_by_datapoint: BatchResultsByDatapoint = [
-            (
-                datapoint_id_1,
-                [(
-                    "test_variant".to_string(),
-                    BatchItemResult::Error(DatapointVariantError {
-                        datapoint_id: datapoint_id_1,
-                        variant: None,
-                        message: "test error 1".to_string(),
-                    }),
-                )]
-                .into_iter()
-                .collect(),
-            ),
-            (
-                datapoint_id_2,
-                [(
-                    "test_variant".to_string(),
-                    BatchItemResult::Error(DatapointVariantError {
-                        datapoint_id: datapoint_id_2,
-                        variant: None,
-                        message: "test error 2".to_string(),
-                    }),
-                )]
-                .into_iter()
-                .collect(),
-            ),
-        ]
-        .into_iter()
-        .collect();
-
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // variant_failures should have 2 observations (both 1.0 = failure)
-        assert_eq!(variant_failures["test_variant"].count, 2);
-        // Performance should not be updated since there were no successes
-        assert_eq!(variant_performance["test_variant"].count, 0);
-    }
-
-    /// Test that results for variants not in the CS maps are silently ignored.
-    #[test]
-    fn test_compute_updates_missing_variant_in_map() {
-        let scoring_fn = FirstEvaluatorScore;
-        // Don't include "test_variant" in confidence sequence maps - should handle gracefully
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            HashMap::new();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-
-        let datapoint_id = Uuid::now_v7();
-        let results_by_datapoint: BatchResultsByDatapoint = [(
-            datapoint_id,
-            [(
-                "test_variant".to_string(),
-                BatchItemResult::Error(DatapointVariantError {
-                    datapoint_id,
-                    variant: None,
-                    message: "test error".to_string(),
-                }),
-            )]
-            .into_iter()
-            .collect(),
-        )]
-        .into_iter()
-        .collect();
-
-        // Should not panic, just skip updates for missing variants
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // No maps should be modified since variant wasn't in any of them
-        assert!(variant_performance.is_empty());
-        assert!(variant_failures.is_empty());
-        assert!(evaluator_failures.is_empty());
-    }
-
-    /// Test that successful evaluations update performance and evaluator CS correctly.
-    #[test]
-    fn test_compute_updates_successful_evaluations() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
-            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
-        ]
-        .into_iter()
-        .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
-            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
-        ]
-        .into_iter()
-        .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
-                .into_iter()
-                .collect();
-
-        let datapoint_id = Uuid::now_v7();
-
-        // Both variants succeed with different scores
-        let results_by_datapoint: BatchResultsByDatapoint = [(
-            datapoint_id,
-            [
-                (
-                    "variant_a".to_string(),
-                    mock_success(
-                        datapoint_id,
-                        "variant_a",
-                        [("evaluator1".to_string(), Ok(Some(json!(0.8))))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                ),
-                (
-                    "variant_b".to_string(),
-                    mock_success(
-                        datapoint_id,
-                        "variant_b",
-                        [("evaluator1".to_string(), Ok(Some(json!(0.6))))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        )]
-        .into_iter()
-        .collect();
-
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // Both variants should have 1 performance observation
-        assert_eq!(variant_performance["variant_a"].count, 1);
-        assert_eq!(variant_performance["variant_b"].count, 1);
-        // Both variants should have 1 failure observation (0.0 = success)
-        assert_eq!(variant_failures["variant_a"].count, 1);
-        assert_eq!(variant_failures["variant_b"].count, 1);
-        // Evaluator should have 2 observations (one per variant)
-        assert_eq!(evaluator_failures["evaluator1"].count, 2);
-    }
-
-    /// Test that evaluator errors within successful inferences update evaluator failure CS.
-    #[test]
-    fn test_compute_updates_evaluator_failures() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-            ("evaluator1".to_string(), mock_fresh_cs("evaluator1")),
-            ("evaluator2".to_string(), mock_fresh_cs("evaluator2")),
-        ]
-        .into_iter()
-        .collect();
-
-        let datapoint_id = Uuid::now_v7();
-
-        // Variant succeeds but one evaluator fails
-        let results_by_datapoint: BatchResultsByDatapoint = [(
-            datapoint_id,
-            [(
-                "test_variant".to_string(),
-                mock_success(
-                    datapoint_id,
-                    "test_variant",
-                    [
-                        ("evaluator1".to_string(), Ok(Some(json!(0.7)))),
-                        (
-                            "evaluator2".to_string(),
-                            Err(anyhow::anyhow!("evaluator error")),
-                        ),
-                    ]
-                    .into_iter()
-                    .collect(),
-                ),
-            )]
-            .into_iter()
-            .collect(),
-        )]
-        .into_iter()
-        .collect();
-
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // Variant succeeded so variant_failures should have 1 observation (0.0)
-        assert_eq!(variant_failures["test_variant"].count, 1);
-        // Performance should be updated (scoring function uses first successful evaluator)
-        assert_eq!(variant_performance["test_variant"].count, 1);
-        // evaluator1 succeeded, evaluator2 failed
-        assert_eq!(evaluator_failures["evaluator1"].count, 1);
-        assert_eq!(evaluator_failures["evaluator2"].count, 1);
-    }
-
-    /// Test mixed scenario: one variant succeeds, one fails - verify correct CS updates for each.
-    #[test]
-    fn test_compute_updates_mixed_success_and_failure() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
-            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
-        ]
-        .into_iter()
-        .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> = [
-            ("variant_a".to_string(), mock_fresh_cs("variant_a")),
-            ("variant_b".to_string(), mock_fresh_cs("variant_b")),
-        ]
-        .into_iter()
-        .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
-                .into_iter()
-                .collect();
-
-        let datapoint_id = Uuid::now_v7();
-
-        // variant_a succeeds, variant_b fails
-        let results_by_datapoint: BatchResultsByDatapoint = [(
-            datapoint_id,
-            [
-                (
-                    "variant_a".to_string(),
-                    mock_success(
-                        datapoint_id,
-                        "variant_a",
-                        [("evaluator1".to_string(), Ok(Some(json!(0.9))))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                ),
-                (
-                    "variant_b".to_string(),
-                    BatchItemResult::Error(DatapointVariantError {
-                        datapoint_id,
-                        variant: None,
-                        message: "variant error".to_string(),
-                    }),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        )]
-        .into_iter()
-        .collect();
-
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // variant_a succeeded: performance and failures updated
-        assert_eq!(variant_performance["variant_a"].count, 1);
-        assert_eq!(variant_failures["variant_a"].count, 1);
-        // variant_b failed: only failures updated (count as failure), no performance
-        assert_eq!(variant_performance["variant_b"].count, 0);
-        assert_eq!(variant_failures["variant_b"].count, 1);
-        // evaluator only ran for variant_a
-        assert_eq!(evaluator_failures["evaluator1"].count, 1);
     }
 }
