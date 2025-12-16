@@ -632,7 +632,34 @@ struct VariantStatusParams {
     variant_failure_threshold: Option<f64>,
 }
 
-/// Update variant statuses based on current confidence sequences and top-k stopping result.
+/// Updates variant statuses based on confidence sequences and top-k stopping results.
+///
+/// This function transitions variants from `Active` to one of the terminal states:
+/// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
+/// - `Include`: Variant is confidently in the top k_min set
+/// - `Exclude`: Variant is confidently outside the top k_max set
+///
+/// The checks are applied in priority order (failure > global stopping > early exclusion > early inclusion),
+/// so a variant that would otherwise be included can still be marked as `Failed` if its failure rate
+/// is too high.
+///
+/// # Status Transition Logic
+///
+/// 1. **Skip non-active**: Variants already in a terminal state are not modified.
+///
+/// 2. **Failure check**: If `variant_failure_threshold` is set and the variant's failure rate
+///    CS lower bound exceeds it, mark as `Failed`.
+///
+/// 3. **Global stopping**: If `stopping_result.stopped` is true, mark variants in `top_variants`
+///    as `Include` and all others as `Exclude`.
+///
+/// 4. **Early exclusion**: If at least `k_max` other variants have lower bounds above this
+///    variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
+///    so mark as `Exclude`.
+///
+/// 5. **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
+///    `(num_variants - k_min)` others (adjusted by epsilon), it's confidently in the top k_min,
+///    so mark as `Include`.
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
