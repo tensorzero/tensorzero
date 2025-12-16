@@ -122,10 +122,11 @@ pub async fn tensorzero_auth_middleware(
     ));
 
     match do_auth.await {
-        Ok((parsed_key, _key_info)) => {
+        Ok((parsed_key, key_info)) => {
             request.extensions_mut().insert(RequestApiKeyExtension {
                 api_key: Arc::new(parsed_key),
             });
+            request.extensions_mut().insert(key_info);
             next.run(request).await
         }
         Err(e) => {
