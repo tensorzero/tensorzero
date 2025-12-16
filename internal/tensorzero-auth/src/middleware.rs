@@ -13,7 +13,7 @@ use tracing::Instrument;
 
 use crate::{
     key::{TensorZeroApiKey, TensorZeroAuthError},
-    postgres::AuthResult,
+    postgres::{AuthResult, KeyInfo},
 };
 
 #[derive(Clone)]
@@ -125,8 +125,8 @@ pub async fn tensorzero_auth_middleware(
         Ok((parsed_key, key_info)) => {
             request.extensions_mut().insert(RequestApiKeyExtension {
                 api_key: Arc::new(parsed_key),
+                key_info: key_info.clone(),
             });
-            request.extensions_mut().insert(key_info);
             next.run(request).await
         }
         Err(e) => {
@@ -153,4 +153,5 @@ pub async fn tensorzero_auth_middleware(
 #[derive(Debug, Clone)]
 pub struct RequestApiKeyExtension {
     pub api_key: Arc<TensorZeroApiKey>,
+    pub key_info: KeyInfo,
 }
