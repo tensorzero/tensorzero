@@ -42,7 +42,7 @@ export function DatasetCombobox({
       emptyMessage="No datasets found"
       disabled={disabled}
       allowCreation={allowCreation}
-      creationHint={allowCreation ? "Type to create a new dataset" : undefined}
+      createHint={allowCreation ? "Type to create a new dataset" : undefined}
       createHeading={allowCreation ? "New dataset" : undefined}
       loading={isLoading}
       loadingMessage="Loading datasets..."

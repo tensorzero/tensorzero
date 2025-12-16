@@ -23,7 +23,7 @@ type ComboboxProps = {
   name?: string;
   ariaLabel?: string;
   allowCreation?: boolean;
-  creationHint?: string;
+  createHint?: string;
   createHeading?: string;
   loading?: boolean;
   loadingMessage?: string;
@@ -44,7 +44,7 @@ export function Combobox({
   name,
   ariaLabel,
   allowCreation = false,
-  creationHint,
+  createHint,
   createHeading = "Create new",
   loading = false,
   loadingMessage = "Loading...",
@@ -149,8 +149,8 @@ export function Combobox({
               />
             )}
           </ComboboxContent>
-          {creationHint && !showCreateOption && !loading && !error && (
-            <ComboboxHint>{creationHint}</ComboboxHint>
+          {createHint && !showCreateOption && !loading && !error && (
+            <ComboboxHint>{createHint}</ComboboxHint>
           )}
         </PopoverContent>
       </Popover>
