@@ -1332,7 +1332,7 @@ fn test_update_variant_statuses_topk_stopping() {
     let params = VariantStatusParams {
         k_min: 1,
         k_max: 1,
-        epsilon: 0.0,
+        epsilon: 0.02, // Non-zero epsilon; global stopping takes precedence anyway
         variant_failure_threshold: None,
     };
     update_variant_statuses(
@@ -1379,7 +1379,7 @@ fn test_update_variant_statuses_topk_stopping_multiple_winners() {
     let params = VariantStatusParams {
         k_min: 2,
         k_max: 2,
-        epsilon: 0.0,
+        epsilon: 0.03, // Non-zero epsilon; global stopping takes precedence anyway
         variant_failure_threshold: None,
     };
     update_variant_statuses(
@@ -1429,7 +1429,7 @@ fn test_update_variant_statuses_early_exclusion() {
     let params = VariantStatusParams {
         k_min: 1,
         k_max: 2,
-        epsilon: 0.0,
+        epsilon: 0.05, // Non-zero epsilon; intervals are well-separated so doesn't affect outcome
         variant_failure_threshold: None,
     };
     update_variant_statuses(
@@ -1708,7 +1708,7 @@ fn test_update_variant_statuses_early_exclusion_k_max_1() {
     let params = VariantStatusParams {
         k_min: 1,
         k_max: 1,
-        epsilon: 0.0,
+        epsilon: 0.05, // Non-zero epsilon; intervals are well-separated so doesn't affect outcome
         variant_failure_threshold: None,
     };
     update_variant_statuses(
@@ -1723,4 +1723,203 @@ fn test_update_variant_statuses_early_exclusion_k_max_1() {
     assert_eq!(variant_status["worst"], VariantStatus::Exclude);
     // "best" beats 1 other, needs >= (2 - 1) = 1, so gets early inclusion
     assert_eq!(variant_status["best"], VariantStatus::Include);
+}
+
+/// Test that epsilon tolerance enables early exclusion for nearly-separated intervals.
+#[test]
+fn test_update_variant_statuses_epsilon_enables_exclusion() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("best".to_string(), VariantStatus::Active),
+        ("mid".to_string(), VariantStatus::Active),
+        ("worst".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // "worst" has upper bound 0.505, "best" has lower bound 0.5
+    // Without epsilon: 0.505 < 0.5 is false (need strict <), so no exclusion with k = 1
+    // With epsilon = 0.01: 0.505 - 0.01 = 0.495 < 0.5 is true, so exclusion triggers
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("best", 0.595, 0.7),
+        mock_cs_with_bounds("mid", 0.5, 0.6),
+        mock_cs_with_bounds("worst", 0.3, 0.505),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    // Without epsilon, "worst" and "mid" both stay Active, "best gets early inclusion"
+    let params_no_epsilon = VariantStatusParams {
+        k_min: 2,
+        k_max: 2,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &stopping_result,
+        &params_no_epsilon,
+    );
+
+    assert_eq!(variant_status["worst"], VariantStatus::Active);
+    assert_eq!(variant_status["mid"], VariantStatus::Active);
+    assert_eq!(variant_status["best"], VariantStatus::Include);
+
+    // Reset for second test
+    // *variant_status.get_mut("worst").unwrap() = VariantStatus::Active;
+    *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
+
+    // Second test: with epsilon = 0.01, "worst" should be excluded
+    let params_with_epsilon = VariantStatusParams {
+        k_min: 2,
+        k_max: 2,
+        epsilon: 0.01,
+        variant_failure_threshold: None,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &stopping_result,
+        &params_with_epsilon,
+    );
+
+    // Now "worst" should be excluded, and mid and best should be included
+    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
+    assert_eq!(variant_status["mid"], VariantStatus::Include);
+    assert_eq!(variant_status["best"], VariantStatus::Include);
+}
+
+/// Test that epsilon tolerance enables early inclusion for nearly-separated intervals.
+#[test]
+fn test_update_variant_statuses_epsilon_enables_inclusion() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("best".to_string(), VariantStatus::Active),
+        ("worst".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // "best" has lower bound 0.499, "worst" has upper bound 0.5
+    // Without epsilon: 0.499 > 0.5 is false, so "best" doesn't beat "worst"
+    // With epsilon = 0.01: 0.499 > 0.5 - 0.01 = 0.49 is true, so "best" beats "worst"
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("best", 0.499, 0.7),
+        mock_cs_with_bounds("worst", 0.3, 0.5),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let stopping_result = TopKStoppingResult {
+        stopped: false,
+        k: None,
+        top_variants: vec![],
+    };
+
+    // Without epsilon, "best" stays Active (0.499 is not > 0.5)
+    let params_no_epsilon = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.0,
+        variant_failure_threshold: None,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &stopping_result,
+        &params_no_epsilon,
+    );
+
+    // "best" doesn't beat "worst" (0.499 is not > 0.5), so stays Active
+    assert_eq!(variant_status["best"], VariantStatus::Active);
+    assert_eq!(variant_status["worst"], VariantStatus::Active);
+
+    // Reset for second test
+    *variant_status.get_mut("best").unwrap() = VariantStatus::Active;
+    *variant_status.get_mut("worst").unwrap() = VariantStatus::Active;
+
+    // With epsilon = 0.01, "best" should get early inclusion
+    let params_with_epsilon = VariantStatusParams {
+        k_min: 1,
+        k_max: 1,
+        epsilon: 0.01,
+        variant_failure_threshold: None,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &stopping_result,
+        &params_with_epsilon,
+    );
+
+    // Now "best" beats "worst" (0.499 > 0.5 - 0.01 = 0.49), so gets early inclusion
+    assert_eq!(variant_status["best"], VariantStatus::Include);
+    // "worst" should be excluded (best beats it, and k_max = 1)
+    assert_eq!(variant_status["worst"], VariantStatus::Exclude);
+}
+
+/// Test that global stopping via stopping_result marks all variants appropriately.
+#[test]
+fn test_update_variant_statuses_global_stopping() {
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("a".to_string(), VariantStatus::Active),
+        ("b".to_string(), VariantStatus::Active),
+        ("c".to_string(), VariantStatus::Active),
+        ("d".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // Performance values don't matter when global stopping is triggered
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("a", 0.7, 0.9),
+        mock_cs_with_bounds("b", 0.5, 0.6),
+        mock_cs_with_bounds("c", 0.4, 0.5),
+        mock_cs_with_bounds("d", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    // Global stopping triggered with "a" and "b" as top variants
+    let stopping_result = TopKStoppingResult {
+        stopped: true,
+        k: Some(2),
+        top_variants: vec!["a".to_string(), "b".to_string()],
+    };
+
+    let params = VariantStatusParams {
+        k_min: 2,
+        k_max: 2,
+        epsilon: 0.05,
+        variant_failure_threshold: None,
+    };
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &stopping_result,
+        &params,
+    );
+
+    // Variants in top_variants should be Include
+    assert_eq!(variant_status["a"], VariantStatus::Include);
+    assert_eq!(variant_status["b"], VariantStatus::Include);
+    // Variants not in top_variants should be Exclude
+    assert_eq!(variant_status["c"], VariantStatus::Exclude);
+    assert_eq!(variant_status["d"], VariantStatus::Exclude);
 }
