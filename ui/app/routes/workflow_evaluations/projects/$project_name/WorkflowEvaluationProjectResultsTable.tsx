@@ -24,7 +24,7 @@ import {
   formatConfidenceInterval,
 } from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue from "~/components/metric/MetricValue";
+import { MetricBadge } from "~/components/metric/MetricBadge";
 import type {
   GroupedWorkflowEvaluationRunEpisodeWithFeedback,
   WorkflowEvaluationRunStatisticsByMetricName,
@@ -191,7 +191,7 @@ export function WorkflowEvaluationProjectResultsTable({
                                 >
                                   {value && metricConfig ? (
                                     <>
-                                      <MetricValue
+                                      <MetricBadge
                                         value={value}
                                         metricType={metricConfig.type}
                                         optimize={metricConfig.optimize}

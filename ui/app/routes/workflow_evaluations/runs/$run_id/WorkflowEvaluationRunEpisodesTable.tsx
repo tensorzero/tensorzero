@@ -21,7 +21,7 @@ import {
 } from "~/utils/config/feedback";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
-import MetricValue from "~/components/metric/MetricValue";
+import { MetricBadge } from "~/components/metric/MetricBadge";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import type { FeedbackRow } from "~/types/tensorzero";
 
@@ -157,20 +157,17 @@ function FeedbackMetricValue({
     return <FeedbackValue feedback={feedback} />;
   }
 
-  // Handle float and boolean metrics with MetricValue
   if (metricConfig) {
     return (
-      <MetricValue
+      <MetricBadge
         value={value}
         metricType={metricConfig.type}
         optimize={metricConfig.optimize}
-        cutoff={metricConfig.type === "boolean" ? 0.5 : undefined}
         isHumanFeedback={false}
       />
     );
   }
 
-  // Unknown metric type
   return <span className="text-gray-400">-</span>;
 }
 
