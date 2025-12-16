@@ -14,8 +14,8 @@ type ComboboxProps = {
   selected: string | null;
   onSelect: (value: string, isNew: boolean) => void;
   items: string[];
-  getItemIcon?: (item: string | null, isSelected: boolean) => React.ReactNode;
-  getItemSuffix?: (item: string | null) => React.ReactNode;
+  getPrefix?: (item: string | null, isSelected: boolean) => React.ReactNode;
+  getSuffix?: (item: string | null) => React.ReactNode;
   getItemDataAttributes?: (item: string) => Record<string, string>;
   placeholder: string;
   emptyMessage: string;
@@ -35,8 +35,8 @@ export function Combobox({
   selected,
   onSelect,
   items,
-  getItemIcon,
-  getItemSuffix,
+  getPrefix,
+  getSuffix,
   getItemDataAttributes,
   placeholder,
   emptyMessage,
@@ -87,13 +87,13 @@ export function Combobox({
   const inputPrefix = useMemo(() => {
     const item = selected && !searchValue ? selected : null;
     const isSelected = Boolean(selected && !searchValue);
-    return getItemIcon?.(item, isSelected);
-  }, [selected, searchValue, getItemIcon]);
+    return getPrefix?.(item, isSelected);
+  }, [selected, searchValue, getPrefix]);
 
   const inputSuffix = useMemo(() => {
     const item = selected && !searchValue ? selected : null;
-    return getItemSuffix?.(item);
-  }, [selected, searchValue, getItemSuffix]);
+    return getSuffix?.(item);
+  }, [selected, searchValue, getSuffix]);
 
   return (
     <div className="w-full">
@@ -143,8 +143,8 @@ export function Combobox({
                 showCreateOption={showCreateOption}
                 createHeading={createHeading}
                 existingHeading="Existing"
-                getItemIcon={getItemIcon}
-                getItemSuffix={getItemSuffix}
+                getPrefix={getPrefix}
+                getSuffix={getSuffix}
                 getItemDataAttributes={getItemDataAttributes}
               />
             )}

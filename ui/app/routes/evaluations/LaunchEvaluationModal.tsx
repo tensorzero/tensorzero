@@ -203,7 +203,7 @@ function EvaluationForm({
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
         items={evaluation_names}
-        getItemIcon={() => <Evaluation className="h-4 w-4 shrink-0" />}
+        getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
         placeholder="Select evaluation"
         emptyMessage="No evaluations found"
       />
@@ -264,7 +264,7 @@ function EvaluationForm({
         selected={selectedVariantName}
         onSelect={setSelectedVariantName}
         items={functionConfig ? Object.keys(functionConfig.variants) : []}
-        getItemIcon={() => <GitBranch className="h-4 w-4 shrink-0" />}
+        getPrefix={() => <GitBranch className="h-4 w-4 shrink-0" />}
         placeholder="Select variant"
         emptyMessage="No variants found"
         disabled={!selectedEvaluationName}

@@ -8,8 +8,8 @@ type ComboboxMenuItemsProps = {
   showCreateOption: boolean;
   createHeading?: string;
   existingHeading?: string;
-  getItemIcon?: (item: string | null, isSelected: boolean) => React.ReactNode;
-  getItemSuffix?: (item: string | null) => React.ReactNode;
+  getPrefix?: (item: string | null, isSelected: boolean) => React.ReactNode;
+  getSuffix?: (item: string | null) => React.ReactNode;
   getItemDataAttributes?: (item: string) => Record<string, string>;
 };
 
@@ -21,8 +21,8 @@ export function ComboboxMenuItems({
   showCreateOption,
   createHeading = "Create new",
   existingHeading,
-  getItemIcon,
-  getItemSuffix,
+  getPrefix,
+  getSuffix,
   getItemDataAttributes,
 }: ComboboxMenuItemsProps) {
   return (
@@ -34,7 +34,7 @@ export function ComboboxMenuItems({
             onSelect={() => onSelectItem(searchValue.trim(), true)}
             className="flex items-center gap-2"
           >
-            {getItemIcon?.(null, false)}
+            {getPrefix?.(null, false)}
             <span className="truncate font-mono">{searchValue.trim()}</span>
           </CommandItem>
         </CommandGroup>
@@ -52,14 +52,10 @@ export function ComboboxMenuItems({
                 {...getItemDataAttributes?.(item)}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  {getItemIcon?.(item, isSelected)}
+                  {getPrefix?.(item, isSelected)}
                   <span className="truncate font-mono">{item}</span>
                 </div>
-                {getItemSuffix && (
-                  <span className="text-fg-tertiary min-w-8 flex-shrink-0 text-right font-mono text-sm whitespace-nowrap">
-                    {getItemSuffix(item)}
-                  </span>
-                )}
+                {getSuffix?.(item)}
               </CommandItem>
             );
           })}

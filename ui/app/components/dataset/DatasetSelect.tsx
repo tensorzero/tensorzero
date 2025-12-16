@@ -14,8 +14,7 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import clsx from "clsx";
-import { ComboboxMenuItems } from "~/components/ui/combobox";
-import { formatCompactNumber } from "~/utils/chart";
+import { ComboboxMenuItems } from "~/components/ui/combobox/ComboboxMenuItems";
 import {
   useDatasetOptions,
   getDatasetItemDataAttributes,
@@ -43,8 +42,8 @@ export function DatasetSelect({
     isError,
     computedPlaceholder,
     searchPlaceholder,
-    getItemIcon,
-    getItemSuffix,
+    getPrefix,
+    getSuffix,
     getSelectedDataset,
     filterItems,
     shouldShowCreateOption,
@@ -86,18 +85,14 @@ export function DatasetSelect({
           {selected ? (
             <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
               {selectedDataset ? (
-                <Table size={16} className="h-4 w-4 shrink-0 text-green-700" />
+                <Table size={16} className="shrink-0 text-green-700" />
               ) : (
-                <TablePlus className="h-4 w-4 shrink-0 text-blue-600" />
+                <TablePlus size={16} className="shrink-0 text-blue-600" />
               )}
               <span className="truncate font-mono text-sm">
                 {selectedDataset?.name ?? selected}
               </span>
-              {selectedDataset && (
-                <span className="bg-bg-tertiary text-fg-tertiary ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
-                  {formatCompactNumber(selectedDataset.count)}
-                </span>
-              )}
+              <div className="ml-auto">{getSuffix(selected)}</div>
             </div>
           ) : (
             <span className="flex flex-row items-center gap-2">
@@ -153,8 +148,8 @@ export function DatasetSelect({
                 showCreateOption={showCreateOption}
                 createHeading="New dataset"
                 existingHeading="Existing"
-                getItemIcon={getItemIcon}
-                getItemSuffix={getItemSuffix}
+                getPrefix={getPrefix}
+                getSuffix={getSuffix}
                 getItemDataAttributes={getDatasetItemDataAttributes}
               />
             </CommandList>

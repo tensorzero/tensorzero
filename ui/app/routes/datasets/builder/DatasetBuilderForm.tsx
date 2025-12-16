@@ -150,6 +150,7 @@ export function DatasetBuilderForm() {
             name="dataset"
             label="Dataset"
             placeholder="Select dataset"
+            allowCreation
             onSelect={(dataset, isNew) => {
               setIsNewDataset(isNew);
             }}

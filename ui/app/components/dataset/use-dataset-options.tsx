@@ -64,10 +64,14 @@ export function useDatasetOptions({
     return "Search datasets";
   }, [allowCreation, sortedDatasetNames.length]);
 
-  const getItemIcon = useCallback(
+  const getPrefix = useCallback(
     (item: string | null, isSelected: boolean) => {
       if (!item) {
-        return <TablePlus size={16} className="text-blue-600" />;
+        return allowCreation ? (
+          <TablePlus size={16} className="text-blue-600" />
+        ) : (
+          <Table size={16} className="text-fg-muted" />
+        );
       }
       const exists = datasetsByName.has(item);
       if (isSelected && exists) {
@@ -78,15 +82,19 @@ export function useDatasetOptions({
       }
       return <Table size={16} className="text-fg-muted" />;
     },
-    [datasetsByName],
+    [allowCreation, datasetsByName],
   );
 
-  const getItemSuffix = useCallback(
+  const getSuffix = useCallback(
     (item: string | null) => {
       if (!item) return null;
       const dataset = datasetsByName.get(item);
       if (!dataset) return null;
-      return formatCompactNumber(dataset.count);
+      return (
+        <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1.5 py-0.5 font-mono text-xs">
+          {formatCompactNumber(dataset.count)}
+        </span>
+      );
     },
     [datasetsByName],
   );
@@ -124,12 +132,13 @@ export function useDatasetOptions({
   );
 
   return {
+    items: sortedDatasetNames,
     isLoading,
     isError,
     computedPlaceholder,
     searchPlaceholder,
-    getItemIcon,
-    getItemSuffix,
+    getPrefix,
+    getSuffix,
     getSelectedDataset,
     filterItems,
     shouldShowCreateOption,

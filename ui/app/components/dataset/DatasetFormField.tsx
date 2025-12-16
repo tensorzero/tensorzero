@@ -21,7 +21,7 @@ export function DatasetFormField<T extends FieldValues>({
   label = "Dataset",
   onSelect,
   placeholder,
-  allowCreation = true,
+  allowCreation,
 }: DatasetFormFieldProps<T>) {
   return (
     <FormField

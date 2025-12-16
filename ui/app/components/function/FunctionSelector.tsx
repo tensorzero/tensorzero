@@ -37,8 +37,8 @@ export function FunctionSelector({
     [functions, hideDefaultFunction],
   );
 
-  const getItemIcon = useCallback(
-    (name: string | null, _isSelected: boolean) => {
+  const getPrefix = useCallback(
+    (name: string | null) => {
       if (!name) return <Functions className="h-4 w-4 shrink-0" />;
       const fn = functions[name];
       return fn ? <FunctionTypeIcon type={fn.type} /> : null;
@@ -51,7 +51,7 @@ export function FunctionSelector({
       selected={selected}
       onSelect={(value) => onSelect?.(value)}
       items={functionNames}
-      getItemIcon={getItemIcon}
+      getPrefix={getPrefix}
       placeholder="Select function"
       emptyMessage="No functions found"
       ariaLabel={ariaLabel}
