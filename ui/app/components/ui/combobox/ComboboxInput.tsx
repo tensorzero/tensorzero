@@ -60,8 +60,14 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
             clearable ? "pr-14" : "pr-8",
           )}
         />
+        {/* Annotation overlay */}
         {annotation && value && (
-          <div className="pointer-events-none absolute inset-y-0 left-9 flex items-center">
+          <div
+            className={clsx(
+              "pointer-events-none absolute inset-y-0 left-9 flex items-center",
+              "translate-x-px -translate-y-px", // align with menu item annotations
+            )}
+          >
             <span className="invisible font-mono text-base md:text-sm">
               {value}
             </span>
