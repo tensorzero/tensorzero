@@ -30,6 +30,8 @@ services:
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
       - TENSORZERO_SKIP_LARGE_FIXTURES
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       clickhouse:
         condition: service_healthy
