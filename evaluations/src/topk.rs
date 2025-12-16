@@ -40,10 +40,10 @@ use crate::{
 // ============================================================================
 
 /// Default batch size for top-k evaluation
-const DEFAULT_BATCH_SIZE: usize = 100;
+const DEFAULT_BATCH_SIZE: usize = 20;
 
 /// Default confidence sequence resolution (grid points for mean estimation)
-const DEFAULT_CS_RESOLUTION: usize = 101;
+const DEFAULT_CS_RESOLUTION: usize = 1001;
 
 /// Default alpha (significance level) for confidence sequences
 const DEFAULT_ALPHA: f32 = 0.05;
