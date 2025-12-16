@@ -66,7 +66,6 @@ export function EvaluationCombobox({
       placeholder={placeholder}
       emptyMessage="No evaluations found"
       disabled={isDisabled}
-      monospace
       clearable
       onClear={handleClear}
       getItemSuffix={getItemSuffix}

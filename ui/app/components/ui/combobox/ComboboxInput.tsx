@@ -15,7 +15,6 @@ type ComboboxInputProps = {
   placeholder: string;
   disabled?: boolean;
   monospace?: boolean;
-  open: boolean;
   icon: IconComponent;
   clearable?: boolean;
   onClear?: () => void;
@@ -32,7 +31,6 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       placeholder,
       disabled = false,
       monospace = false,
-      open,
       icon: Icon,
       clearable = false,
       onClear,
@@ -77,12 +75,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-          <ChevronDown
-            className={clsx(
-              "text-fg-tertiary h-4 w-4 transition duration-300 ease-out",
-              open && "-rotate-180",
-            )}
-          />
+          <ChevronDown className="text-fg-tertiary h-4 w-4" />
         </div>
       </div>
     );

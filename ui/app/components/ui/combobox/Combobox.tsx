@@ -43,7 +43,7 @@ export function Combobox({
   placeholder,
   emptyMessage,
   disabled = false,
-  monospace = false,
+  monospace = true,
   name,
   clearable = false,
   onClear,
@@ -93,7 +93,6 @@ export function Combobox({
             placeholder={placeholder}
             disabled={disabled}
             monospace={monospace}
-            open={open}
             icon={Icon}
             clearable={clearable && !!selected}
             onClear={handleClear}
