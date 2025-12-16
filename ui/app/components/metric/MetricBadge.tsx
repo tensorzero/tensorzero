@@ -14,7 +14,7 @@ export function MetricBadge({
   error,
 }: MetricBadgeProps): React.ReactElement {
   const baseClasses =
-    "inline-flex items-center gap-1 rounded-full font-mono whitespace-nowrap px-2 py-0.5 text-xs";
+    "inline-flex items-center gap-1.5 rounded-full font-mono whitespace-nowrap px-2 py-0.5 text-xs";
 
   if (error) {
     return (
@@ -28,7 +28,7 @@ export function MetricBadge({
   const displayValue = formatValue(value);
 
   return (
-    <span className={clsx(baseClasses, "bg-gray-100 text-gray-800")}>
+    <span className={clsx(baseClasses, "bg-gray-100 text-gray-900")}>
       {label && <span className="text-gray-500">{label}</span>}
       {displayValue}
     </span>
