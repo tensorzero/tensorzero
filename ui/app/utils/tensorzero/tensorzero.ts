@@ -26,6 +26,7 @@ import type {
   DeleteDatapointsResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
+  GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
@@ -944,6 +945,25 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetWorkflowEvaluationProjectsResponse;
+  }
+
+  /**
+   * Counts workflow evaluation projects.
+   * @returns A promise that resolves with the workflow evaluation project count
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationProjects(): Promise<number> {
+    const response = await this.fetch(
+      "/internal/workflow-evaluations/projects/count",
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as GetWorkflowEvaluationProjectCountResponse;
+    return body.count;
   }
 
   /**

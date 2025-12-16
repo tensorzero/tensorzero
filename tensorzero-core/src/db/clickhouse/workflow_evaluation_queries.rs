@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 
 use super::ClickHouseConnectionInfo;
-use super::select_queries::parse_json_rows;
+use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationProjectRow;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
 impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
@@ -40,6 +40,26 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &params).await?;
 
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error> {
+        let query = r"
+            SELECT
+                toUInt32(countDistinct(project_name)) as count
+            FROM DynamicEvaluationRunByProjectName
+            WHERE project_name IS NOT NULL
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = parse_count(response.response.as_str())?;
+
+        u32::try_from(count).map_err(|error| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to convert workflow evaluation project count: {error}"),
+            })
+        })
     }
 }
 
@@ -159,5 +179,40 @@ mod tests {
         assert_eq!(result[0].name, "project1");
         assert_eq!(result[1].name, "project2");
         assert_eq!(result[2].name, "project3");
+    }
+
+    #[tokio::test]
+    async fn test_count_workflow_evaluation_projects() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "
+                SELECT toUInt32(countDistinct(project_name)) as count
+                FROM DynamicEvaluationRunByProjectName
+                WHERE project_name IS NOT NULL
+                FORMAT JSONEachRow",
+                );
+                assert!(params.is_empty());
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":2}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let count = conn.count_workflow_evaluation_projects().await.unwrap();
+
+        assert_eq!(count, 2);
     }
 }
