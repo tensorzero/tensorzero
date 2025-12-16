@@ -185,7 +185,7 @@ async fn test_thinking_rejected_128k() {
     // since we want to test the current Anthropic behavior.
     let random = Uuid::now_v7();
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": "anthropic::claude-sonnet-4-5-20250929",
         "input":{
             "messages": [
                 {
@@ -223,36 +223,6 @@ async fn test_thinking_rejected_128k() {
             .contains("the maximum allowed number of output tokens"),
         "Unexpected error: {resp_json}"
     );
-}
-
-async fn test_thinking_helper(client: &Client, payload: &serde_json::Value) -> serde_json::Value {
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(payload)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let resp_json = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "Unexpected status code with response: {resp_json}"
-    );
-    let content = resp_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 2, "Unexpected content length: {content:?}");
-    assert_eq!(content[0]["type"], "thought", "Unexpected content type");
-    assert_eq!(content[1]["type"], "text", "Unexpected content type");
-    assert!(
-        !content[1]["text"]
-            .as_str()
-            .unwrap()
-            .contains("my_custom_stop"),
-        "Found my_custom_stop in content: {}",
-        content[1]["text"].as_str().unwrap()
-    );
-    resp_json
 }
 
 #[tokio::test]
@@ -325,112 +295,10 @@ async fn test_empty_chunks_success() {
 }
 
 #[tokio::test]
-async fn test_thinking_inference_extra_header_128k() {
-    let client = Client::new();
-
-    // This model uses a custom stop sequence, as we want to make sure that
-    // we don't actually generate 128k tokens of output. This test just verifies
-    // that we can pass through the necessary 'anthropic-beta' header to support
-    // a large 'max_tokens'
-    let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
-        "input":{
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Output a haiku that ends in the word 'my_custom_stop'"
-                }
-            ]},
-        "extra_headers": [
-            {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
-                "provider_name": "anthropic",
-                "name": "anthropic-beta",
-                "value": "output-128k-2025-02-19"
-            }
-        ],
-        "extra_body": [
-            {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
-                "provider_name": "anthropic",
-                "pointer": "/stop_sequences",
-                "value": [
-                    "my_custom_stop",
-                ]
-            }
-        ],
-        // We use a budget tokens of 1024 to make sure that it doesn't think for too long,
-        // since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
-        // to 128k in 'test_thinking_128k'
-        "params": {
-            "chat_completion": {
-                "max_tokens": 128000,
-                "thinking_budget_tokens": 1024,
-            }
-        },
-    });
-
-    let response = test_thinking_helper(&client, &payload).await;
-    let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
-
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
-
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-
-    // Check that thinking_budget_tokens was stored correctly
-    let inference_params: Value =
-        serde_json::from_str(result["inference_params"].as_str().unwrap()).unwrap();
-    println!("inference_params: {inference_params:?}");
-    assert_eq!(
-        inference_params["chat_completion"]["thinking_budget_tokens"],
-        1024
-    );
-}
-
-#[tokio::test]
-async fn test_thinking_128k() {
-    let client = Client::new();
-
-    // This model uses a custom stop sequence, as we want to make sure that
-    // we don't actually generate 128k tokens of output. This test just verifies
-    // that we can pass through the necessary 'anthropic-beta' header to support
-    // a large 'max_tokens'
-    let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking-128k",
-        "input":{
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Output a haiku that ends in the word 'my_custom_stop'"
-                }
-            ]},
-        "params": {
-            "chat_completion": {
-                "thinking_budget_tokens": 1024,
-                "max_tokens": 128000,
-            }
-        },
-        "stream": false,
-    });
-
-    test_thinking_helper(&client, &payload).await;
-
-    // We don't check the database, as we already do that in lots of places.
-}
-
-#[tokio::test]
 pub async fn test_thinking_signature() {
     test_thinking_signature_helper(
         "anthropic-thinking",
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
     )
     .await;
@@ -621,7 +489,7 @@ pub async fn test_thinking_signature_helper(
 #[tokio::test]
 pub async fn test_redacted_thinking() {
     test_redacted_thinking_helper(
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
         "anthropic",
     )
@@ -1031,7 +899,7 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
-    test_streaming_thinking_helper("anthropic::claude-3-7-sonnet-20250219", "anthropic").await;
+    test_streaming_thinking_helper("anthropic::claude-sonnet-4-5-20250929", "anthropic").await;
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
