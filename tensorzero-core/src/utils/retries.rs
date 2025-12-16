@@ -1,5 +1,6 @@
 #[expect(clippy::disallowed_types)]
 use backon::{ExponentialBuilder, Retryable};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
 
@@ -18,7 +19,7 @@ use pyo3::prelude::*;
  * this code.
  */
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Copy, Clone, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {

@@ -16,7 +16,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
   await page.waitForTimeout(500);
-  await page.getByText("Select an evaluation").click();
+  await page.getByPlaceholder("Select evaluation").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "entity_extraction" }).click();
   await page.waitForTimeout(500);
@@ -24,7 +24,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.locator('[data-dataset-name="foo"]').click();
   await page.waitForTimeout(500);
-  await page.getByText("Select a variant").click();
+  await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   // IMPORTANT - we need to set concurrency to 1 in order to prevent a race condition
@@ -63,7 +63,7 @@ test("push the new run button, launch an image evaluation", async ({
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
   await page.waitForTimeout(500);
-  await page.getByText("Select an evaluation").click();
+  await page.getByPlaceholder("Select evaluation").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "images" }).click();
   await page.waitForTimeout(500);
@@ -71,7 +71,7 @@ test("push the new run button, launch an image evaluation", async ({
   await page.waitForTimeout(500);
   await page.locator('[data-dataset-name="baz"]').click();
   await page.waitForTimeout(500);
-  await page.getByText("Select a variant").click();
+  await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "honest_answer" }).click();
   // IMPORTANT - we need to set concurrency to 1 in order to prevent a race condition
@@ -110,7 +110,7 @@ test("run evaluation with dataset with no output", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
   await page.waitForTimeout(500);
-  await page.getByText("Select an evaluation").click();
+  await page.getByPlaceholder("Select evaluation").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "haiku" }).click();
   await page.waitForTimeout(500);
@@ -118,7 +118,7 @@ test("run evaluation with dataset with no output", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.locator('[data-dataset-name="no_output"]').click();
   await page.waitForTimeout(500);
-  await page.getByText("Select a variant").click();
+  await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "initial_prompt_gpt4o_mini" }).click();
   await page.getByTestId("concurrency-limit").fill("5");
@@ -153,7 +153,7 @@ test("launch evaluation with adaptive stopping parameters", async ({
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();
   await page.waitForTimeout(500);
-  await page.getByText("Select an evaluation").click();
+  await page.getByPlaceholder("Select evaluation").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "entity_extraction" }).click();
   await page.waitForTimeout(500);
@@ -161,7 +161,7 @@ test("launch evaluation with adaptive stopping parameters", async ({
   await page.waitForTimeout(500);
   await page.locator('[data-dataset-name="foo"]').click();
   await page.waitForTimeout(500);
-  await page.getByText("Select a variant").click();
+  await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   await page.getByTestId("concurrency-limit").fill("1");

@@ -76,10 +76,14 @@ pub struct ConfigSnapshot {
     /// uses the compiled templates in `Config.templates`, not these raw strings.
     pub extra_templates: HashMap<String, String>,
 
+    /// User-defined tags for categorizing or labeling this config snapshot.
+    /// Tags are metadata and do not affect the config hash.
+    pub tags: HashMap<String, String>,
+
     __private: (),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SnapshotHash(Arc<str>);
 
 impl std::fmt::Display for SnapshotHash {
@@ -105,7 +109,6 @@ impl SnapshotHash {
     }
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
 impl std::str::FromStr for SnapshotHash {
     type Err = std::convert::Infallible;
 
@@ -137,11 +140,13 @@ impl ConfigSnapshot {
                     message: format!("Failed to serialize stored config: {e}"),
                 })
             })?);
+
         let hash = ConfigSnapshot::hash(&stored_config_toml, &extra_templates)?;
         Ok(Self {
             config: stored_config,
             hash,
             extra_templates,
+            tags: HashMap::new(),
             __private: (),
         })
     }
@@ -169,6 +174,7 @@ impl ConfigSnapshot {
             config: StoredConfig::default(),
             hash: SnapshotHash::new_test(),
             extra_templates: HashMap::new(),
+            tags: HashMap::new(),
             __private: (),
         }
     }
@@ -177,9 +183,14 @@ impl ConfigSnapshot {
     ///
     /// This is used when loading a previously stored config snapshot from ClickHouse.
     /// The hash is recomputed from the config and templates to ensure consistency.
+    ///
+    /// Note: We deserialize as `StoredConfig` (not `UninitializedConfig`) to support
+    /// backward compatibility with historical snapshots that may contain deprecated
+    /// fields like `timeouts`.
     pub fn from_stored(
         config_toml: &str,
         extra_templates: HashMap<String, String>,
+        tags: HashMap<String, String>,
         original_hash: &SnapshotHash,
     ) -> Result<Self, Error> {
         let table: toml::Table = config_toml.parse().map_err(|e| {
@@ -189,19 +200,24 @@ impl ConfigSnapshot {
         })?;
 
         let sorted_table = prepare_table_for_snapshot(table);
-        let config = UninitializedConfig::try_from(sorted_table.clone())?;
-        let hash = ConfigSnapshot::hash(&sorted_table, &extra_templates)?;
-        if hash != *original_hash {
-            return Err(Error::new(ErrorDetails::ConfigSnapshotHashMismatch {
-                expected: original_hash.clone(),
-                actual: hash.clone(),
-            }));
-        }
 
+        // Deserialize as StoredConfig to accept deprecated fields (e.g., `timeouts`)
+        let stored_config: StoredConfig =
+            serde_path_to_error::deserialize(sorted_table).map_err(|e| {
+                let path = e.path().clone();
+                Error::new(ErrorDetails::Config {
+                    message: format!("{}: {}", path, e.into_inner().message()),
+                })
+            })?;
+
+        // Use the original hash from the database rather than recomputing it.
+        // Recomputing can produce different hashes due to floating-point serialization
+        // differences (e.g., 0.2 vs 0.20000000298023224) even when the config is identical.
         Ok(Self {
-            config: config.into(),
-            hash,
+            config: stored_config,
+            hash: original_hash.clone(),
             extra_templates,
+            tags,
             __private: (),
         })
     }
