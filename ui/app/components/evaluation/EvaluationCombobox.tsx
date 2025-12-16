@@ -36,7 +36,7 @@ export function EvaluationCombobox({
     onSelect(null);
   }, [onSelect]);
 
-  const getItemSuffix = useCallback(
+  const getItemAnnotation = useCallback(
     (item: string) => {
       const config = evaluations[item];
       if (!config) return null;
@@ -68,7 +68,7 @@ export function EvaluationCombobox({
       disabled={isDisabled}
       clearable
       onClear={handleClear}
-      getItemSuffix={getItemSuffix}
+      getItemAnnotation={getItemAnnotation}
     />
   );
 }

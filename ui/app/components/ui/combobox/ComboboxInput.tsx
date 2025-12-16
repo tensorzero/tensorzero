@@ -17,6 +17,7 @@ type ComboboxInputProps = {
   icon: IconComponent;
   clearable?: boolean;
   onClear?: () => void;
+  annotation?: React.ReactNode;
 };
 
 export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
@@ -32,6 +33,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       icon: Icon,
       clearable = false,
       onClear,
+      annotation,
     },
     ref,
   ) {
@@ -58,6 +60,12 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
             clearable ? "pr-14" : "pr-8",
           )}
         />
+        {annotation && value && (
+          <div className="pointer-events-none absolute inset-y-0 left-9 flex items-center">
+            <span className="invisible font-mono text-sm">{value}</span>
+            <span className="ml-1">{annotation}</span>
+          </div>
+        )}
         <div className="absolute inset-y-0 right-3 flex items-center gap-1">
           {clearable && (
             <button
@@ -66,7 +74,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
                 e.stopPropagation();
                 onClear?.();
               }}
-              className="text-fg-muted hover:text-fg-primary rounded p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+              className="text-fg-tertiary hover:text-fg-primary cursor-pointer rounded p-0.5"
               aria-label="Clear selection"
             >
               <X className="h-3.5 w-3.5" />

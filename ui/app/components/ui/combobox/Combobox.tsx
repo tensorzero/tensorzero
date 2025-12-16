@@ -29,8 +29,8 @@ type ComboboxProps = {
   /** Show clear button and call onClear when clicked */
   clearable?: boolean;
   onClear?: () => void;
-  /** Render custom suffix for each item in dropdown */
-  getItemSuffix?: (item: string) => React.ReactNode;
+  /** Render annotation after item text (in dropdown and input) */
+  getItemAnnotation?: (item: string) => React.ReactNode;
 };
 
 export function Combobox({
@@ -44,7 +44,7 @@ export function Combobox({
   name,
   clearable = false,
   onClear,
-  getItemSuffix,
+  getItemAnnotation,
 }: ComboboxProps) {
   const {
     open,
@@ -92,6 +92,7 @@ export function Combobox({
             icon={Icon}
             clearable={clearable && !!selected}
             onClear={handleClear}
+            annotation={selected ? getItemAnnotation?.(selected) : undefined}
           />
         </PopoverAnchor>
         <PopoverContent
@@ -117,7 +118,7 @@ export function Combobox({
                     >
                       <Icon className="h-4 w-4 shrink-0" />
                       <span className="truncate font-mono">{item}</span>
-                      {getItemSuffix?.(item)}
+                      {getItemAnnotation?.(item)}
                     </CommandItem>
                   ))}
                 </CommandGroup>
