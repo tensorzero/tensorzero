@@ -248,9 +248,60 @@ async fn test_or_filter_mixed_metrics() {
     }
 }
 
+/// Tests that NOT filter correctly inverts the child filter.
+/// NOT (exact_match = true OR exact_match = false) should return rows WITHOUT the metric,
+/// since rows without the metric don't match either boolean value.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
     let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences
+    let opts_total = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let total_count = client
+        .experimental_list_inferences(opts_total)
+        .await
+        .unwrap()
+        .len();
+
+    // Get count with exact_match = true
+    let filter_true = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let opts_true = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_true),
+        limit: 1000,
+        ..Default::default()
+    };
+    let true_count = client
+        .experimental_list_inferences(opts_true)
+        .await
+        .unwrap()
+        .len();
+
+    // Get count with exact_match = false
+    let filter_false = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: false,
+    });
+    let opts_false = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_false),
+        limit: 1000,
+        ..Default::default()
+    };
+    let false_count = client
+        .experimental_list_inferences(opts_false)
+        .await
+        .unwrap()
+        .len();
+
+    // Now test NOT (true OR false) - should return rows WITHOUT the metric
     let filter_node = InferenceFilter::Not {
         child: Box::new(InferenceFilter::Or {
             children: vec![
@@ -265,13 +316,32 @@ async fn test_not_filter() {
             ],
         }),
     };
-    let opts = ListInferencesParams {
+    let opts_not = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
+        limit: 1000,
         ..Default::default()
     };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 0);
+    let not_count = client
+        .experimental_list_inferences(opts_not)
+        .await
+        .unwrap()
+        .len();
+
+    // Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    let rows_with_metric = true_count + false_count;
+    assert_eq!(
+        rows_with_metric + not_count,
+        total_count,
+        "NOT filter should return exactly the rows without the metric. \
+         true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    );
+
+    // Also verify that NOT actually returned something (there are rows without the metric)
+    assert!(
+        not_count > 0,
+        "Expected some rows without the exact_match metric"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
