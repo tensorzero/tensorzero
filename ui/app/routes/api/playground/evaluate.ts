@@ -1,3 +1,21 @@
+/**
+ * Playground Evaluation API
+ *
+ * This endpoint runs evaluations on specific datapoints from the playground UI.
+ * It's used by DatapointPlaygroundOutput to evaluate inference results inline
+ * after the user selects an evaluation.
+ *
+ * Request body:
+ * - evaluationName: Name of the evaluation config to run
+ * - datapointIds: Array of datapoint IDs to evaluate
+ * - variantName: (optional) Name of a builtin variant
+ * - variantConfig: (optional) JSON-serialized UninitializedVariantInfo for edited variants
+ *
+ * Response: NDJSON stream of EvaluationRunEvent objects
+ *
+ * Note: Uses inferenceCache="read_only" to read cached inference results from
+ * the playground inference (which uses cache="on").
+ */
 import type { Route } from "./+types/evaluate";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { getEnv } from "~/utils/env.server";

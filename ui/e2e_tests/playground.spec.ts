@@ -356,9 +356,7 @@ test("playground should work with tool config ID different from display name @cr
   ).toHaveCount(0);
 });
 
-test("playground should run evaluation after inference @credentials", async ({
-  page,
-}) => {
+test("playground should run evaluation after inference", async ({ page }) => {
   await page.goto("/playground?limit=1");
   await expect(page.getByText("Select a function")).toBeVisible();
 
