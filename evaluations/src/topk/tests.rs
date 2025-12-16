@@ -1970,17 +1970,31 @@ fn test_check_global_stopping_none_when_running() {
     let names = vec!["a", "b", "c", "d", "e"];
     let params = default_params_with_variants(names.clone());
     let loop_state = empty_loop_state(&names);
+    // With five variants all sharing overlapping CS intervals, none can prove it beats two others,
+    // so check_global_stopping should report that we're still running.
     let reason = check_global_stopping(&loop_state, &params);
     assert!(reason.is_none());
 }
 
 #[test]
+// Check that the top-k stopping condition triggers and takes precedence over evaluator and variant failures
 fn test_check_global_stopping_prefers_topk() {
-    let params = default_params_with_variants(vec!["a", "b"]);
-    let mut loop_state = empty_loop_state(&["a", "b"]);
+    let variant_names = vec!["a", "b", "c", "d"];
+    let params = default_params_with_variants(variant_names.clone());
+    let mut loop_state = empty_loop_state(&variant_names);
+    loop_state.variant_status = [
+        ("a".to_string(), VariantStatus::Active),
+        ("b".to_string(), VariantStatus::Active),
+        ("c".to_string(), VariantStatus::Failed),
+        ("d".to_string(), VariantStatus::Failed),
+    ]
+    .into_iter()
+    .collect();
     loop_state.variant_performance = [
         mock_cs_with_bounds("a", 0.7, 0.9),
-        mock_cs_with_bounds("b", 0.2, 0.4),
+        mock_cs_with_bounds("b", 0.6, 0.8),
+        mock_cs_with_bounds("c", 0.3, 0.5),
+        mock_cs_with_bounds("d", 0.2, 0.4),
     ]
     .into_iter()
     .collect();
@@ -1989,6 +2003,8 @@ fn test_check_global_stopping_prefers_topk() {
         .map(|(name, (_, cs))| (name, cs))
         .collect();
 
+    // Variants "a" and "b" both beat the remaining two variants, so the algorithm should stop with
+    // k=2 before considering evaluator failures or the too-many-variant-failures condition.
     let reason = check_global_stopping(&loop_state, &params);
     match reason {
         Some(GlobalStoppingReason::TopKFound { k, top_variants }) => {
@@ -2000,6 +2016,7 @@ fn test_check_global_stopping_prefers_topk() {
 }
 
 #[test]
+// Check that the evaluator failure condition triggers and takes precedence over variant failures
 fn test_check_global_stopping_evaluators_failed() {
     let variant_names = vec!["a", "b", "c", "d"];
     let mut params = default_params_with_variants(variant_names.clone());
@@ -2034,6 +2051,8 @@ fn test_check_global_stopping_evaluators_failed() {
         })
         .collect();
 
+    // Both evaluator failure rates exceed 0.2, so EvaluatorsFailed should win even though too many
+    // variants have also failed.
     let reason = check_global_stopping(&loop_state, &params);
     match reason {
         Some(GlobalStoppingReason::EvaluatorsFailed { evaluator_names }) => {
@@ -2046,6 +2065,7 @@ fn test_check_global_stopping_evaluators_failed() {
 }
 
 #[test]
+// Check that the too-many-variant-failures condition triggers
 fn test_check_global_stopping_too_many_variant_failures() {
     let variant_names = vec!["a", "b", "c", "d"];
     let mut params = default_params_with_variants(variant_names.clone());
@@ -2067,6 +2087,8 @@ fn test_check_global_stopping_too_many_variant_failures() {
         })
         .collect();
 
+    // With k_min=2 and three variants failed, only one remains active, triggering
+    // TooManyVariantsFailed (3 > 4 - k_min).
     let reason = check_global_stopping(&loop_state, &params);
     match reason {
         Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed }) => {
