@@ -424,7 +424,7 @@ async fn test_dropped_stream_body() {
     assert!(files.count() == 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_stream_body() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
