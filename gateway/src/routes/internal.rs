@@ -91,6 +91,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
                         "/internal/evaluations/runs",
             get(endpoints::internal::evaluations::list_evaluation_runs_handler),
         )
+        // Workflow evaluation endpoints
+        .route(
+            "/internal/workflow-evaluations/projects",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_projects_handler),
+        )
         .route(
             "/internal/models/usage",
             get(endpoints::internal::models::get_model_usage_handler),
@@ -107,5 +112,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/config/{hash}",
             get(endpoints::internal::config::get_config_by_hash_handler),
+        )
+        // Action endpoint for executing with historical config snapshots
+        .route(
+            "/internal/action",
+            post(endpoints::internal::action::action_handler),
         )
 }

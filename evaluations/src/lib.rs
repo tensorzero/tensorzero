@@ -458,7 +458,7 @@ pub async fn run_evaluation_core_streaming(
     };
 
     // Process all datapoints across all variants
-    let (mut join_set, task_id_map) = process_batch(&batch_params, dataset, &variants);
+    let (mut join_set, task_id_map) = process_batch(&batch_params, dataset, &variants).await?;
 
     // Get a shared reference to the evaluation config (which includes evaluators)
     let evaluators = evaluation_config.clone();
@@ -745,10 +745,10 @@ pub enum BatchItemResult {
 }
 
 /// Return type for process_batch: a JoinSet of results and a map from task ID to (datapoint_id, variant).
-type ProcessBatchResult = (
+type ProcessBatchResult = Result<(
     JoinSet<Result<DatapointVariantResult>>,
     HashMap<tokio::task::Id, (Uuid, Arc<EvaluationVariant>)>,
-);
+)>;
 
 /// Process a batch of datapoints across all variants.
 ///
@@ -771,7 +771,7 @@ type ProcessBatchResult = (
 /// # Returns
 /// A JoinSet that yields `DatapointVariantResult` as tasks complete, along with a mapping
 /// from task ID to (datapoint_id, variant) for error reporting.
-pub fn process_batch(
+pub async fn process_batch(
     params: &ProcessBatchParams,
     datapoints: Vec<Datapoint>,
     variants: &[Arc<EvaluationVariant>],
@@ -782,8 +782,22 @@ pub fn process_batch(
     let EvaluationConfig::Inference(inference_evaluation_config) = &*params.evaluation_config;
     let function_name = inference_evaluation_config.function_name.clone();
 
+    // Pre-resolve all datapoint inputs before spawning tasks (avoids redundant work per variant)
+    let mut datapoints_with_inputs: Vec<(Arc<Datapoint>, Arc<Input>)> =
+        Vec::with_capacity(datapoints.len());
     for datapoint in datapoints {
-        let datapoint = Arc::new(datapoint);
+        let stored_input = datapoint
+            .input()
+            .clone()
+            .into_stored_input_without_file_handling()?;
+        let resolved_input = stored_input
+            .reresolve(&params.clients.tensorzero_client)
+            .await?;
+        let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
+        datapoints_with_inputs.push((Arc::new(datapoint), input));
+    }
+
+    for (datapoint, input) in datapoints_with_inputs {
         let datapoint_id = datapoint.id();
 
         for variant in variants {
@@ -800,6 +814,7 @@ pub fn process_batch(
             let variant_for_map = variant.clone(); // Clone before moving into async block
             let datapoint = datapoint.clone();
             let function_name = function_name.clone();
+            let input = input.clone();
 
             // Skip feedback for dynamic variants (they're not production-ready)
             let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
@@ -812,14 +827,6 @@ pub fn process_batch(
                 let function_config = function_configs.get(&function_name).ok_or_else(|| {
                     anyhow!("Function '{function_name}' not found in function configs table")
                 })?;
-
-                // Resolve input from datapoint
-                let stored_input = datapoint
-                    .input()
-                    .clone()
-                    .into_stored_input_without_file_handling()?;
-                let resolved_input = stored_input.reresolve(&clients.tensorzero_client).await?;
-                let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
 
                 // Run inference
                 let inference_response = Arc::new(
@@ -886,7 +893,7 @@ pub fn process_batch(
         }
     }
 
-    (join_set, task_id_map)
+    Ok((join_set, task_id_map))
 }
 
 /// Collect results from a JoinSet into BatchItemResults.

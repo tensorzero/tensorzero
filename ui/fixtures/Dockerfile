@@ -1,7 +1,10 @@
 # This Dockerfile is used to load fixtures into a (separate) ClickHouse server
 FROM clickhouse:lts
 
-RUN apt-get update && apt-get install -y cmake
+RUN apt-get update && apt-get install -y cmake curl
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+    unzip awscliv2.zip && \
+    ./aws/install
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy Python project files and install dependencies

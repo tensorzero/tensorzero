@@ -6,3 +6,4 @@ mod inference_queries;
 mod inference_stats_queries;
 mod rate_limit_queries;
 mod select_queries;
+mod workflow_evaluation_queries;
