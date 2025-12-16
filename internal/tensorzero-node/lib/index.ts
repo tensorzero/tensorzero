@@ -11,8 +11,6 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  FeedbackBounds,
-  QueryFeedbackBoundsByTargetIdParams,
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
@@ -219,17 +217,6 @@ export class DatabaseClient {
         paramsString,
       );
     return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
-  }
-
-  async queryFeedbackBoundsByTargetId(
-    params: QueryFeedbackBoundsByTargetIdParams,
-  ): Promise<FeedbackBounds> {
-    const paramsString = safeStringify(params);
-    const boundsString =
-      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
-        paramsString,
-      );
-    return JSON.parse(boundsString) as FeedbackBounds;
   }
 
   async getCumulativeFeedbackTimeseries(

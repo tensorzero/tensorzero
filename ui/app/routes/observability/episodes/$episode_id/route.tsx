@@ -135,7 +135,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
         async (feedbacks) => {
           const [bounds, latestFeedbackByMetric] = await Promise.all([
-            dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
+            tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return { feedbacks, bounds, latestFeedbackByMetric };
@@ -148,7 +148,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           after: afterFeedback || undefined,
           limit,
         }),
-        dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
+        tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
       ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
         feedbacks,
