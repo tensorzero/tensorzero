@@ -86,7 +86,7 @@ export async function action({ request }: Route.ActionArgs) {
           variantName,
           internalDynamicVariantConfig: variantConfig,
           concurrency: 5,
-          inferenceCache: "on",
+          inferenceCache: "read_only",
           onEvent: sendEvent,
         });
       } catch (err) {
