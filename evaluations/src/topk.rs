@@ -1190,15 +1190,15 @@ mod tests {
     fn test_compute_updates_empty_results() {
         let scoring_fn = FirstEvaluatorScore;
         let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+            [mock_cs_with_bounds("test_variant", 0.3, 0.7)]
                 .into_iter()
                 .collect();
         let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
+            [mock_cs_with_bounds("test_variant", 0.1, 0.4)]
                 .into_iter()
                 .collect();
         let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+            [mock_cs_with_bounds("evaluator1", 0.05, 0.2)]
                 .into_iter()
                 .collect();
 
@@ -1213,48 +1213,45 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        // Count should still be 0 since no observations were processed
-        assert_eq!(variant_performance["test_variant"].count, 0);
-        assert_eq!(variant_failures["test_variant"].count, 0);
-        assert_eq!(evaluator_failures["evaluator1"].count, 0);
-    }
 
-    /// Test that cancelled tasks are skipped and don't affect any confidence sequences.
-    #[test]
-    fn test_compute_updates_only_cancelled() {
-        let scoring_fn = FirstEvaluatorScore;
-        let mut variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
-                .into_iter()
-                .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
-            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
-                .into_iter()
-                .collect();
+        // Verify variant_performance is completely unchanged
+        let vp = &variant_performance["test_variant"];
+        assert_eq!(vp.name, "test_variant");
+        assert_eq!(vp.mean_regularized, 0.5); // (0.3 + 0.7) / 2
+        assert_eq!(vp.variance_regularized, 0.1);
+        assert_eq!(vp.count, 100);
+        assert_eq!(vp.mean_est, 0.5);
+        assert_eq!(vp.cs_lower, 0.3);
+        assert_eq!(vp.cs_upper, 0.7);
+        assert_eq!(vp.alpha, 0.05);
+        assert_eq!(vp.wealth.wealth_upper, vec![1.0; 101]);
+        assert_eq!(vp.wealth.wealth_lower, vec![1.0; 101]);
 
-        // Cancelled results should not affect any statistics
-        // In the new structure, we group by datapoint, then by variant
-        // Cancelled tasks are skipped entirely in process_topk_batch,
-        // so an empty map represents the case of only cancelled tasks
-        let results_by_datapoint: BatchResultsByDatapoint = HashMap::new();
+        // Verify variant_failures is completely unchanged
+        let vf = &variant_failures["test_variant"];
+        assert_eq!(vf.name, "test_variant");
+        assert_eq!(vf.mean_regularized, 0.25); // (0.1 + 0.4) / 2
+        assert_eq!(vf.variance_regularized, 0.1);
+        assert_eq!(vf.count, 100);
+        assert_eq!(vf.mean_est, 0.25);
+        assert_eq!(vf.cs_lower, 0.1);
+        assert_eq!(vf.cs_upper, 0.4);
+        assert_eq!(vf.alpha, 0.05);
+        assert_eq!(vf.wealth.wealth_upper, vec![1.0; 101]);
+        assert_eq!(vf.wealth.wealth_lower, vec![1.0; 101]);
 
-        let result = compute_updates(
-            &results_by_datapoint,
-            &scoring_fn,
-            &mut variant_performance,
-            &mut variant_failures,
-            &mut evaluator_failures,
-        );
-
-        assert!(result.is_ok());
-        // Count should still be 0 since cancelled tasks don't count
-        assert_eq!(variant_performance["test_variant"].count, 0);
-        assert_eq!(variant_failures["test_variant"].count, 0);
-        assert_eq!(evaluator_failures["evaluator1"].count, 0);
+        // Verify evaluator_failures is completely unchanged
+        let ef = &evaluator_failures["evaluator1"];
+        assert_eq!(ef.name, "evaluator1");
+        assert_eq!(ef.mean_regularized, 0.125); // (0.05 + 0.2) / 2
+        assert_eq!(ef.variance_regularized, 0.1);
+        assert_eq!(ef.count, 100);
+        assert_eq!(ef.mean_est, 0.125);
+        assert_eq!(ef.cs_lower, 0.05);
+        assert_eq!(ef.cs_upper, 0.2);
+        assert_eq!(ef.alpha, 0.05);
+        assert_eq!(ef.wealth.wealth_upper, vec![1.0; 101]);
+        assert_eq!(ef.wealth.wealth_lower, vec![1.0; 101]);
     }
 
     /// Test that variant-level errors (BatchItemResult::Error) update failure CS but not performance/evaluator CS.
@@ -1269,7 +1266,10 @@ mod tests {
             [("test_variant".to_string(), mock_fresh_cs("test_variant"))]
                 .into_iter()
                 .collect();
-        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+        let mut evaluator_failures: HashMap<String, MeanBettingConfidenceSequence> =
+            [("evaluator1".to_string(), mock_fresh_cs("evaluator1"))]
+                .into_iter()
+                .collect();
 
         // Create two errors for two different datapoints
         let datapoint_id_1 = Uuid::now_v7();
@@ -1320,6 +1320,8 @@ mod tests {
         assert_eq!(variant_failures["test_variant"].count, 2);
         // Performance should not be updated since there were no successes
         assert_eq!(variant_performance["test_variant"].count, 0);
+        // evaluator_failures should not be updated (variant failed before evaluation ran)
+        assert_eq!(evaluator_failures["evaluator1"].count, 0);
     }
 
     /// Test that results for variants not in the CS maps are silently ignored.
@@ -1428,14 +1430,70 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        // Both variants should have 1 performance observation
-        assert_eq!(variant_performance["variant_a"].count, 1);
-        assert_eq!(variant_performance["variant_b"].count, 1);
-        // Both variants should have 1 failure observation (0.0 = success)
-        assert_eq!(variant_failures["variant_a"].count, 1);
-        assert_eq!(variant_failures["variant_b"].count, 1);
-        // Evaluator should have 2 observations (one per variant)
-        assert_eq!(evaluator_failures["evaluator1"].count, 2);
+
+        // ========================================
+        // Check variant_a performance (observation = 0.8)
+        // ========================================
+        // Starting from fresh CS (count=0, mean_reg=0.5, var_reg=0.25)
+        // After one observation x=0.8:
+        //   mean_regularized = (0.5 * 1 + 0.8) / 2 = 0.65
+        //   variance_regularized = (0.25 * 1 + (0.8 - 0.65)^2) / 2 = (0.25 + 0.0225) / 2 = 0.13625
+        //   mean_est = 0.8 (single observation)
+        let vp_a = &variant_performance["variant_a"];
+        assert_eq!(vp_a.count, 1);
+        assert!((vp_a.mean_regularized - 0.65).abs() < 1e-10);
+        assert!((vp_a.variance_regularized - 0.13625).abs() < 1e-10);
+        assert!((vp_a.mean_est - 0.8).abs() < 1e-10);
+
+        // ========================================
+        // Check variant_b performance (observation = 0.6)
+        // ========================================
+        // After one observation x=0.6:
+        //   mean_regularized = (0.5 * 1 + 0.6) / 2 = 0.55
+        //   variance_regularized = (0.25 * 1 + (0.6 - 0.55)^2) / 2 = (0.25 + 0.0025) / 2 = 0.12625
+        //   mean_est = 0.6 (single observation)
+        let vp_b = &variant_performance["variant_b"];
+        assert_eq!(vp_b.count, 1);
+        assert!((vp_b.mean_regularized - 0.55).abs() < 1e-10);
+        assert!((vp_b.variance_regularized - 0.12625).abs() < 1e-10);
+        assert!((vp_b.mean_est - 0.6).abs() < 1e-10);
+
+        // ========================================
+        // Check variant failures (both get observation = 0.0 for success)
+        // ========================================
+        // After one observation x=0.0:
+        //   mean_regularized = (0.5 * 1 + 0.0) / 2 = 0.25
+        //   variance_regularized = (0.25 * 1 + (0.0 - 0.25)^2) / 2 = (0.25 + 0.0625) / 2 = 0.15625
+        //   mean_est = 0.0
+        let vf_a = &variant_failures["variant_a"];
+        assert_eq!(vf_a.count, 1);
+        assert!((vf_a.mean_regularized - 0.25).abs() < 1e-10);
+        assert!((vf_a.variance_regularized - 0.15625).abs() < 1e-10);
+        assert!((vf_a.mean_est - 0.0).abs() < 1e-10);
+
+        let vf_b = &variant_failures["variant_b"];
+        assert_eq!(vf_b.count, 1);
+        assert!((vf_b.mean_regularized - 0.25).abs() < 1e-10);
+        assert!((vf_b.variance_regularized - 0.15625).abs() < 1e-10);
+        assert!((vf_b.mean_est - 0.0).abs() < 1e-10);
+
+        // ========================================
+        // Check evaluator failures (two observations of 0.0)
+        // ========================================
+        // After two observations x1=0.0, x2=0.0:
+        //   After x1=0.0: mean_reg1 = 0.25, var_reg1 = 0.15625 (same as above)
+        //   After x2=0.0:
+        //     mean_regularized = (0.25 * 2 + 0.0) / 3 = 0.5 / 3 = 0.16666...
+        //     variance_regularized = (0.15625 * 2 + (0.0 - 0.16666...)^2) / 3
+        //                          = (0.3125 + 0.02777...) / 3 = 0.34027... / 3 = 0.11342...
+        //   mean_est = (0.0 + 0.0) / 2 = 0.0
+        let ef = &evaluator_failures["evaluator1"];
+        assert_eq!(ef.count, 2);
+        assert!((ef.mean_regularized - 1.0 / 6.0).abs() < 1e-10);
+        // var_reg = (0.15625 * 2 + (0 - 1/6)^2) / 3 = (0.3125 + 1/36) / 3 = (0.3125 + 0.02777...) / 3
+        let expected_var = (0.3125 + 1.0 / 36.0) / 3.0;
+        assert!((ef.variance_regularized - expected_var).abs() < 1e-10);
+        assert!((ef.mean_est - 0.0).abs() < 1e-10);
     }
 
     /// Test that evaluator errors within successful inferences update evaluator failure CS.
