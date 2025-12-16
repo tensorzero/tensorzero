@@ -504,6 +504,8 @@ pub struct TopKLoopState {
     pub num_datapoints_processed: usize,
     /// Current batch index
     pub batch_index: usize,
+    /// Name of failed evaluator (if any) - causes early termination
+    pub failed_evaluator: Option<String>,
 }
 
 /// Parameters for the fetch_datapoint_ids step.
@@ -697,8 +699,8 @@ async fn process_batch_step(
                     evaluator_name = %evaluator_name,
                     "Evaluator failure threshold exceeded"
                 );
-                // Mark all active variants as failed due to evaluator
-                // (The stopping reason will be set in the output)
+                current_state.failed_evaluator = Some(evaluator_name.clone());
+                break;
             }
         }
     }
@@ -715,8 +717,6 @@ fn update_variant_statuses(
     stopping_result: &TopKStoppingResult,
     k_max: u32,
 ) {
-    let num_variants = variant_status.len();
-
     for (name, status) in variant_status.iter_mut() {
         // Skip already-stopped variants
         if *status != VariantStatus::Active {
@@ -753,7 +753,7 @@ fn update_variant_statuses(
 
             // If at least (num_variants - k_max) variants are definitely better,
             // this variant cannot be in the top k_max
-            if num_definitely_better >= num_variants.saturating_sub(k_max as usize) {
+            if num_definitely_better >= k_max as usize {
                 *status = VariantStatus::Exclude;
             }
         }
@@ -784,14 +784,10 @@ fn determine_stopping_reason(
     }
 
     // Check for evaluator failure
-    if let Some(threshold) = params.evaluator_failure_threshold {
-        for (evaluator_name, cs) in &loop_state.evaluator_failures {
-            if check_evaluator_failed(cs, threshold) {
-                return GlobalStoppingReason::EvaluatorFailed {
-                    evaluator_name: evaluator_name.clone(),
-                };
-            }
-        }
+    if let Some(evaluator_name) = &loop_state.failed_evaluator {
+        return GlobalStoppingReason::EvaluatorFailed {
+            evaluator_name: evaluator_name.clone(),
+        };
     }
 
     // Check for too many variant failures
@@ -943,6 +939,7 @@ impl Task<TopKTaskState> for TopKTask {
                 .collect(),
             num_datapoints_processed: 0,
             batch_index: 0,
+            failed_evaluator: None,
         };
 
         // Process batches
@@ -952,6 +949,11 @@ impl Task<TopKTaskState> for TopKTask {
             .collect();
 
         for (batch_idx, batch_ids) in batches.into_iter().enumerate() {
+            // Check if an evaluator has failed
+            if loop_state.failed_evaluator.is_some() {
+                break;
+            }
+
             // Check if all active variants are gone
             let has_active = loop_state
                 .variant_status
