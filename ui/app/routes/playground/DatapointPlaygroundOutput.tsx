@@ -320,8 +320,9 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
             {evalState.status === "success" &&
               evalState.result?.evaluations && (
                 <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(evalState.result.evaluations).map(
-                    ([evaluatorName, value]) => (
+                  {Object.entries(evalState.result.evaluations)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([evaluatorName, value]) => (
                       <MetricBadge
                         key={evaluatorName}
                         label={evaluatorName}
@@ -330,8 +331,7 @@ const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
                           evalState.result?.evaluatorErrors?.[evaluatorName],
                         )}
                       />
-                    ),
-                  )}
+                    ))}
                 </div>
               )}
           </div>
