@@ -905,11 +905,11 @@ fn check_global_stopping(
         .filter(|s| **s == VariantStatus::Failed)
         .count();
     let num_variants = loop_state.variant_status.len();
-    if num_failed >= num_variants.saturating_sub(params.k_min as usize) {
+    if num_failed > num_variants.saturating_sub(params.k_min as usize) {
         return Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed });
     }
 
-    // If we processed all available datapoints without a conclusive result
+    // If none of the three reasons above apply
     None
 }
 
