@@ -70,8 +70,10 @@ pub enum VariantStatus {
 pub enum GlobalStoppingReason {
     /// Successfully identified a top-k set of variants
     TopKFound { k: u32, top_variants: Vec<String> },
-    /// Reached the maximum number of datapoints without identifying top-k
+    /// Reached the configured maximum number of datapoints
     MaxDatapointsReached,
+    /// Exhausted all available datapoints in the dataset
+    DatasetExhausted,
     /// At least one evaluator has a failure rate above the threshold
     EvaluatorFailed { evaluator_name: String },
     /// Too many variants failed (>= num_variants - k_min)
@@ -764,7 +766,7 @@ fn update_variant_statuses(
 fn determine_stopping_reason(
     loop_state: &TopKLoopState,
     params: &TopKTaskParams,
-    _total_datapoints: usize,
+    total_datapoints: usize,
 ) -> GlobalStoppingReason {
     // Check if we identified a top-k set
     let stopping_result = check_topk_stopping(
@@ -801,8 +803,37 @@ fn determine_stopping_reason(
         return GlobalStoppingReason::TooManyVariantsFailed { num_failed };
     }
 
-    // Default: max datapoints reached
-    GlobalStoppingReason::MaxDatapointsReached
+    // Distinguish between hitting max_datapoints limit vs exhausting the dataset
+    if let Some(max) = params.max_datapoints
+        && loop_state.num_datapoints_processed >= max
+    {
+        return GlobalStoppingReason::MaxDatapointsReached;
+    }
+
+    // If we processed all available datapoints without a conclusive result
+    if loop_state.num_datapoints_processed >= total_datapoints {
+        return GlobalStoppingReason::DatasetExhausted;
+    }
+
+    // Fallback: we stopped for some other reason (e.g., all variants became non-active
+    // through early exclusion). This is actually a form of completion.
+    // Re-check top-k one more time - if all variants are Include/Exclude, we have a result.
+    let included: Vec<String> = loop_state
+        .variant_status
+        .iter()
+        .filter(|(_, s)| **s == VariantStatus::Include)
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    if !included.is_empty() {
+        return GlobalStoppingReason::TopKFound {
+            k: included.len() as u32,
+            top_variants: included,
+        };
+    }
+
+    // Should not reach here in normal operation, but default to dataset exhausted
+    GlobalStoppingReason::DatasetExhausted
 }
 
 /// The durable top-k evaluation task.
