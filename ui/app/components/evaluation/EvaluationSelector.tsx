@@ -5,7 +5,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -81,12 +81,27 @@ export function EvaluationSelector({
                 </div>
               )}
             </div>
-            <ChevronDown
-              className={clsx(
-                "text-fg-muted group-hover:text-fg-tertiary ml-2 h-4 w-4 shrink-0 transition duration-300 ease-out",
-                open ? "-rotate-180" : "rotate-0",
+            <div className="ml-2 flex shrink-0 items-center gap-1">
+              {selected && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(null);
+                  }}
+                  className="text-fg-muted hover:text-fg-primary rounded p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  aria-label="Clear selection"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
-            />
+              <ChevronDown
+                className={clsx(
+                  "text-fg-muted group-hover:text-fg-tertiary h-4 w-4 transition duration-300 ease-out",
+                  open ? "-rotate-180" : "rotate-0",
+                )}
+              />
+            </div>
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -105,19 +120,6 @@ export function EvaluationSelector({
                 No evaluations found.
               </CommandEmpty>
               <CommandGroup>
-                {selected && (
-                  <CommandItem
-                    value="__clear__"
-                    onSelect={() => {
-                      onSelect(null);
-                      setInputValue("");
-                      setOpen(false);
-                    }}
-                    className="text-muted-foreground flex items-center gap-2"
-                  >
-                    Clear selection
-                  </CommandItem>
-                )}
                 {filteredEvaluations.map(
                   ([name, config]) =>
                     config && (
