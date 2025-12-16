@@ -206,7 +206,6 @@ function EvaluationForm({
         icon={Evaluation}
         placeholder="Select evaluation"
         emptyMessage="No evaluations found"
-        monospace
       />
       <div className="mt-4">
         <label
@@ -270,7 +269,6 @@ function EvaluationForm({
         placeholder="Select variant"
         emptyMessage="No variants found"
         disabled={!selectedEvaluationName}
-        monospace
       />
       <div className="mt-4">
         <div className="mb-1 flex items-center gap-1.5">

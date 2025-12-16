@@ -14,7 +14,6 @@ type ComboboxInputProps = {
   onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
   placeholder: string;
   disabled?: boolean;
-  monospace?: boolean;
   icon: IconComponent;
   clearable?: boolean;
   onClear?: () => void;
@@ -30,7 +29,6 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       onBlur,
       placeholder,
       disabled = false,
-      monospace = false,
       icon: Icon,
       clearable = false,
       onClear,
@@ -56,9 +54,8 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           placeholder={placeholder}
           disabled={disabled}
           className={clsx(
-            "cursor-text pl-9",
+            "cursor-text pl-9 font-mono",
             clearable ? "pr-14" : "pr-8",
-            monospace && "font-mono",
           )}
         />
         <div className="absolute inset-y-0 right-3 flex items-center gap-1">

@@ -10,7 +10,6 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import clsx from "clsx";
 import { useCallback, useMemo } from "react";
 import type { IconProps } from "~/components/icons/Icons";
 import { ComboboxInput } from "./ComboboxInput";
@@ -26,7 +25,6 @@ type ComboboxProps = {
   placeholder: string;
   emptyMessage: string;
   disabled?: boolean;
-  monospace?: boolean;
   name?: string;
   /** Show clear button and call onClear when clicked */
   clearable?: boolean;
@@ -43,7 +41,6 @@ export function Combobox({
   placeholder,
   emptyMessage,
   disabled = false,
-  monospace = true,
   name,
   clearable = false,
   onClear,
@@ -92,7 +89,6 @@ export function Combobox({
             onBlur={handleBlur}
             placeholder={placeholder}
             disabled={disabled}
-            monospace={monospace}
             icon={Icon}
             clearable={clearable && !!selected}
             onClear={handleClear}
@@ -120,11 +116,7 @@ export function Combobox({
                       className="flex items-center gap-2"
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span
-                        className={clsx("truncate", monospace && "font-mono")}
-                      >
-                        {item}
-                      </span>
+                      <span className="truncate font-mono">{item}</span>
                       {getItemSuffix?.(item)}
                     </CommandItem>
                   ))}
