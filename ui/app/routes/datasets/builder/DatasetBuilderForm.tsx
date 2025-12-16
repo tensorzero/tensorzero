@@ -16,13 +16,16 @@ import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { logger } from "~/utils/logger";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
-import type { InferenceFilter } from "~/types/tensorzero";
+import type {
+  InferenceFilter,
+  InferenceOutputSource,
+} from "~/types/tensorzero";
+import { useInferenceCountFetcher } from "~/routes/api/inferences/count.route";
 
 export function DatasetBuilderForm() {
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
   >("idle");
-  const [isNewDataset, setIsNewDataset] = useState<boolean | null>(null);
 
   // Local state for InferenceFilter (managed outside react-hook-form)
   const [inferenceFilter, setInferenceFilter] = useState<
@@ -50,11 +53,42 @@ export function DatasetBuilderForm() {
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "dataset"] as const,
+    name: [
+      "function",
+      "dataset",
+      "variant_name",
+      "episode_id",
+      "search_query",
+      "output_source",
+    ] as const,
   });
 
-  const [functionName, selectedDataset] = watchedFields;
+  const [
+    functionName,
+    selectedDataset,
+    variantName,
+    episodeId,
+    searchQuery,
+    outputSource,
+  ] = watchedFields;
   const functionConfig = useFunctionConfig(functionName ?? "");
+
+  // Fetch inference count based on current form values
+  // Only fetch when form has no validation errors
+  const hasValidationErrors = Object.keys(form.formState.errors).length > 0;
+  const {
+    count: inferenceCount,
+    error: countError,
+    isLoading: isCountLoading,
+  } = useInferenceCountFetcher({
+    functionName: functionName ?? undefined,
+    variantName: variantName ?? undefined,
+    episodeId: episodeId ?? undefined,
+    outputSource: (outputSource as InferenceOutputSource) ?? "inference",
+    filters: inferenceFilter,
+    searchQuery: searchQuery ?? undefined,
+    enabled: !hasValidationErrors,
+  });
 
   // Update form type when function changes
   useEffect(() => {
@@ -102,7 +136,7 @@ export function DatasetBuilderForm() {
     }
   };
 
-  function getButtonText(isNewDataset: boolean | null) {
+  function getButtonText() {
     switch (submissionPhase) {
       case "submitting":
         return "Creating Dataset...";
@@ -110,11 +144,7 @@ export function DatasetBuilderForm() {
         return "Success";
       case "idle":
       default:
-        if (isNewDataset) {
-          return "Create Dataset";
-        } else {
-          return "Insert Into Dataset";
-        }
+        return "Create Datapoints";
     }
   }
 
@@ -132,9 +162,6 @@ export function DatasetBuilderForm() {
             name="dataset"
             label="Dataset"
             placeholder="Select a dataset"
-            onSelect={(dataset, isNew) => {
-              setIsNewDataset(isNew);
-            }}
           />
 
           <FunctionFormField
@@ -192,6 +219,11 @@ export function DatasetBuilderForm() {
                       }
                       placeholder="00000000-0000-0000-0000-000000000000"
                     />
+                    {form.formState.errors.episode_id && (
+                      <p className="mt-1 text-sm text-red-500">
+                        {form.formState.errors.episode_id.message}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -231,20 +263,38 @@ export function DatasetBuilderForm() {
 
           <OutputSourceSelector control={form.control} />
         </div>
-        <Button
-          type="submit"
-          disabled={
-            submissionPhase !== "idle" || !selectedDataset || !functionName
-          }
-          onClick={() => {
-            if (submissionPhase === "complete") {
-              setSubmissionPhase("idle");
-              form.clearErrors("root");
+
+        <div className="flex items-center gap-4">
+          <Button
+            type="submit"
+            disabled={
+              submissionPhase !== "idle" ||
+              !selectedDataset ||
+              !functionName ||
+              isCountLoading ||
+              !!countError ||
+              inferenceCount === 0
             }
-          }}
-        >
-          {getButtonText(isNewDataset)}
-        </Button>
+            onClick={() => {
+              if (submissionPhase === "complete") {
+                setSubmissionPhase("idle");
+                form.clearErrors("root");
+              }
+            }}
+          >
+            {getButtonText()}
+          </Button>
+          {functionName && (
+            <span className="text-muted-foreground text-sm">
+              {isCountLoading
+                ? "Loading..."
+                : `${inferenceCount.toLocaleString()} matching inferences`}
+            </span>
+          )}
+        </div>
+        {countError && (
+          <p className="mt-2 text-sm text-red-500">{countError}</p>
+        )}
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">
             {form.formState.errors.root.message}

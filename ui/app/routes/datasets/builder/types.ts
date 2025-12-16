@@ -10,7 +10,11 @@ export const DatasetBuilderFormValuesSchema = z.object({
   type: z.enum(["chat", "json"]),
   function: z.string(),
   variant_name: z.string().optional(),
-  episode_id: z.string().optional(),
+  episode_id: z
+    .string()
+    .uuid("Must be a valid UUID.")
+    .optional()
+    .or(z.literal("")),
   search_query: z.string().optional(),
   filters: InferenceFilterSchema.optional(),
   output_source: z.enum(["none", "inference", "demonstration"]),

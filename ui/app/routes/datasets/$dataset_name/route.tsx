@@ -26,10 +26,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const limit = Number(url.searchParams.get("limit")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
   const rowsAddedParam = url.searchParams.get("rowsAdded");
-  const rowsSkippedParam = url.searchParams.get("rowsSkipped");
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
-  const rowsSkipped =
-    rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
   const function_name = url.searchParams.get("function_name") || undefined;
   const search_query = url.searchParams.get("search_query") || undefined;
   const filterParam = url.searchParams.get("filter");
@@ -73,7 +70,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     limit,
     offset,
     rowsAdded,
-    rowsSkipped,
     function_name,
     search_query,
     filter,
@@ -144,7 +140,6 @@ export default function DatasetDetailPage({
     limit,
     offset,
     rowsAdded,
-    rowsSkipped,
     function_name,
     search_query,
     filter,
@@ -159,13 +154,12 @@ export default function DatasetDetailPage({
     if (rowsAdded !== null) {
       const { dismiss } = toast.success({
         title: "Dataset Updated",
-        description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
+        description: `Added ${rowsAdded} rows to the dataset.`,
       });
       return () => dismiss({ immediate: true });
     }
     return;
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
   const handleDelete = () => {

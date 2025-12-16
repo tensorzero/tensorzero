@@ -109,4 +109,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/config/{hash}",
             get(endpoints::internal::config::get_config_by_hash_handler),
         )
+        // Inference count endpoint
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::internal::count_inferences::count_inferences_handler),
+        )
 }

@@ -71,7 +71,12 @@ pub async fn create_from_inferences(
             (params, output_source)
         }
         CreateDatapointsFromInferenceRequestParams::InferenceQuery { query } => {
-            let params = query.as_list_inferences_params()?;
+            let mut params = query.as_list_inferences_params()?;
+            // If the user didn't specify a limit, default to fetching all matching inferences
+            // (the standard list_inferences API defaults to 20, but for dataset creation we want all)
+            if query.limit.is_none() {
+                params.limit = u32::MAX;
+            }
             let output_source = params.output_source;
             (params, output_source)
         }

@@ -31,6 +31,8 @@ export * from "./CommentTargetType";
 export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
 export * from "./CountFeedbackByTargetIdParams";
+export * from "./CountInferencesRequest";
+export * from "./CountInferencesResponse";
 export * from "./CountModelsResponse";
 export * from "./CreateChatDatapointRequest";
 export * from "./CreateDatapointRequest";
