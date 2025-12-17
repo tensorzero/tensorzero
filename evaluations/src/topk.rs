@@ -13,7 +13,6 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use tracing::info;
 use uuid::Uuid;
 
 use crate::BatchItemResult;
