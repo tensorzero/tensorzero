@@ -727,6 +727,18 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), 200);
 
+        // We should still have a request in-flight while we're holding the `Response`'
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            1
+        );
+
+        // Drop the response, and verify that the counter is now zero (and that no other clients were used)
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             if i == 0 {
                 assert_eq!(
@@ -824,6 +836,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             assert_eq!(
                 client_cell.get().is_some(),
