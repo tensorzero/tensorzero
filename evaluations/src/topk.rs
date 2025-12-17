@@ -351,10 +351,20 @@ pub fn check_topk_stopping(
     let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Intermediate struct for sorting variants by their statistics
+    struct VariantStats<'a> {
+        name: &'a String,
+        /// Number of other variants this variant "confidently beats"
+        num_beaten: usize,
+        mean_est: f64,
+        cs_lower: f64,
+        cs_upper: f64,
+    }
+
     // For each variant, count how many other variants' upper bounds its lower bound exceeds
     // with tolerance epsilon. This tells us how many variants it "confidently beats".
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_stats: Vec<(&String, usize, f64, f64, f64)> = variant_performance
+    let mut variants_with_stats: Vec<VariantStats<'_>> = variant_performance
         .iter()
         .map(|(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
@@ -367,7 +377,13 @@ pub fn check_topk_stopping(
             } else {
                 num_beaten_including_self
             };
-            (name, num_beaten, cs.mean_est, cs.cs_lower, cs.cs_upper)
+            VariantStats {
+                name,
+                num_beaten,
+                mean_est: cs.mean_est,
+                cs_lower: cs.cs_lower,
+                cs_upper: cs.cs_upper,
+            }
         })
         .collect();
 
@@ -377,10 +393,23 @@ pub fn check_topk_stopping(
     // 3. cs_lower descending (secondary tiebreaker)
     // 4. cs_upper descending (tertiary tiebreaker)
     variants_with_stats.sort_by(|a, b| {
-        b.1.cmp(&a.1) // num_beaten descending
-            .then_with(|| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)) // mean_est descending
-            .then_with(|| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal)) // cs_lower descending
-            .then_with(|| b.4.partial_cmp(&a.4).unwrap_or(std::cmp::Ordering::Equal)) // cs_upper descending
+        b.num_beaten
+            .cmp(&a.num_beaten)
+            .then_with(|| {
+                b.mean_est
+                    .partial_cmp(&a.mean_est)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                b.cs_lower
+                    .partial_cmp(&a.cs_lower)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                b.cs_upper
+                    .partial_cmp(&a.cs_upper)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     });
 
     // Check each k from k_max down to k_min
@@ -392,37 +421,36 @@ pub fn check_topk_stopping(
         // Check if at least k variants beat the threshold
         let num_qualifying = variants_with_stats
             .iter()
-            .filter(|(_, num_beaten, _, _, _)| *num_beaten >= threshold)
+            .filter(|v| v.num_beaten >= threshold)
             .count();
 
         if num_qualifying >= k_usize {
             // We have at least k qualifying variants
             // Take the top k, but check for ties at the boundary
             let kth_variant = &variants_with_stats[k_usize - 1];
-            let kth_stats = (kth_variant.1, kth_variant.2, kth_variant.3, kth_variant.4);
 
             // Find all variants that are tied with the kth variant
             // (same num_beaten, mean_est, cs_lower, cs_upper)
             let mut top_variants: Vec<String> = Vec::new();
             let mut num_tied_at_boundary = 0;
 
-            for (name, num_beaten, mean_est, cs_lower, cs_upper) in &variants_with_stats {
-                if *num_beaten < threshold {
+            for v in &variants_with_stats {
+                if v.num_beaten < threshold {
                     // This variant doesn't qualify
                     break;
                 }
 
-                let is_tied_with_kth = *num_beaten == kth_stats.0
-                    && (*mean_est - kth_stats.1).abs() < f64::EPSILON
-                    && (*cs_lower - kth_stats.2).abs() < f64::EPSILON
-                    && (*cs_upper - kth_stats.3).abs() < f64::EPSILON;
+                let is_tied_with_kth = v.num_beaten == kth_variant.num_beaten
+                    && (v.mean_est - kth_variant.mean_est).abs() < f64::EPSILON
+                    && (v.cs_lower - kth_variant.cs_lower).abs() < f64::EPSILON
+                    && (v.cs_upper - kth_variant.cs_upper).abs() < f64::EPSILON;
 
                 if top_variants.len() < k_usize {
                     // Still filling the top k
-                    top_variants.push((*name).clone());
+                    top_variants.push(v.name.clone());
                 } else if is_tied_with_kth {
                     // This variant is tied with the kth variant, include it
-                    top_variants.push((*name).clone());
+                    top_variants.push(v.name.clone());
                     num_tied_at_boundary += 1;
                 } else {
                     // Not tied, stop here
