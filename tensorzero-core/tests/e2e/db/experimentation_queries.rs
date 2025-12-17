@@ -44,7 +44,7 @@ async fn verify_variant_stored(
 
 #[sqlx::test]
 async fn test_cas_basic_functionality(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -85,7 +85,7 @@ async fn test_cas_basic_functionality(pool_opts: PgPoolOptions, conn_opts: PgCon
 
 #[sqlx::test]
 async fn test_cas_isolation(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -147,7 +147,7 @@ async fn test_cas_isolation(pool_opts: PgPoolOptions, conn_opts: PgConnectOption
 
 #[sqlx::test]
 async fn test_cas_concurrency_and_atomicity(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -206,7 +206,7 @@ async fn test_cas_concurrency_and_atomicity(pool_opts: PgPoolOptions, conn_opts:
 
 #[sqlx::test]
 async fn test_cas_edge_case_values(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -320,7 +320,7 @@ async fn test_cas_edge_case_values(pool_opts: PgPoolOptions, conn_opts: PgConnec
 
 #[sqlx::test]
 async fn test_cas_stress_test(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -412,7 +412,7 @@ async fn test_cas_stress_test(pool_opts: PgPoolOptions, conn_opts: PgConnectOpti
 
 #[sqlx::test]
 async fn test_cas_failure_recovery(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();

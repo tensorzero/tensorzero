@@ -52,7 +52,7 @@ async fn test_atomic_multi_key_all_or_nothing(
     pool_opts: PgPoolOptions,
     conn_opts: PgConnectOptions,
 ) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -97,7 +97,7 @@ async fn test_atomic_multi_key_all_or_nothing(
 
 #[sqlx::test]
 async fn test_atomic_consistency_under_load(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -153,7 +153,7 @@ async fn test_race_condition_no_over_consumption(
     pool_opts: PgPoolOptions,
     conn_opts: PgConnectOptions,
 ) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -215,7 +215,7 @@ async fn test_race_condition_interleaved_consume_return(
     pool_opts: PgPoolOptions,
     conn_opts: PgConnectOptions,
 ) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -282,7 +282,7 @@ async fn test_race_condition_interleaved_consume_return(
 
 #[sqlx::test]
 async fn test_rate_limit_lifecycle(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -330,7 +330,7 @@ async fn test_rate_limit_lifecycle(pool_opts: PgPoolOptions, conn_opts: PgConnec
 
 #[sqlx::test]
 async fn test_capacity_boundaries(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -364,7 +364,7 @@ async fn test_capacity_boundaries(pool_opts: PgPoolOptions, conn_opts: PgConnect
 
 #[sqlx::test]
 async fn test_refill_mechanics(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -431,7 +431,7 @@ async fn test_refill_mechanics(pool_opts: PgPoolOptions, conn_opts: PgConnectOpt
 
 #[sqlx::test]
 async fn test_empty_operations(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -448,7 +448,7 @@ async fn test_empty_operations(pool_opts: PgPoolOptions, conn_opts: PgConnectOpt
 
 #[sqlx::test]
 async fn test_new_bucket_behavior(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -478,7 +478,7 @@ async fn test_new_bucket_behavior(pool_opts: PgPoolOptions, conn_opts: PgConnect
 
 #[sqlx::test]
 async fn test_concurrent_stress(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
@@ -524,7 +524,7 @@ async fn test_zero_refill_interval_exception(
     pool_opts: PgPoolOptions,
     conn_opts: PgConnectOptions,
 ) {
-    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+    manual_run_postgres_migrations_with_url(conn_opts.to_url_lossy().as_ref())
         .await
         .unwrap();
     let pool = pool_opts.connect_with(conn_opts).await.unwrap();
