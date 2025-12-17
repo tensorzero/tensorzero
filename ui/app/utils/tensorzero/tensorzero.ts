@@ -15,6 +15,7 @@ import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   CountModelsResponse,
+  DatapointStatsResponse,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
@@ -25,6 +26,8 @@ import type {
   DeleteDatapointsResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
+  GetWorkflowEvaluationProjectCountResponse,
+  GetWorkflowEvaluationProjectsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -32,11 +35,13 @@ import type {
   GetInferencesResponse,
   GetModelInferencesResponse,
   InferenceStatsResponse,
+  LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  SearchEvaluationRunsResponse,
   StatusResponse,
   TimeWindow,
   TableBoundsWithCount,
@@ -46,6 +51,7 @@ import type {
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
   ListEpisodesResponse,
+  GetEpisodeInferenceCountResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -891,6 +897,77 @@ export class TensorZeroClient {
   }
 
   /**
+   * Counts unique datapoints across specified evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param evaluationRunIds - Array of evaluation run IDs
+   * @returns A promise that resolves with the datapoint count
+   * @throws Error if the request fails
+   */
+  async countDatapointsForEvaluation(
+    functionName: string,
+    evaluationRunIds: string[],
+  ): Promise<number> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/datapoint-count?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const result = (await response.json()) as DatapointStatsResponse;
+    return Number(result.count);
+  }
+
+  /**
+   * Gets workflow evaluation projects with pagination.
+   * @param limit - Maximum number of projects to return (default: 100)
+   * @param offset - Number of projects to skip (default: 0)
+   * @returns A promise that resolves with the workflow evaluation projects response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationProjects(
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<GetWorkflowEvaluationProjectsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/projects${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationProjectsResponse;
+  }
+
+  /**
+   * Counts workflow evaluation projects.
+   * @returns A promise that resolves with the workflow evaluation project count
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationProjects(): Promise<number> {
+    const response = await this.fetch(
+      "/internal/workflow-evaluations/projects/count",
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as GetWorkflowEvaluationProjectCountResponse;
+    return body.count;
+  }
+
+  /**
    * Lists inference metadata with optional cursor-based pagination and filtering.
    * @param params - Optional pagination and filter parameters
    * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
@@ -985,6 +1062,83 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as TableBoundsWithCount;
+  }
+
+  /**
+   * Gets inference statistics for a specific episode.
+   * @param episode_id - The UUID of the episode
+   * @returns A promise that resolves with the inference stats
+   * @throws Error if the request fails
+   */
+  async getEpisodeInferenceCount(
+    episode_id: string,
+  ): Promise<GetEpisodeInferenceCountResponse> {
+    const endpoint = `/internal/episodes/${episode_id}/inference-count`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEpisodeInferenceCountResponse;
+  }
+
+  /**
+   * Searches evaluation runs by ID or variant name.
+   * @param evaluationName - The name of the evaluation
+   * @param functionName - The name of the function being evaluated
+   * @param query - The search query (case-insensitive)
+   * @param limit - Maximum number of results to return (default: 100)
+   * @param offset - Number of results to skip (default: 0)
+   * @returns A promise that resolves with the search results
+   * @throws Error if the request fails
+   */
+  async searchEvaluationRuns(
+    evaluationName: string,
+    functionName: string,
+    query: string,
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<SearchEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_name", evaluationName);
+    searchParams.append("function_name", functionName);
+    searchParams.append("query", query);
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/runs/search?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    return (await response.json()) as SearchEvaluationRunsResponse;
+  }
+
+  /**
+   * Queries the latest feedback ID for each metric for a given target.
+   * @param targetId - The target ID (inference_id or episode_id) to query feedback for
+   * @returns A promise that resolves with a mapping of metric names to their latest feedback IDs
+   * @throws Error if the request fails
+   */
+  async getLatestFeedbackIdByMetric(
+    targetId: string,
+  ): Promise<Record<string, string>> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest-id-by-metric`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as LatestFeedbackIdByMetricResponse;
+    // Convert optional values to non-optional (ts-rs generates HashMap as optional, but values are always present)
+    return Object.fromEntries(
+      Object.entries(body.feedback_id_by_metric).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
   }
 
   private async fetch(

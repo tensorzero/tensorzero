@@ -1,4 +1,4 @@
-import type { EvaluationRunSearchResult } from "~/utils/clickhouse/evaluations";
+import type { SearchEvaluationRunResult } from "~/types/tensorzero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { Badge } from "../ui/badge";
 import { X } from "lucide-react";
@@ -6,7 +6,7 @@ import { formatDate } from "~/utils/date";
 import { cn } from "~/utils/common";
 
 interface EvaluationRunBadgeProps {
-  runInfo: EvaluationRunSearchResult;
+  runInfo: SearchEvaluationRunResult;
   getColor: (runId: string) => string;
   lastUpdateDate?: Date;
   onRemove?: (e: React.MouseEvent) => void;

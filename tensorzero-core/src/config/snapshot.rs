@@ -83,7 +83,7 @@ pub struct ConfigSnapshot {
     __private: (),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SnapshotHash(Arc<str>);
 
 impl std::fmt::Display for SnapshotHash {

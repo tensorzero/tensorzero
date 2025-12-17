@@ -1,8 +1,5 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import {
-  pollForFeedbackItem,
-  queryLatestFeedbackIdByMetric,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { resolveModelInferences } from "~/utils/resolve.server";
 import { getUsedVariants } from "~/utils/clickhouse/function";
@@ -72,7 +69,7 @@ export async function loader({
       // Query these after polling completes to avoid race condition with materialized views
       [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
         dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
-        queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+        client.getLatestFeedbackIdByMetric(inference_id),
       ]);
     } else {
       // Normal case: execute all queries in parallel
@@ -89,7 +86,7 @@ export async function loader({
         demonstrationFeedbackPromise,
         dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
         feedbackDataPromise,
-        queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+        client.getLatestFeedbackIdByMetric(inference_id),
       ]);
     }
 

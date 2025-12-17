@@ -9,7 +9,7 @@ use crate::{
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow, MetricWithFeedback,
+            FeedbackRow, FloatMetricFeedbackRow, LatestFeedbackRow, MetricWithFeedback,
         },
     },
     error::{Error, ErrorDetails},
@@ -491,6 +491,35 @@ fn build_metrics_with_feedback_query(
     (query, query_params)
 }
 
+/// Builds the SQL query for getting the latest feedback ID for each metric for a target
+fn build_latest_feedback_id_by_metric_query(target_id: Uuid) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("target_id".to_string(), target_id.to_string());
+
+    let query = r"
+        SELECT
+          metric_name,
+          argMax(id, toUInt128(id)) as latest_id
+        FROM BooleanMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+        GROUP BY metric_name
+
+        UNION ALL
+
+        SELECT
+          metric_name,
+          argMax(id, toUInt128(id)) as latest_id
+        FROM FloatMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+        GROUP BY metric_name
+
+        ORDER BY metric_name
+        FORMAT JSONEachRow"
+        .to_string();
+
+    (query, query_params)
+}
+
 // Implementation of FeedbackQueries trait
 #[async_trait]
 impl FeedbackQueries for ClickHouseConnectionInfo {
@@ -930,6 +959,22 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         let (query, params_owned) =
             build_metrics_with_feedback_query(function_name, inference_table, variant_name);
+
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn query_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<LatestFeedbackRow>, Error> {
+        let (query, params_owned) = build_latest_feedback_id_by_metric_query(target_id);
 
         let query_params: HashMap<&str, &str> = params_owned
             .iter()
@@ -1951,5 +1996,25 @@ mod tests {
             params.get("variant_name"),
             Some(&"test_variant".to_string())
         );
+    }
+
+    #[test]
+    fn test_build_latest_feedback_id_by_metric_query() {
+        let target_id = Uuid::now_v7();
+        let (query, query_params) = build_latest_feedback_id_by_metric_query(target_id);
+
+        // Verify the query structure
+        assert_query_contains(&query, "SELECT");
+        assert_query_contains(&query, "FROM BooleanMetricFeedbackByTargetId");
+        assert_query_contains(&query, "FROM FloatMetricFeedbackByTargetId");
+        assert_query_contains(&query, "argMax(id, toUInt128(id)) as latest_id");
+        assert_query_contains(&query, "WHERE target_id = {target_id:String}");
+        assert_query_contains(&query, "UNION ALL");
+        assert_query_contains(&query, "GROUP BY metric_name");
+        assert_query_contains(&query, "ORDER BY metric_name");
+        assert_query_contains(&query, "FORMAT JSONEachRow");
+
+        // Verify params
+        assert_eq!(query_params.get("target_id"), Some(&target_id.to_string()));
     }
 }

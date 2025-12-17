@@ -23,6 +23,7 @@ pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
 pub mod stored_datapoint;
+pub mod workflow_evaluation_queries;
 
 #[async_trait]
 pub trait ClickHouseConnection:

@@ -74,7 +74,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.aws-bedrock-thinking]
 type = "chat_completion"
-model = "claude-3-7-sonnet-20250219-thinking-aws-bedrock"
+model = "claude-sonnet-4-5-20250929-thinking-aws-bedrock"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 thinking_budget_tokens = 1024

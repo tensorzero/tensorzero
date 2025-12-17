@@ -2167,7 +2167,7 @@ pub async fn parse_chat_output(
     }
 
     let mut output = Vec::new();
-    for content in content.into_iter() {
+    for content in content {
         match content {
             ContentBlockOutput::Text(text) => {
                 output.push(ContentBlockChatOutput::Text(text));
