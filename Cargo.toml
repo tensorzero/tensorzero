@@ -98,7 +98,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = "0.1"
+durable = { git = "https://github.com/tensorzero/durable", rev = "a0df128dd225e4729433230880f6111a946ba4fe" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

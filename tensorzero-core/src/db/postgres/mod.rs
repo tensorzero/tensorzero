@@ -6,9 +6,9 @@ use tokio::time::timeout;
 
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
-use crate::error::{Error, ErrorDetails};
-
 use super::HealthCheckable;
+use crate::error::{Error, ErrorDetails};
+use durable;
 
 pub mod experimentation;
 pub mod rate_limiting;
@@ -212,19 +212,6 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
         })
     })?;
-    let pool = PgPoolOptions::new()
-        .connect(&postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-    make_migrator().run(&pool).await.map_err(|e| {
-        Error::new(ErrorDetails::PostgresMigration {
-            message: e.to_string(),
-        })
-    })?;
 
     // Our 'tensorzero-auth' crate currently uses an alpha release of 'sqlx', so the `PgPool` type is different.
     let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(&postgres_url)
@@ -242,6 +229,28 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
                 message: format!("Failed to run tensorzero-auth migrations: {e}"),
             })
         })?;
+
+    // Run durable migrations using the same pool as the tensorzero_auth migrations
+    durable::MIGRATOR.run(&sqlx_alpha_pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: format!("Failed to run durable migrations: {e}"),
+        })
+    })?;
+
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+    make_migrator().run(&pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: e.to_string(),
+        })
+    })?;
+
     Ok(())
 }
 
