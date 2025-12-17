@@ -117,10 +117,10 @@ pub async fn start_gateway_on_random_port(
     #[cfg(not(target_os = "windows"))]
     {
         return ChildData {
-        addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
-        output,
-        stdout: line_rx,
-        child,
+            addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
+            output,
+            stdout: line_rx,
+            child,
         };
     }
 }
