@@ -11,7 +11,6 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
   GetCumulativeFeedbackTimeseriesParams,
@@ -230,15 +229,6 @@ export class DatabaseClient {
     return JSON.parse(
       feedbackTimeseriesString,
     ) as CumulativeFeedbackTimeSeriesPoint[];
-  }
-
-  async countFeedbackByTargetId(
-    params: CountFeedbackByTargetIdParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    const countString =
-      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
-    return JSON.parse(countString) as number;
   }
 
   async getFeedbackByVariant(

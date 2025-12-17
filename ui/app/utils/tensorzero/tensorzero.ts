@@ -14,6 +14,7 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CountFeedbackByTargetIdResponse,
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
@@ -1330,6 +1331,23 @@ export class TensorZeroClient {
         (entry): entry is [string, string] => entry[1] !== undefined,
       ),
     );
+  }
+
+  /**
+   * Queries the count of feedback for a given target ID.
+   * @param targetId - The target ID (inference_id or episode_id) to count feedback for
+   * @returns A promise that resolves with the feedback count
+   * @throws Error if the request fails
+   */
+  async countFeedbackByTargetId(targetId: string): Promise<number> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/count`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as CountFeedbackByTargetIdResponse;
+    return Number(body.count);
   }
 
   /**

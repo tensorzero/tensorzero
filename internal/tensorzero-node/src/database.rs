@@ -35,16 +35,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            count_feedback_by_target_id,
-            params,
-            CountFeedbackByTargetIdParams { target_id }
-        )
-    }
-
-    #[napi]
     pub async fn query_demonstration_feedback_by_inference_id(
         &self,
         params: String,
@@ -98,12 +88,6 @@ struct QueryDemonstrationFeedbackByInferenceIdParams {
     before: Option<Uuid>,
     after: Option<Uuid>,
     limit: Option<u32>,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-struct CountFeedbackByTargetIdParams {
-    target_id: Uuid,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
