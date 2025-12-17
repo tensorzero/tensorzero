@@ -781,6 +781,12 @@ impl TensorZeroGateway {
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
+    /// :param otlp_traces_extra_attributes: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                      Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-attributes-".
+    ///                                      Example: {"My-Attribute": "My-Value"} becomes header "tensorzero-otlp-traces-extra-attribute-My-Attribute: My-Value"
+    /// :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                     Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
+    ///                                     Example: {"My-Resource": "My-Value"} becomes header "tensorzero-otlp-traces-extra-resource-My-Resource: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
