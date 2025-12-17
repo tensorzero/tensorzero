@@ -155,6 +155,7 @@ export * from "./LLMJudgeIncludeConfig";
 export * from "./LLMJudgeInputFormat";
 export * from "./LLMJudgeOptimize";
 export * from "./LLMJudgeOutputType";
+export * from "./LatestFeedbackIdByMetricResponse";
 export * from "./LaunchOptimizationParams";
 export * from "./LaunchOptimizationWorkflowParams";
 export * from "./ListDatapointsRequest";

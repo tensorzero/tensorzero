@@ -1,9 +1,7 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
-import {
-  pollForFeedbackItem,
-  queryLatestFeedbackIdByMetric,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -44,7 +42,6 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -98,7 +95,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const dbClient = await getNativeDatabaseClient();
-  const tensorZeroClient = await getTensorZeroClient();
+  const tensorZeroClient = getTensorZeroClient();
 
   // Start count queries early - these will be streamed to section headers
   const numInferencesPromise = tensorZeroClient
@@ -139,7 +136,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         async (feedbacks) => {
           const [bounds, latestFeedbackByMetric] = await Promise.all([
             dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
-            queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+            tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return { feedbacks, bounds, latestFeedbackByMetric };
         },
@@ -153,7 +150,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           limit,
         }),
         dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
-        queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+        tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
       ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
         feedbacks,
         bounds,
