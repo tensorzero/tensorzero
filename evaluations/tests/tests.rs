@@ -3138,8 +3138,8 @@ mod topk_tests {
             .expect("Failed to create queue");
     }
 
-    /// Test that top-k evaluation runs successfully with the haiku_without_outputs evaluation.
-    /// This test uses the existing fixture-based approach for creating datapoints.
+    /// Test that top-k evaluation runs successfully with the test_evaluation evaluation.
+    /// This test uses deterministic dummy providers and evaluators for reliable results.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_basic_run() {
         // Setup
@@ -3149,27 +3149,27 @@ mod topk_tests {
         let pg_pool = get_postgres_pool().await;
         ensure_queue_exists(&pg_pool).await;
 
-        // Create a unique dataset for this test using existing fixtures
-        let dataset_name = format!("topk_test_haiku_{}", Uuid::now_v7());
+        // Create a unique dataset for this test using basic_test fixtures
+        let dataset_name = format!("topk_test_basic_{}", Uuid::now_v7());
 
-        // Use existing fixture for write_haiku function (haiku_without_outputs evaluation)
+        // Use basic_test fixture for test_evaluation (uses dummy providers)
         write_chat_fixture_to_dataset(
             &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )),
-            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
         )
         .await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
-        // Get the evaluation config for haiku_without_outputs
-        // This evaluation uses the write_haiku function with topic_starts_with_f evaluator
+        // Get the evaluation config for test_evaluation
+        // This evaluation uses basic_test function with dummy LLM judge evaluators
         let evaluation_config = config
             .evaluations
-            .get("haiku_without_outputs")
-            .expect("haiku_without_outputs not found in config")
+            .get("test_evaluation")
+            .expect("test_evaluation not found in config")
             .clone();
 
         // Build the function configs table
@@ -3180,8 +3180,8 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Variant names for write_haiku function
-        let variant_names = vec!["gpt_4o_mini".to_string(), "haiku".to_string()];
+        // Variant names for basic_test function (using dummy providers)
+        let variant_names = vec!["test".to_string(), "test2".to_string()];
 
         // Create clients
         let clients = Arc::new(Clients {
@@ -3204,7 +3204,7 @@ mod topk_tests {
 
         // Create task params
         let params = TopKTaskParams {
-            evaluation_name: "haiku_without_outputs".to_string(),
+            evaluation_name: "test_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
             k_min: 1,
@@ -3324,6 +3324,7 @@ mod topk_tests {
 
     /// Test that top-k evaluation stops with DatasetExhausted when there aren't enough datapoints.
     /// We create a small dataset and set max_datapoints to a small value to ensure exhaustion.
+    /// Uses deterministic dummy providers and evaluators.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_dataset_exhaustion() {
         // Setup
@@ -3336,23 +3337,23 @@ mod topk_tests {
         // Create a unique dataset with very few datapoints
         let dataset_name = format!("topk_test_exhaustion_{}", Uuid::now_v7());
 
-        // Use existing fixture but with a small subset
+        // Use basic_test fixture for test_evaluation (uses dummy providers)
         write_chat_fixture_to_dataset(
             &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )),
-            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
         )
         .await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
-        // Get the evaluation config
+        // Get the evaluation config for test_evaluation
         let evaluation_config = config
             .evaluations
-            .get("haiku_without_outputs")
-            .expect("haiku_without_outputs not found in config")
+            .get("test_evaluation")
+            .expect("test_evaluation not found in config")
             .clone();
 
         // Build the function configs table
@@ -3363,8 +3364,8 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use two variants that are likely similar in performance
-        let variant_names = vec!["gpt_4o_mini".to_string(), "haiku".to_string()];
+        // Use two variants with deterministic dummy providers
+        let variant_names = vec!["test".to_string(), "test2".to_string()];
 
         let clients = Arc::new(Clients {
             tensorzero_client,
@@ -3385,7 +3386,7 @@ mod topk_tests {
         // Set max_datapoints very low (3) so the dataset will be exhausted before
         // we can confidently identify a winner
         let params = TopKTaskParams {
-            evaluation_name: "haiku_without_outputs".to_string(),
+            evaluation_name: "test_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
             k_min: 1,
@@ -3486,7 +3487,8 @@ mod topk_tests {
     }
 
     /// Test that top-k evaluation stops with EvaluatorsFailed when evaluators exceed failure threshold.
-    /// This test uses the "error" variant which triggers evaluator errors.
+    /// This test uses the "error" evaluator in test_evaluation which always fails.
+    /// Uses deterministic dummy providers and evaluators.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_evaluator_failure_threshold() {
         // Setup
@@ -3499,23 +3501,23 @@ mod topk_tests {
         // Create a unique dataset
         let dataset_name = format!("topk_test_eval_fail_{}", Uuid::now_v7());
 
-        // Use entity_extraction evaluation which has an "error" evaluator that always fails
-        write_json_fixture_to_dataset(
+        // Use basic_test fixture for test_evaluation (has dummy providers and error evaluator)
+        write_chat_fixture_to_dataset(
             &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )),
-            &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
         )
         .await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
-        // Get the evaluation config for entity_extraction which has an "error" evaluator
+        // Get the evaluation config for test_evaluation which has an "error" evaluator
         let evaluation_config = config
             .evaluations
-            .get("entity_extraction")
-            .expect("entity_extraction not found in config")
+            .get("test_evaluation")
+            .expect("test_evaluation not found in config")
             .clone();
 
         let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
@@ -3525,8 +3527,9 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use the gpt_4o_mini variant for entity_extraction
-        let variant_names = vec!["gpt_4o_mini".to_string()];
+        // Use two dummy variants for basic_test function so there's actual competition
+        // (with only 1 variant, top-k is trivially found before evaluator failure triggers)
+        let variant_names = vec!["test".to_string(), "test2".to_string()];
 
         let clients = Arc::new(Clients {
             tensorzero_client,
@@ -3545,9 +3548,9 @@ mod topk_tests {
             .expect("Failed to create durable client");
 
         // Set a low evaluator failure threshold so we'll hit it quickly
-        // The "error" evaluator in entity_extraction always fails
+        // The "error" evaluator in test_evaluation always fails
         let params = TopKTaskParams {
-            evaluation_name: "entity_extraction".to_string(),
+            evaluation_name: "test_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
             k_min: 1,
@@ -3556,7 +3559,7 @@ mod topk_tests {
             max_datapoints: Some(10),
             batch_size: Some(5),
             variant_failure_threshold: None,
-            evaluator_failure_threshold: Some(0.5), // 50% failure rate threshold
+            evaluator_failure_threshold: Some(0.05), // 5% failure rate threshold
             concurrency: 2,
             inference_cache: CacheEnabledMode::On,
         };
@@ -3658,6 +3661,7 @@ mod topk_tests {
 
     /// Test that top-k evaluation handles variant failures correctly.
     /// When too many variants fail, the task should stop with TooManyVariantsFailed.
+    /// Uses deterministic dummy providers and evaluators.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_variant_failure_threshold() {
         // Setup
@@ -3670,13 +3674,13 @@ mod topk_tests {
         // Create a unique dataset
         let dataset_name = format!("topk_test_variant_fail_{}", Uuid::now_v7());
 
-        // Use basic_test function which has an "error" variant that always fails
+        // Use basic_test fixture for test_evaluation (has dummy providers and error variant)
         write_chat_fixture_to_dataset(
             &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )),
-            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
         )
         .await;
         clickhouse_flush_async_insert(&clickhouse).await;

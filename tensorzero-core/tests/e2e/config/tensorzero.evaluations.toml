@@ -50,6 +50,18 @@ active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
+[evaluations.test_evaluation.evaluators.error]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.error.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::error"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
 [evaluations.json_evaluation]
 type = "inference"
 function_name = "json_success"
