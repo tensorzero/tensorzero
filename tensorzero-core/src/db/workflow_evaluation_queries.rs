@@ -27,4 +27,7 @@ pub trait WorkflowEvaluationQueries {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<WorkflowEvaluationProjectRow>, Error>;
+
+    /// Counts workflow evaluation projects.
+    async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error>;
 }

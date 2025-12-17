@@ -919,7 +919,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode().cloned(),
+            self.inner.json_mode().copied(),
             extra_body,
             extra_headers,
         )?;

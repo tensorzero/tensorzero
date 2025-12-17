@@ -13,8 +13,8 @@ use crate::db::inference_stats::{
     CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
 };
 use crate::db::inferences::{
-    InferenceMetadata, InferenceQueries, ListInferenceMetadataParams, ListInferencesParams,
-    MockInferenceQueries,
+    CountInferencesParams as ListInferencesCountParams, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -68,6 +68,16 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         params: &ListInferenceMetadataParams,
     ) -> Result<Vec<InferenceMetadata>, Error> {
         self.inference_queries.list_inference_metadata(params).await
+    }
+
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &ListInferencesCountParams<'_>,
+    ) -> Result<u64, Error> {
+        self.inference_queries
+            .count_inferences(config, params)
+            .await
     }
 }
 
@@ -185,6 +195,12 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
     ) -> Result<u64, Error> {
         self.inference_stats_queries
             .count_inferences_with_demonstration_feedback(params)
+            .await
+    }
+
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
+        self.inference_stats_queries
+            .count_inferences_for_episode(episode_id)
             .await
     }
 }

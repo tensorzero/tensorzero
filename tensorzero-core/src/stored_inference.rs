@@ -2,12 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::client::InferenceParams;
 use crate::config::Config;
+use crate::db::inferences::InferenceOutputSource;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use crate::endpoints::datasets::v1::types::{
-    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
-    CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateJsonDatapointRequest,
+    JsonDatapointOutputUpdate,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -97,7 +98,7 @@ impl StoredInference {
     pub fn into_datapoint_insert(
         self,
         dataset_name: &str,
-        output_source: &CreateDatapointsFromInferenceOutputSource,
+        output_source: &InferenceOutputSource,
         config: &Config,
     ) -> Result<StoredDatapoint, Error> {
         let datapoint_id = Uuid::now_v7();
@@ -105,11 +106,9 @@ impl StoredInference {
         match self {
             StoredInference::Json(inference) => {
                 let output = match output_source {
-                    CreateDatapointsFromInferenceOutputSource::None => None,
-                    CreateDatapointsFromInferenceOutputSource::Inference => Some(inference.output),
-                    CreateDatapointsFromInferenceOutputSource::Demonstration => {
-                        Some(inference.output)
-                    }
+                    InferenceOutputSource::None => None,
+                    InferenceOutputSource::Inference => Some(inference.output),
+                    InferenceOutputSource::Demonstration => Some(inference.output),
                 };
 
                 let datapoint = StoredJsonInferenceDatapoint {
@@ -135,11 +134,9 @@ impl StoredInference {
             }
             StoredInference::Chat(inference) => {
                 let output = match output_source {
-                    CreateDatapointsFromInferenceOutputSource::None => None,
-                    CreateDatapointsFromInferenceOutputSource::Inference => Some(inference.output),
-                    CreateDatapointsFromInferenceOutputSource::Demonstration => {
-                        Some(inference.output)
-                    }
+                    InferenceOutputSource::None => None,
+                    InferenceOutputSource::Inference => Some(inference.output),
+                    InferenceOutputSource::Demonstration => Some(inference.output),
                 };
 
                 // Convert DynamicToolParams (wire type) to ToolCallConfigDatabaseInsert (storage type)
@@ -788,7 +785,6 @@ mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
     use crate::db::stored_datapoint::StoredDatapoint;
-    use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
     use crate::endpoints::inference::InferenceParams;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -1001,7 +997,7 @@ mod tests {
     fn test_chat_inference_to_datapoint_with_inference_output() {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let output_source = InferenceOutputSource::Inference;
         let config = create_test_config();
 
         let original_inference_id = chat_inference.inference_id;
@@ -1041,7 +1037,7 @@ mod tests {
     fn test_chat_inference_to_datapoint_with_none_output() {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::None;
+        let output_source = InferenceOutputSource::None;
         let config = create_test_config();
 
         let inference = StoredInference::Chat(chat_inference);
@@ -1066,7 +1062,7 @@ mod tests {
     fn test_chat_inference_to_datapoint_with_demonstration_output() {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+        let output_source = InferenceOutputSource::Demonstration;
         let config = create_test_config();
 
         let original_output = chat_inference.output.clone();
@@ -1088,7 +1084,7 @@ mod tests {
     fn test_json_inference_to_datapoint_with_inference_output() {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let output_source = InferenceOutputSource::Inference;
         let config = create_test_config();
 
         let original_inference_id = json_inference.inference_id;
@@ -1127,7 +1123,7 @@ mod tests {
     fn test_json_inference_to_datapoint_with_none_output() {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::None;
+        let output_source = InferenceOutputSource::None;
         let config = create_test_config();
 
         let inference = StoredInference::Json(json_inference);
@@ -1152,7 +1148,7 @@ mod tests {
     fn test_json_inference_to_datapoint_with_demonstration_output() {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+        let output_source = InferenceOutputSource::Demonstration;
         let config = create_test_config();
 
         let original_output = json_inference.output.clone();
@@ -1174,7 +1170,7 @@ mod tests {
     fn test_new_datapoint_id_is_generated_for_each_conversion() {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let output_source = InferenceOutputSource::Inference;
         let config = create_test_config();
 
         // Convert the same inference twice
@@ -1211,7 +1207,7 @@ mod tests {
         chat_inference.tags = HashMap::new();
 
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let output_source = InferenceOutputSource::Inference;
         let config = create_test_config();
 
         let inference = StoredInference::Chat(chat_inference);
@@ -1234,7 +1230,7 @@ mod tests {
         json_inference.tags = HashMap::new();
 
         let dataset_name = "test_dataset";
-        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let output_source = InferenceOutputSource::Inference;
         let config = create_test_config();
 
         let inference = StoredInference::Json(json_inference);
