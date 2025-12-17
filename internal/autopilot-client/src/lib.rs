@@ -5,7 +5,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use autopilot_client::{AutopilotClient, CreateEventRequest, EventPayload, UserMessagePayload};
+//! use autopilot_client::{
+//!     AutopilotClient, CreateEventRequest, EventPayload, InputMessage,
+//!     InputMessageContent, Role, Text,
+//! };
 //! use uuid::Uuid;
 //!
 //! # async fn example() -> Result<(), autopilot_client::AutopilotError> {
@@ -20,8 +23,11 @@
 //!     CreateEventRequest {
 //!         deployment_id: Uuid::new_v4(),
 //!         tensorzero_version: "2025.1.0".to_string(),
-//!         payload: EventPayload::UserMessage(UserMessagePayload {
-//!             content: vec![serde_json::json!({"type": "text", "text": "Hello!"})],
+//!         payload: EventPayload::Message(InputMessage {
+//!             role: Role::User,
+//!             content: vec![InputMessageContent::Text(Text {
+//!                 text: "Hello!".to_string(),
+//!             })],
 //!         }),
 //!         previous_user_message_event_id: None,
 //!     },
@@ -39,7 +45,34 @@ mod types;
 pub use client::{AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL};
 pub use error::AutopilotError;
 pub use types::{
-    AssistantMessagePayload, CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse,
-    Event, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, Session, StatusUpdate, StreamEventsParams, UserMessagePayload,
+    // Autopilot-specific types
+    AssistantMessagePayload,
+    // Re-exported from tensorzero: InputMessage and its dependencies
+    Base64File,
+    CreateEventRequest,
+    CreateEventResponse,
+    ErrorDetail,
+    ErrorResponse,
+    Event,
+    EventPayload,
+    File,
+    InputMessage,
+    InputMessageContent,
+    ListEventsParams,
+    ListEventsResponse,
+    ListSessionsParams,
+    ListSessionsResponse,
+    ObjectStoragePointer,
+    RawText,
+    Role,
+    Session,
+    StatusUpdate,
+    StreamEventsParams,
+    Template,
+    Text,
+    Thought,
+    ToolCallWrapper,
+    ToolResult,
+    Unknown,
+    UrlFile,
 };

@@ -87,15 +87,17 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
-    Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
-    UrlFile, Usage,
+    Base64File, ContentBlockChunk, File, ObjectStoragePointer, RawText, Role, System, Template,
+    Text, Thought, Unknown, UnknownChunk, UrlFile, Usage,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, FunctionTool, Tool, ToolCallWrapper};
+pub use tensorzero_core::tool::{
+    DynamicToolParams, FunctionTool, Tool, ToolCallWrapper, ToolResult,
+};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037

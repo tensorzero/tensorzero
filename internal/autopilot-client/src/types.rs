@@ -4,6 +4,24 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+// Re-export types from tensorzero-core that InputMessage depends on
+pub use tensorzero_core::inference::types::{
+    // File types
+    Base64File,
+    File,
+    // Content types for InputMessageContent
+    InputMessage,
+    InputMessageContent,
+    ObjectStoragePointer,
+    RawText,
+    Role,
+    Template,
+    Text,
+    Thought,
+    Unknown,
+    UrlFile,
+};
+pub use tensorzero_core::tool::{ToolCallWrapper, ToolResult};
 use uuid::Uuid;
 
 // =============================================================================
@@ -34,15 +52,8 @@ pub struct Event {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
-    UserMessage(UserMessagePayload),
-    AssistantMessage(AssistantMessagePayload),
+    Message(InputMessage),
     StatusUpdate { status_update: StatusUpdate },
-}
-
-/// Payload for a user message event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserMessagePayload {
-    pub content: Vec<serde_json::Value>,
 }
 
 /// Payload for an assistant message event.

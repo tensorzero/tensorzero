@@ -288,6 +288,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "tensorzero-core",
  "thiserror 2.0.17",
  "url",
  "uuid",
