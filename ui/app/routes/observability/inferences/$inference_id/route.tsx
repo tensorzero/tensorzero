@@ -66,8 +66,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
-    : dbClient.queryFeedbackByTargetId({
-        target_id: inference_id,
+    : tensorZeroClient.getFeedbackByTargetId(inference_id, {
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
         limit,

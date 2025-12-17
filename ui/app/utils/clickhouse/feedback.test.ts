@@ -1,17 +1,17 @@
 import { expect, test, vi } from "vitest";
 import { pollForFeedbackItem } from "./feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 test("pollForFeedbackItem should find feedback when it exists", async () => {
   const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
   const limit = 10;
 
-  const dbClient = await getNativeDatabaseClient();
-  // Run the queryFeedbackByTargetId function to return feedback with the target ID
-  const originalQueryFeedback = await dbClient.queryFeedbackByTargetId({
-    target_id: targetId,
-    limit,
-  });
+  const tensorZeroClient = getTensorZeroClient();
+  // Run the getFeedbackByTargetId function to return feedback with the target ID
+  const originalQueryFeedback = await tensorZeroClient.getFeedbackByTargetId(
+    targetId,
+    { limit },
+  );
 
   // Ensure we have feedback to test with
   expect(originalQueryFeedback.length).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
-import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import { logger } from "~/utils/logger";
 import type { FeedbackRow } from "~/types/tensorzero";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 /**
  * Polls for a specific feedback item on the first page.
@@ -18,15 +18,12 @@ export async function pollForFeedbackItem(
   maxRetries: number = 10,
   retryDelay: number = 200,
 ): Promise<FeedbackRow[]> {
-  const dbClient = await getNativeDatabaseClient();
+  const tensorZeroClient = getTensorZeroClient();
 
   let feedback: FeedbackRow[] = [];
   let found = false;
   for (let i = 0; i < maxRetries; i++) {
-    feedback = await dbClient.queryFeedbackByTargetId({
-      target_id: targetId,
-      before: undefined,
-      after: undefined,
+    feedback = await tensorZeroClient.getFeedbackByTargetId(targetId, {
       limit,
     });
     if (feedback.some((f) => f.id === feedbackId)) {
