@@ -15,7 +15,7 @@ set -euxo pipefail
 # ------------------------------------------------------------------------------
 # Configurable versions (override via env if needed)
 # ------------------------------------------------------------------------------
-: "${NODE_VERSION:=24.11.0}"      # Use "24.11.0" for latest stable Node 24.x
+: "${NODE_VERSION:=24.12.0}"      # Use "24.12.0" for latest stable Node 24.x
 : "${PNPM_VERSION:=9}"       # Use "9" (latest 9.x) or pin "9.12.3", etc.
 
 echo "==============================================================================="
