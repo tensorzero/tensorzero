@@ -57,6 +57,7 @@ import type {
   UpdateDatapointsResponse,
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
+  GetEvaluationRunInfosResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -1219,6 +1220,31 @@ export class TensorZeroClient {
         (entry): entry is [string, string] => entry[1] !== undefined,
       ),
     );
+  }
+
+  /**
+   * Gets information about specific evaluation runs.
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @param functionName - The name of the function being evaluated
+   * @returns A promise that resolves with information about the evaluation runs
+   * @throws Error if the request fails
+   */
+  async getEvaluationRunInfos(
+    evaluationRunIds: string[],
+    functionName: string,
+  ): Promise<GetEvaluationRunInfosResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    searchParams.append("function_name", functionName);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/run-infos?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunInfosResponse;
   }
 
   private async fetch(
