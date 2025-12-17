@@ -114,6 +114,92 @@ async fn test_get_evaluation_run_infos_empty_input() {
 }
 
 // ============================================================================
+// get_evaluation_run_infos_for_datapoint tests
+// ============================================================================
+
+/// Test that get_evaluation_run_infos_for_datapoint returns correct info for a JSON function datapoint.
+#[tokio::test]
+async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
+    let clickhouse = get_clickhouse().await;
+
+    // Datapoint ID from the test fixture for extract_entities function
+    let datapoint_id = Uuid::parse_str("0196368e-0b64-7321-ab5b-c32eefbf3e9f").expect("Valid UUID");
+
+    let run_infos = clickhouse
+        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "extract_entities")
+        .await
+        .unwrap();
+
+    assert_eq!(run_infos.len(), 1, "Expected 1 evaluation run info");
+    assert_eq!(
+        run_infos[0].evaluation_run_id,
+        Uuid::parse_str("0196368e-53a8-7e82-a88d-db7086926d81").expect("Valid UUID")
+    );
+    assert_eq!(run_infos[0].variant_name, "gpt4o_initial_prompt");
+}
+
+/// Test that get_evaluation_run_infos_for_datapoint returns correct info for a chat function datapoint.
+#[tokio::test]
+async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
+    let clickhouse = get_clickhouse().await;
+
+    // Datapoint ID from the test fixture for write_haiku function
+    let datapoint_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").expect("Valid UUID");
+
+    let run_infos = clickhouse
+        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "write_haiku")
+        .await
+        .unwrap();
+
+    assert_eq!(run_infos.len(), 1, "Expected 1 evaluation run info");
+    assert_eq!(
+        run_infos[0].evaluation_run_id,
+        Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").expect("Valid UUID")
+    );
+    assert_eq!(run_infos[0].variant_name, "better_prompt_haiku_3_5");
+}
+
+/// Test that get_evaluation_run_infos_for_datapoint returns empty for nonexistent datapoint.
+#[tokio::test]
+async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
+    let clickhouse = get_clickhouse().await;
+
+    let nonexistent_id =
+        Uuid::parse_str("00000000-0000-0000-0000-000000000000").expect("Valid UUID");
+
+    let run_infos = clickhouse
+        .get_evaluation_run_infos_for_datapoint(&nonexistent_id, "extract_entities")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        run_infos.len(),
+        0,
+        "Expected 0 evaluation run infos for nonexistent datapoint"
+    );
+}
+
+/// Test that get_evaluation_run_infos_for_datapoint returns empty when function name doesn't match.
+#[tokio::test]
+async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a valid datapoint ID but with wrong function name
+    let datapoint_id = Uuid::parse_str("0196368e-0b64-7321-ab5b-c32eefbf3e9f").expect("Valid UUID");
+
+    let run_infos = clickhouse
+        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "nonexistent_function")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        run_infos.len(),
+        0,
+        "Expected 0 evaluation run infos for wrong function"
+    );
+}
+
+// ============================================================================
 // count_datapoints_for_evaluation tests
 // ============================================================================
 

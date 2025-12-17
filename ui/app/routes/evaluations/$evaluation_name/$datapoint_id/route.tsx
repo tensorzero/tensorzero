@@ -1,5 +1,4 @@
 import {
-  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
@@ -107,10 +106,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const selectedEvaluationRunInfosPromise = tensorZeroClient
     .getEvaluationRunInfos(selectedRunIds, function_name)
     .then((response) => response.run_infos);
-  const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
-    datapoint_id,
-    function_name,
-  );
+  const allowedEvaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfosForDatapoint(datapoint_id, function_name)
+    .then((response) => response.run_infos);
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the evaluation results as it is eventually consistent.

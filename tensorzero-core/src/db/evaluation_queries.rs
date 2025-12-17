@@ -74,4 +74,11 @@ pub trait EvaluationQueries {
         evaluation_run_ids: &[Uuid],
         function_name: &str,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets evaluation run info for inferences associated with a specific datapoint.
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &Uuid,
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
 }

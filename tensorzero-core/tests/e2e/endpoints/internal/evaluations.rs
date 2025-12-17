@@ -132,3 +132,137 @@ async fn test_get_evaluation_run_infos_wrong_function() {
         "Expected 0 evaluation run infos for wrong function"
     );
 }
+
+// ============================================================================
+// get_evaluation_run_infos_for_datapoint endpoint tests
+// ============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
+    let http_client = Client::new();
+
+    // Use datapoint ID from the test fixture data for extract_entities function
+    let datapoint_id = "0196368e-0b64-7321-ab5b-c32eefbf3e9f";
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+    ))
+    .to_string()
+        + "?function_name=extract_entities";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_run_infos_for_datapoint json request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationRunInfosResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.run_infos.len(),
+        1,
+        "Expected 1 evaluation run info for json datapoint"
+    );
+
+    let run_info = &response.run_infos[0];
+    assert_eq!(
+        run_info.evaluation_run_id,
+        Uuid::parse_str("0196368e-53a8-7e82-a88d-db7086926d81").unwrap()
+    );
+    assert_eq!(run_info.variant_name, "gpt4o_initial_prompt");
+    assert!(!run_info.most_recent_inference_date.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
+    let http_client = Client::new();
+
+    // Use datapoint ID from the test fixture data for write_haiku function
+    let datapoint_id = "0196374a-d03f-7420-9da5-1561cba71ddb";
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+    ))
+    .to_string()
+        + "?function_name=write_haiku";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_run_infos_for_datapoint chat request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationRunInfosResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.run_infos.len(),
+        1,
+        "Expected 1 evaluation run info for chat datapoint"
+    );
+
+    let run_info = &response.run_infos[0];
+    assert_eq!(
+        run_info.evaluation_run_id,
+        Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").unwrap()
+    );
+    assert_eq!(run_info.variant_name, "better_prompt_haiku_3_5");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
+    let http_client = Client::new();
+
+    let datapoint_id = "00000000-0000-0000-0000-000000000000";
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+    ))
+    .to_string()
+        + "?function_name=extract_entities";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_run_infos_for_datapoint nonexistent request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationRunInfosResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.run_infos.len(),
+        0,
+        "Expected 0 evaluation run infos for nonexistent datapoint"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
+    let http_client = Client::new();
+
+    // Use a valid datapoint ID but with wrong function name
+    let datapoint_id = "0196368e-0b64-7321-ab5b-c32eefbf3e9f";
+
+    let url = get_gateway_endpoint(&format!(
+        "/internal/evaluations/datapoints/{datapoint_id}/run-infos"
+    ))
+    .to_string()
+        + "?function_name=nonexistent_function";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_run_infos_for_datapoint wrong function request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationRunInfosResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.run_infos.len(),
+        0,
+        "Expected 0 evaluation run infos for wrong function"
+    );
+}

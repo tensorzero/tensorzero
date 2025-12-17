@@ -1,7 +1,7 @@
-//! Handler for getting evaluation run infos by IDs.
+//! Handlers for getting evaluation run infos.
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
@@ -10,11 +10,17 @@ use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Query parameters for getting evaluation run infos.
+/// Query parameters for getting evaluation run infos by IDs.
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationRunInfosParams {
     /// Comma-separated list of evaluation run UUIDs
     pub evaluation_run_ids: String,
+    pub function_name: String,
+}
+
+/// Query parameters for getting evaluation run infos for a datapoint.
+#[derive(Debug, Deserialize)]
+pub struct GetEvaluationRunInfosForDatapointParams {
     pub function_name: String,
 }
 
@@ -75,6 +81,48 @@ pub async fn get_evaluation_run_infos(
 ) -> Result<GetEvaluationRunInfosResponse, Error> {
     let run_infos_database = clickhouse
         .get_evaluation_run_infos(evaluation_run_ids, function_name)
+        .await?;
+
+    let run_infos = run_infos_database
+        .into_iter()
+        .map(|row| EvaluationRunInfoById {
+            evaluation_run_id: row.evaluation_run_id,
+            variant_name: row.variant_name,
+            most_recent_inference_date: row.most_recent_inference_date.to_rfc3339(),
+        })
+        .collect();
+
+    Ok(GetEvaluationRunInfosResponse { run_infos })
+}
+
+/// Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run-infos`
+///
+/// Returns information about evaluation runs associated with a specific datapoint.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "evaluations.get_run_infos_for_datapoint", skip_all)]
+pub async fn get_evaluation_run_infos_for_datapoint_handler(
+    State(app_state): AppState,
+    Path(datapoint_id): Path<Uuid>,
+    Query(params): Query<GetEvaluationRunInfosForDatapointParams>,
+) -> Result<Json<GetEvaluationRunInfosResponse>, Error> {
+    let response = get_evaluation_run_infos_for_datapoint(
+        &app_state.clickhouse_connection_info,
+        &datapoint_id,
+        &params.function_name,
+    )
+    .await?;
+
+    Ok(Json(response))
+}
+
+/// Core business logic for getting evaluation run infos for a datapoint.
+pub async fn get_evaluation_run_infos_for_datapoint(
+    clickhouse: &impl EvaluationQueries,
+    datapoint_id: &Uuid,
+    function_name: &str,
+) -> Result<GetEvaluationRunInfosResponse, Error> {
+    let run_infos_database = clickhouse
+        .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name)
         .await?;
 
     let run_infos = run_infos_database
@@ -178,6 +226,99 @@ mod tests {
 
         assert_eq!(result.run_infos.len(), 1);
         assert_eq!(result.run_infos[0].evaluation_run_id, id);
+        assert_eq!(result.run_infos[0].variant_name, "my_variant");
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_returns_results() {
+        let datapoint_id = Uuid::now_v7();
+        let eval_run_id1 = Uuid::now_v7();
+        let eval_run_id2 = Uuid::now_v7();
+        let timestamp = Utc::now();
+
+        let mut mock_clickhouse = MockEvaluationQueries::new();
+        mock_clickhouse
+            .expect_get_evaluation_run_infos_for_datapoint()
+            .withf(move |dp_id, fn_name| *dp_id == datapoint_id && fn_name == "test_function")
+            .times(1)
+            .returning(move |_, _| {
+                Box::pin(async move {
+                    Ok(vec![
+                        EvaluationRunInfoByIdRow {
+                            evaluation_run_id: eval_run_id1,
+                            variant_name: "variant1".to_string(),
+                            most_recent_inference_date: timestamp,
+                        },
+                        EvaluationRunInfoByIdRow {
+                            evaluation_run_id: eval_run_id2,
+                            variant_name: "variant2".to_string(),
+                            most_recent_inference_date: timestamp,
+                        },
+                    ])
+                })
+            });
+
+        let result = get_evaluation_run_infos_for_datapoint(
+            &mock_clickhouse,
+            &datapoint_id,
+            "test_function",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.run_infos.len(), 2);
+        assert_eq!(result.run_infos[0].evaluation_run_id, eval_run_id1);
+        assert_eq!(result.run_infos[0].variant_name, "variant1");
+        assert_eq!(result.run_infos[1].evaluation_run_id, eval_run_id2);
+        assert_eq!(result.run_infos[1].variant_name, "variant2");
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_empty_results() {
+        let datapoint_id = Uuid::now_v7();
+
+        let mut mock_clickhouse = MockEvaluationQueries::new();
+        mock_clickhouse
+            .expect_get_evaluation_run_infos_for_datapoint()
+            .times(1)
+            .returning(|_, _| Box::pin(async move { Ok(vec![]) }));
+
+        let result =
+            get_evaluation_run_infos_for_datapoint(&mock_clickhouse, &datapoint_id, "nonexistent")
+                .await
+                .unwrap();
+
+        assert_eq!(result.run_infos.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_single_run() {
+        let datapoint_id = Uuid::now_v7();
+        let eval_run_id = Uuid::now_v7();
+        let timestamp = Utc::now();
+
+        let mut mock_clickhouse = MockEvaluationQueries::new();
+        mock_clickhouse
+            .expect_get_evaluation_run_infos_for_datapoint()
+            .withf(move |dp_id, fn_name| *dp_id == datapoint_id && fn_name == "my_function")
+            .times(1)
+            .returning(move |_, _| {
+                Box::pin(async move {
+                    Ok(vec![EvaluationRunInfoByIdRow {
+                        evaluation_run_id: eval_run_id,
+                        variant_name: "my_variant".to_string(),
+                        most_recent_inference_date: timestamp,
+                    }])
+                })
+            });
+
+        let result =
+            get_evaluation_run_infos_for_datapoint(&mock_clickhouse, &datapoint_id, "my_function")
+                .await
+                .unwrap();
+
+        assert_eq!(result.run_infos.len(), 1);
+        assert_eq!(result.run_infos[0].evaluation_run_id, eval_run_id);
         assert_eq!(result.run_infos[0].variant_name, "my_variant");
     }
 }

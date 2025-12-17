@@ -1357,6 +1357,30 @@ export class TensorZeroClient {
     return (await response.json()) as GetEvaluationRunInfosResponse;
   }
 
+  /**
+   * Gets evaluation run infos for a specific datapoint.
+   * @param datapointId - The UUID of the datapoint to query
+   * @param functionName - The name of the function being evaluated
+   * @returns A promise that resolves with information about evaluation runs that include this datapoint
+   * @throws Error if the request fails
+   */
+  async getEvaluationRunInfosForDatapoint(
+    datapointId: string,
+    functionName: string,
+  ): Promise<GetEvaluationRunInfosResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run-infos?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunInfosResponse;
+  }
+
   private async fetch(
     path: string,
     init: {
