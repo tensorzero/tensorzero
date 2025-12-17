@@ -181,7 +181,7 @@ impl AutopilotClient {
         let response = self
             .http_client
             .get(url)
-            .headers(self.auth_headers())
+            .headers(self.auth_headers()?)
             .query(&params)
             .send()
             .await?;
@@ -206,7 +206,7 @@ impl AutopilotClient {
         let response = self
             .http_client
             .get(url)
-            .headers(self.auth_headers())
+            .headers(self.auth_headers()?)
             .query(&params)
             .send()
             .await?;
@@ -229,7 +229,7 @@ impl AutopilotClient {
         let response = self
             .http_client
             .post(url)
-            .headers(self.auth_headers())
+            .headers(self.auth_headers()?)
             .json(&request)
             .send()
             .await?;
@@ -259,7 +259,7 @@ impl AutopilotClient {
                 .append_pair("last_event_id", &last_event_id.to_string());
         }
 
-        let request = self.sse_http_client.get(url).headers(self.auth_headers());
+        let request = self.sse_http_client.get(url).headers(self.auth_headers()?);
 
         let event_source =
             EventSource::new(request).map_err(|e| AutopilotError::Sse(e.to_string()))?;
@@ -289,13 +289,15 @@ impl AutopilotClient {
     // -------------------------------------------------------------------------
 
     /// Creates the authorization headers.
-    fn auth_headers(&self) -> HeaderMap {
+    fn auth_headers(&self) -> Result<HeaderMap, AutopilotError> {
         let mut headers = HeaderMap::new();
         let auth_value = format!("Bearer {}", self.api_key.expose_secret());
         if let Ok(value) = HeaderValue::from_str(&auth_value) {
-            headers.insert(AUTHORIZATION, value);
+            headers
+                .insert(AUTHORIZATION, value)
+                .ok_or(AutopilotError::ApiKey)?;
         }
-        headers
+        Ok(headers)
     }
 
     /// Checks the response status and extracts error details if needed.

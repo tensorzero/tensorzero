@@ -5,6 +5,10 @@ use thiserror::Error;
 /// Errors that can occur when using the Autopilot client.
 #[derive(Error, Debug)]
 pub enum AutopilotError {
+    /// Error on insertion of API key to headers (should never happen)
+    #[error("Error inserting API key into header map. Please confirm your API key is corrrect.")]
+    ApiKey,
+
     /// HTTP error returned by the API.
     #[error("HTTP error {status_code}: {message}")]
     Http { status_code: u16, message: String },
