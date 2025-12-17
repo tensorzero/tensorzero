@@ -284,7 +284,7 @@ export function DatasetBuilderForm() {
           >
             {getButtonText()}
           </Button>
-          {functionName && !hasValidationErrors && (
+          {functionName && !hasValidationErrors && !countError && (
             <span className="text-muted-foreground text-sm">
               {isCountLoading
                 ? "Loading..."
