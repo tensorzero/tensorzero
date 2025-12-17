@@ -315,21 +315,6 @@ export async function countWorkflowEvaluationRunEpisodes(
   return rows[0].count;
 }
 
-export async function countWorkflowEvaluationProjects(): Promise<number> {
-  const query = `
-  SELECT toUInt32(countDistinct(project_name)) AS count
-  FROM DynamicEvaluationRunByProjectName
-  WHERE project_name IS NOT NULL
-`;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await result.json<{ count: number }[]>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
-
 export async function searchWorkflowEvaluationRuns(
   limit: number,
   offset: number,

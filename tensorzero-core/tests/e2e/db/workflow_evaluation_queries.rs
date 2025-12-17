@@ -38,3 +38,19 @@ async fn test_list_workflow_evaluation_projects_with_fixture_data() {
         "Expected at least one of the fixture projects to be present. Found: {project_names:?}",
     );
 }
+
+/// Ensures workflow evaluation project counts are returned from ClickHouse.
+#[tokio::test]
+async fn test_count_workflow_evaluation_projects_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .count_workflow_evaluation_projects()
+        .await
+        .unwrap();
+
+    assert!(
+        result >= 2,
+        "Expected at least 2 workflow evaluation projects from fixtures, got {result}",
+    );
+}
