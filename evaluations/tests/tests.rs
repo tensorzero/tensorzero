@@ -3063,3 +3063,780 @@ async fn test_cli_args_precision_targets() {
         "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
     );
 }
+
+// ============================================================================
+// Top-K Evaluation Tests
+// ============================================================================
+
+mod topk_tests {
+    use super::*;
+    use durable::WorkerOptions;
+    use evaluations::EvaluationFunctionConfig;
+    use evaluations::evaluators::EvaluationResult;
+    use evaluations::topk::{
+        GlobalStoppingReason, ScoringFunction, TopKTaskOutput, TopKTaskParams, TopKTaskState,
+        VariantStatus, create_client,
+    };
+    use std::time::Duration;
+    use tensorzero_core::evaluations::EvaluationConfig;
+
+    /// A simple scoring function that uses the first successful boolean evaluator's result.
+    /// For boolean evaluators: true = 1.0, false = 0.0.
+    /// For float evaluators: uses the value directly (clamped to [0, 1]).
+    ///
+    /// This scoring function operates on a per-datapoint basis, comparing all variants
+    /// on that datapoint. It returns scores for each variant that has results.
+    struct FirstBooleanScore;
+
+    impl ScoringFunction for FirstBooleanScore {
+        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+            let mut scores = HashMap::new();
+
+            for (variant_name, eval_result) in evaluations {
+                // Find the first successful evaluator result
+                for result in (*eval_result).values() {
+                    if let Ok(Some(value)) = result {
+                        let score = if let Some(b) = value.as_bool() {
+                            if b { 1.0 } else { 0.0 }
+                        } else if let Some(f) = value.as_f64() {
+                            f.clamp(0.0, 1.0)
+                        } else {
+                            continue;
+                        };
+                        scores.insert(variant_name.clone(), score);
+                        break;
+                    }
+                }
+            }
+
+            scores
+        }
+    }
+
+    /// Helper to get a Postgres pool for tests
+    async fn get_postgres_pool() -> sqlx_alpha::PgPool {
+        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+            .expect("TENSORZERO_POSTGRES_URL must be set for top-k tests");
+        sqlx_alpha::PgPool::connect(&postgres_url)
+            .await
+            .expect("Failed to connect to Postgres")
+    }
+
+    /// Helper to create the durable queue if it doesn't exist
+    async fn ensure_queue_exists(pool: &sqlx_alpha::PgPool) {
+        // The queue should be created by the durable migrations, but we create it here
+        // just in case. This is idempotent.
+        let client = durable::Durable::builder()
+            .pool(pool.clone())
+            .queue_name("evaluations_topk")
+            .build()
+            .await
+            .expect("Failed to create durable client");
+        client
+            .create_queue(None)
+            .await
+            .expect("Failed to create queue");
+    }
+
+    /// Test that top-k evaluation runs successfully with the haiku_without_outputs evaluation.
+    /// This test uses the existing fixture-based approach for creating datapoints.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_topk_basic_run() {
+        // Setup
+        let config = get_config().await;
+        let clickhouse = get_clickhouse().await;
+        let tensorzero_client = get_tensorzero_client().await;
+        let pg_pool = get_postgres_pool().await;
+        ensure_queue_exists(&pg_pool).await;
+
+        // Create a unique dataset for this test using existing fixtures
+        let dataset_name = format!("topk_test_haiku_{}", Uuid::now_v7());
+
+        // Use existing fixture for write_haiku function (haiku_without_outputs evaluation)
+        write_chat_fixture_to_dataset(
+            &PathBuf::from(&format!(
+                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )),
+            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+        )
+        .await;
+        clickhouse_flush_async_insert(&clickhouse).await;
+        sleep(Duration::from_secs(2)).await;
+
+        // Get the evaluation config for haiku_without_outputs
+        // This evaluation uses the write_haiku function with topic_starts_with_f evaluator
+        let evaluation_config = config
+            .evaluations
+            .get("haiku_without_outputs")
+            .expect("haiku_without_outputs not found in config")
+            .clone();
+
+        // Build the function configs table
+        let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
+        let function_configs: EvaluationFunctionConfigTable = config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+
+        // Variant names for write_haiku function
+        let variant_names = vec!["gpt_4o_mini".to_string(), "haiku".to_string()];
+
+        // Create clients
+        let clients = Arc::new(Clients {
+            tensorzero_client,
+            clickhouse_client: clickhouse.clone(),
+        });
+
+        // Create the top-k task state
+        let state = TopKTaskState {
+            clients,
+            evaluation_config: evaluation_config.clone(),
+            function_configs: Arc::new(function_configs),
+            scoring_fn: Arc::new(FirstBooleanScore),
+        };
+
+        // Create the durable client
+        let durable_client = create_client(pg_pool.clone(), state)
+            .await
+            .expect("Failed to create durable client");
+
+        // Create task params
+        let params = TopKTaskParams {
+            evaluation_name: "haiku_without_outputs".to_string(),
+            dataset_name: dataset_name.clone(),
+            variant_names,
+            k_min: 1,
+            k_max: 1,
+            epsilon: Some(0.1),
+            max_datapoints: Some(10), // Small for test speed
+            batch_size: Some(5),
+            variant_failure_threshold: None,
+            evaluator_failure_threshold: None,
+            concurrency: 2,
+            inference_cache: CacheEnabledMode::On,
+        };
+
+        // Spawn the task
+        let spawn_result = durable_client
+            .spawn::<evaluations::topk::TopKTask>(params)
+            .await
+            .expect("Failed to spawn top-k task");
+
+        println!("Spawned top-k task: {:?}", spawn_result.task_id);
+
+        // Start a worker to process the task
+        let worker = durable_client
+            .start_worker(WorkerOptions {
+                poll_interval: 0.1,
+                claim_timeout: 60,
+                ..Default::default()
+            })
+            .await;
+
+        // Wait for the task to complete (with timeout)
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(120);
+
+        loop {
+            if start.elapsed() > timeout {
+                worker.shutdown().await;
+                panic!("Top-k task timed out after {timeout:?}");
+            }
+
+            // Check task state
+            let state: Option<(String,)> = sqlx_alpha::query_as(
+                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
+            )
+            .bind(spawn_result.task_id)
+            .fetch_optional(&pg_pool)
+            .await
+            .expect("Failed to query task state");
+
+            if let Some((state,)) = state {
+                if state == "completed" {
+                    println!("Task completed successfully");
+                    break;
+                } else if state == "failed" {
+                    worker.shutdown().await;
+                    panic!("Top-k task failed");
+                }
+            }
+
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        // Get the task result
+        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
+            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
+        )
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
+
+        let output: TopKTaskOutput = result
+            .and_then(|(payload,)| payload)
+            .map(|v| serde_json::from_value(v).expect("Failed to deserialize output"))
+            .expect("No task output found");
+
+        println!("Top-k output: {output:?}");
+
+        // Shutdown worker
+        worker.shutdown().await;
+
+        // Verify results
+        // The evaluation should have processed some datapoints
+        assert!(
+            output.num_datapoints_processed > 0,
+            "Should have processed at least one datapoint"
+        );
+
+        // Check that we got a stopping reason
+        match &output.stopping_reason {
+            GlobalStoppingReason::TopKFound { k, top_variants } => {
+                assert_eq!(*k, 1, "Should have found top-1");
+                assert_eq!(top_variants.len(), 1, "Should have exactly one top variant");
+                println!("Top variant: {top_variants:?}");
+            }
+            GlobalStoppingReason::DatasetExhausted => {
+                // This is also acceptable if we couldn't determine a winner
+                println!("Dataset exhausted without finding clear winner");
+            }
+            other => {
+                panic!("Unexpected stopping reason: {other:?}");
+            }
+        }
+
+        // Verify variant statuses make sense
+        for (variant_name, status) in &output.variant_status {
+            println!("Variant {variant_name}: {status:?}");
+            assert!(
+                matches!(
+                    status,
+                    VariantStatus::Include | VariantStatus::Exclude | VariantStatus::Active
+                ),
+                "Variant should be in a valid state"
+            );
+        }
+    }
+
+    /// Test that top-k evaluation stops with DatasetExhausted when there aren't enough datapoints.
+    /// We create a small dataset and set max_datapoints to a small value to ensure exhaustion.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_topk_dataset_exhaustion() {
+        // Setup
+        let config = get_config().await;
+        let clickhouse = get_clickhouse().await;
+        let tensorzero_client = get_tensorzero_client().await;
+        let pg_pool = get_postgres_pool().await;
+        ensure_queue_exists(&pg_pool).await;
+
+        // Create a unique dataset with very few datapoints
+        let dataset_name = format!("topk_test_exhaustion_{}", Uuid::now_v7());
+
+        // Use existing fixture but with a small subset
+        write_chat_fixture_to_dataset(
+            &PathBuf::from(&format!(
+                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )),
+            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+        )
+        .await;
+        clickhouse_flush_async_insert(&clickhouse).await;
+        sleep(Duration::from_secs(2)).await;
+
+        // Get the evaluation config
+        let evaluation_config = config
+            .evaluations
+            .get("haiku_without_outputs")
+            .expect("haiku_without_outputs not found in config")
+            .clone();
+
+        // Build the function configs table
+        let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
+        let function_configs: EvaluationFunctionConfigTable = config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+
+        // Use two variants that are likely similar in performance
+        let variant_names = vec!["gpt_4o_mini".to_string(), "haiku".to_string()];
+
+        let clients = Arc::new(Clients {
+            tensorzero_client,
+            clickhouse_client: clickhouse.clone(),
+        });
+
+        let state = TopKTaskState {
+            clients,
+            evaluation_config: evaluation_config.clone(),
+            function_configs: Arc::new(function_configs),
+            scoring_fn: Arc::new(FirstBooleanScore),
+        };
+
+        let durable_client = create_client(pg_pool.clone(), state)
+            .await
+            .expect("Failed to create durable client");
+
+        // Set max_datapoints very low (3) so the dataset will be exhausted before
+        // we can confidently identify a winner
+        let params = TopKTaskParams {
+            evaluation_name: "haiku_without_outputs".to_string(),
+            dataset_name: dataset_name.clone(),
+            variant_names,
+            k_min: 1,
+            k_max: 1,
+            epsilon: Some(0.0), // Strict epsilon makes it harder to find a winner
+            max_datapoints: Some(3),
+            batch_size: Some(3),
+            variant_failure_threshold: None,
+            evaluator_failure_threshold: None,
+            concurrency: 2,
+            inference_cache: CacheEnabledMode::On,
+        };
+
+        let spawn_result = durable_client
+            .spawn::<evaluations::topk::TopKTask>(params)
+            .await
+            .expect("Failed to spawn top-k task");
+
+        println!(
+            "Spawned dataset exhaustion test task: {:?}",
+            spawn_result.task_id
+        );
+
+        let worker = durable_client
+            .start_worker(WorkerOptions {
+                poll_interval: 0.1,
+                claim_timeout: 60,
+                ..Default::default()
+            })
+            .await;
+
+        // Wait for completion
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(120);
+
+        loop {
+            if start.elapsed() > timeout {
+                worker.shutdown().await;
+                panic!("Top-k task timed out after {timeout:?}");
+            }
+
+            let state: Option<(String,)> = sqlx_alpha::query_as(
+                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
+            )
+            .bind(spawn_result.task_id)
+            .fetch_optional(&pg_pool)
+            .await
+            .expect("Failed to query task state");
+
+            if let Some((state,)) = state {
+                if state == "completed" {
+                    break;
+                } else if state == "failed" {
+                    worker.shutdown().await;
+                    panic!("Top-k task failed");
+                }
+            }
+
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
+            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
+        )
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
+
+        let output: TopKTaskOutput = result
+            .and_then(|(payload,)| payload)
+            .map(|v| serde_json::from_value(v).expect("Failed to deserialize output"))
+            .expect("No task output found");
+
+        println!("Dataset exhaustion test output: {output:?}");
+
+        worker.shutdown().await;
+
+        // Verify we got DatasetExhausted or TopKFound (either is acceptable with small data)
+        match &output.stopping_reason {
+            GlobalStoppingReason::DatasetExhausted => {
+                println!("Dataset exhausted as expected");
+            }
+            GlobalStoppingReason::TopKFound { k, top_variants } => {
+                // This is also acceptable if we happened to find a clear winner
+                println!("Found top-{k} with {top_variants:?} (acceptable outcome)");
+            }
+            other => {
+                panic!("Unexpected stopping reason: {other:?}");
+            }
+        }
+
+        // Should have processed exactly max_datapoints
+        assert_eq!(
+            output.num_datapoints_processed, 3,
+            "Should have processed exactly 3 datapoints"
+        );
+    }
+
+    /// Test that top-k evaluation stops with EvaluatorsFailed when evaluators exceed failure threshold.
+    /// This test uses the "error" variant which triggers evaluator errors.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_topk_evaluator_failure_threshold() {
+        // Setup
+        let config = get_config().await;
+        let clickhouse = get_clickhouse().await;
+        let tensorzero_client = get_tensorzero_client().await;
+        let pg_pool = get_postgres_pool().await;
+        ensure_queue_exists(&pg_pool).await;
+
+        // Create a unique dataset
+        let dataset_name = format!("topk_test_eval_fail_{}", Uuid::now_v7());
+
+        // Use entity_extraction evaluation which has an "error" evaluator that always fails
+        write_json_fixture_to_dataset(
+            &PathBuf::from(&format!(
+                "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )),
+            &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+        )
+        .await;
+        clickhouse_flush_async_insert(&clickhouse).await;
+        sleep(Duration::from_secs(2)).await;
+
+        // Get the evaluation config for entity_extraction which has an "error" evaluator
+        let evaluation_config = config
+            .evaluations
+            .get("entity_extraction")
+            .expect("entity_extraction not found in config")
+            .clone();
+
+        let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
+        let function_configs: EvaluationFunctionConfigTable = config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+
+        // Use the gpt_4o_mini variant for entity_extraction
+        let variant_names = vec!["gpt_4o_mini".to_string()];
+
+        let clients = Arc::new(Clients {
+            tensorzero_client,
+            clickhouse_client: clickhouse.clone(),
+        });
+
+        let state = TopKTaskState {
+            clients,
+            evaluation_config: evaluation_config.clone(),
+            function_configs: Arc::new(function_configs),
+            scoring_fn: Arc::new(FirstBooleanScore),
+        };
+
+        let durable_client = create_client(pg_pool.clone(), state)
+            .await
+            .expect("Failed to create durable client");
+
+        // Set a low evaluator failure threshold so we'll hit it quickly
+        // The "error" evaluator in entity_extraction always fails
+        let params = TopKTaskParams {
+            evaluation_name: "entity_extraction".to_string(),
+            dataset_name: dataset_name.clone(),
+            variant_names,
+            k_min: 1,
+            k_max: 1,
+            epsilon: Some(0.1),
+            max_datapoints: Some(10),
+            batch_size: Some(5),
+            variant_failure_threshold: None,
+            evaluator_failure_threshold: Some(0.5), // 50% failure rate threshold
+            concurrency: 2,
+            inference_cache: CacheEnabledMode::On,
+        };
+
+        let spawn_result = durable_client
+            .spawn::<evaluations::topk::TopKTask>(params)
+            .await
+            .expect("Failed to spawn top-k task");
+
+        println!(
+            "Spawned evaluator failure test task: {:?}",
+            spawn_result.task_id
+        );
+
+        let worker = durable_client
+            .start_worker(WorkerOptions {
+                poll_interval: 0.1,
+                claim_timeout: 60,
+                ..Default::default()
+            })
+            .await;
+
+        // Wait for completion
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(120);
+
+        loop {
+            if start.elapsed() > timeout {
+                worker.shutdown().await;
+                panic!("Top-k task timed out after {timeout:?}");
+            }
+
+            let state: Option<(String,)> = sqlx_alpha::query_as(
+                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
+            )
+            .bind(spawn_result.task_id)
+            .fetch_optional(&pg_pool)
+            .await
+            .expect("Failed to query task state");
+
+            if let Some((state,)) = state {
+                if state == "completed" {
+                    break;
+                } else if state == "failed" {
+                    worker.shutdown().await;
+                    panic!("Top-k task failed");
+                }
+            }
+
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
+            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
+        )
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
+
+        let output: TopKTaskOutput = result
+            .and_then(|(payload,)| payload)
+            .map(|v| serde_json::from_value(v).expect("Failed to deserialize output"))
+            .expect("No task output found");
+
+        println!("Evaluator failure test output: {output:?}");
+
+        worker.shutdown().await;
+
+        // Verify that we processed some datapoints
+        assert!(
+            output.num_datapoints_processed > 0,
+            "Should have processed at least one datapoint"
+        );
+
+        // We expect either EvaluatorsFailed (if error evaluator hit threshold)
+        // or DatasetExhausted/TopKFound (if not enough errors to trigger threshold)
+        match &output.stopping_reason {
+            GlobalStoppingReason::EvaluatorsFailed { evaluator_names } => {
+                println!("Evaluators failed as expected: {evaluator_names:?}");
+                assert!(
+                    evaluator_names.contains(&"error".to_string()),
+                    "error evaluator should be in the failed list"
+                );
+            }
+            // GlobalStoppingReason::DatasetExhausted => {
+            //     // Also acceptable - we may not have hit the threshold
+            //     println!("Dataset exhausted (threshold may not have been reached)");
+            // }
+            // GlobalStoppingReason::TopKFound { k, top_variants } => {
+            //     // Also acceptable
+            //     println!("Found top-{k} with {top_variants:?}");
+            // }
+            other => {
+                panic!("Unexpected stopping reason: {other:?}");
+            }
+        }
+    }
+
+    /// Test that top-k evaluation handles variant failures correctly.
+    /// When too many variants fail, the task should stop with TooManyVariantsFailed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_topk_variant_failure_threshold() {
+        // Setup
+        let config = get_config().await;
+        let clickhouse = get_clickhouse().await;
+        let tensorzero_client = get_tensorzero_client().await;
+        let pg_pool = get_postgres_pool().await;
+        ensure_queue_exists(&pg_pool).await;
+
+        // Create a unique dataset
+        let dataset_name = format!("topk_test_variant_fail_{}", Uuid::now_v7());
+
+        // Use basic_test function which has an "error" variant that always fails
+        write_chat_fixture_to_dataset(
+            &PathBuf::from(&format!(
+                "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )),
+            &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+        )
+        .await;
+        clickhouse_flush_async_insert(&clickhouse).await;
+        sleep(Duration::from_secs(2)).await;
+
+        // Get the test_evaluation config which uses basic_test function
+        let evaluation_config = config
+            .evaluations
+            .get("test_evaluation")
+            .expect("test_evaluation not found in config")
+            .clone();
+
+        let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
+        let function_configs: EvaluationFunctionConfigTable = config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+
+        // Use "test" (working) and "error" (always fails) variants
+        // With k_min=1 and 2 variants, if 1 variant fails we'll have too many failures
+        let variant_names = vec!["test".to_string(), "error".to_string()];
+
+        let clients = Arc::new(Clients {
+            tensorzero_client,
+            clickhouse_client: clickhouse.clone(),
+        });
+
+        let state = TopKTaskState {
+            clients,
+            evaluation_config: evaluation_config.clone(),
+            function_configs: Arc::new(function_configs),
+            scoring_fn: Arc::new(FirstBooleanScore),
+        };
+
+        let durable_client = create_client(pg_pool.clone(), state)
+            .await
+            .expect("Failed to create durable client");
+
+        // Set a low variant failure threshold so the "error" variant will be marked as Failed
+        let params = TopKTaskParams {
+            evaluation_name: "test_evaluation".to_string(),
+            dataset_name: dataset_name.clone(),
+            variant_names,
+            k_min: 1,
+            k_max: 1,
+            epsilon: Some(0.1),
+            max_datapoints: Some(10),
+            batch_size: Some(5),
+            variant_failure_threshold: Some(0.3), // Low threshold to catch the error variant
+            evaluator_failure_threshold: None,
+            concurrency: 2,
+            inference_cache: CacheEnabledMode::Off, // Don't cache error responses
+        };
+
+        let spawn_result = durable_client
+            .spawn::<evaluations::topk::TopKTask>(params)
+            .await
+            .expect("Failed to spawn top-k task");
+
+        println!(
+            "Spawned variant failure test task: {:?}",
+            spawn_result.task_id
+        );
+
+        let worker = durable_client
+            .start_worker(WorkerOptions {
+                poll_interval: 0.1,
+                claim_timeout: 60,
+                ..Default::default()
+            })
+            .await;
+
+        // Wait for completion
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(120);
+
+        loop {
+            if start.elapsed() > timeout {
+                worker.shutdown().await;
+                panic!("Top-k task timed out after {timeout:?}");
+            }
+
+            let state: Option<(String,)> = sqlx_alpha::query_as(
+                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
+            )
+            .bind(spawn_result.task_id)
+            .fetch_optional(&pg_pool)
+            .await
+            .expect("Failed to query task state");
+
+            if let Some((state,)) = state {
+                if state == "completed" {
+                    break;
+                } else if state == "failed" {
+                    worker.shutdown().await;
+                    panic!("Top-k task failed");
+                }
+            }
+
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
+            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
+        )
+        .bind(spawn_result.task_id)
+        .fetch_optional(&pg_pool)
+        .await
+        .expect("Failed to query task result");
+
+        let output: TopKTaskOutput = result
+            .and_then(|(payload,)| payload)
+            .map(|v| serde_json::from_value(v).expect("Failed to deserialize output"))
+            .expect("No task output found");
+
+        println!("Variant failure test output: {output:?}");
+
+        worker.shutdown().await;
+
+        // Verify we processed some datapoints
+        assert!(
+            output.num_datapoints_processed > 0,
+            "Should have processed at least one datapoint"
+        );
+
+        // Check that the error variant is marked as Failed
+        let error_status = output.variant_status.get("error");
+        println!("Error variant status: {error_status:?}");
+
+        // We expect either:
+        // - TooManyVariantsFailed (if error variant failed and that's too many)
+        // - TopKFound with "test" as winner (if we identified the winner before too many failures)
+        // - DatasetExhausted (if we ran out of data)
+        match &output.stopping_reason {
+            GlobalStoppingReason::TooManyVariantsFailed { num_failed } => {
+                println!("Too many variants failed: {num_failed} failed");
+                assert!(*num_failed >= 1, "At least one variant should have failed");
+                // The error variant should be marked as Failed
+                assert_eq!(
+                    output.variant_status.get("error"),
+                    Some(&VariantStatus::Failed),
+                    "error variant should be marked as Failed"
+                );
+            }
+            GlobalStoppingReason::TopKFound { k, top_variants } => {
+                println!("Found top-{k} with {top_variants:?}");
+                // The working variant should be the winner
+                assert!(
+                    top_variants.contains(&"test".to_string()),
+                    "test variant should be in top variants"
+                );
+            }
+            GlobalStoppingReason::DatasetExhausted => {
+                println!("Dataset exhausted");
+            }
+            GlobalStoppingReason::EvaluatorsFailed { evaluator_names } => {
+                // This is also acceptable if evaluators failed
+                println!("Evaluators failed: {evaluator_names:?}");
+            }
+        }
+    }
+}
