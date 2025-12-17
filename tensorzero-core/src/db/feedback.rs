@@ -237,7 +237,10 @@ pub struct FeedbackBoundsByType {
 pub struct MetricWithFeedback {
     pub function_name: String,
     pub metric_name: String,
-    pub metric_type: MetricType,
+    /// The type of metric (boolean, float, demonstration).
+    /// None if the metric is not in the current config (e.g., was deleted).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_type: Option<MetricType>,
     pub feedback_count: u32,
 }
 
