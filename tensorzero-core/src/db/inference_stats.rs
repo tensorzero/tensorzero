@@ -1,15 +1,17 @@
 //! Inference statistics types and trait definitions.
 
 use async_trait::async_trait;
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 use mockall::automock;
 
 use crate::config::MetricConfig;
+use crate::db::TimeWindow;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
-use crate::serde_util::deserialize_u64;
+use crate::serde_util::{deserialize_u64, serialize_utc_datetime_rfc_3339_with_millis};
 
 /// Parameters for counting inferences for a function.
 #[derive(Debug)]
@@ -47,6 +49,26 @@ pub struct CountInferencesWithDemonstrationFeedbacksParams<'a> {
     pub function_type: FunctionConfigType,
 }
 
+/// Parameters for getting function throughput by variant.
+#[derive(Debug)]
+pub struct GetFunctionThroughputByVariantParams<'a> {
+    pub function_name: &'a str,
+    pub time_window: TimeWindow,
+    pub max_periods: u32,
+}
+
+/// Row returned from the get_function_throughput_by_variant query.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[ts(export)]
+pub struct VariantThroughput {
+    /// Start datetime of the period in RFC 3339 format with milliseconds
+    #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    pub period_start: DateTime<Utc>,
+    pub variant_name: String,
+    /// Number of inferences for this (period, variant) combination
+    pub count: u32,
+}
+
 /// Trait for inference statistics queries
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -78,4 +100,12 @@ pub trait InferenceStatsQueries {
 
     /// Counts the number of inferences for an episode.
     async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error>;
+
+    /// Get function throughput (inference counts) grouped by variant and time period.
+    /// Returns throughput data for the last `max_periods` time periods, grouped by variant.
+    /// For cumulative time window, returns all-time data with a fixed period_start.
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error>;
 }
