@@ -2,7 +2,7 @@ import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
-import { CountSchema, inputSchema } from "./common";
+import { inputSchema } from "./common";
 import {
   waldConfidenceIntervalLower,
   waldConfidenceIntervalUpper,
@@ -389,39 +389,6 @@ export async function getEvaluationStatistics(
   });
   const rows = await result.json<EvaluationStatistics>();
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
-}
-
-export async function countDatapointsForEvaluation(
-  function_name: string,
-  function_type: "chat" | "json",
-  evaluation_run_ids: string[],
-) {
-  const datapoint_table_name =
-    function_type === "chat"
-      ? "ChatInferenceDatapoint"
-      : "JsonInferenceDatapoint";
-  const inference_table_name =
-    function_type === "chat" ? "ChatInference" : "JsonInference";
-
-  const query = `
-      WITH ${getEvaluationResultDatapointIdQuery()}
-      SELECT toUInt32(count()) as count
-      FROM all_datapoint_ids
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      function_name: function_name,
-      datapoint_table_name: datapoint_table_name,
-      inference_table_name: inference_table_name,
-      evaluation_run_ids: evaluation_run_ids,
-    },
-  });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
 }
 
 export async function searchEvaluationRuns(
