@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{Client as TensorZeroClient, ClientExt, WriteConfigRequest};
-use tensorzero_core::config::stored::StoredConfig;
+use tensorzero_core::config::UninitializedConfig;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -116,7 +116,7 @@ optimize = "max"
 "#
     );
 
-    let stored_config: StoredConfig = toml::from_str(&config_toml).unwrap();
+    let stored_config: UninitializedConfig = toml::from_str(&config_toml).unwrap();
 
     let mut tags = HashMap::new();
     tags.insert("env".to_string(), "test".to_string());
@@ -182,7 +182,7 @@ optimize = "max"
 "#
     );
 
-    let stored_config: StoredConfig = toml::from_str(&config_toml).unwrap();
+    let stored_config: UninitializedConfig = toml::from_str(&config_toml).unwrap();
 
     // First write with initial tags
     let mut tags1 = HashMap::new();

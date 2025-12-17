@@ -1662,7 +1662,7 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]

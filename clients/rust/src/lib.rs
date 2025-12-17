@@ -1462,7 +1462,7 @@ impl ClientExt for Client {
                         .map_err(err_to_http)?;
                     Ok(GetConfigResponse {
                         hash: snapshot.hash.to_string(),
-                        config: snapshot.config,
+                        config: snapshot.config.into(),
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
                     })
@@ -1496,12 +1496,9 @@ impl ClientExt for Client {
                     use tensorzero_core::config::snapshot::ConfigSnapshot;
                     use tensorzero_core::config::write_config_snapshot;
 
-                    let snapshot = ConfigSnapshot::from_stored_config(
-                        request.config,
-                        request.extra_templates,
-                        request.tags,
-                    )
-                    .map_err(err_to_http)?;
+                    let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)
+                        .map_err(err_to_http)?;
+                    snapshot.tags = request.tags;
 
                     let hash = snapshot.hash.to_string();
 

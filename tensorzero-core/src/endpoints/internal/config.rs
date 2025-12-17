@@ -10,8 +10,8 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::config::UninitializedConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::config::stored::StoredConfig;
 use crate::config::write_config_snapshot;
 use crate::db::ConfigQueries;
 use crate::error::{Error, ErrorDetails};
@@ -21,7 +21,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetConfigResponse {
     /// The config in a form suitable for serialization.
-    pub config: StoredConfig,
+    pub config: UninitializedConfig,
     /// The hash identifying this config version.
     pub hash: String,
     /// Templates that were loaded from the filesystem.
@@ -34,7 +34,7 @@ impl GetConfigResponse {
     fn from_snapshot(snapshot: ConfigSnapshot) -> Self {
         Self {
             hash: snapshot.hash.to_string(),
-            config: snapshot.config,
+            config: snapshot.config.into(),
             extra_templates: snapshot.extra_templates,
             tags: snapshot.tags,
         }
@@ -85,7 +85,7 @@ pub async fn get_config_by_hash_handler(
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WriteConfigRequest {
     /// The config to write.
-    pub config: StoredConfig,
+    pub config: UninitializedConfig,
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
@@ -113,8 +113,8 @@ pub async fn write_config_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<WriteConfigRequest>,
 ) -> Result<Json<WriteConfigResponse>, Error> {
-    let snapshot =
-        ConfigSnapshot::from_stored_config(request.config, request.extra_templates, request.tags)?;
+    let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)?;
+    snapshot.tags = request.tags;
 
     let hash = snapshot.hash.to_string();
 
