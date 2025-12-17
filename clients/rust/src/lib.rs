@@ -69,7 +69,7 @@ pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
-    InferenceResponseChunk, InferenceStream, Params as ActionInferenceParams,
+    InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::internal::action::{
     ActionInput, ActionInputInfo, ActionResponse,
