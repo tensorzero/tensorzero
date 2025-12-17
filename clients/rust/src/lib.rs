@@ -1,4 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -1493,9 +1495,6 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Box::pin(with_embedded_timeout(*timeout, async {
-                    use tensorzero_core::config::snapshot::ConfigSnapshot;
-                    use tensorzero_core::config::write_config_snapshot;
-
                     let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)
                         .map_err(err_to_http)?;
                     snapshot.tags = request.tags;
