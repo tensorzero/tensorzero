@@ -290,6 +290,7 @@ impl InferenceProvider for AzureProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -462,6 +463,7 @@ impl EmbeddingProvider for AzureProvider {
                 status,
                 &response_text,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

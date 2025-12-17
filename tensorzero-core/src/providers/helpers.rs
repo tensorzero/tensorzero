@@ -30,8 +30,13 @@ pub async fn convert_stream_error(
     raw_request: String,
     provider_type: String,
     e: reqwest_eventsource::Error,
+    request_id: Option<&str>,
 ) -> Error {
-    let message = e.to_string();
+    let base_message = e.to_string();
+    let message = match request_id {
+        Some(id) => format!("{base_message} [request_id: {id}]"),
+        None => base_message,
+    };
     // If we get an invalid status code, content type, or generic transport error,
     // then we assume that we're never going to be able to read more chunks from the stream,
     // The `wrap_provider_stream` function will bail out when it sees this error,

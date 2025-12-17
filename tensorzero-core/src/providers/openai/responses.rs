@@ -1153,7 +1153,7 @@ pub fn stream_openai_responses(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id.as_deref()).await);
                         }
                     }
                 }

@@ -230,6 +230,7 @@ impl InferenceProvider for SGLangProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

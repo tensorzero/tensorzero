@@ -227,6 +227,7 @@ impl InferenceProvider for HyperbolicProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

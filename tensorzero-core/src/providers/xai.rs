@@ -230,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

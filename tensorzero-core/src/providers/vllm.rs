@@ -220,6 +220,7 @@ impl InferenceProvider for VLLMProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

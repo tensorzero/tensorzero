@@ -261,6 +261,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

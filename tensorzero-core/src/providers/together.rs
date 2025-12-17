@@ -256,6 +256,7 @@ impl InferenceProvider for TogetherProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }

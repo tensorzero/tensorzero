@@ -508,17 +508,12 @@ impl InferenceProvider for OpenAIProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            tracing::warn!(
-                provider = %PROVIDER_TYPE,
-                status = ?status,
-                request_id = request_id.as_deref(),
-                "OpenAI request failed"
-            );
             Err(handle_openai_error(
                 &raw_request,
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                request_id.as_deref(),
             ))
         }
     }
@@ -1015,6 +1010,7 @@ impl EmbeddingProvider for OpenAIProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -1056,7 +1052,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id.as_deref()).await);
                         }
                     }
                 }
@@ -1067,14 +1063,18 @@ pub fn stream_openai(
                             break;
                         }
                         let data: Result<OpenAIChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!(
-                                    "Error parsing chunk. Error: {e}",
-                                ),
-                                raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
-                                provider_type: provider_type.clone(),
-                            }));
+                            serde_json::from_str(&message.data).map_err(|e| {
+                                let error_message = match &request_id {
+                                    Some(id) => format!("Error parsing chunk. Error: {e} [request_id: {id}]"),
+                                    None => format!("Error parsing chunk. Error: {e}"),
+                                };
+                                Error::new(ErrorDetails::InferenceServer {
+                                    message: error_message,
+                                    raw_request: Some(raw_request.clone()),
+                                    raw_response: Some(message.data.clone()),
+                                    provider_type: provider_type.clone(),
+                                })
+                            });
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
@@ -1148,6 +1148,7 @@ impl OpenAIProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ));
         }
 
@@ -1242,21 +1243,26 @@ pub(super) fn handle_openai_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
+    request_id: Option<&str>,
 ) -> Error {
+    let message = match request_id {
+        Some(id) => format!("{response_body} [request_id: {id}]"),
+        None => response_body.to_string(),
+    };
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
         | StatusCode::FORBIDDEN
         | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
             status_code: Some(response_code),
-            message: response_body.to_string(),
+            message,
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
-            message: response_body.to_string(),
+            message,
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
@@ -3112,12 +3118,13 @@ mod tests {
     fn test_handle_openai_error() {
         use reqwest::StatusCode;
 
-        // Test unauthorized error
+        // Test unauthorized error without request_id
         let unauthorized = handle_openai_error(
             "Request Body",
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
+            None,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3136,12 +3143,26 @@ mod tests {
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }
 
+        // Test unauthorized error with request_id
+        let unauthorized_with_id = handle_openai_error(
+            "Request Body",
+            StatusCode::UNAUTHORIZED,
+            "Unauthorized access",
+            PROVIDER_TYPE,
+            Some("req_abc123"),
+        );
+        let details = unauthorized_with_id.get_details();
+        if let ErrorDetails::InferenceClient { message, .. } = details {
+            assert_eq!(message, "Unauthorized access [request_id: req_abc123]");
+        }
+
         // Test forbidden error
         let forbidden = handle_openai_error(
             "Request Body",
             StatusCode::FORBIDDEN,
             "Forbidden access",
             PROVIDER_TYPE,
+            None,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3166,6 +3187,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
+            None,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3190,6 +3212,7 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
+            None,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
