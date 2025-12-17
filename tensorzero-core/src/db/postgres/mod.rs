@@ -212,9 +212,26 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
         })
     })?;
+    manual_run_postgres_migrations_with_url(&postgres_url).await
+}
+
+pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
+    let pool = PgPoolOptions::new()
+        .connect(postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+    make_migrator().run(&pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: e.to_string(),
+        })
+    })?;
 
     // Our 'tensorzero-auth' crate currently uses an alpha release of 'sqlx', so the `PgPool` type is different.
-    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(&postgres_url)
+    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -238,7 +255,7 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
     })?;
 
     let pool = PgPoolOptions::new()
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {

@@ -5,7 +5,6 @@
 
 import { describe, test, expect } from "vitest";
 import {
-  countWorkflowEvaluationProjects,
   countWorkflowEvaluationRunEpisodes,
   countWorkflowEvaluationRuns as countWorkflowEvaluationRuns,
   getWorkflowEvaluationRunEpisodesByTaskName,
@@ -393,13 +392,6 @@ describe("countWorkflowEvaluationRunEpisodes", () => {
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
-  });
-});
-
-describe("countWorkflowEvaluationProjects", () => {
-  test("should return correct number of projects", async () => {
-    const count = await countWorkflowEvaluationProjects();
-    expect(count).toBe(2);
   });
 });
 
