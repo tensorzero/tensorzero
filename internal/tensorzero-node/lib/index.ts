@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  DatasetQueryParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -264,24 +263,6 @@ export class DatabaseClient {
     const countString =
       await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
     return JSON.parse(countString) as number;
-  }
-
-  async countRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.countRowsForDataset(paramsString);
-    return result;
-  }
-
-  async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
-    return result;
-  }
-
-  async countDatasets(): Promise<number> {
-    return this.nativeDatabaseClient.countDatasets();
   }
 
   async getFeedbackByVariant(

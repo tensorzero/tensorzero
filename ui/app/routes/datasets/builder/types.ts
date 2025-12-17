@@ -5,8 +5,8 @@ import { getComparisonOperator } from "~/utils/config/feedback";
 // This MUST be a type-only import; this code lives in the browser, and tensorzero-node should not be browserified.
 import type {
   MetricConfig,
-  DatasetQueryParams,
   MetricConfigLevel,
+  FilterInferencesForDatasetBuilderRequest,
 } from "~/types/tensorzero";
 
 const MetricConfigSchema: ZodType<MetricConfig> = z.any();
@@ -37,21 +37,25 @@ export const DatasetBuilderFormValuesResolver = zodResolver(
   DatasetBuilderFormValuesSchema,
 );
 
-export const serializedFormDataToDatasetQueryParams = (
+/**
+ * Converts serialized DatasetBuilder form data to FilterInferencesForDatasetBuilderRequest for the new backend API
+ */
+export const formDataToFilterInferencesForDatasetBuilderRequest = (
   serializedFormData: string,
-): DatasetQueryParams => {
+): {
+  datasetName: string;
+  params: FilterInferencesForDatasetBuilderRequest;
+} => {
   const parsedData = JSON.parse(serializedFormData);
   const formData = DatasetBuilderFormValuesSchema.parse(parsedData);
 
-  // Build and validate DatasetQueryParams from form data
-  const queryParams: DatasetQueryParams = {
+  const params: FilterInferencesForDatasetBuilderRequest = {
     inference_type: formData.type,
     function_name: formData.function,
     variant_name: formData.variant,
-    dataset_name: formData.dataset,
     output_source: formData.output_source,
     metric_filter:
-      formData.metric_name && formData.threshold
+      formData.metric_name && formData.threshold !== undefined
         ? {
             metric: parsedData.metric_name,
             metric_type: parsedData.metric_config?.type,
@@ -62,5 +66,5 @@ export const serializedFormDataToDatasetQueryParams = (
         : undefined,
   };
 
-  return queryParams;
+  return { datasetName: formData.dataset, params };
 };

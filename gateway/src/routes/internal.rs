@@ -78,6 +78,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::datasets::internal::get_datapoint_count_handler),
         )
         .route(
+            "/internal/datasets/{dataset_name}/datapoints/insert-inferences",
+            post(endpoints::datasets::internal::insert_from_matching_inferences_handler),
+        )
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::datasets::internal::count_matching_inferences_handler),
+        )
+        .route(
             "/internal/object_storage",
             get(endpoints::object_storage::get_object_handler),
         )

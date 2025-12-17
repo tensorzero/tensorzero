@@ -76,23 +76,44 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         query_params_owned.insert("datapoint_table".to_string(), destination_table.to_string());
         query_params_owned.insert("dataset_name".to_string(), dataset_name.clone());
 
-        // Build the INSERT query with conditional logic based on inference type
-        let type_specific_fields = match params.inference_type {
-            DatapointKind::Chat => {
+        // Build the INSERT query with conditional logic based on inference type.
+        // We explicitly list columns in the INSERT to ensure correct mapping regardless of
+        // table column order.
+        let (type_specific_insert_columns, type_specific_select_fields) = match params
+            .inference_type
+        {
+            DatapointKind::Chat => (
+                "tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice, parallel_tool_calls",
                 r"subquery.tool_params,
-    subquery.dynamic_tools,
-    subquery.dynamic_provider_tools,
-    subquery.parallel_tool_calls,
-    subquery.tool_choice,
-    subquery.allowed_tools,
-            "
-            }
-            DatapointKind::Json => "subquery.output_schema,",
+                subquery.dynamic_tools,
+                subquery.dynamic_provider_tools,
+                subquery.allowed_tools,
+                subquery.tool_choice,
+                subquery.parallel_tool_calls",
+            ),
+            DatapointKind::Json => ("output_schema", r"subquery.output_schema"),
         };
 
         let wrapped_query = format!(
             r"
-            INSERT INTO {{datapoint_table:Identifier}}
+            INSERT INTO {{datapoint_table:Identifier}} (
+                dataset_name,
+                function_name,
+                id,
+                episode_id,
+                input,
+                output,
+                snapshot_hash,
+                tags,
+                auxiliary,
+                is_deleted,
+                updated_at,
+                staled_at,
+                source_inference_id,
+                is_custom,
+                name,
+                {type_specific_insert_columns}
+            )
             SELECT
                 {{dataset_name:String}} as dataset_name,
                 subquery.function_name as function_name,
@@ -100,16 +121,16 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 subquery.episode_id as episode_id,
                 subquery.input as input,
                 subquery.output as output,
-                {type_specific_fields}
-                subquery.tags as tags,
-                subquery.auxiliary as auxiliary,
+                subquery.snapshot_hash as snapshot_hash,
+                subquery.tags,
+                subquery.auxiliary,
                 false as is_deleted,
                 now64() as updated_at,
                 null as staled_at,
                 subquery.id as source_inference_id,
                 false as is_custom,
-                subquery.name as name,
-                snapshot_hash
+                subquery.name,
+                {type_specific_select_fields}
             FROM (
                 {source_query}
             ) AS subquery
@@ -900,7 +921,8 @@ allowed_tools,
             NULL as staled_at,
             id as source_inference_id,
             false as is_custom,
-            '' AS auxiliary
+            '' AS auxiliary,
+            snapshot_hash
         FROM {source_table_name}"
     );
 
@@ -1069,7 +1091,8 @@ mod tests {
                 NULL as staled_at,
                 id as source_inference_id,
                 false as is_custom,
-                '' AS auxiliary
+                '' AS auxiliary,
+                snapshot_hash
             FROM ChatInference
         ",
         );
@@ -1100,7 +1123,8 @@ mod tests {
                 NULL as staled_at,
                 id as source_inference_id,
                 false as is_custom,
-                '' AS auxiliary
+                '' AS auxiliary,
+                snapshot_hash
             FROM JsonInference
         ",
         );
@@ -1593,31 +1617,54 @@ mod tests {
             .withf(|query, parameters| {
                 assert_query_contains(
                     query,
-                    "
-                INSERT INTO {datapoint_table:Identifier}
-                    SELECT {dataset_name:String} as dataset_name,
-                    subquery.function_name as function_name,
-                    generateUUIDv7() as id,
-                    subquery.episode_id as episode_id,
-                    subquery.input as input,
-                    subquery.output as output,
-                    subquery.tool_params,
-                    subquery.dynamic_tools,
-                    subquery.dynamic_provider_tools,
-                    subquery.parallel_tool_calls,
-                    subquery.tool_choice,
-                    subquery.allowed_tools,
-                    subquery.tags as tags,
-                    subquery.auxiliary as auxiliary,
-                    false as is_deleted,
-                    now64() as updated_at,
-                    null as staled_at,
-                    subquery.id as source_inference_id,
-                    false as is_custom,
-                    subquery.name as name,
-                    snapshot_hash
-                FROM (",
+                    "INSERT INTO {datapoint_table:Identifier} (
+                        dataset_name,
+                        function_name,
+                        id,
+                        episode_id,
+                        input,
+                        output,
+                        snapshot_hash,
+                        tags,
+                        auxiliary,
+                        is_deleted,
+                        updated_at,
+                        staled_at,
+                        source_inference_id,
+                        is_custom,
+                        name,
+                        tool_params,
+                        dynamic_tools,
+                        dynamic_provider_tools,
+                        allowed_tools,
+                        tool_choice,
+                        parallel_tool_calls
+                    )
+                    SELECT
+                        {dataset_name:String} as dataset_name,
+                        subquery.function_name as function_name,
+                        generateUUIDv7() as id,
+                        subquery.episode_id as episode_id,
+                        subquery.input as input,
+                        subquery.output as output,
+                        subquery.snapshot_hash as snapshot_hash,
+                        subquery.tags,
+                        subquery.auxiliary,
+                        false as is_deleted,
+                        now64() as updated_at,
+                        null as staled_at,
+                        subquery.id as source_inference_id,
+                        false as is_custom,
+                        subquery.name,
+                        subquery.tool_params,
+                        subquery.dynamic_tools,
+                        subquery.dynamic_provider_tools,
+                        subquery.allowed_tools,
+                        subquery.tool_choice,
+                        subquery.parallel_tool_calls
+                    FROM (",
                 );
+                // Check LEFT JOIN structure
                 assert_query_contains(
                     query,
                     "
@@ -1665,8 +1712,45 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "INSERT INTO {datapoint_table:Identifier}");
-                assert_query_contains(query, "subquery.output_schema");
+                assert_query_contains(
+                    query,
+                    "INSERT INTO {datapoint_table:Identifier} (
+                        dataset_name,
+                        function_name,
+                        id,
+                        episode_id,
+                        input,
+                        output,
+                        snapshot_hash,
+                        tags,
+                        auxiliary,
+                        is_deleted,
+                        updated_at,
+                        staled_at,
+                        source_inference_id,
+                        is_custom,
+                        name,
+                        output_schema
+                    )
+                    SELECT
+                        {dataset_name:String} as dataset_name,
+                        subquery.function_name as function_name,
+                        generateUUIDv7() as id,
+                        subquery.episode_id as episode_id,
+                        subquery.input as input,
+                        subquery.output as output,
+                        subquery.snapshot_hash as snapshot_hash,
+                        subquery.tags,
+                        subquery.auxiliary,
+                        false as is_deleted,
+                        now64() as updated_at,
+                        null as staled_at,
+                        subquery.id as source_inference_id,
+                        false as is_custom,
+                        subquery.name,
+                        subquery.output_schema
+                    FROM (",
+                );
                 assert_query_does_not_contain(query, "subquery.tool_params");
                 assert_eq!(parameters.get("dataset_name"), Some(&"my_dataset"));
                 assert_eq!(

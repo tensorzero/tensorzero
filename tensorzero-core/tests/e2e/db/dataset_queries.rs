@@ -1430,6 +1430,92 @@ async fn test_insert_rows_for_dataset_handles_invalid_dataset_names() {
 }
 
 #[tokio::test]
+async fn test_insert_rows_for_dataset_inserts_chat_inferences() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_insert_rows_{}", Uuid::now_v7());
+
+    // Insert inferences into a new dataset
+    let insert_params = DatasetQueryParams {
+        inference_type: DatapointKind::Chat,
+        function_name: Some("write_haiku".to_string()),
+        dataset_name: Some(dataset_name.clone()),
+        variant_name: None,
+        extra_where: None,
+        extra_params: None,
+        metric_filter: None,
+        output_source: DatasetOutputSource::Inference,
+        limit: None,
+        offset: None,
+    };
+
+    let rows_inserted = clickhouse
+        .insert_rows_for_dataset(&insert_params)
+        .await
+        .unwrap();
+    assert!(
+        rows_inserted > 0,
+        "Should have inserted at least one row, got {rows_inserted}"
+    );
+
+    // Wait for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify by counting datapoints in the new dataset
+    let datapoint_count = clickhouse
+        .count_datapoints_for_dataset(&dataset_name, Some("write_haiku"))
+        .await
+        .unwrap();
+    assert_eq!(
+        datapoint_count,
+        u64::from(rows_inserted),
+        "Dataset should have {rows_inserted} datapoints after insertion, got {datapoint_count}"
+    );
+}
+
+#[tokio::test]
+async fn test_insert_rows_for_dataset_inserts_json_inferences() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_insert_rows_json_{}", Uuid::now_v7());
+
+    // Insert inferences into a new dataset
+    let insert_params = DatasetQueryParams {
+        inference_type: DatapointKind::Json,
+        function_name: Some("extract_entities".to_string()),
+        dataset_name: Some(dataset_name.clone()),
+        variant_name: None,
+        extra_where: None,
+        extra_params: None,
+        metric_filter: None,
+        output_source: DatasetOutputSource::Inference,
+        limit: None,
+        offset: None,
+    };
+
+    let rows_inserted = clickhouse
+        .insert_rows_for_dataset(&insert_params)
+        .await
+        .unwrap();
+    assert!(
+        rows_inserted > 0,
+        "Should have inserted at least one row, got {rows_inserted}"
+    );
+
+    // Wait for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify by counting datapoints in the new dataset
+    let datapoint_count = clickhouse
+        .count_datapoints_for_dataset(&dataset_name, Some("extract_entities"))
+        .await
+        .unwrap();
+    assert_eq!(
+        datapoint_count,
+        u64::from(rows_inserted),
+        "Dataset should have {rows_inserted} datapoints after insertion, got {datapoint_count}"
+    );
+}
+
+#[tokio::test]
 async fn test_insert_datapoint_handles_invalid_dataset_names() {
     let clickhouse = get_clickhouse().await;
     let mut tags = HashMap::new();

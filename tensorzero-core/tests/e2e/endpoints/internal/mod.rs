@@ -1,11 +1,13 @@
 mod action;
 mod config;
+mod count_matching_inferences;
 mod datapoint_count;
 mod episodes;
 mod feedback;
 mod functions;
 mod inference_metadata;
 mod inference_stats;
+mod insert_from_matching_inferences;
 mod model_inferences;
 mod models;
 mod workflow_evaluations;

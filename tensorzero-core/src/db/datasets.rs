@@ -35,8 +35,7 @@ pub enum DatasetOutputSource {
     Demonstration,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DatasetQueryParams {
     pub inference_type: DatapointKind,
     pub function_name: Option<String>,

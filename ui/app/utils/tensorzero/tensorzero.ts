@@ -14,6 +14,7 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CountMatchingInferencesResponse,
   CountModelsResponse,
   DatapointStatsResponse,
   EvaluationRunStatsResponse,
@@ -34,6 +35,8 @@ import type {
   GetInferencesResponse,
   GetModelInferencesResponse,
   InferenceStatsResponse,
+  FilterInferencesForDatasetBuilderRequest,
+  InsertFromMatchingInferencesResponse,
   LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
@@ -716,6 +719,62 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetInferencesResponse;
+  }
+
+  /**
+   * Counts inferences matching the provided filter criteria.
+   * This is used by the dataset builder to preview how many inferences
+   * would be selected for a dataset.
+   * @param params - The filter parameters
+   * @param params.inference_type - Type of inference: "chat" or "json"
+   * @param params.function_name - Optional function name to filter by
+   * @param params.variant_name - Optional variant name to filter by (requires function_name)
+   * @param params.output_source - How to handle output: "none", "inference", or "demonstration"
+   * @param params.metric_filter - Optional metric filter with threshold
+   * @returns A promise that resolves with the count of matching inferences
+   * @throws Error if the request fails
+   */
+  async countMatchingInferences(
+    params: FilterInferencesForDatasetBuilderRequest,
+  ): Promise<CountMatchingInferencesResponse> {
+    const response = await this.fetch("/internal/inferences/count", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CountMatchingInferencesResponse;
+  }
+
+  /**
+   * Inserts inferences matching the provided filter criteria into a dataset.
+   * This is used by the dataset builder to populate a dataset with matching inferences.
+   * @param datasetName - The name of the dataset to insert inferences into
+   * @param params - The filter parameters
+   * @param params.inference_type - Type of inference: "chat" or "json"
+   * @param params.function_name - Optional function name to filter by
+   * @param params.variant_name - Optional variant name to filter by (requires function_name)
+   * @param params.output_source - How to handle output: "none", "inference", or "demonstration"
+   * @param params.metric_filter - Optional metric filter with threshold
+   * @returns A promise that resolves with the number of rows inserted
+   * @throws Error if the request fails
+   */
+  async insertFromMatchingInferences(
+    datasetName: string,
+    params: FilterInferencesForDatasetBuilderRequest,
+  ): Promise<InsertFromMatchingInferencesResponse> {
+    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/insert-inferences`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InsertFromMatchingInferencesResponse;
   }
 
   /**
