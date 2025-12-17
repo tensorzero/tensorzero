@@ -212,6 +212,10 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
         })
     })?;
+    manual_run_postgres_migrations_with_url(&postgres_url).await
+}
+
+pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
     let pool = PgPoolOptions::new()
         .connect(&postgres_url)
         .await

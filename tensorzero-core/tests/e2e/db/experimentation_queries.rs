@@ -1,7 +1,10 @@
-use sqlx::PgPool;
+use sqlx::ConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::time::Instant;
 use tensorzero_core::db::ExperimentationQueries;
-use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::postgres::{
+    PostgresConnectionInfo, manual_run_postgres_migrations_with_url,
+};
 use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
@@ -39,8 +42,12 @@ async fn verify_variant_stored(
 
 // ===== CONSOLIDATED TESTS =====
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_basic_functionality(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_basic_functionality(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
@@ -76,8 +83,12 @@ async fn test_cas_basic_functionality(pool: PgPool) {
     verify_variant_stored(&conn, episode_id, &function_name, &variant_name).await;
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_isolation(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_isolation(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     // Create comprehensive test matrix: 3 episodes × 3 functions = 9 combinations
@@ -134,8 +145,12 @@ async fn test_cas_isolation(pool: PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_concurrency_and_atomicity(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
@@ -189,8 +204,12 @@ async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
     verify_variant_stored(&conn, episode_id, &function_name, winning_variant).await;
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_edge_case_values(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_edge_case_values(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
@@ -299,8 +318,12 @@ async fn test_cas_edge_case_values(pool: PgPool) {
     verify_variant_stored(&conn, max_uuid, &function_name, &variant_name).await;
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_stress_test(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_stress_test(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let num_episodes = 5;
@@ -387,8 +410,12 @@ async fn test_cas_stress_test(pool: PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "src/db/postgres/migrations")]
-async fn test_cas_failure_recovery(pool: PgPool) {
+#[sqlx::test]
+async fn test_cas_failure_recovery(pool_opts: PgPoolOptions, conn_opts: PgConnectOptions) {
+    manual_run_postgres_migrations_with_url(&conn_opts.to_url_lossy().to_string())
+        .await
+        .unwrap();
+    let pool = pool_opts.connect_with(conn_opts).await.unwrap();
     let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
