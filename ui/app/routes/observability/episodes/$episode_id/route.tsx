@@ -1,12 +1,7 @@
-import {
-  countInferencesForEpisode,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
-import {
-  pollForFeedbackItem,
-  queryLatestFeedbackIdByMetric,
-} from "~/utils/clickhouse/feedback";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -100,9 +95,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const dbClient = await getNativeDatabaseClient();
+  const tensorZeroClient = getTensorZeroClient();
 
   // Start count queries early - these will be streamed to section headers
-  const numInferencesPromise = countInferencesForEpisode(episode_id);
+  const numInferencesPromise = tensorZeroClient
+    .getEpisodeInferenceCount(episode_id)
+    .then((response) => response.inference_count);
   const numFeedbacksPromise = dbClient.countFeedbackByTargetId({
     target_id: episode_id,
   });
@@ -138,7 +136,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         async (feedbacks) => {
           const [bounds, latestFeedbackByMetric] = await Promise.all([
             dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
-            queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+            tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return { feedbacks, bounds, latestFeedbackByMetric };
         },
@@ -152,7 +150,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           limit,
         }),
         dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
-        queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+        tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
       ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
         feedbacks,
         bounds,

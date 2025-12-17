@@ -197,4 +197,10 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
             .count_inferences_with_demonstration_feedback(params)
             .await
     }
+
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
+        self.inference_stats_queries
+            .count_inferences_for_episode(episode_id)
+            .await
+    }
 }

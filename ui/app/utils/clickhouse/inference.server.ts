@@ -1,4 +1,3 @@
-import { CountSchema } from "./common";
 import { data } from "react-router";
 import type { StoredInference, InferenceFilter } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
@@ -105,20 +104,6 @@ export async function countInferencesForVariant(
     variantName: variant_name,
   });
   return Number(result.inference_count);
-}
-
-export async function countInferencesForEpisode(
-  episode_id: string,
-): Promise<number> {
-  const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { episode_id },
-  });
-  const rows = await resultSet.json<{ count: string }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
 }
 
 const functionCountInfoSchema = z.object({

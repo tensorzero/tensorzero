@@ -57,9 +57,9 @@ Let's define a TensorZero function that includes these additional parameters:
 [functions.bash_assistant]
 type = "chat"
 
-[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+[functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-20250219"
+model = "anthropic::claude-sonnet-4-5-20250929"
 max_tokens = 2048
 extra_body = [
     { pointer = "/tools", value = [{ type = "bash_20250124", name = "bash" }] },

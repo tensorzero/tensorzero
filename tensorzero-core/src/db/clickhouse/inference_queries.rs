@@ -1129,7 +1129,7 @@ mod tests {
         LEFT JOIN (
             SELECT
                 target_id,
-                argMax(value, timestamp) as value
+                toNullable(argMax(value, timestamp)) as value
             FROM FloatMetricFeedback
             WHERE metric_name = {p1:String}
             GROUP BY target_id
@@ -1339,7 +1339,7 @@ mod tests {
             LEFT JOIN (
                 SELECT
                     target_id,
-                    argMax(value, timestamp) as value
+                    toNullable(argMax(value, timestamp)) as value
                 FROM FloatMetricFeedback
                 WHERE metric_name = {p0:String}
                 GROUP BY target_id
@@ -1352,7 +1352,7 @@ mod tests {
             LEFT JOIN (
                 SELECT
                     target_id,
-                    argMax(value, timestamp) as value
+                    toNullable(argMax(value, timestamp)) as value
                 FROM FloatMetricFeedback
                 WHERE metric_name = {p2:String}
                 GROUP BY target_id
