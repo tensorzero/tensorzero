@@ -23,6 +23,7 @@ import {
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
 import { Checkbox } from "~/components/ui/checkbox";
+import { Input } from "~/components/ui/input";
 
 interface MergedFunctionData {
   function_name: string;
@@ -137,18 +138,18 @@ export default function FunctionsTable({
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-md">
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
+          <Input
             type="text"
             placeholder="Search functions..."
-            value={globalFilter ?? ""}
+            value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
           />
         </div>
-        <label className="text-fg-muted flex items-center gap-2 text-sm font-medium">
+        <label className="text-fg-muted flex items-center gap-2 text-sm font-medium whitespace-nowrap">
           <Checkbox
             id="show-internal-functions"
             checked={showInternalFunctions}
