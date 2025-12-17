@@ -129,6 +129,7 @@ export * from "./GetModelLatencyResponse";
 export * from "./GetModelUsageResponse";
 export * from "./GetWorkflowEvaluationProjectCountResponse";
 export * from "./GetWorkflowEvaluationProjectsResponse";
+export * from "./GetWorkflowEvaluationRunsResponse";
 export * from "./GoogleAIStudioGeminiProvider";
 export * from "./GroqProvider";
 export * from "./HostedProviderKind";

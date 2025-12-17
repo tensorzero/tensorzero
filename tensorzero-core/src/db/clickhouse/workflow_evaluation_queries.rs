@@ -223,11 +223,65 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
             })
         })
     }
+
+    async fn get_workflow_evaluation_runs(
+        &self,
+        run_ids: &[Uuid],
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        if run_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut params = HashMap::new();
+
+        let project_name_filter = if let Some(project_name_str) = project_name {
+            params.insert("project_name", project_name_str);
+            "AND project_name = {project_name:String}"
+        } else {
+            ""
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                run_display_name AS name,
+                uint_to_uuid(run_id_uint) AS id,
+                variant_pins,
+                tags,
+                project_name,
+                formatDateTime(
+                    UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
+                    '%Y-%m-%dT%H:%i:%SZ'
+                ) AS timestamp
+            FROM DynamicEvaluationRun
+            WHERE run_id_uint IN (
+                SELECT arrayJoin(
+                    arrayMap(x -> toUInt128(toUUID(x)), {{run_ids:Array(String)}})
+                )
+            )
+            {project_name_filter}
+            ORDER BY run_id_uint DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        // Format run_ids as ClickHouse array with single quotes
+        let run_ids_str: Vec<String> = run_ids.iter().map(|id| format!("'{id}'")).collect();
+        let run_ids_array = format!("[{}]", run_ids_str.join(","));
+        params.insert("run_ids", run_ids_array.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use uuid::Uuid;
 
     use crate::db::{
         clickhouse::{
@@ -376,5 +430,95 @@ mod tests {
         let count = conn.count_workflow_evaluation_projects().await.unwrap();
 
         assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_empty_ids() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        // No expectations set - should not call the database
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.get_workflow_evaluation_runs(&[], None).await.unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_with_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "SELECT");
+                assert_query_contains(query, "run_display_name AS name");
+                assert_query_contains(query, "uint_to_uuid(run_id_uint) AS id");
+                assert_query_contains(query, "variant_pins");
+                assert_query_contains(query, "tags");
+                assert_query_contains(query, "project_name");
+                assert_query_contains(query, "FROM DynamicEvaluationRun");
+                assert_query_contains(query, "WHERE run_id_uint IN");
+                assert_query_contains(query, "ORDER BY run_id_uint DESC");
+
+                assert!(params.contains_key("run_ids"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"name":"test_run","id":"01968d04-142c-7e53-8ea7-3a3255b518dc","variant_pins":{},"tags":{},"project_name":"test_project","timestamp":"2025-05-01T18:02:56Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+        let result = conn
+            .get_workflow_evaluation_runs(&[run_id], None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, Some("test_run".to_string()));
+        assert_eq!(result[0].id, run_id);
+        assert_eq!(result[0].project_name, Some("test_project".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_with_project_name() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "AND project_name = {project_name:String}");
+                assert!(params.contains_key("run_ids"));
+                assert_eq!(params.get("project_name"), Some(&"my_project"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"name":"filtered_run","id":"01968d04-142c-7e53-8ea7-3a3255b518dc","variant_pins":{},"tags":{},"project_name":"my_project","timestamp":"2025-05-01T18:02:56Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+        let result = conn
+            .get_workflow_evaluation_runs(&[run_id], Some("my_project"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].project_name, Some("my_project".to_string()));
     }
 }

@@ -8,42 +8,8 @@ import {
   countWorkflowEvaluationRunEpisodes,
   getWorkflowEvaluationRunEpisodesByTaskName,
   getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
-  getWorkflowEvaluationRunsByIds,
   getWorkflowEvaluationRunStatisticsByMetricName,
 } from "./workflow_evaluations.server";
-
-describe("getWorkflowEvaluationRunsByIds", () => {
-  test("should return correct run infos for a given run id", async () => {
-    const runInfos = await getWorkflowEvaluationRunsByIds([
-      "01968d04-142c-7e53-8ea7-3a3255b518dc",
-      "01968d05-d734-7751-ab33-75dd8b3fb4a3",
-    ]);
-    expect(runInfos).toMatchObject([
-      {
-        id: "01968d05-d734-7751-ab33-75dd8b3fb4a3",
-        name: "baseline",
-        project_name: "21_questions",
-        tags: { foo: "bar" },
-        timestamp: "2025-05-01T18:04:52Z",
-        variant_pins: {
-          answer_question: "baseline",
-          ask_question: "baseline",
-        },
-      },
-      {
-        id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        name: "gpt-4.1-nano",
-        project_name: "21_questions",
-        tags: { foo: "bar" },
-        timestamp: "2025-05-01T18:02:56Z",
-        variant_pins: {
-          ask_question: "gpt-4.1-nano",
-          answer_question: "baseline",
-        },
-      },
-    ]);
-  });
-});
 
 describe("getWorkflowEvaluationRunEpisodesByRunId", () => {
   test("should return correct episodes for a given run id", async () => {

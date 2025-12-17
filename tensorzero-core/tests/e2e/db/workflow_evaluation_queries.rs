@@ -208,3 +208,84 @@ async fn test_search_workflow_evaluation_runs_with_pagination() {
         result.len()
     );
 }
+
+/// Test getting workflow evaluation runs by IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run ID from the fixture data
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id], None)
+        .await
+        .unwrap();
+
+    // Should return exactly 1 run
+    assert_eq!(
+        result.len(),
+        1,
+        "Expected exactly 1 run, got {}",
+        result.len()
+    );
+    assert_eq!(result[0].id, run_id, "Expected run ID to match");
+}
+
+/// Test getting workflow evaluation runs with multiple IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_multiple_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use known run IDs from the fixture data
+    let run_id1 = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+    let run_id2 = uuid::Uuid::parse_str("01968d05-d734-7751-ab33-75dd8b3fb4a3").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id1, run_id2], None)
+        .await
+        .unwrap();
+
+    // Should return 2 runs
+    assert_eq!(result.len(), 2, "Expected 2 runs, got {}", result.len());
+}
+
+/// Test getting workflow evaluation runs with project_name filter.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_with_project_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id], Some("21_questions"))
+        .await
+        .unwrap();
+
+    // Should return the run since it belongs to 21_questions project
+    assert_eq!(result.len(), 1, "Expected 1 run, got {}", result.len());
+    assert_eq!(
+        result[0].project_name.as_deref(),
+        Some("21_questions"),
+        "Expected project_name to be '21_questions'"
+    );
+}
+
+/// Test getting workflow evaluation runs with empty IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_empty_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[], None)
+        .await
+        .unwrap();
+
+    // Should return empty list
+    assert_eq!(
+        result.len(),
+        0,
+        "Expected 0 runs for empty IDs, got {}",
+        result.len()
+    );
+}
