@@ -63,7 +63,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+            #[expect(deprecated)]
+            post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/clone",
@@ -134,6 +135,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/config/{hash}",
             get(endpoints::internal::config::get_config_by_hash_handler),
+        )
+        // Inference count endpoint
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::internal::count_inferences::count_inferences_handler),
         )
         // Action endpoint for executing with historical config snapshots
         .route(

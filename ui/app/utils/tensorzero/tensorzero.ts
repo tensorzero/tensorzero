@@ -14,7 +14,10 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CountInferencesRequest,
+  CountInferencesResponse,
   CountModelsResponse,
+  CreateDatapointsFromInferenceRequest,
   DatapointStatsResponse,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
@@ -897,6 +900,29 @@ export class TensorZeroClient {
   }
 
   /**
+   * Creates datapoints from inferences based on either specific inference IDs or an inference query.
+   * @param datasetName - The name of the dataset to create datapoints in
+   * @param request - The request containing either inference IDs or an inference query with filters
+   * @returns A promise that resolves with the response containing the new datapoint IDs
+   * @throws Error if the request fails
+   */
+  async createDatapointsFromInferences(
+    datasetName: string,
+    request: CreateDatapointsFromInferenceRequest,
+  ): Promise<CreateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/from_inferences`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CreateDatapointsResponse;
+  }
+
+  /**
    * Counts unique datapoints across specified evaluation runs.
    * @param functionName - The name of the function being evaluated
    * @param evaluationRunIds - Array of evaluation run IDs
@@ -1062,6 +1088,27 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as TableBoundsWithCount;
+  }
+
+  /**
+   * Counts inferences matching the given parameters.
+   * When output_source is "demonstration", only inferences with demonstration feedback are counted.
+   * @param request - The count inferences request parameters
+   * @returns A promise that resolves with the count of matching inferences
+   * @throws Error if the request fails
+   */
+  async countInferences(request: CountInferencesRequest): Promise<number> {
+    const endpoint = "/internal/inferences/count";
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const result = (await response.json()) as CountInferencesResponse;
+    return Number(result.count);
   }
 
   /**
