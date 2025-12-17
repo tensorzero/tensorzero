@@ -1124,7 +1124,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 frequency_penalty: variant.frequency_penalty(),
                 max_tokens: variant.max_tokens(),
                 seed: variant.seed(),
-                json_mode: variant.json_mode().cloned(),
+                json_mode: variant.json_mode().copied(),
                 extra_body: variant.extra_body().cloned(),
                 extra_headers: variant.extra_headers().cloned(),
                 retries: *variant.retries(),
