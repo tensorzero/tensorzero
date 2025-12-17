@@ -46,7 +46,6 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
-#[cfg(feature = "durable")]
 pub mod topk;
 pub mod types;
 
