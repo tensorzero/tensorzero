@@ -52,7 +52,6 @@ export * from "./DatapointOrderByTerm";
 export * from "./DatapointStatsResponse";
 export * from "./DatasetMetadata";
 export * from "./DatasetOutputSource";
-export * from "./DatasetQueryParams";
 export * from "./DeepSeekProvider";
 export * from "./DeleteDatapointsRequest";
 export * from "./DeleteDatapointsResponse";

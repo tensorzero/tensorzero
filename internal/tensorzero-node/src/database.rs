@@ -1,7 +1,5 @@
 use serde::Deserialize;
-use tensorzero::{
-    ClickHouseConnection, DatasetQueryParams, TimeWindow, setup_clickhouse_without_config,
-};
+use tensorzero::{ClickHouseConnection, TimeWindow, setup_clickhouse_without_config};
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -37,16 +35,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
-    }
-
-    #[napi]
-    pub async fn insert_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, insert_rows_for_dataset, params, DatasetQueryParams)
-    }
-
-    #[napi]
     pub async fn query_feedback_bounds_by_target_id(
         &self,
         params: String,
@@ -57,11 +45,6 @@ impl DatabaseClient {
             params,
             QueryFeedbackBoundsByTargetIdParams { target_id }
         )
-    }
-
-    #[napi]
-    pub async fn count_datasets(&self) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_datasets)
     }
 
     #[napi]
