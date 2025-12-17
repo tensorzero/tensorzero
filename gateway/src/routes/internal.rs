@@ -124,6 +124,18 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             ),
         )
         .route(
+            "/internal/workflow-evaluations/list-runs",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/runs/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/runs/search",
+            get(endpoints::workflow_evaluations::internal::search_workflow_evaluation_runs_handler),
+        )
+        .route(
             "/internal/models/usage",
             get(endpoints::internal::models::get_model_usage_handler),
         )

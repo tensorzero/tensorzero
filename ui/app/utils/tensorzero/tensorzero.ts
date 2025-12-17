@@ -17,6 +17,7 @@ import type {
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
+  CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   DatapointStatsResponse,
   EvaluationRunStatsResponse,
@@ -46,7 +47,9 @@ import type {
   ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListWorkflowEvaluationRunsResponse,
   SearchEvaluationRunsResponse,
+  SearchWorkflowEvaluationRunsResponse,
   StatusResponse,
   TimeWindow,
   TableBoundsWithCount,
@@ -1023,6 +1026,94 @@ export class TensorZeroClient {
     }
     const body =
       (await response.json()) as GetWorkflowEvaluationProjectCountResponse;
+    return body.count;
+  }
+
+  /**
+   * Searches workflow evaluation runs by project name and/or search query.
+   * @param limit - Maximum number of runs to return (default: 100)
+   * @param offset - Number of runs to skip (default: 0)
+   * @param projectName - Optional project name to filter by
+   * @param searchQuery - Optional search query to filter by (searches run name and ID)
+   * @returns A promise that resolves with the search results
+   * @throws Error if the request fails
+   */
+  async searchWorkflowEvaluationRuns(
+    limit: number = 100,
+    offset: number = 0,
+    projectName?: string,
+    searchQuery?: string,
+  ): Promise<SearchWorkflowEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    if (projectName) {
+      searchParams.append("project_name", projectName);
+    }
+    if (searchQuery) {
+      searchParams.append("q", searchQuery);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/runs/search?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as SearchWorkflowEvaluationRunsResponse;
+  }
+
+  /**
+   * Lists workflow evaluation runs with episode counts.
+   * @param limit - Maximum number of runs to return (default: 100)
+   * @param offset - Number of runs to skip (default: 0)
+   * @param runId - Optional run ID to filter by
+   * @param projectName - Optional project name to filter by
+   * @returns A promise that resolves with the workflow evaluation runs response
+   * @throws Error if the request fails
+   */
+  async listWorkflowEvaluationRuns(
+    limit: number = 100,
+    offset: number = 0,
+    runId?: string,
+    projectName?: string,
+  ): Promise<ListWorkflowEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    if (runId) {
+      searchParams.append("run_id", runId);
+    }
+    if (projectName) {
+      searchParams.append("project_name", projectName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/list-runs?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListWorkflowEvaluationRunsResponse;
+  }
+
+  /**
+   * Counts workflow evaluation runs.
+   * @returns A promise that resolves with the workflow evaluation run count
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRuns(): Promise<number> {
+    const response = await this.fetch(
+      "/internal/workflow-evaluations/runs/count",
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as CountWorkflowEvaluationRunsResponse;
     return body.count;
   }
 
