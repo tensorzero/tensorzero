@@ -13,7 +13,7 @@ reqwest-eventsource.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror = "2.0.17"
+thiserror.workspace = true
 url.workspace = true
 uuid.workspace = true
 tensorzero-core = { path = "../../tensorzero-core" }
