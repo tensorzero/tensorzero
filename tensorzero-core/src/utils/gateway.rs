@@ -270,7 +270,7 @@ impl GatewayHandle {
         let config_snapshot_cache = Some(
             Cache::builder()
                 .time_to_live(Duration::from_secs(300))
-                .max_capacity(100)
+                .max_capacity(10)
                 .build(),
         );
 

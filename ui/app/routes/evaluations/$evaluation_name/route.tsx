@@ -4,7 +4,6 @@ import {
   getEvaluationStatistics,
   getEvaluationResults,
   getEvaluationRunInfos,
-  countDatapointsForEvaluation,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
@@ -26,7 +25,10 @@ import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
-import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import {
+  addEvaluationHumanFeedback,
+  getTensorZeroClient,
+} from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
@@ -122,11 +124,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let total_datapoints_promise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    total_datapoints_promise = countDatapointsForEvaluation(
-      function_name,
-      function_type,
-      selected_evaluation_run_ids_array,
-    );
+    total_datapoints_promise =
+      getTensorZeroClient().countDatapointsForEvaluation(
+        function_name,
+        selected_evaluation_run_ids_array,
+      );
   } else {
     total_datapoints_promise = Promise.resolve(0);
   }

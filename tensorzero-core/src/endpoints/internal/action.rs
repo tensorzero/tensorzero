@@ -10,13 +10,12 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::client::client_inference_params::ClientInferenceParams;
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, RuntimeOverlay};
 use crate::db::ConfigQueries;
 use crate::endpoints::feedback::{FeedbackResponse, Params as FeedbackParams, feedback};
-use crate::endpoints::inference::{
-    InferenceOutput, InferenceResponse, Params as InferenceParams, inference,
-};
+use crate::endpoints::inference::{InferenceOutput, InferenceResponse, inference};
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -34,7 +33,7 @@ pub struct ActionInputInfo {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ActionInput {
-    Inference(Box<InferenceParams>),
+    Inference(Box<ClientInferenceParams>),
     Feedback(Box<FeedbackParams>),
 }
 
@@ -84,7 +83,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
-                *inference_params,
+                (*inference_params).try_into()?,
                 None, // No API key for internal endpoint
             ))
             .await?;

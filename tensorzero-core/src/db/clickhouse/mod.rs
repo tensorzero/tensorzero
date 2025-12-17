@@ -37,6 +37,7 @@ pub mod model_inferences;
 pub mod query_builder;
 mod select_queries;
 mod table_name;
+pub mod workflow_evaluation_queries;
 
 #[cfg(test)]
 mod mock_clickhouse_connection_info;

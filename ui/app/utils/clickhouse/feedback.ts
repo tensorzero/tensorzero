@@ -1,7 +1,4 @@
-import { data } from "react-router";
-import { getClickhouseClient } from "./client.server";
 import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
-import { z } from "zod";
 import { logger } from "~/utils/logger";
 import type { FeedbackRow } from "~/types/tensorzero";
 
@@ -47,55 +44,4 @@ export async function pollForFeedbackItem(
     );
   }
   return feedback;
-}
-
-export async function queryLatestFeedbackIdByMetric(params: {
-  target_id: string;
-}): Promise<Record<string, string>> {
-  const { target_id } = params;
-
-  const query = `
-    SELECT
-      metric_name,
-      argMax(id, toUInt128(id)) as latest_id
-    FROM BooleanMetricFeedbackByTargetId
-    WHERE target_id = {target_id:String}
-    GROUP BY metric_name
-
-    UNION ALL
-
-    SELECT
-      metric_name,
-      argMax(id, toUInt128(id)) as latest_id
-    FROM FloatMetricFeedbackByTargetId
-    WHERE target_id = {target_id:String}
-    GROUP BY metric_name
-
-    ORDER BY metric_name
-  `;
-
-  try {
-    const resultSet = await getClickhouseClient().query({
-      query,
-      format: "JSONEachRow",
-      query_params: { target_id },
-    });
-    const rows = await resultSet.json();
-
-    const latestFeedbackByMetric = z
-      .array(
-        z.object({
-          metric_name: z.string(),
-          latest_id: z.string().uuid(),
-        }),
-      )
-      .parse(rows);
-
-    return Object.fromEntries(
-      latestFeedbackByMetric.map((item) => [item.metric_name, item.latest_id]),
-    );
-  } catch (error) {
-    logger.error("ERROR", error);
-    throw data("Error querying latest feedback by metric", { status: 500 });
-  }
 }
