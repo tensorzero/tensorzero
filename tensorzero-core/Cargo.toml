@@ -108,7 +108,7 @@ mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = { version = "2.12.1", features = ["serde"] }
 base64 = "0.22.1"
-thiserror = "2.0.16"
+thiserror = { workspace = true }
 globset = "0.4.18"
 walkdir = "2.5.0"
 enum-map = "2.7.3"
