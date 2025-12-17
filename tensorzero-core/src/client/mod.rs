@@ -1045,6 +1045,11 @@ impl Client {
                     builder = builder.header(header_name, value);
                 }
 
+                for (key, value) in &params.otlp_traces_extra_attributes {
+                    let header_name = format!("tensorzero_otlp-traces-extra-attribute-{key}");
+                    builder = builder.header(header_name, value);
+                }
+
                 // FIXME: reproduce the above pattern for tensorzero-otlp-traces-extra-attribute
 
                 if params.stream.unwrap_or(false) {
