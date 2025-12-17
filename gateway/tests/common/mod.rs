@@ -104,7 +104,7 @@ pub async fn start_gateway_on_random_port(
 
     // Bind to 0.0.0.0 so the gateway can listen on all interfaces, but tests should
     // connect via loopback. On Windows, connecting to 0.0.0.0 fails with AddrNotAvailable.
-    // Lets add conditional logic to handle that.
+    // Let's add conditional logic to handle that.
     #[cfg(target_os = "windows")]
     {
         return ChildData {
