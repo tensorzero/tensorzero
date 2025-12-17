@@ -1289,7 +1289,7 @@ async fn test_get_all_templates() {
         .expect("Failed to load config");
 
     // Get all templates
-    let templates = Config::get_templates(&config.functions);
+    let templates = Config::get_templates(&config.functions).unwrap();
 
     // Check if all expected templates are present
     assert_eq!(
@@ -1486,9 +1486,9 @@ async fn test_load_bad_extra_body_delete() {
         [functions.bash_assistant]
         type = "chat"
 
-        [functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+        [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
         type = "chat_completion"
-        model = "anthropic::claude-3-7-sonnet-20250219"
+        model = "anthropic::claude-sonnet-4-5-20250929"
         max_tokens = 2048
         extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
         "#;
@@ -1500,7 +1500,7 @@ async fn test_load_bad_extra_body_delete() {
         .to_string();
     assert_eq!(
         err,
-        "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: `delete` must be `true`, or not set"
+        "functions.bash_assistant: variants.anthropic_claude_4_5_sonnet_20250929: extra_body.[0]: Error deserializing replacement config: `delete` must be `true`, or not set"
     );
 }
 
@@ -1510,12 +1510,12 @@ async fn test_load_bad_config_error_path() {
 [functions.bash_assistant]
 type = "chat"
 
-[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+[functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-20250219"
+model = "anthropic::claude-sonnet-4-5-20250929"
 max_tokens = 2048
 
-[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219.extra_body]
+[functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929.extra_body]
 tools = [{ type = "bash_20250124", name = "bash" }]
 thinking = { type = "enabled", budget_tokens = 1024 }
         "#;
@@ -1527,7 +1527,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         .to_string();
     assert_eq!(
         err,
-        "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body: invalid type: map, expected a sequence"
+        "functions.bash_assistant: variants.anthropic_claude_4_5_sonnet_20250929: extra_body: invalid type: map, expected a sequence"
     );
 }
 

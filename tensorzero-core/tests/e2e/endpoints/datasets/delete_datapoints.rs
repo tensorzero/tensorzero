@@ -3,6 +3,7 @@
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::time::Duration;
+use tensorzero::DeleteDatapointsRequest;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -85,9 +86,9 @@ async fn test_delete_datapoints_single_chat() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([datapoint_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -254,9 +255,9 @@ async fn test_delete_datapoints_multiple_mixed() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [chat_id1.to_string(), chat_id2.to_string(), json_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([chat_id1, chat_id2, json_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -299,9 +300,7 @@ async fn test_delete_datapoints_empty_ids_list() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": []
-        }))
+        .json(&DeleteDatapointsRequest { ids: Vec::new() })
         .send()
         .await
         .unwrap();
@@ -361,9 +360,9 @@ async fn test_delete_datapoints_non_existent_id() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [existing_id.to_string(), non_existent_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([existing_id, non_existent_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -401,9 +400,9 @@ async fn test_delete_datapoints_invalid_dataset_name() {
         .delete(get_gateway_endpoint(
             "/v1/datasets/tensorzero::dataset/datapoints",
         ))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([datapoint_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -423,9 +422,9 @@ async fn test_delete_datapoints_from_empty_dataset() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [non_existent_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([non_existent_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -487,9 +486,9 @@ async fn test_delete_datapoints_already_stale() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([datapoint_id]),
+        })
         .send()
         .await
         .unwrap();
@@ -505,9 +504,9 @@ async fn test_delete_datapoints_already_stale() {
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&DeleteDatapointsRequest {
+            ids: Vec::from([datapoint_id]),
+        })
         .send()
         .await
         .unwrap();

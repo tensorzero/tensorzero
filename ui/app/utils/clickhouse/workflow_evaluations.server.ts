@@ -7,12 +7,10 @@ import {
   wilsonConfidenceIntervalUpper,
 } from "./helpers";
 import {
-  workflowEvaluationProjectSchema,
   workflowEvaluationRunEpisodeWithFeedbackSchema,
   workflowEvaluationRunSchema,
   workflowEvaluationRunStatisticsByMetricNameSchema,
   groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
-  type WorkflowEvaluationProject,
   type WorkflowEvaluationRun,
   type WorkflowEvaluationRunEpisodeWithFeedback,
   type WorkflowEvaluationRunStatisticsByMetricName,
@@ -315,45 +313,6 @@ export async function countWorkflowEvaluationRunEpisodes(
   });
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
-}
-
-export async function getWorkflowEvaluationProjects(
-  limit: number,
-  offset: number,
-): Promise<WorkflowEvaluationProject[]> {
-  const query = `
-    SELECT
-      project_name as name,
-      toUInt32(count()) as count,
-      formatDateTime(max(updated_at), '%Y-%m-%dT%H:%i:%SZ')  as last_updated
-    FROM DynamicEvaluationRunByProjectName
-    GROUP BY project_name
-    ORDER BY last_updated DESC
-    LIMIT {limit:UInt64}
-    OFFSET {offset:UInt64}
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { limit, offset },
-  });
-  const rows = await result.json<WorkflowEvaluationProject[]>();
-  return rows.map((row) => workflowEvaluationProjectSchema.parse(row));
-}
-
-export async function countWorkflowEvaluationProjects(): Promise<number> {
-  const query = `
-  SELECT toUInt32(countDistinct(project_name)) AS count
-  FROM DynamicEvaluationRunByProjectName
-  WHERE project_name IS NOT NULL
-`;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await result.json<{ count: number }[]>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
 }
 
 export async function searchWorkflowEvaluationRuns(

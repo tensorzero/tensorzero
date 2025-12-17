@@ -5,6 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
+use tensorzero::GetDatapointsRequest;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -80,9 +81,9 @@ mod get_datapoints_tests {
         // Get the datapoint via the endpoint
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([datapoint_id]),
+            })
             .send()
             .await
             .unwrap();
@@ -167,9 +168,9 @@ mod get_datapoints_tests {
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/get_datapoints"
             )))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([datapoint_id]),
+            })
             .send()
             .await
             .unwrap();
@@ -257,9 +258,9 @@ mod get_datapoints_tests {
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/get_datapoints"
             )))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([datapoint_id]),
+            })
             .send()
             .await
             .unwrap();
@@ -393,9 +394,9 @@ mod get_datapoints_tests {
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/get_datapoints"
             )))
-            .json(&json!({
-                "ids": [chat_id1.to_string(), chat_id2.to_string(), json_id.to_string()]
-            }))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([chat_id1, chat_id2, json_id]),
+            })
             .send()
             .await
             .unwrap();
@@ -473,15 +474,15 @@ mod get_datapoints_tests {
         let non_existent_id2 = Uuid::now_v7();
 
         let resp = http_client
-        .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/get_datapoints"
-        )))
-        .json(&json!({
-            "ids": [existing_id.to_string(), non_existent_id1.to_string(), non_existent_id2.to_string()]
-        }))
-        .send()
-        .await
-        .unwrap();
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([existing_id, non_existent_id1, non_existent_id2]),
+            })
+            .send()
+            .await
+            .unwrap();
 
         assert!(resp.status().is_success());
 
@@ -552,9 +553,9 @@ mod get_datapoints_tests {
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/get_datapoints"
             )))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&GetDatapointsRequest {
+                ids: Vec::from([datapoint_id]),
+            })
             .send()
             .await
             .unwrap();
@@ -619,9 +620,7 @@ mod get_datapoints_tests {
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/get_datapoints"
             )))
-            .json(&json!({
-                "ids": []
-            }))
+            .json(&GetDatapointsRequest { ids: Vec::new() })
             .send()
             .await
             .unwrap();

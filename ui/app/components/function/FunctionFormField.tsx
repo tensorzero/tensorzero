@@ -36,6 +36,7 @@ export function FunctionFormField<T extends FieldValues>({
               }}
               functions={functions}
               hideDefaultFunction={hideDefaultFunction}
+              ariaLabel={label}
             />
           </div>
         </FormItem>

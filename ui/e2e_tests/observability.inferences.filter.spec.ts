@@ -88,15 +88,24 @@ test.describe("Inference Filtering", () => {
     await filterButton.click();
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
-    // Find the Variant input field
-    const variantInput = page.getByPlaceholder("Enter variant name");
-    await variantInput.fill("openai_promptA");
+    // First select a function to enable the variant selector
+    await page.getByRole("combobox", { name: "Function" }).click();
+    await page.getByRole("option", { name: "write_haiku" }).click();
+
+    // Select variant from dropdown
+    await page.getByRole("combobox", { name: "Variant" }).click();
+    await page
+      .getByRole("option", { name: "initial_prompt_gpt4o_mini" })
+      .click();
 
     // Apply filters and wait for results
     await applyFiltersAndWait(page);
 
-    // Verify URL contains the variant filter parameter
-    await expect(page).toHaveURL(/variant_name=openai_promptA/, {
+    // Verify URL contains both filter parameters
+    await expect(page).toHaveURL(/function_name=write_haiku/, {
+      timeout: 10_000,
+    });
+    await expect(page).toHaveURL(/variant_name=initial_prompt_gpt4o_mini/, {
       timeout: 10_000,
     });
   });
@@ -109,8 +118,8 @@ test.describe("Inference Filtering", () => {
     await filterButton.click();
     await expect(page.getByRole("heading", { name: "Filter" })).toBeVisible();
 
-    // Find the Episode ID input field
-    const episodeInput = page.getByPlaceholder("Enter episode ID");
+    // Find the Episode ID input field by its label
+    const episodeInput = page.getByLabel("Episode ID");
     await episodeInput.fill("0196367a-842d-74c2-9e62-67f07369b6ad");
 
     // Apply filters and wait for results
@@ -166,8 +175,8 @@ test.describe("Inference Filtering", () => {
     // Apply filters and wait for results
     await applyFiltersAndWait(page);
 
-    // Verify URL contains filter parameter with JSON
-    await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
+    // Verify URL contains filters parameter with JSON
+    await expect(page).toHaveURL(/filters=/, { timeout: 10_000 });
   });
 
   test("should add metric filter", async ({ page }) => {
@@ -190,8 +199,8 @@ test.describe("Inference Filtering", () => {
       // Apply filters and wait for results
       await applyFiltersAndWait(page);
 
-      // Verify URL contains filter parameter with JSON
-      await expect(page).toHaveURL(/filter=/, { timeout: 10_000 });
+      // Verify URL contains filters parameter with JSON
+      await expect(page).toHaveURL(/filters=/, { timeout: 10_000 });
     }
   });
 
@@ -315,9 +324,11 @@ test.describe("Inference Filtering", () => {
     await page.getByPlaceholder("Select function").click();
     await page.getByRole("option", { name: "write_haiku" }).click();
 
-    // Add variant filter
-    const variantInput = page.getByPlaceholder("Enter variant name");
-    await variantInput.fill("openai_promptA");
+    // Select variant from dropdown
+    await page.getByRole("combobox", { name: "Variant" }).click();
+    await page
+      .getByRole("option", { name: "initial_prompt_gpt4o_mini" })
+      .click();
 
     // Apply filters and wait for results
     await applyFiltersAndWait(page);
@@ -326,7 +337,7 @@ test.describe("Inference Filtering", () => {
     await expect(page).toHaveURL(/function_name=write_haiku/, {
       timeout: 10_000,
     });
-    await expect(page).toHaveURL(/variant_name=openai_promptA/, {
+    await expect(page).toHaveURL(/variant_name=initial_prompt_gpt4o_mini/, {
       timeout: 10_000,
     });
   });

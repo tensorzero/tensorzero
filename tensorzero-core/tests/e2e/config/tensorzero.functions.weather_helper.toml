@@ -21,7 +21,7 @@ max_tokens = 100
 [functions.weather_helper.variants.anthropic-thinking]
 type = "chat_completion"
 weight = 0
-model = "anthropic::claude-3-7-sonnet-20250219"
+model = "anthropic::claude-sonnet-4-5-20250929"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 thinking_budget_tokens = 1024
 max_tokens = 1200

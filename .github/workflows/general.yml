@@ -652,6 +652,9 @@ jobs:
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
 
+      - name: end-of-file-fixer
+        run: uv run --with pre-commit pre-commit run end-of-file-fixer --all-files
+
       - name: check‑executables‑have‑shebangs
         run: uv run --with pre-commit pre-commit run check-executables-have-shebangs --all-files
 
