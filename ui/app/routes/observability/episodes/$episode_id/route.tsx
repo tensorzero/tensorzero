@@ -1,7 +1,4 @@
-import {
-  countInferencesForEpisode,
-  listInferencesWithPagination,
-} from "~/utils/clickhouse/inference.server";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
@@ -47,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -100,9 +98,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const dbClient = await getNativeDatabaseClient();
+  const tensorZeroClient = await getTensorZeroClient();
 
   // Start count queries early - these will be streamed to section headers
-  const numInferencesPromise = countInferencesForEpisode(episode_id);
+  const numInferencesPromise = tensorZeroClient
+    .getEpisodeInferenceCount(episode_id)
+    .then((response) => response.inference_count);
   const numFeedbacksPromise = dbClient.countFeedbackByTargetId({
     target_id: episode_id,
   });
