@@ -8,6 +8,6 @@ export type MetricWithFeedback = {
    * The type of metric (boolean, float, demonstration).
    * None if the metric is not in the current config (e.g., was deleted).
    */
-  metric_type: MetricType | null;
+  metric_type?: MetricType;
   feedback_count: number;
 };

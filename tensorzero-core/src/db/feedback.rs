@@ -240,6 +240,7 @@ pub struct MetricWithFeedback {
     /// The type of metric (boolean, float, demonstration).
     /// None if the metric is not in the current config (e.g., was deleted).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub metric_type: Option<MetricType>,
     pub feedback_count: u32,
 }
