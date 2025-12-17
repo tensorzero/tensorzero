@@ -123,6 +123,7 @@ export * from "./GetInferencesResponse";
 export * from "./GetModelInferencesResponse";
 export * from "./GetModelLatencyResponse";
 export * from "./GetModelUsageResponse";
+export * from "./GetWorkflowEvaluationProjectCountResponse";
 export * from "./GetWorkflowEvaluationProjectsResponse";
 export * from "./GoogleAIStudioGeminiProvider";
 export * from "./GroqProvider";
