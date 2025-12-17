@@ -15,8 +15,7 @@ use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tower_http::metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter};
-
+use tower_http::{decompression::RequestDecompressionLayer, metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter}};
 use crate::routes::build_api_routes;
 
 /// Builds the final Axum router for the gateway,
@@ -60,6 +59,9 @@ pub fn build_axum_router(
         .layer(axum::middleware::from_fn(
             tensorzero_core::observability::request_logging::request_logging_middleware,
         ))
+        // Accept encoded requests and transparently decompress them.
+        // Supported encodings: gzip, br, zstd.
+        .layer(RequestDecompressionLayer::new())
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(in_flight_requests_layer)
         .with_state(app_state.clone());

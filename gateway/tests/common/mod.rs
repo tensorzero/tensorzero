@@ -102,11 +102,26 @@ pub async fn start_gateway_on_random_port(
         .parse::<u16>()
         .unwrap();
 
-    ChildData {
+    // Bind to 0.0.0.0 so the gateway can listen on all interfaces, but tests should
+    // connect via loopback. On Windows, connecting to 0.0.0.0 fails with AddrNotAvailable.
+    // Lets add conditional logic to handle that.
+    #[cfg(target_os = "windows")]
+    {
+        return ChildData {
+            addr: format!("127.0.0.1:{port}").parse::<SocketAddr>().unwrap(),
+            output,
+            stdout: line_rx,
+            child,
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return ChildData {
         addr: format!("0.0.0.0:{port}").parse::<SocketAddr>().unwrap(),
         output,
         stdout: line_rx,
         child,
+        };
     }
 }
 
