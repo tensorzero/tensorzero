@@ -34,6 +34,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::inference_stats::get_inference_with_feedback_stats_handler),
         )
         .route(
+            "/internal/feedback/{target_id}",
+            get(endpoints::feedback::internal::get_feedback_by_target_id_handler),
+        )
+        .route(
             "/internal/feedback/{target_id}/latest-id-by-metric",
             get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
         )
@@ -63,7 +67,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+            #[expect(deprecated)]
+            post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/clone",
@@ -96,8 +101,16 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::evaluations::get_evaluation_run_stats_handler),
         )
         .route(
+            "/internal/evaluations/datapoint-count",
+            get(endpoints::internal::evaluations::count_datapoints_handler),
+        )
+        .route(
             "/internal/evaluations/runs",
             get(endpoints::internal::evaluations::list_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/runs/search",
+            get(endpoints::internal::evaluations::search_evaluation_runs_handler),
         )
         // Workflow evaluation endpoints
         .route(
@@ -105,8 +118,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_projects_handler),
         )
         .route(
-            "/internal/evaluations/datapoint-count",
-            get(endpoints::internal::evaluations::count_datapoints_handler),
+            "/internal/workflow-evaluations/projects/count",
+            get(
+                endpoints::workflow_evaluations::internal::get_workflow_evaluation_project_count_handler,
+            ),
         )
         .route(
             "/internal/models/usage",
@@ -125,6 +140,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/config/{hash}",
             get(endpoints::internal::config::get_config_by_hash_handler),
+        )
+        // Inference count endpoint
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::internal::count_inferences::count_inferences_handler),
         )
         // Action endpoint for executing with historical config snapshots
         .route(

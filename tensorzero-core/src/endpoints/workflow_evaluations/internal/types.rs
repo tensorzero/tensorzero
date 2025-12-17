@@ -7,19 +7,6 @@ use serde::{Deserialize, Serialize};
 // Get Workflow Evaluation Projects
 // =============================================================================
 
-/// Query parameters for getting workflow evaluation projects.
-#[derive(Debug, Deserialize)]
-pub struct GetWorkflowEvaluationProjectsParams {
-    #[serde(default = "default_limit")]
-    pub limit: u32,
-    #[serde(default)]
-    pub offset: u32,
-}
-
-fn default_limit() -> u32 {
-    100
-}
-
 /// Response containing a list of workflow evaluation projects.
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -34,4 +21,15 @@ pub struct WorkflowEvaluationProject {
     pub name: String,
     pub count: u32,
     pub last_updated: DateTime<Utc>,
+}
+
+// =============================================================================
+// Get Workflow Evaluation Project Count
+// =============================================================================
+
+/// Response containing the count of workflow evaluation projects.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetWorkflowEvaluationProjectCountResponse {
+    pub count: u32,
 }

@@ -12,10 +12,8 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  FeedbackRow,
   FeedbackBounds,
   QueryFeedbackBoundsByTargetIdParams,
-  QueryFeedbackByTargetIdParams,
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
@@ -211,15 +209,6 @@ export class DatabaseClient {
     return new DatabaseClient(
       await NativeDatabaseClient.fromClickhouseUrl(url),
     );
-  }
-
-  async queryFeedbackByTargetId(
-    params: QueryFeedbackByTargetIdParams,
-  ): Promise<FeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
-    return JSON.parse(feedbackString) as FeedbackRow[];
   }
 
   async queryDemonstrationFeedbackByInferenceId(

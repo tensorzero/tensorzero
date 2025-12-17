@@ -859,7 +859,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode().cloned(),
+            self.json_mode().copied(),
             extra_body,
             extra_headers,
         )

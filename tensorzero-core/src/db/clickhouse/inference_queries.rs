@@ -8,9 +8,9 @@ use crate::db::clickhouse::query_builder::{
     generate_order_by_sql,
 };
 use crate::db::inferences::{
-    ClickHouseStoredInferenceWithDispreferredOutputs, DEFAULT_INFERENCE_QUERY_LIMIT,
-    InferenceMetadata, InferenceOutputSource, InferenceQueries, ListInferenceMetadataParams,
-    ListInferencesParams, PaginationParams,
+    ClickHouseStoredInferenceWithDispreferredOutputs, CountInferencesParams,
+    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceMetadata, InferenceOutputSource, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
 use crate::function::FunctionConfigType;
 use crate::{
@@ -103,6 +103,191 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         Ok(results)
     }
+
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &CountInferencesParams<'_>,
+    ) -> Result<u64, Error> {
+        let (sql, bound_parameters) = generate_count_inferences_sql(config, params)?;
+        let query_params = bound_parameters
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+        let response = self.inner.run_query_synchronous(sql, &query_params).await?;
+
+        // Parse the count directly (no JSON format)
+        let count_str = response.response.trim();
+        let count: u64 = count_str.parse().map_err(|e: std::num::ParseIntError| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to parse count '{count_str}': {e}"),
+            })
+        })?;
+
+        Ok(count)
+    }
+}
+
+/// Generates the SQL query and parameters for counting inferences.
+pub(crate) fn generate_count_inferences_sql(
+    config: &Config,
+    opts: &CountInferencesParams<'_>,
+) -> Result<(String, Vec<QueryParameter>), Error> {
+    let mut query_params: Vec<QueryParameter> = Vec::new();
+    let mut param_idx_counter = 0;
+
+    let sql = match opts.function_name {
+        // If function_name is provided, we know which table to query
+        Some(function_name) => {
+            let mut joins = JoinRegistry::new();
+            let function_config = config.get_function(function_name)?;
+            let query = generate_count_query_for_table(
+                config,
+                opts,
+                function_config.table_name(),
+                &mut joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            // Construct final query: SELECT COUNT(*) FROM table + JOINs + WHERE
+            let mut sql = query.select_from_sql_fragment;
+            if !joins.get_clauses().is_empty() {
+                sql.push_str(&joins.get_clauses().join("\n"));
+            }
+            sql.push('\n');
+            sql.push_str(&query.where_sql_fragment);
+            sql
+        }
+        None => {
+            // Query both tables with UNION ALL, then count
+            let mut chat_joins = JoinRegistry::new();
+            let chat_query = generate_count_query_for_table(
+                config,
+                opts,
+                "ChatInference",
+                &mut chat_joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            let mut json_joins = JoinRegistry::new();
+            let json_query = generate_count_query_for_table(
+                config,
+                opts,
+                "JsonInference",
+                &mut json_joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            // Build subqueries that select just the id for counting
+            let chat_sql = format!(
+                "SELECT i.id FROM ChatInference AS i {joins} {where_clause}",
+                joins = chat_joins.get_clauses().join("\n"),
+                where_clause = chat_query.where_sql_fragment,
+            );
+            let json_sql = format!(
+                "SELECT i.id FROM JsonInference AS i {joins} {where_clause}",
+                joins = json_joins.get_clauses().join("\n"),
+                where_clause = json_query.where_sql_fragment,
+            );
+
+            format!("SELECT toUInt64(COUNT(*)) FROM ({chat_sql} UNION ALL {json_sql})")
+        }
+    };
+
+    Ok((sql, query_params))
+}
+
+/// Generates WHERE clauses and JOINs for a count query on a specific table.
+/// Returns a SingleTableQuery with just the WHERE part filled in.
+fn generate_count_query_for_table(
+    config: &Config,
+    opts: &CountInferencesParams<'_>,
+    table_name: &str,
+    joins: &mut JoinRegistry,
+    query_params: &mut Vec<QueryParameter>,
+    param_idx_counter: &mut usize,
+) -> Result<SingleTableQuery, Error> {
+    let mut where_clauses: Vec<String> = Vec::new();
+    let mut select_clauses: Vec<String> = Vec::new();
+
+    // Add function_name filter if provided
+    if let Some(function_name) = opts.function_name {
+        let function_name_param_placeholder = add_parameter(
+            function_name,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!(
+            "i.function_name = {function_name_param_placeholder}"
+        ));
+    }
+
+    // Add variant_name filter
+    if let Some(variant_name) = opts.variant_name {
+        let variant_name_param_placeholder = add_parameter(
+            variant_name,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!("i.variant_name = {variant_name_param_placeholder}"));
+    }
+
+    // Add episode_id filter
+    if let Some(episode_id) = opts.episode_id {
+        let episode_id_param_placeholder = add_parameter(
+            episode_id.to_string(),
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!("i.episode_id = {episode_id_param_placeholder}"));
+    }
+
+    // Handle filters
+    if let Some(filter_node) = opts.filters {
+        let filter_condition_sql = filter_node.to_clickhouse_sql(
+            config,
+            query_params,
+            &mut select_clauses,
+            joins,
+            param_idx_counter,
+        )?;
+        where_clauses.push(filter_condition_sql);
+    }
+
+    // Add text query filter
+    if let Some(search_query_experimental) = opts.search_query_experimental {
+        let json_escaped_text_query = json_escape_string_without_quotes(search_query_experimental)?;
+        let text_query_param = add_parameter(
+            json_escaped_text_query,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+
+        // For count, we just need to filter, not return the term frequency
+        where_clauses.push(format!(
+            "(countSubstringsCaseInsensitiveUTF8(i.input, {text_query_param}) + countSubstringsCaseInsensitiveUTF8(i.output, {text_query_param})) > 0"
+        ));
+    }
+
+    let select_from_sql_fragment = format!("SELECT toUInt64(COUNT(*)) FROM {table_name} AS i");
+
+    let where_sql_fragment = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    Ok(SingleTableQuery {
+        select_from_sql_fragment,
+        where_sql_fragment,
+    })
 }
 
 /// Generates the SQL query and parameters for listing inference metadata.
@@ -631,7 +816,9 @@ fn generate_single_table_query_for_type(
 
     // Handle OutputSource
     match opts.output_source {
-        InferenceOutputSource::Inference => {
+        InferenceOutputSource::None | InferenceOutputSource::Inference => {
+            // For None, we still select the inference output but it will be dropped
+            // when creating the datapoint. This avoids an unnecessary join.
             select_clauses.push("i.output as output".to_string());
         }
         InferenceOutputSource::Demonstration => {

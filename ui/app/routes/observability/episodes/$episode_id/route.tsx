@@ -143,8 +143,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       )
     : // Normal case: execute all queries in parallel
       Promise.all([
-        dbClient.queryFeedbackByTargetId({
-          target_id: episode_id,
+        tensorZeroClient.getFeedbackByTargetId(episode_id, {
           before: beforeFeedback || undefined,
           after: afterFeedback || undefined,
           limit,
