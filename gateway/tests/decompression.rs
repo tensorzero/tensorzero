@@ -31,8 +31,11 @@ fn brotli_compress(input: &[u8]) -> Vec<u8> {
     out
 }
 
-#[tokio::test]
-async fn test_request_decompression_gzip_inference() {
+async fn run_compression_test(
+    compress: fn(&[u8]) -> Vec<u8>,
+    encoding: &str,
+    message: &str,
+) {
     let gateway = start_gateway_on_random_port("", None).await;
 
     let body = json!({
@@ -40,20 +43,20 @@ async fn test_request_decompression_gzip_inference() {
         "episode_id": Uuid::now_v7(),
         "input": {
             "messages": [
-                {"role": "user", "content": "Hello (gzip)"}
+                {"role": "user", "content": message}
             ]
         },
         "stream": false
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
-    let gzipped = gzip_compress(&body_bytes);
+    let compressed = compress(&body_bytes);
 
     let client = reqwest::Client::new();
     let response = client
         .post(format!("http://{}/inference", gateway.addr))
         .header(CONTENT_TYPE, "application/json")
-        .header(CONTENT_ENCODING, "gzip")
-        .body(gzipped)
+        .header(CONTENT_ENCODING, encoding)
+        .body(compressed)
         .send()
         .await
         .unwrap();
@@ -63,7 +66,7 @@ async fn test_request_decompression_gzip_inference() {
     assert_eq!(
         status,
         http::StatusCode::OK,
-        "Expected gzip-compressed request body to be accepted and decoded. Status: {status}, body: {text}"
+        "Expected {encoding}-compressed request body to be accepted and decoded. Status: {status}, body: {text}"
     );
 
     let json: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -71,88 +74,19 @@ async fn test_request_decompression_gzip_inference() {
         json.get("inference_id").is_some(),
         "Expected successful inference response to include inference_id. Body: {json}"
     );
+}
+
+#[tokio::test]
+async fn test_request_decompression_gzip_inference() {
+    run_compression_test(gzip_compress, "gzip", "Hello (gzip)").await;
 }
 
 #[tokio::test]
 async fn test_request_decompression_zstd_inference() {
-    let gateway = start_gateway_on_random_port("", None).await;
-
-    let body = json!({
-        "model_name": "dummy::good",
-        "episode_id": Uuid::now_v7(),
-        "input": {
-            "messages": [
-                {"role": "user", "content": "Hello (zstd)"}
-            ]
-        },
-        "stream": false
-    });
-    let body_bytes = serde_json::to_vec(&body).unwrap();
-    let compressed = zstd_compress(&body_bytes);
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(format!("http://{}/inference", gateway.addr))
-        .header(CONTENT_TYPE, "application/json")
-        .header(CONTENT_ENCODING, "zstd")
-        .body(compressed)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let text = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        http::StatusCode::OK,
-        "Expected zstd-compressed request body to be accepted and decoded. Status: {status}, body: {text}"
-    );
-
-    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert!(
-        json.get("inference_id").is_some(),
-        "Expected successful inference response to include inference_id. Body: {json}"
-    );
+    run_compression_test(zstd_compress, "zstd", "Hello (zstd)").await;
 }
 
 #[tokio::test]
 async fn test_request_decompression_brotli_inference() {
-    let gateway = start_gateway_on_random_port("", None).await;
-
-    let body = json!({
-        "model_name": "dummy::good",
-        "episode_id": Uuid::now_v7(),
-        "input": {
-            "messages": [
-                {"role": "user", "content": "Hello (br)"}
-            ]
-        },
-        "stream": false
-    });
-    let body_bytes = serde_json::to_vec(&body).unwrap();
-    let compressed = brotli_compress(&body_bytes);
-
-    let client = reqwest::Client::new();
-    let response = client
-        .post(format!("http://{}/inference", gateway.addr))
-        .header(CONTENT_TYPE, "application/json")
-        .header(CONTENT_ENCODING, "br")
-        .body(compressed)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-    let text = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        http::StatusCode::OK,
-        "Expected brotli-compressed request body to be accepted and decoded. Status: {status}, body: {text}"
-    );
-
-    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert!(
-        json.get("inference_id").is_some(),
-        "Expected successful inference response to include inference_id. Body: {json}"
-    );
+    run_compression_test(brotli_compress, "br", "Hello (br)").await;
 }
