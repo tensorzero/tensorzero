@@ -56,7 +56,7 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, DelayedError> {
 
     let uuid_timestamp = uuid.get_timestamp().ok_or_else(|| {
         // This should never happen, since we already checked that the version was 7.
-        // Dynamic evaluations should have a timestamp that exists but is far in the future.
+        // Workflow evaluations (formerly "dynamic evaluations should have a timestamp that exists but is far in the future.
         DelayedError::new(ErrorDetails::InvalidUuid {
             raw_uuid: uuid.to_string(),
         })
