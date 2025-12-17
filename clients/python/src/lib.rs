@@ -305,7 +305,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -331,6 +331,7 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -357,6 +358,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
             internal_dynamic_variant_config,
         )?;
         serialize_to_dict(this.py(), params)
@@ -430,6 +432,7 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
@@ -540,7 +543,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
-            otlp_traces_extra_attributes: HashMap::new(),
+            otlp_traces_extra_attributes: otlp_traces_extra_attributes.unwrap_or_default(),
             api_key: None,
         })
     }
@@ -738,7 +741,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -801,6 +804,7 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
@@ -828,6 +832,7 @@ impl TensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
             internal_dynamic_variant_config,
         )?);
 
@@ -1888,7 +1893,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1951,6 +1956,7 @@ impl AsyncTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
@@ -1977,6 +1983,7 @@ impl AsyncTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            otlp_traces_extra_attributes,
             internal_dynamic_variant_config,
         )?;
         let client = this.as_super().client.clone();
