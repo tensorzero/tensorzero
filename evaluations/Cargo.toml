@@ -24,8 +24,8 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 indicatif = "0.18.2"
-durable = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
+durable = { workspace = true }
+rand = { workspace = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
@@ -38,5 +38,3 @@ default = []
 # Forward this feature to 'tensorzero-core', so that our
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests"]
-# Enable durable execution for top-k evaluations (requires postgres)
-durable = ["dep:durable", "dep:rand"]
