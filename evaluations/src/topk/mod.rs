@@ -782,7 +782,7 @@ async fn process_batch_step(
 
             // Call process_batch() from lib.rs
             let (mut join_set, task_id_map) =
-                process_batch(&batch_params, datapoints, &active_variants);
+                process_batch(&batch_params, datapoints, &active_variants).await?;
 
             // Collect results and group by datapoint ID, then by variant
             let mut results_by_datapoint: BatchResultsByDatapoint = HashMap::new();

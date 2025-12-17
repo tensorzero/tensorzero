@@ -309,11 +309,49 @@ async fn test_list_or_filter_mixed_metrics() {
     }
 }
 
+/// Tests that NOT filter correctly inverts the child filter.
+/// NOT (exact_match = true OR exact_match = false) should return rows WITHOUT the metric.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_not_filter() {
-    let request = json!({
+    // Get total count
+    let request_total = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
+        "limit": 1000
+    });
+    let total_count = list_inferences(request_total).await.unwrap().len();
+
+    // Get count with exact_match = true
+    let request_true = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": true
+        }
+    });
+    let true_count = list_inferences(request_true).await.unwrap().len();
+
+    // Get count with exact_match = false
+    let request_false = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": false
+        }
+    });
+    let false_count = list_inferences(request_false).await.unwrap().len();
+
+    // Get NOT (true OR false) - should return rows WITHOUT the metric
+    let request_not = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
         "filter": {
             "type": "not",
             "child": {
@@ -333,9 +371,22 @@ async fn test_list_not_filter() {
             }
         }
     });
+    let not_count = list_inferences(request_not).await.unwrap().len();
 
-    let res = list_inferences(request).await.unwrap();
-    assert_eq!(res.len(), 0);
+    // Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    let rows_with_metric = true_count + false_count;
+    assert_eq!(
+        rows_with_metric + not_count,
+        total_count,
+        "NOT filter should return exactly the rows without the metric. \
+         true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    );
+
+    // Also verify NOT returned something (there are rows without the metric)
+    assert!(
+        not_count > 0,
+        "Expected some rows without the exact_match metric"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -70,10 +70,12 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       gateway:
         condition: service_healthy

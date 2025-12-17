@@ -88,8 +88,11 @@ impl DatapointFilter {
                     param_idx_counter,
                 );
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
+                // Add mapContains check to ensure the tag exists before comparing.
+                // Without this, a != filter would match rows without the tag (since
+                // accessing a missing key returns empty string, and '' != value is true).
                 format!(
-                    "{table_prefix}tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                    "(mapContains({table_prefix}tags, {key_placeholder}) AND {table_prefix}tags[{key_placeholder}] {comparison_operator} {value_placeholder})"
                 )
             }
             DatapointFilter::Time(TimeFilter {
@@ -167,7 +170,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "tags[{p0:String}] = {p1:String}");
+        assert_eq!(
+            sql,
+            "(mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String})"
+        );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[0].value, "tag_key");
@@ -185,7 +191,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "tags[{p0:String}] != {p1:String}");
+        assert_eq!(
+            sql,
+            "(mapContains(tags, {p0:String}) AND tags[{p0:String}] != {p1:String})"
+        );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[0].value, "tag_key");
@@ -203,7 +212,10 @@ mod tests {
 
         let (sql, _) = filter.to_clickhouse_sql("original");
 
-        assert_eq!(sql, "original.tags[{p0:String}] = {p1:String}");
+        assert_eq!(
+            sql,
+            "(mapContains(original.tags, {p0:String}) AND original.tags[{p0:String}] = {p1:String})"
+        );
     }
 
     #[test]
@@ -336,7 +348,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "(tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String})"
+            "((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) AND (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String}))"
         );
         assert_eq!(params.len(), 4);
         assert_eq!(params[0].name, "p0");
@@ -370,7 +382,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "(tags[{p0:String}] = {p1:String} OR tags[{p2:String}] = {p3:String})"
+            "((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) OR (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String}))"
         );
         assert_eq!(params.len(), 4);
     }
@@ -387,7 +399,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "NOT (tags[{p0:String}] = {p1:String})");
+        assert_eq!(
+            sql,
+            "NOT ((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}))"
+        );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[0].value, "archived");
@@ -467,7 +482,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "((tags[{p0:String}] = {p1:String} OR tags[{p2:String}] = {p3:String}) AND updated_at > parseDateTimeBestEffort({p4:String}))"
+            "(((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) OR (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String})) AND updated_at > parseDateTimeBestEffort({p4:String}))"
         );
         assert_eq!(params.len(), 5);
     }
@@ -503,7 +518,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "((tags[{p0:String}] = {p1:String} AND updated_at < parseDateTimeBestEffort({p2:String})) OR tags[{p3:String}] = {p4:String})"
+            "(((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) AND updated_at < parseDateTimeBestEffort({p2:String})) OR (mapContains(tags, {p3:String}) AND tags[{p3:String}] = {p4:String}))"
         );
         assert_eq!(params.len(), 5);
     }
@@ -548,7 +563,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "(((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}) OR tags[{p4:String}] = {p5:String}) AND updated_at >= parseDateTimeBestEffort({p6:String}))"
+            "((((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) AND (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String})) OR (mapContains(tags, {p4:String}) AND tags[{p4:String}] = {p5:String})) AND updated_at >= parseDateTimeBestEffort({p6:String}))"
         );
         assert_eq!(params.len(), 7);
     }
@@ -577,7 +592,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "NOT ((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}))"
+            "NOT (((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) AND (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String})))"
         );
         assert_eq!(params.len(), 4);
     }
@@ -666,7 +681,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "(tags[{p0:String}] = {p1:String} OR tags[{p2:String}] = {p3:String} OR tags[{p4:String}] = {p5:String})"
+            "((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}) OR (mapContains(tags, {p2:String}) AND tags[{p2:String}] = {p3:String}) OR (mapContains(tags, {p4:String}) AND tags[{p4:String}] = {p5:String}))"
         );
         assert_eq!(params.len(), 6);
     }
@@ -715,7 +730,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "NOT (tags[{p0:String}] = {p1:String})");
+        assert_eq!(
+            sql,
+            "NOT ((mapContains(tags, {p0:String}) AND tags[{p0:String}] = {p1:String}))"
+        );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[0].value, "test");
