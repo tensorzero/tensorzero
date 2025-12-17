@@ -14,8 +14,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use durable::{Task, TaskContext, TaskResult, async_trait};
+use durable::{Durable, Task, TaskContext, TaskResult, async_trait};
 use serde::{Deserialize, Serialize};
+use sqlx_alpha::PgPool;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::endpoints::datasets::v1::get_datapoints;
 use tensorzero_core::endpoints::datasets::v1::list_datapoints;
@@ -47,6 +48,36 @@ const DEFAULT_CS_RESOLUTION: usize = 1001;
 
 /// Default alpha (significance level) for confidence sequences
 const DEFAULT_ALPHA: f32 = 0.05;
+
+/// Queue name for top-k evaluation tasks
+const QUEUE_NAME: &str = "evaluations_topk";
+
+// ============================================================================
+// Durable Client
+// ============================================================================
+
+/// Creates a Durable client configured for top-k evaluation tasks.
+///
+/// The client is configured to use the `evaluations_topk` queue, which must
+/// have been created by running the database migrations.
+///
+/// # Arguments
+/// * `pool` - A PostgreSQL connection pool
+/// * `state` - Application state containing clients, configs, and scoring function
+///
+/// # Returns
+/// A configured `Durable` client for spawning and processing `TopKTask` tasks.
+pub async fn create_client(pool: PgPool, state: TopKTaskState) -> Result<Durable<TopKTaskState>> {
+    let client = Durable::builder()
+        .pool(pool)
+        .queue_name(QUEUE_NAME)
+        .build_with_state(state)
+        .await?;
+
+    client.register::<TopKTask>().await;
+
+    Ok(client)
+}
 
 // ============================================================================
 // Core Types
