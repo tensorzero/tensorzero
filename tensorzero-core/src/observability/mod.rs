@@ -561,9 +561,9 @@ pub trait RouterExt<S> {
 ///    (which exports without any extra headers set).
 ///
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
-const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
-const TENSORZERO_OTLP_RESOURCE_PREFIX: &str = "tensorzero-otlp-traces-extra-resource-";
-const TENSORZERO_OTLP_ATTRIBUTE_PREFIX: &str = "tensorzero-otlp-traces-extra-attribute-";
+pub const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
+pub const TENSORZERO_OTLP_RESOURCE_PREFIX: &str = "tensorzero-otlp-traces-extra-resource-";
+pub const TENSORZERO_OTLP_ATTRIBUTE_PREFIX: &str = "tensorzero-otlp-traces-extra-attribute-";
 
 /// Converts a HashMap of config headers to a MetadataMap
 fn config_headers_to_metadata(
