@@ -46,7 +46,6 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
-pub mod topk;
 pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
