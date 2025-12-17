@@ -281,7 +281,16 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 name = "autopilot-client"
 version = "2025.12.3"
 dependencies = [
+ "chrono",
+ "futures",
  "reqwest",
+ "reqwest-eventsource",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "url",
+ "uuid",
 ]
 
 [[package]]
