@@ -1109,6 +1109,7 @@ pub(super) enum OpenAIResponsesStreamEvent {
 
 /// Stream function for OpenAI Responses API
 /// Similar to stream_openai but uses the Responses API streaming format
+#[expect(clippy::too_many_arguments)]
 pub fn stream_openai_responses(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
@@ -1116,6 +1117,7 @@ pub fn stream_openai_responses(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    request_id: Option<String>,
     raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
@@ -1123,17 +1125,34 @@ pub fn stream_openai_responses(
     let mut current_tool_name: Option<String> = None;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
+    let mut saw_content_block = false;
+    let mut encountered_error = false;
 
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let request_id_for_error = match &e {
+                        TensorZeroEventError::TensorZero(_) => request_id.clone(),
+                        TensorZeroEventError::EventSource(inner) => {
+                            request_id.clone().or_else(|| super::request_id_from_event_source_error(inner))
+                        }
+                    };
+                    if let Some(request_id) = request_id_for_error {
+                        tracing::warn!(
+                            provider = %provider_type,
+                            request_id = %request_id,
+                            "OpenAI Responses streaming request errored"
+                        );
+                    }
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
+                            encountered_error = true;
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
+                            encountered_error = true;
                             yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
@@ -1182,6 +1201,9 @@ pub fn stream_openai_responses(
 
                         match stream_message {
                             Ok(Some(chunk)) => {
+                                if !chunk.content.is_empty() {
+                                    saw_content_block = true;
+                                }
                                 yield Ok(chunk);
                                 // Break after yielding terminal events
                                 if is_terminal {
@@ -1190,6 +1212,7 @@ pub fn stream_openai_responses(
                             }
                             Ok(None) => continue, // Skip lifecycle events
                             Err(e) => {
+                                encountered_error = true;
                                 yield Err(e);
                                 // Break on error events too
                                 break;
@@ -1198,6 +1221,13 @@ pub fn stream_openai_responses(
                     }
                 },
             }
+        }
+        if !saw_content_block && !encountered_error {
+            tracing::warn!(
+                provider = %provider_type,
+                request_id = request_id.as_deref(),
+                "OpenAI Responses streaming response returned no content blocks"
+            );
         }
     })
 }

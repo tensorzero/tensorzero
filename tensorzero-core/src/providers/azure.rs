@@ -339,6 +339,7 @@ impl InferenceProvider for AzureProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
             &raw_request,
         )
         .peekable();

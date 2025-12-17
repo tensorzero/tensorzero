@@ -10,7 +10,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
-use std::borrow::Cow;
+use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
@@ -64,8 +64,9 @@ use crate::tool::{
 };
 
 use crate::providers::helpers::{
-    convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource,
+    InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource_with_headers,
+    inject_extra_request_data_and_send_with_headers,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -359,6 +360,7 @@ impl WrappedProvider for OpenAIProvider {
             PROVIDER_TYPE.to_string(),
             event_source,
             start_time,
+            None,
             raw_request,
         )
     }
@@ -392,7 +394,11 @@ impl InferenceProvider for OpenAIProvider {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
-        let (res, raw_request) = inject_extra_request_data_and_send(
+        let InjectedResponse {
+            response: res,
+            raw_request,
+            headers,
+        } = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
             &request.request.extra_body,
             &request.request.extra_headers,
@@ -401,9 +407,22 @@ impl InferenceProvider for OpenAIProvider {
             request_body,
             request_builder,
         )
-        .await?;
+        .await
+        .map_err(|(e, headers)| {
+            if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
+                tracing::warn!(
+                    provider = %PROVIDER_TYPE,
+                    request_id = %request_id,
+                    "OpenAI request failed"
+                );
+            }
+            e
+        })?;
 
-        if res.status().is_success() {
+        let status = res.status();
+        let request_id = extract_request_id(&headers);
+
+        if status.is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -468,21 +487,37 @@ impl InferenceProvider for OpenAIProvider {
                     .try_into()?)
                 }
             }
+            .inspect(|response: &ProviderInferenceResponse| {
+                if response.output.is_empty() {
+                    tracing::warn!(
+                        provider = %PROVIDER_TYPE,
+                        request_id = request_id.as_deref(),
+                        "OpenAI non-streaming response returned no content blocks"
+                    );
+                }
+            })
         } else {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            tracing::warn!(
+                provider = %PROVIDER_TYPE,
+                status = ?status,
+                request_id = request_id.as_deref(),
+                "OpenAI request failed"
+            );
             Err(handle_openai_error(
-                &raw_request.clone(),
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(raw_request),
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
+                &raw_request,
+                status,
+                &raw_response,
                 PROVIDER_TYPE,
             ))
         }
@@ -537,7 +572,11 @@ impl InferenceProvider for OpenAIProvider {
                     request_builder = request_builder.bearer_auth(api_key.expose_secret());
                 }
 
-                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                let InjectedResponse {
+                    response: event_source,
+                    raw_request,
+                    headers,
+                } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
                     &request.extra_body,
                     &request.extra_headers,
@@ -546,8 +585,19 @@ impl InferenceProvider for OpenAIProvider {
                     request_body,
                     request_builder,
                 )
-                .await?;
+                .await
+                .map_err(|(e, headers)| {
+                    if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
+                        tracing::warn!(
+                            provider = %PROVIDER_TYPE,
+                            request_id = %request_id,
+                            "OpenAI Responses streaming request failed"
+                        );
+                    }
+                    e
+                })?;
 
+                let request_id = extract_request_id(&headers);
                 let stream = stream_openai_responses(
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
@@ -555,6 +605,7 @@ impl InferenceProvider for OpenAIProvider {
                     model_provider.discard_unknown_chunks,
                     model_name,
                     provider_name,
+                    request_id,
                     &raw_request,
                 )
                 .peekable();
@@ -581,7 +632,11 @@ impl InferenceProvider for OpenAIProvider {
                     request_builder = request_builder.bearer_auth(api_key.expose_secret());
                 }
 
-                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                let InjectedResponse {
+                    response: event_source,
+                    raw_request,
+                    headers,
+                } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
                     &request.extra_body,
                     &request.extra_headers,
@@ -590,12 +645,24 @@ impl InferenceProvider for OpenAIProvider {
                     request_body,
                     request_builder,
                 )
-                .await?;
+                .await
+                .map_err(|(e, headers)| {
+                    if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
+                        tracing::warn!(
+                            provider = %PROVIDER_TYPE,
+                            request_id = %request_id,
+                            "OpenAI streaming request failed"
+                        );
+                    }
+                    e
+                })?;
 
+                let request_id = extract_request_id(&headers);
                 let stream = stream_openai(
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
+                    request_id,
                     &raw_request,
                 )
                 .peekable();
@@ -957,20 +1024,38 @@ pub fn stream_openai(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    request_id: Option<String>,
     raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
+    let mut saw_content_block = false;
+    let mut encountered_error = false;
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let request_id_for_error = match &e {
+                        TensorZeroEventError::TensorZero(_) => request_id.clone(),
+                        TensorZeroEventError::EventSource(inner) => {
+                            request_id.clone().or_else(|| request_id_from_event_source_error(inner))
+                        }
+                    };
+                    if let Some(request_id) = request_id_for_error {
+                        tracing::warn!(
+                            provider = %provider_type,
+                            request_id = %request_id,
+                            "OpenAI streaming request errored"
+                        );
+                    }
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
+                            encountered_error = true;
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
+                            encountered_error = true;
                             yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
@@ -995,10 +1080,20 @@ pub fn stream_openai(
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
+                        if stream_message.as_ref().is_ok_and(|chunk| !chunk.content.is_empty()) {
+                            saw_content_block = true;
+                        }
                         yield stream_message;
                     }
                 },
             }
+        }
+        if !saw_content_block && !encountered_error {
+            tracing::warn!(
+                provider = %provider_type,
+                request_id = request_id.as_deref(),
+                "OpenAI streaming response returned no content blocks"
+            );
         }
     })
 }
@@ -1121,6 +1216,25 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
             message: e.to_string(),
         })
     })
+}
+
+fn extract_request_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    headers
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned)
+}
+
+pub(super) fn request_id_from_event_source_error(
+    error: &reqwest_eventsource::Error,
+) -> Option<String> {
+    match error {
+        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
+        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+            extract_request_id(resp.headers())
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn handle_openai_error(

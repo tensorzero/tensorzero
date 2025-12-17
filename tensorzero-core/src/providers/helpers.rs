@@ -170,37 +170,25 @@ pub async fn inject_extra_request_data_and_send(
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
-    mut body: serde_json::Value,
+    body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
 ) -> Result<(reqwest::Response, String), Error> {
-    let headers = inject_extra_request_data(
+    let InjectedResponse {
+        response,
+        raw_request,
+        ..
+    } = inject_extra_request_data_and_send_with_headers(
+        provider_type,
         config,
         extra_headers_config,
         model_provider_data,
         model_name,
-        &mut body,
-    )?;
-    let raw_request = body.to_string();
-    // Apply the headers as the very last step, so that they can overwrite all
-    // other headers (including things like `Authorization` and `Content-Type`)
-    Ok((
-        builder
-            .body(raw_request.clone())
-            .header("content-type", "application/json")
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    provider_type: provider_type.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                })
-            })?,
-        raw_request,
-    ))
+        body,
+        builder,
+    )
+    .await
+    .map_err(|(e, _headers)| e)?;
+    Ok((response, raw_request))
 }
 
 /// Like `inject_extra_request_data_and_send`, but for streaming requests
@@ -211,36 +199,122 @@ pub async fn inject_extra_request_data_and_send_eventsource(
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
-    mut body: serde_json::Value,
+    body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
 ) -> Result<(TensorZeroEventSource, String), Error> {
+    let InjectedResponse {
+        response,
+        raw_request,
+        ..
+    } = inject_extra_request_data_and_send_eventsource_with_headers(
+        provider_type,
+        config,
+        extra_headers_config,
+        model_provider_data,
+        model_name,
+        body,
+        builder,
+    )
+    .await
+    .map_err(|(e, _headers)| e)?;
+    Ok((response, raw_request))
+}
+
+pub struct InjectedResponse<T> {
+    pub response: T,
+    pub raw_request: String,
+    pub headers: http::HeaderMap,
+}
+
+pub async fn inject_extra_request_data_and_send_with_headers(
+    provider_type: &str,
+    config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
+    mut body: serde_json::Value,
+    builder: TensorzeroRequestBuilder<'_>,
+) -> Result<InjectedResponse<reqwest::Response>, (Error, Option<http::HeaderMap>)> {
     let headers = inject_extra_request_data(
         config,
         extra_headers_config,
         model_provider_data,
         model_name,
         &mut body,
-    )?;
+    )
+    .map_err(|e| (e, None))?;
     let raw_request = body.to_string();
-    // Apply the headers as the very last step, so that they can overwrite all
-    // other headers (including things like `Authorization` and `Content-Type`)
-    Ok((
-        builder
-            .body(raw_request.clone())
-            .header("content-type", "application/json")
-            .headers(headers)
-            .eventsource()
-            .map_err(|e| {
+    let response = builder
+        .body(raw_request.clone())
+        .header("content-type", "application/json")
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| {
+            (
                 Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code: None,
                     provider_type: provider_type.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
-                })
-            })?,
+                }),
+                None,
+            )
+        })?;
+    let response_headers = response.headers().clone();
+    Ok(InjectedResponse {
+        response,
         raw_request,
-    ))
+        headers: response_headers,
+    })
+}
+
+pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
+    provider_type: &str,
+    config: &FullExtraBodyConfig,
+    extra_headers_config: &FullExtraHeadersConfig,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
+    mut body: serde_json::Value,
+    builder: TensorzeroRequestBuilder<'_>,
+) -> Result<InjectedResponse<TensorZeroEventSource>, (Error, Option<http::HeaderMap>)> {
+    let headers = inject_extra_request_data(
+        config,
+        extra_headers_config,
+        model_provider_data,
+        model_name,
+        &mut body,
+    )
+    .map_err(|e| (e, None))?;
+    let raw_request = body.to_string();
+    let (event_source, response_headers) = builder
+        .body(raw_request.clone())
+        .header("content-type", "application/json")
+        .headers(headers)
+        .eventsource_with_headers()
+        .await
+        .map_err(|(e, headers)| {
+            let status_code = match &e {
+                reqwest_eventsource::Error::InvalidStatusCode(status, _) => Some(*status),
+                _ => None,
+            };
+            (
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    status_code,
+                    provider_type: provider_type.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                }),
+                headers,
+            )
+        })?;
+    Ok(InjectedResponse {
+        response: event_source,
+        raw_request,
+        headers: response_headers,
+    })
 }
 
 /// A helper method to inject extra_body fields into a request, and

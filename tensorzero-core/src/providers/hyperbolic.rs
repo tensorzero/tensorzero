@@ -278,6 +278,7 @@ impl InferenceProvider for HyperbolicProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
             &raw_request,
         )
         .peekable();
