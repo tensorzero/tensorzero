@@ -5,5 +5,6 @@ export type FireworksSFTJobHandle = {
   account_id: string;
   job_url: string;
   job_path: string;
+  deploy_after_training: boolean;
   credential_location: string | null;
 };

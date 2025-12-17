@@ -4,8 +4,10 @@
 //! 3. `FireworksSFTJobHandle.poll` performs the following checks (without maintaining any additional state):
 //!    - If the job is still running, we return a `Pending` status
 //!    - If the job has failed, we return a `Failed` status
-//!    - If the job has completed, we look for an existing 'default' deployment for the model.
-//!      If it exists, we return its status - otherwise, we start a new serverless deployment.
+//!    - If the job has completed and deploy_after_training is true, we look for an existing
+//!      'default' deployment for the model. If it exists, we return its status - otherwise,
+//!      we start a new serverless deployment. When deploy_after_training is false, we skip
+//!      deployment and return immediately with the model output.
 
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -215,6 +217,7 @@ impl Optimizer for FireworksSFTConfig {
                 .parse()
                 .convert_parse_error()?,
             job_path: job.name,
+            deploy_after_training: self.deploy_after_training,
             credential_location: self.credential_location.clone(),
         })
     }
@@ -255,6 +258,30 @@ impl JobHandle for FireworksSFTJobHandle {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+            let completed_output = OptimizationJobInfo::Completed {
+                output: OptimizerOutput::Model(UninitializedModelConfig {
+                    routing: vec![model_path.clone().into()],
+                    providers: HashMap::from([(
+                        model_path.clone().into(),
+                        UninitializedModelProvider {
+                            config: UninitializedProviderConfig::Fireworks {
+                                model_name: model_path.clone(),
+                                parse_think_blocks: true,
+                                api_key_location: None,
+                            },
+                            extra_headers: None,
+                            extra_body: None,
+                            timeouts: TimeoutsConfig::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
+                }),
+            };
+            if !self.deploy_after_training {
+                return Ok(completed_output);
+            }
             let deployment_state = deploy_or_poll_model(
                 client,
                 api_key,
@@ -273,27 +300,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     trained_tokens: None,
                     error: None,
                 }),
-                FireworksDeploymentState::Deployed => {
-                    let model_provider = UninitializedModelProvider {
-                        config: UninitializedProviderConfig::Fireworks {
-                            model_name: model_path.clone(),
-                            parse_think_blocks: true,
-                            api_key_location: None,
-                        },
-                        extra_headers: None,
-                        extra_body: None,
-                        timeouts: TimeoutsConfig::default(),
-                        discard_unknown_chunks: false,
-                    };
-                    Ok(OptimizationJobInfo::Completed {
-                        output: OptimizerOutput::Model(UninitializedModelConfig {
-                            routing: vec![model_path.clone().into()],
-                            providers: HashMap::from([(model_path.into(), model_provider)]),
-                            timeouts: TimeoutsConfig::default(),
-                            skip_relay: None,
-                        }),
-                    })
-                }
+                FireworksDeploymentState::Deployed => Ok(completed_output),
             }
         } else {
             convert_to_optimizer_status(job_status)

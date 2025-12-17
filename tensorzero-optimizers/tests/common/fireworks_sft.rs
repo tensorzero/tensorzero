@@ -37,6 +37,7 @@ impl OptimizationTestCase for FireworksSFTTestCase {
                 mtp_enabled: None,
                 mtp_num_draft_tokens: None,
                 mtp_freeze_base_model: None,
+                deploy_after_training: None,
                 credentials: None,
                 api_base: if use_mock_inference_provider {
                     Some(mock_inference_provider_base().join("fireworks/").unwrap())
