@@ -1,0 +1,12 @@
+[package]
+name = "autopilot-client"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+reqwest.workspace = true
+
+[lints]
+workspace = true

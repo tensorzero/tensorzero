@@ -16,6 +16,7 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
+    "internal/autopilot-client",
 ]
 resolver = "2"
 
