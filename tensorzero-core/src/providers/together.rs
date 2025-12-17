@@ -714,8 +714,6 @@ fn stream_together(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

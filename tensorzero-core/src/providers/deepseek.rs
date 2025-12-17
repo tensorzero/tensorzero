@@ -507,8 +507,6 @@ fn stream_deepseek(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

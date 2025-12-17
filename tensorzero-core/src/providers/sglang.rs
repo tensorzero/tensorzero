@@ -416,8 +416,6 @@ fn stream_sglang(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

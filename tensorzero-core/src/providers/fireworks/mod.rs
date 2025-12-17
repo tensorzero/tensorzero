@@ -709,8 +709,6 @@ fn stream_fireworks(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

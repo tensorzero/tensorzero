@@ -20,8 +20,7 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use reqwest_eventsource::{
-    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, EventSource,
-    RequestBuilderExt,
+    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
 };
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -291,34 +290,16 @@ pub struct TensorzeroRequestBuilder<'a> {
     ticket: LimitedClientTicket<'a>,
 }
 
-/// A wrapper type around `reqwest_eventsource::EventSource`.
+/// A wrapper type around an event source stream.
 /// Like `TensorzeroRequestBuilder`, this type holds on to a `LimitedClientTicket`,
 /// so that we can drop it when the stream is dropped (and hold on to it while
 /// we're still polling messages from the stream).
-#[pin_project(project = TensorZeroEventSourceInnerProj)]
-enum TensorZeroEventSourceInner {
-    Reqwest(#[pin] Box<EventSource>),
-    Custom {
-        #[pin]
-        stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
-    },
-}
-
 #[pin_project]
 pub struct TensorZeroEventSource {
     #[pin]
-    inner: TensorZeroEventSourceInner,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
-}
-
-impl TensorZeroEventSource {
-    pub fn close(&mut self) {
-        match &mut self.inner {
-            TensorZeroEventSourceInner::Reqwest(source) => source.close(),
-            TensorZeroEventSourceInner::Custom { .. } => {}
-        }
-    }
 }
 
 impl Stream for TensorZeroEventSource {
@@ -327,10 +308,7 @@ impl Stream for TensorZeroEventSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let _guard = this.span.enter();
-        match this.inner.project() {
-            TensorZeroEventSourceInnerProj::Reqwest(mut source) => source.as_mut().poll_next(cx),
-            TensorZeroEventSourceInnerProj::Custom { stream } => stream.poll_next(cx),
-        }
+        this.stream.poll_next(cx)
     }
 }
 
@@ -441,8 +419,9 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
     pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
         self = self.with_otlp_headers();
+        let event_source = self.builder.eventsource()?;
         Ok(TensorZeroEventSource {
-            inner: TensorZeroEventSourceInner::Reqwest(Box::new(self.builder.eventsource()?)),
+            stream: Box::pin(event_source),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
         })
@@ -476,9 +455,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
         Ok((
             TensorZeroEventSource {
-                inner: TensorZeroEventSourceInner::Custom {
-                    stream: Box::pin(stream),
-                },
+                stream: Box::pin(stream),
                 ticket,
                 span: tensorzero_h2_workaround_span(),
             },

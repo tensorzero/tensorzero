@@ -384,8 +384,6 @@ pub fn stream_mistral(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

@@ -417,8 +417,6 @@ fn stream_anthropic(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
