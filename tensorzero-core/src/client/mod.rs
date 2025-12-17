@@ -1050,7 +1050,10 @@ impl Client {
                     builder = builder.header(header_name, value);
                 }
 
-                // FIXME: reproduce the above pattern for tensorzero-otlp-traces-extra-attribute
+                for (key, value) in &params.otlp_traces_extra_resources {
+                    let header_name = format!("tensorzero_otlp-traces-extra-resource-{key}");
+                    builder = builder.header(header_name, value);
+                }
 
                 if params.stream.unwrap_or(false) {
                     Ok(HttpResponse {
