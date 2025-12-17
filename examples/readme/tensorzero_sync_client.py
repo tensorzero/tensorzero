@@ -6,7 +6,7 @@ with TensorZeroGateway.build_embedded(
 ) as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
+        # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
         input={
             "messages": [
                 {

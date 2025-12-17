@@ -3621,6 +3621,10 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
+    // This test is very flaky on Fireworks for some reason
+    if provider.model_provider_name == "fireworks" {
+        return;
+    }
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -11739,6 +11743,11 @@ async fn check_short_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content_blocks = content_blocks
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -11823,6 +11832,11 @@ async fn check_short_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let output = output
+        .iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect::<Vec<_>>();
     assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");

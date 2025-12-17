@@ -392,7 +392,7 @@ pub fn start_cache_write_streaming(
             finish_reason = Some(chunk_finish_reason);
         }
     }
-    let finish_reason = finish_reason.cloned();
+    let finish_reason = finish_reason.copied();
     let output = StreamingCacheData {
         chunks: chunks
             .into_iter()
