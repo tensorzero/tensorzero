@@ -1045,6 +1045,8 @@ impl Client {
                     builder = builder.header(header_name, value);
                 }
 
+                // FIXME: reproduce the above pattern for tensorzero-otlp-traces-extra-attribute
+
                 if params.stream.unwrap_or(false) {
                     Ok(HttpResponse {
                         response: InferenceOutput::Streaming(

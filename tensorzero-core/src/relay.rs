@@ -510,6 +510,7 @@ impl TensorzeroRelay {
             dryrun: None,
             tags: (*clients.tags).clone(),
             otlp_traces_extra_headers: HashMap::new(),
+            otlp_traces_extra_attributes: HashMap::new(),
             include_original_response: false,
             api_key,
         };
