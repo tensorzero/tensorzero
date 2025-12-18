@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
-    http::{TensorZeroEventSource, TensorzeroRequestBuilder},
+    http::{TensorZeroEventSource, TensorzeroRequestBuilder, TensorzeroResponseWrapper},
     inference::types::{
         ProviderInferenceResponseChunk,
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
@@ -172,7 +172,7 @@ pub async fn inject_extra_request_data_and_send(
     model_name: &str,
     mut body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
-) -> Result<(reqwest::Response, String), Error> {
+) -> Result<(TensorzeroResponseWrapper, String), Error> {
     let headers = inject_extra_request_data(
         config,
         extra_headers_config,
