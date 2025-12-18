@@ -46,6 +46,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
         )
         .route(
+            "/internal/feedback/{target_id}/count",
+            get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
+        )
+        .route(
             "/internal/model_inferences/{inference_id}",
             get(endpoints::internal::model_inferences::get_model_inferences_handler),
         )

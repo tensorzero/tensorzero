@@ -1,6 +1,5 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
@@ -94,16 +93,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const dbClient = await getNativeDatabaseClient();
   const tensorZeroClient = getTensorZeroClient();
 
   // Start count queries early - these will be streamed to section headers
   const numInferencesPromise = tensorZeroClient
     .getEpisodeInferenceCount(episode_id)
     .then((response) => response.inference_count);
-  const numFeedbacksPromise = dbClient.countFeedbackByTargetId({
-    target_id: episode_id,
-  });
+  const numFeedbacksPromise =
+    tensorZeroClient.countFeedbackByTargetId(episode_id);
 
   // Stream inferences data - will be resolved in the component
   // Throws error if no inferences found (episode doesn't exist)

@@ -30,7 +30,7 @@ export * from "./CommentFeedbackRow";
 export * from "./CommentTargetType";
 export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
-export * from "./CountFeedbackByTargetIdParams";
+export * from "./CountFeedbackByTargetIdResponse";
 export * from "./CountInferencesRequest";
 export * from "./CountInferencesResponse";
 export * from "./CountModelsResponse";
