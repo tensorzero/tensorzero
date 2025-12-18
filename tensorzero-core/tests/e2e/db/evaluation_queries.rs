@@ -457,6 +457,8 @@ async fn test_get_evaluation_statistics_chat_function() {
 /// Test that get_evaluation_results returns correct results for haiku evaluation.
 #[tokio::test]
 async fn test_get_evaluation_results_haiku() {
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -466,8 +468,7 @@ async fn test_get_evaluation_results_haiku() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &[
                 "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
                 "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
@@ -489,14 +490,22 @@ async fn test_get_evaluation_results_haiku() {
 
     // Verify all results belong to the correct evaluation run
     for result in &results {
-        assert_eq!(result.evaluation_run_id, evaluation_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        match result {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.evaluation_run_id, evaluation_run_id);
+                assert_eq!(row.variant_name, "better_prompt_haiku_3_5");
+            }
+            EvaluationResultRow::Json(_) => panic!("Expected Chat result"),
+        }
     }
 
     // Verify we have both metric types
     let metric_names: std::collections::HashSet<_> = results
         .iter()
-        .filter_map(|r| r.metric_name.as_ref())
+        .filter_map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.metric_name.as_ref(),
+            EvaluationResultRow::Json(row) => row.metric_name.as_ref(),
+        })
         .collect();
     assert!(
         metric_names.contains(
@@ -512,14 +521,21 @@ async fn test_get_evaluation_results_haiku() {
     );
 
     // Verify datapoint count (should be 5 unique datapoints)
-    let datapoint_ids: std::collections::HashSet<_> =
-        results.iter().map(|r| r.datapoint_id).collect();
+    let datapoint_ids: std::collections::HashSet<_> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
     assert_eq!(datapoint_ids.len(), 5, "Expected 5 unique datapoints");
 }
 
 /// Test that get_evaluation_results handles entity_extraction (JSON function) correctly.
 #[tokio::test]
 async fn test_get_evaluation_results_entity_extraction() {
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -529,8 +545,7 @@ async fn test_get_evaluation_results_entity_extraction() {
         .get_evaluation_results(
             "extract_entities",
             &[evaluation_run_id],
-            "JsonInference",
-            "JsonInferenceDatapoint",
+            FunctionConfigType::Json,
             &[
                 "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
                     .to_string(),
@@ -554,7 +569,10 @@ async fn test_get_evaluation_results_entity_extraction() {
     // Verify we have both metrics
     let metric_names: std::collections::HashSet<_> = results
         .iter()
-        .filter_map(|r| r.metric_name.as_ref())
+        .filter_map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.metric_name.as_ref(),
+            EvaluationResultRow::Json(row) => row.metric_name.as_ref(),
+        })
         .collect();
     assert!(
         metric_names.contains(
@@ -572,23 +590,29 @@ async fn test_get_evaluation_results_entity_extraction() {
     );
 
     // Verify datapoint count
-    let datapoint_ids: std::collections::HashSet<_> =
-        results.iter().map(|r| r.datapoint_id).collect();
+    let datapoint_ids: std::collections::HashSet<_> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
     assert_eq!(datapoint_ids.len(), 2, "Expected 2 unique datapoints");
 
-    // Verify JSON structure
+    // Verify results are Json type
     for result in &results {
-        assert!(result.input.starts_with('{'), "Input should be JSON object");
-        assert!(
-            result.generated_output.contains("\"raw\""),
-            "Generated output should have 'raw' field"
-        );
+        match result {
+            EvaluationResultRow::Json(_) => {}
+            EvaluationResultRow::Chat(_) => panic!("Expected Json result"),
+        }
     }
 }
 
 /// Test that get_evaluation_results handles multiple evaluation runs (ragged case).
 #[tokio::test]
 async fn test_get_evaluation_results_multiple_runs() {
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id1 =
@@ -600,8 +624,7 @@ async fn test_get_evaluation_results_multiple_runs() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id1, evaluation_run_id2],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &[
                 "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
                 "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
@@ -623,8 +646,13 @@ async fn test_get_evaluation_results_multiple_runs() {
     );
 
     // Verify both evaluation runs are present
-    let eval_run_ids: std::collections::HashSet<_> =
-        results.iter().map(|r| r.evaluation_run_id).collect();
+    let eval_run_ids: std::collections::HashSet<_> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.evaluation_run_id,
+            EvaluationResultRow::Json(row) => row.evaluation_run_id,
+        })
+        .collect();
     assert!(
         eval_run_ids.contains(&evaluation_run_id1),
         "Should have results from first evaluation run"
@@ -635,8 +663,13 @@ async fn test_get_evaluation_results_multiple_runs() {
     );
 
     // Verify datapoint count
-    let datapoint_ids: std::collections::HashSet<_> =
-        results.iter().map(|r| r.datapoint_id).collect();
+    let datapoint_ids: std::collections::HashSet<_> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
     assert_eq!(datapoint_ids.len(), 5, "Expected 5 unique datapoints");
 }
 
@@ -652,8 +685,7 @@ async fn test_get_evaluation_results_nonexistent_function() {
         .get_evaluation_results(
             "nonexistent_function",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["some_metric".to_string()],
             None,
             100,
@@ -671,6 +703,8 @@ async fn test_get_evaluation_results_nonexistent_function() {
 /// Test that get_evaluation_results respects pagination offset.
 #[tokio::test]
 async fn test_get_evaluation_results_pagination() {
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -681,8 +715,7 @@ async fn test_get_evaluation_results_pagination() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
             None,
             5,
@@ -696,8 +729,7 @@ async fn test_get_evaluation_results_pagination() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
             None,
             5,
@@ -711,10 +743,20 @@ async fn test_get_evaluation_results_pagination() {
     assert_eq!(second_page.len(), 5, "Second page should have 5 results");
 
     // Verify no overlap between pages
-    let first_datapoints: std::collections::HashSet<_> =
-        first_page.iter().map(|r| r.datapoint_id).collect();
-    let second_datapoints: std::collections::HashSet<_> =
-        second_page.iter().map(|r| r.datapoint_id).collect();
+    let first_datapoints: std::collections::HashSet<_> = first_page
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
+    let second_datapoints: std::collections::HashSet<_> = second_page
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
 
     let overlap: Vec<_> = first_datapoints.intersection(&second_datapoints).collect();
     assert!(
@@ -726,6 +768,8 @@ async fn test_get_evaluation_results_pagination() {
 /// Test that get_evaluation_results with datapoint_id filter returns results for only that datapoint.
 #[tokio::test]
 async fn test_get_evaluation_results_with_datapoint_id_filter() {
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+
     let clickhouse = get_clickhouse().await;
 
     let evaluation_run_id =
@@ -736,8 +780,7 @@ async fn test_get_evaluation_results_with_datapoint_id_filter() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
             None,
             1,
@@ -747,15 +790,17 @@ async fn test_get_evaluation_results_with_datapoint_id_filter() {
         .unwrap();
 
     assert!(!all_results.is_empty(), "Need at least one result to test");
-    let target_datapoint_id = all_results[0].datapoint_id;
+    let target_datapoint_id = match &all_results[0] {
+        EvaluationResultRow::Chat(row) => row.datapoint_id,
+        EvaluationResultRow::Json(row) => row.datapoint_id,
+    };
 
     // Now filter by that specific datapoint_id
     let filtered_results = clickhouse
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
             Some(&target_datapoint_id),
             u32::MAX,
@@ -770,8 +815,12 @@ async fn test_get_evaluation_results_with_datapoint_id_filter() {
         "Should have results for the datapoint"
     );
     for result in &filtered_results {
+        let dp_id = match result {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        };
         assert_eq!(
-            result.datapoint_id, target_datapoint_id,
+            dp_id, target_datapoint_id,
             "All results should be for the filtered datapoint"
         );
     }
@@ -791,8 +840,7 @@ async fn test_get_evaluation_results_with_datapoint_id_filter_nonexistent() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
             Some(&nonexistent_datapoint_id),
             u32::MAX,
@@ -811,6 +859,8 @@ async fn test_get_evaluation_results_with_datapoint_id_filter_nonexistent() {
 /// This mirrors the TypeScript test "should return correct array for chat datapoint".
 #[tokio::test]
 async fn test_get_evaluation_results_chat_datapoint_details() {
+    use tensorzero_core::db::evaluation_queries::{ChatEvaluationResultRow, EvaluationResultRow};
+
     let clickhouse = get_clickhouse().await;
 
     let datapoint_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").expect("Valid UUID");
@@ -821,8 +871,7 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
         .get_evaluation_results(
             "write_haiku",
             &[evaluation_run_id],
-            "ChatInference",
-            "ChatInferenceDatapoint",
+            FunctionConfigType::Chat,
             &[
                 "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
                 "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
@@ -838,15 +887,24 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     // Should have 2 results (1 datapoint * 2 metrics)
     assert_eq!(results.len(), 2, "Expected 2 results for chat datapoint");
 
+    // Extract chat results
+    let chat_results: Vec<&ChatEvaluationResultRow> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row,
+            EvaluationResultRow::Json(_) => panic!("Expected Chat result"),
+        })
+        .collect();
+
     // Verify all results are for the correct datapoint and evaluation run
-    for result in &results {
+    for result in &chat_results {
         assert_eq!(result.datapoint_id, datapoint_id);
         assert_eq!(result.evaluation_run_id, evaluation_run_id);
         assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
     }
 
     // Verify we have both metrics
-    let metric_names: std::collections::HashSet<_> = results
+    let metric_names: std::collections::HashSet<_> = chat_results
         .iter()
         .filter_map(|r| r.metric_name.as_ref())
         .collect();
@@ -864,7 +922,7 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     );
 
     // Verify the exact_match metric value is "true"
-    let exact_match_result = results
+    let exact_match_result = chat_results
         .iter()
         .find(|r| {
             r.metric_name.as_ref()
@@ -880,7 +938,7 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     );
 
     // Verify the topic_starts_with_f metric value is "false"
-    let topic_result = results
+    let topic_result = chat_results
         .iter()
         .find(|r| {
             r.metric_name.as_ref()
@@ -897,16 +955,16 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     );
 
     // Verify input contains the expected topic
+    let input_json = serde_json::to_string(&exact_match_result.input).unwrap();
     assert!(
-        exact_match_result.input.contains("sheet"),
+        input_json.contains("sheet"),
         "Input should contain the topic 'sheet'"
     );
 
     // Verify generated output contains expected text
+    let output_json = serde_json::to_string(&exact_match_result.generated_output).unwrap();
     assert!(
-        exact_match_result
-            .generated_output
-            .contains("Swallowing moonlight"),
+        output_json.contains("Swallowing moonlight"),
         "Generated output should contain 'Swallowing moonlight'"
     );
 }
@@ -915,6 +973,8 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
 /// This mirrors the TypeScript test "should return correct array for json datapoint".
 #[tokio::test]
 async fn test_get_evaluation_results_json_datapoint_details() {
+    use tensorzero_core::db::evaluation_queries::{EvaluationResultRow, JsonEvaluationResultRow};
+
     let clickhouse = get_clickhouse().await;
 
     let datapoint_id = Uuid::parse_str("0193994e-5560-7610-a3a0-45fdd59338aa").expect("Valid UUID");
@@ -925,8 +985,7 @@ async fn test_get_evaluation_results_json_datapoint_details() {
         .get_evaluation_results(
             "extract_entities",
             &[evaluation_run_id],
-            "JsonInference",
-            "JsonInferenceDatapoint",
+            FunctionConfigType::Json,
             &[
                 "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
                     .to_string(),
@@ -943,15 +1002,24 @@ async fn test_get_evaluation_results_json_datapoint_details() {
     // Should have 2 results (1 datapoint * 2 metrics)
     assert_eq!(results.len(), 2, "Expected 2 results for JSON datapoint");
 
+    // Extract JSON results
+    let json_results: Vec<&JsonEvaluationResultRow> = results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Json(row) => row,
+            EvaluationResultRow::Chat(_) => panic!("Expected Json result"),
+        })
+        .collect();
+
     // Verify all results are for the correct datapoint and evaluation run
-    for result in &results {
+    for result in &json_results {
         assert_eq!(result.datapoint_id, datapoint_id);
         assert_eq!(result.evaluation_run_id, evaluation_run_id);
         assert_eq!(result.variant_name, "gpt4o_mini_initial_prompt");
     }
 
     // Verify we have both metrics
-    let metric_names: std::collections::HashSet<_> = results
+    let metric_names: std::collections::HashSet<_> = json_results
         .iter()
         .filter_map(|r| r.metric_name.as_ref())
         .collect();
@@ -971,7 +1039,7 @@ async fn test_get_evaluation_results_json_datapoint_details() {
     );
 
     // Verify metric values are defined
-    for result in &results {
+    for result in &json_results {
         assert!(
             result.metric_value.is_some(),
             "Metric value should be defined"
@@ -979,10 +1047,12 @@ async fn test_get_evaluation_results_json_datapoint_details() {
     }
 
     // Verify JSON structure of input and output
-    for result in &results {
-        assert!(result.input.starts_with('{'), "Input should be JSON object");
+    for result in &json_results {
+        let input_json = serde_json::to_string(&result.input).unwrap();
+        assert!(input_json.starts_with('{'), "Input should be JSON object");
+        let output_json = serde_json::to_string(&result.generated_output).unwrap();
         assert!(
-            result.generated_output.contains("\"raw\""),
+            output_json.contains("\"raw\""),
             "Generated output should have 'raw' field"
         );
     }

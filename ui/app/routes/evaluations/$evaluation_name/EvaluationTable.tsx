@@ -230,7 +230,7 @@ interface EvaluationTableProps {
 }
 
 interface MetricValueInfo {
-  value: string;
+  value?: string;
   evaluator_inference_id?: string;
   inference_id: string;
   is_human_feedback: boolean;
@@ -266,9 +266,9 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        name: string | null;
+        name?: string;
         input: ZodDisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
+        reference_output?: JsonInferenceOutput | ContentBlockChatOutput[];
       }
     >();
 
@@ -278,7 +278,7 @@ export function EvaluationTable({
           id: result.datapoint_id,
           name: result.name,
           input: result.input,
-          reference_output: result.reference_output,
+          reference_output: result.reference_output ?? undefined,
         });
       }
     });
@@ -595,6 +595,7 @@ export function EvaluationTable({
                                     {/* Add group and relative positioning to the container */}
                                     <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
+                                      metricValue.value &&
                                       metricType &&
                                       evaluatorConfig ? (
                                         <>

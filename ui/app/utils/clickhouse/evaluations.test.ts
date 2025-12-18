@@ -208,7 +208,7 @@ describe("getEvaluationsForDatapoint", () => {
 
     // Sort evaluations by metric name to ensure consistent order
     const sortedEvaluations = [...evaluations].sort((a, b) =>
-      a.metric_name.localeCompare(b.metric_name),
+      (a.metric_name ?? "").localeCompare(b.metric_name ?? ""),
     );
 
     // Check first evaluation result

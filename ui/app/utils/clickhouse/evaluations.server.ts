@@ -17,33 +17,26 @@ export async function parseEvaluationResult(
   result: EvaluationResultRow,
   function_name: string,
 ): Promise<ParsedEvaluationResult> {
-  // Parse the input field
-  const parsedInput = inputSchema.parse(JSON.parse(result.input));
+  // Parse the input field - input is already parsed from the gateway
+  const parsedInput = inputSchema.parse(result.input);
   const config = await getConfig();
   const functionConfig = await getFunctionConfig(function_name, config);
   const resolvedInput = await resolveInput(parsedInput, functionConfig);
 
-  // Parse the outputs
-  const generatedOutput = JSON.parse(result.generated_output);
-  const referenceOutput = result.reference_output
-    ? JSON.parse(result.reference_output)
-    : null;
-  // Determine if this is a chat result by checking if generated_output is an array
-  if (Array.isArray(generatedOutput)) {
-    // This is likely a chat evaluation result
+  // The result is a discriminated union with type: "chat" | "json"
+  if (result.type === "chat") {
     return ChatEvaluationResultSchema.parse({
       ...result,
       input: resolvedInput,
-      generated_output: generatedOutput,
-      reference_output: referenceOutput,
+      generated_output: result.generated_output,
+      reference_output: result.reference_output ?? null,
     });
   } else {
-    // This is likely a JSON evaluation result
     return JsonEvaluationResultSchema.parse({
       ...result,
       input: resolvedInput,
-      generated_output: generatedOutput,
-      reference_output: referenceOutput,
+      generated_output: result.generated_output,
+      reference_output: result.reference_output ?? null,
     });
   }
 }

@@ -41,17 +41,17 @@ export const JsonEvaluationResultSchema = z.object({
   episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
-  evaluator_inference_id: z.string().uuid().nullable(),
+  evaluator_inference_id: z.string().uuid().optional(),
   input: displayInputSchema,
   generated_output: jsonInferenceOutputSchema,
-  reference_output: jsonInferenceOutputSchema.nullable(),
+  reference_output: jsonInferenceOutputSchema.nullish(),
   dataset_name: z.string(),
-  metric_name: z.string(),
-  metric_value: z.string(),
-  feedback_id: z.string().uuid(),
+  metric_name: z.string().optional(),
+  metric_value: z.string().optional(),
+  feedback_id: z.string().uuid().optional(),
   is_human_feedback: z.boolean(),
-  name: z.string().nullable(),
-  staled_at: z.string().datetime().nullable(),
+  name: z.string().optional(),
+  staled_at: z.string().datetime().optional(),
 });
 
 export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
@@ -61,17 +61,17 @@ export const ChatEvaluationResultSchema = z.object({
   episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
-  evaluator_inference_id: z.string().uuid().nullable(),
+  evaluator_inference_id: z.string().uuid().optional(),
   input: displayInputSchema,
   generated_output: z.array(contentBlockChatOutputSchema),
-  reference_output: z.array(contentBlockChatOutputSchema).nullable(),
+  reference_output: z.array(contentBlockChatOutputSchema).nullish(),
   dataset_name: z.string(),
-  metric_name: z.string(),
-  metric_value: z.string(),
-  feedback_id: z.string().uuid(),
-  is_human_feedback: z.preprocess((val) => val === 1, z.boolean()),
-  name: z.string().nullable(),
-  staled_at: z.string().datetime().nullable(),
+  metric_name: z.string().optional(),
+  metric_value: z.string().optional(),
+  feedback_id: z.string().uuid().optional(),
+  is_human_feedback: z.boolean(),
+  name: z.string().optional(),
+  staled_at: z.string().datetime().optional(),
 });
 
 export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;
@@ -163,8 +163,9 @@ export type ConsolidatedEvaluationResult = Omit<
   metrics: ConsolidatedMetric[];
 };
 /**
- * Parse and consolidate evaluation results from the API.
+ * Consolidate evaluation results from the API.
  * Groups results by (datapoint_id, evaluation_run_id, variant_name) and collects metrics.
+ * Input and output fields are already parsed by the backend.
  */
 export async function consolidateEvaluationResults(
   evaluationResults: ParsedEvaluationResultWithVariant[],

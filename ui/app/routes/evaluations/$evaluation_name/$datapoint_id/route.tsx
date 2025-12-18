@@ -29,6 +29,7 @@ import {
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
 import { getMetricType } from "~/utils/config/evaluations";
@@ -48,9 +49,11 @@ import { getConfig } from "~/utils/config/index.server";
 import type {
   EvaluationConfig,
   EvaluatorConfig,
-  ContentBlockChatOutput,
   JsonInferenceOutput,
+  ContentBlockChatOutput,
 } from "~/types/tensorzero";
+
+type EvaluationOutput = JsonInferenceOutput | ContentBlockChatOutput[];
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
@@ -236,11 +239,12 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    ...(consolidatedEvaluationResults[0].reference_output !== null
+    ...(consolidatedEvaluationResults[0].reference_output != null
       ? [
           {
             id: "Reference",
-            output: consolidatedEvaluationResults[0].reference_output,
+            output: consolidatedEvaluationResults[0]
+              .reference_output as EvaluationOutput,
             metrics: [],
             variant_name: "Reference",
             inferenceId: null,
@@ -253,7 +257,7 @@ export default function EvaluationDatapointPage({
       inferenceId: result.inference_id,
       episodeId: result.episode_id,
       variant_name: result.variant_name,
-      output: result.generated_output,
+      output: result.generated_output as EvaluationOutput,
       metrics: result.metrics,
     })),
   ];
@@ -303,7 +307,11 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input {...consolidatedEvaluationResults[0].input} />
+            {/* Cast StoredInput to ZodDisplayInput - they're structurally compatible for display */}
+            <Input
+              {...(consolidatedEvaluationResults[0]
+                .input as unknown as ZodDisplayInput)}
+            />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -498,7 +506,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockChatOutput[] | JsonInferenceOutput;
+    output: EvaluationOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
     episodeId: string | null;
