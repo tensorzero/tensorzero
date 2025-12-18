@@ -2,6 +2,8 @@ mod action;
 mod config;
 mod datapoint_count;
 mod episodes;
+mod evaluations;
+mod feedback;
 mod functions;
 mod inference_metadata;
 mod inference_stats;

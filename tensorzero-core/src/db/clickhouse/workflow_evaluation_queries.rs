@@ -3,12 +3,15 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use super::ClickHouseConnectionInfo;
-use super::select_queries::parse_json_rows;
-use crate::db::workflow_evaluation_queries::WorkflowEvaluationProjectRow;
-use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
-use crate::error::Error;
+use super::select_queries::{parse_count, parse_json_rows};
+use crate::db::workflow_evaluation_queries::{
+    WorkflowEvaluationProjectRow, WorkflowEvaluationQueries, WorkflowEvaluationRunRow,
+    WorkflowEvaluationRunWithEpisodeCountRow,
+};
+use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
 impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
@@ -40,6 +43,185 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &params).await?;
 
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error> {
+        let query = r"
+            SELECT
+                toUInt32(countDistinct(project_name)) as count
+            FROM DynamicEvaluationRunByProjectName
+            WHERE project_name IS NOT NULL
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = parse_count(response.response.as_str())?;
+
+        u32::try_from(count).map_err(|error| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to convert workflow evaluation project count: {error}"),
+            })
+        })
+    }
+
+    async fn search_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        project_name: Option<&str>,
+        search_query: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        // Build WHERE clause predicates
+        let mut predicates: Vec<String> = Vec::new();
+
+        if project_name.is_some() {
+            predicates.push("project_name = {project_name:String}".to_string());
+        }
+
+        if search_query.is_some() {
+            predicates.push(
+                "(positionCaseInsensitive(run_display_name, {search_query:String}) > 0 \
+                 OR positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {search_query:String}) > 0)"
+                    .to_string(),
+            );
+        }
+
+        let where_clause = if predicates.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", predicates.join(" AND "))
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                run_display_name as name,
+                uint_to_uuid(run_id_uint) as id,
+                variant_pins,
+                tags,
+                project_name,
+                formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') as timestamp
+            FROM DynamicEvaluationRun
+            {where_clause}
+            ORDER BY updated_at DESC
+            LIMIT {{limit:UInt32}}
+            OFFSET {{offset:UInt32}}
+            FORMAT JSONEachRow
+            "
+        );
+
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let project_name_str = project_name.unwrap_or_default().to_string();
+        let search_query_str = search_query.unwrap_or_default().to_string();
+
+        let mut params = HashMap::new();
+        params.insert("limit", limit_str.as_str());
+        params.insert("offset", offset_str.as_str());
+        if project_name.is_some() {
+            params.insert("project_name", project_name_str.as_str());
+        }
+        if search_query.is_some() {
+            params.insert("search_query", search_query_str.as_str());
+        }
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn list_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        run_id: Option<Uuid>,
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunWithEpisodeCountRow>, Error> {
+        // Build WHERE clause - only one of run_id or project_name should be provided
+        let where_clause = if run_id.is_some() {
+            "WHERE toUInt128(toUUID({run_id:String})) = run_id_uint"
+        } else if project_name.is_some() {
+            "WHERE project_name = {project_name:String}"
+        } else {
+            ""
+        };
+
+        let query = format!(
+            r"
+            WITH FilteredDynamicEvaluationRuns AS (
+                SELECT
+                    run_display_name as name,
+                    uint_to_uuid(run_id_uint) as id,
+                    run_id_uint,
+                    variant_pins,
+                    tags,
+                    project_name,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
+                FROM DynamicEvaluationRun
+                {where_clause}
+                ORDER BY run_id_uint DESC
+                LIMIT {{limit:UInt32}}
+                OFFSET {{offset:UInt32}}
+            ),
+            DynamicEvaluationRunsEpisodeCounts AS (
+                SELECT
+                    run_id_uint,
+                    toUInt32(count()) as num_episodes
+                FROM DynamicEvaluationRunEpisodeByRunId
+                WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
+                GROUP BY run_id_uint
+            )
+            SELECT
+                name,
+                id,
+                variant_pins,
+                tags,
+                project_name,
+                COALESCE(num_episodes, 0) AS num_episodes,
+                timestamp
+            FROM FilteredDynamicEvaluationRuns
+            LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
+            ORDER BY run_id_uint DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+        let run_id_str = run_id.map(|id| id.to_string()).unwrap_or_default();
+        let project_name_str = project_name.unwrap_or_default().to_string();
+
+        let mut params = HashMap::new();
+        params.insert("limit", limit_str.as_str());
+        params.insert("offset", offset_str.as_str());
+        if run_id.is_some() {
+            params.insert("run_id", run_id_str.as_str());
+        }
+        if project_name.is_some() {
+            params.insert("project_name", project_name_str.as_str());
+        }
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn count_workflow_evaluation_runs(&self) -> Result<u32, Error> {
+        let query = r"
+            SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = parse_count(response.response.as_str())?;
+
+        u32::try_from(count).map_err(|error| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to convert workflow evaluation run count: {error}"),
+            })
+        })
     }
 }
 
@@ -159,5 +341,40 @@ mod tests {
         assert_eq!(result[0].name, "project1");
         assert_eq!(result[1].name, "project2");
         assert_eq!(result[2].name, "project3");
+    }
+
+    #[tokio::test]
+    async fn test_count_workflow_evaluation_projects() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "
+                SELECT toUInt32(countDistinct(project_name)) as count
+                FROM DynamicEvaluationRunByProjectName
+                WHERE project_name IS NOT NULL
+                FORMAT JSONEachRow",
+                );
+                assert!(params.is_empty());
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":2}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let count = conn.count_workflow_evaluation_projects().await.unwrap();
+
+        assert_eq!(count, 2);
     }
 }

@@ -2,7 +2,7 @@ import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
-import { CountSchema, inputSchema } from "./common";
+import { inputSchema } from "./common";
 import {
   waldConfidenceIntervalLower,
   waldConfidenceIntervalUpper,
@@ -22,46 +22,7 @@ import {
   JsonEvaluationResultSchema,
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
-  type EvaluationRunSearchResult,
-  EvaluationRunSearchResultSchema,
 } from "./evaluations";
-
-export async function getEvaluationRunInfos(
-  evaluation_run_ids: string[],
-  function_name: string,
-): Promise<EvaluationRunInfo[]> {
-  const query = `
-    SELECT
-      any(run_tag.value) as evaluation_run_id,
-      any(run_tag.variant_name) as variant_name,
-      formatDateTime(
-        max(UUIDv7ToDateTime(inference_id)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) as most_recent_inference_date
-    FROM
-      TagInference AS run_tag FINAL
-    WHERE
-      run_tag.key = 'tensorzero::evaluation_run_id'
-      AND run_tag.value IN ({evaluation_run_ids:Array(String)})
-      AND run_tag.function_name = {function_name:String}
-    GROUP BY
-      run_tag.value
-    ORDER BY
-      toUInt128(toUUID(evaluation_run_id)) DESC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-      function_name: function_name,
-    },
-  });
-
-  const rows = await result.json<EvaluationRunInfo[]>();
-  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
-}
 
 export async function getEvaluationRunInfosForDatapoint(
   datapoint_id: string,
@@ -389,80 +350,6 @@ export async function getEvaluationStatistics(
   });
   const rows = await result.json<EvaluationStatistics>();
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
-}
-
-export async function countDatapointsForEvaluation(
-  function_name: string,
-  function_type: "chat" | "json",
-  evaluation_run_ids: string[],
-) {
-  const datapoint_table_name =
-    function_type === "chat"
-      ? "ChatInferenceDatapoint"
-      : "JsonInferenceDatapoint";
-  const inference_table_name =
-    function_type === "chat" ? "ChatInference" : "JsonInference";
-
-  const query = `
-      WITH ${getEvaluationResultDatapointIdQuery()}
-      SELECT toUInt32(count()) as count
-      FROM all_datapoint_ids
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      function_name: function_name,
-      datapoint_table_name: datapoint_table_name,
-      inference_table_name: inference_table_name,
-      evaluation_run_ids: evaluation_run_ids,
-    },
-  });
-  const rows = await result.json<{ count: number }>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
-
-export async function searchEvaluationRuns(
-  evaluation_name: string,
-  function_name: string,
-  search_query: string,
-  limit: number = 100,
-  offset: number = 0,
-) {
-  const query = `
-    WITH
-      evaluation_inference_ids AS (
-        SELECT inference_id
-        FROM TagInference
-        WHERE key = 'tensorzero::evaluation_name'
-        AND value = {evaluation_name:String}
-      )
-    SELECT DISTINCT value as evaluation_run_id, variant_name
-    FROM TagInference FINAL
-    WHERE key = 'tensorzero::evaluation_run_id'
-      AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
-      AND (positionCaseInsensitive(value, {search_query:String}) > 0 OR positionCaseInsensitive(variant_name, {search_query:String}) > 0)
-    ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
-    LIMIT {limit:UInt32}
-    OFFSET {offset:UInt32}
-    `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_name: evaluation_name,
-      function_name: function_name,
-      limit: limit,
-      offset: offset,
-      search_query: search_query,
-    },
-  });
-  const rows = await result.json<EvaluationRunSearchResult[]>();
-  return rows.map((row) => EvaluationRunSearchResultSchema.parse(row));
 }
 
 export async function getEvaluationsForDatapoint(
