@@ -493,5 +493,119 @@ pub fn check_topk(
     check_topk_stopping(variant_performance, k, k, epsilon)
 }
 
+// ============================================================================
+// Durable Top-K Variant Selection Task
+// ============================================================================
+
+/// Parameters for updating variant statuses during top-k evaluation.
+/// TODO: remove #[cfg(test)] once other functions that use this are implemented
+#[cfg(test)]
+struct VariantStatusParams {
+    k_min: u32,
+    k_max: u32,
+    epsilon: f64,
+    variant_failure_threshold: Option<f64>,
+}
+
+/// Updates variant statuses based on confidence sequences and top-k stopping results.
+///
+/// This function transitions variants from `Active` to one of the terminal states:
+/// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
+/// - `Include`: Variant is confidently in the top k_min set
+/// - `Exclude`: Variant is confidently outside the top k_max set
+///
+/// The checks are applied in priority order (failure > global stopping > early exclusion > early inclusion),
+/// so a variant that would otherwise be included can still be marked as `Failed` if its failure rate
+/// is too high.
+///
+/// # Status Transition Logic
+///
+/// 1. **Skip non-active**: Variants already in a terminal state are not modified.
+///
+/// 2. **Failure check**: If `variant_failure_threshold` is set and the variant's failure rate
+///    CS lower bound exceeds it, mark as `Failed`.
+///
+/// 3. **Global stopping**: If `stopping_result.stopped` is true, mark variants in `top_variants`
+///    as `Include` and all others as `Exclude`.
+///
+/// 4. **Early exclusion**: If at least `k_max` other variants have lower bounds above this
+///    variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
+///    so mark as `Exclude`.
+///
+/// 5. **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
+///    `(num_variants - k_min)` others (adjusted by epsilon), it's confidently in the top k_min,
+///    so mark as `Include`.
+/// TODO: remove #[cfg(test)] once other functions that use this are implemented
+#[cfg(test)]
+fn update_variant_statuses(
+    variant_status: &mut HashMap<String, VariantStatus>,
+    variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
+    stopping_result: &TopKStoppingResult,
+    params: &VariantStatusParams,
+) {
+    let num_variants = variant_status.len();
+    for (name, status) in variant_status.iter_mut() {
+        // Skip already-stopped variants
+        if *status != VariantStatus::Active {
+            continue;
+        }
+
+        // Check for failure based on failure rate
+        if let Some(threshold) = params.variant_failure_threshold
+            && let Some(failure_cs) = variant_failures.get(name)
+            && failure_cs.cs_lower > threshold
+        {
+            *status = VariantStatus::Failed;
+            continue;
+        }
+
+        // If top-k stopping occurred, update based on inclusion in top set
+        if stopping_result.stopped {
+            if stopping_result.top_variants.contains(name) {
+                *status = VariantStatus::Include;
+            } else {
+                *status = VariantStatus::Exclude;
+            }
+            continue;
+        }
+
+        // Check if variant can be excluded early because it's confidently outside the top k_max
+        // (its upper bound is below (lower_bound_j + epsilon) for k_max other variants j)
+        if let Some(perf_cs) = variant_performance.get(name) {
+            let num_definitely_worse_than = variant_performance
+                .iter()
+                .filter(|(other_name, other_cs)| {
+                    *other_name != name && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
+                })
+                .count();
+
+            // If at least k_max variants are definitely better,
+            // this variant cannot be in the top k_max
+            if num_definitely_worse_than >= params.k_max as usize {
+                *status = VariantStatus::Exclude;
+                continue;
+            }
+        }
+
+        // Check if variant can be included early because it's confidently within the top k_min
+        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other variants j)
+        if let Some(perf_cs) = variant_performance.get(name) {
+            let num_definitely_better_than = variant_performance
+                .iter()
+                .filter(|(other_name, other_cs)| {
+                    *other_name != name && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
+                })
+                .count();
+
+            // If this variant beats at least (num_variants - k_min) others,
+            // it's confidently in the top k_min
+            if num_definitely_better_than >= num_variants - params.k_min as usize {
+                *status = VariantStatus::Include;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
