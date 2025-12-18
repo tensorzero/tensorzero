@@ -125,6 +125,11 @@ jobs:
         run: |
           sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb
+        with:
+          version: "0.6.17"
+
       - name: Download JSONL fixtures
         run: uv run ./ui/fixtures/download-small-fixtures.py
 
