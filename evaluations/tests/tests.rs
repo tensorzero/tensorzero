@@ -3709,16 +3709,20 @@ mod topk_tests {
     /// Test that top-k evaluation stops with DatasetExhausted when variants can't be separated.
     ///
     /// Setup:
-    /// - 2 variants: "empty" and "empty2" (both use empty model, return "")
-    /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (0 for both since "" != input)
+    /// - 4 variants: "test", "test2", "empty1", "empty2"
+    ///   - test/test2 use dummy model returning a fixed string
+    ///   - empty1/empty2 use empty model returning ""
+    /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (0 for all since output != input)
     /// - Scoring: AverageEvaluatorScore averages all evaluator scores
     ///
-    /// Expected scores:
-    /// - empty: (0 + 1 + 0) / 3 = 1/3
+    /// Expected scores (all identical):
+    /// - test: (0 + 1 + 0) / 3 = 1/3
+    /// - test2: (0 + 1 + 0) / 3 = 1/3
+    /// - empty1: (0 + 1 + 0) / 3 = 1/3
     /// - empty2: (0 + 1 + 0) / 3 = 1/3
     ///
-    /// Since both variants have identical scores, their confidence intervals will overlap
-    /// indefinitely and the dataset will be exhausted before a winner can be identified.
+    /// Since all variants have identical scores, their confidence intervals will overlap
+    /// indefinitely and the dataset will be exhausted before top-k can be identified.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_dataset_exhaustion() {
         // Setup
@@ -3752,9 +3756,16 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use two empty variants that have identical scores (1/3 each)
+        // Use four variants that all have identical scores (1/3 each)
+        // - test/test2: return fixed dummy string, exact_match = 0
+        // - empty1/empty2: return "", exact_match = 0
         // Since they're identical, confidence intervals will never separate
-        let variant_names = vec!["empty".to_string(), "empty2".to_string()];
+        let variant_names = vec![
+            "test".to_string(),
+            "test2".to_string(),
+            "empty1".to_string(),
+            "empty2".to_string(),
+        ];
 
         let clients = Arc::new(Clients {
             tensorzero_client,
@@ -3772,14 +3783,14 @@ mod topk_tests {
             .await
             .expect("Failed to create durable client");
 
-        // With 25 datapoints and 2 identical variants, the dataset will be exhausted
-        // before we can identify a winner (confidence intervals will always overlap)
+        // With 25 datapoints and 4 identical variants, the dataset will be exhausted
+        // before we can identify top-2 or top-3 (confidence intervals will always overlap)
         let params = TopKTaskParams {
             evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
-            k_min: 1,
-            k_max: 1,
+            k_min: 2,
+            k_max: 3,
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
             batch_size: Some(25), // Process all at once for speed
