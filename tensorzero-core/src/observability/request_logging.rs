@@ -39,7 +39,7 @@ impl ConnectionDropGuard {
 impl Drop for ConnectionDropGuard {
     fn drop(&mut self) {
         let _guard = self.span.enter();
-        // If we did't explicitly mark the request as 'finished' (due to the connection
+        // If we didn't explicitly mark the request as 'finished' (due to the connection
         // getting dropped early), then use the current time to compute the latency.
         let latency_duration = self
             .finished

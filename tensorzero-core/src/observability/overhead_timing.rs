@@ -1,6 +1,6 @@
-//! This modules implements an 'overhead' metric (exposed through our `/metrics` endpoint)
+//! This module implements an 'overhead' metric (exposed through our `/metrics` endpoint)
 //! At a high level, the metric tracks a user-controlled duration associated with a span
-//!  (e.g. the time taken to send process a HTTP request and send the response body),
+//!  (e.g. the time taken to process an HTTP request and send the response body),
 //!  subtracting off all of the time during which an 'external' span (e.g. an outgoing model HTTP request)
 //!  was running. This calculated value represents the overhead added by TensorZero, as seen by external HTTP
 //!  clients.
@@ -16,7 +16,7 @@
 //!
 //!
 //!  We currently use these attributes to track overhead on HTTP request processing spans.
-//!   For example, an HTTP request might request in the following spans:
+//!   For example, an HTTP request might result in the following spans:
 //!
 //! [ request {tensorzero.overhead.kind = "POST /inference"}                                                 ]
 //!   [ function_call ]
@@ -36,7 +36,6 @@
 //!   since any background processing that occurs afterward will not affect the latency seen by the original user making the HTTP request.
 //! * We subtract off the time taken in the 'Outgoing HTTP request' span, since it's a descendant of the `request` span,
 //!   and has 'tensorzero.overhead.external_span' attribute applied.
-//! * The time spent in `update_rate_limiting`
 //!
 //! Notable features:
 //! * The reported metric is a histogram - each recorded value has an associated 'kind' label,
@@ -67,7 +66,7 @@
 //! In this example, at least one external span was active from the time Candidate 1 started
 //! until Candidate 2 finished, so that entire time interval is excluded from the overhead metric.
 //! The time taken to call the judge is also excluded from our overhead metric
-//! hHowever, the time between Candidate 2 finishing
+//! However, the time between Candidate 2 finishing
 //! and the judge starting *is* counted as overhead, since no external HTTP requests were active during that time.
 //!
 //! The metric calculations is controlled entirely through `tracing` span attributes.

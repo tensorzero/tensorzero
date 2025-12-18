@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 /// The final intervals can be obtained via `into_disjoint_intervals`
 #[derive(Debug)]
 pub struct DisjointIntervals<T: Ord + Clone> {
-    // Note that we don't do any sorting or merging until `into_disjoint_intervals` is calleed
+    // Note that we don't do any sorting or merging until `into_disjoint_intervals` is called
     intervals: Vec<RangeInclusive<T>>,
 }
 
