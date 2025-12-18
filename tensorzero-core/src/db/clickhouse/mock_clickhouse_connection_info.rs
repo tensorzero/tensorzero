@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
-    DatasetMetadata, DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
+    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, MockDatasetQueries,
 };
 use crate::db::inference_stats::{
@@ -13,8 +13,8 @@ use crate::db::inference_stats::{
     CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
 };
 use crate::db::inferences::{
-    InferenceMetadata, InferenceQueries, ListInferenceMetadataParams, ListInferencesParams,
-    MockInferenceQueries,
+    CountInferencesParams as ListInferencesCountParams, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -69,27 +69,25 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<Vec<InferenceMetadata>, Error> {
         self.inference_queries.list_inference_metadata(params).await
     }
+
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &ListInferencesCountParams<'_>,
+    ) -> Result<u64, Error> {
+        self.inference_queries
+            .count_inferences(config, params)
+            .await
+    }
 }
 
 #[async_trait]
 impl DatasetQueries for MockClickHouseConnectionInfo {
-    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
-        self.dataset_queries.count_rows_for_dataset(params).await
-    }
-
-    async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
-        self.dataset_queries.insert_rows_for_dataset(params).await
-    }
-
     async fn get_dataset_metadata(
         &self,
         params: &GetDatasetMetadataParams,
     ) -> Result<Vec<DatasetMetadata>, Error> {
         self.dataset_queries.get_dataset_metadata(params).await
-    }
-
-    async fn count_datasets(&self) -> Result<u32, Error> {
-        self.dataset_queries.count_datasets().await
     }
 
     async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {

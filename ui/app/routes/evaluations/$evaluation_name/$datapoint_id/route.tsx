@@ -1,5 +1,4 @@
 import {
-  getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   pollForEvaluations,
@@ -96,8 +95,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Validate datapoint exists using v1 API
-  const tensorZeroDatapoint =
-    await getTensorZeroClient().getDatapoint(datapoint_id);
+  const tensorZeroClient = getTensorZeroClient();
+  const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
   if (!tensorZeroDatapoint) {
     throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
       status: 404,
@@ -105,10 +104,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Define all promises
-  const selectedEvaluationRunInfosPromise = getEvaluationRunInfos(
-    selectedRunIds,
-    function_name,
-  );
+  const selectedEvaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selectedRunIds, function_name)
+    .then((response) => response.run_infos);
   const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
     datapoint_id,
     function_name,

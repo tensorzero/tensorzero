@@ -7,7 +7,9 @@ use async_trait::async_trait;
 use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
+use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
+use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::error::Error;
 
 // Private helper for constructing the subquery for datapoint IDs
@@ -143,6 +145,96 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &params).await?;
         parse_count(&response.response)
+    }
+
+    async fn search_evaluation_runs(
+        &self,
+        evaluation_name: &str,
+        function_name: &str,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
+        let sql_query = r"
+            WITH
+                evaluation_inference_ids AS (
+                    SELECT inference_id
+                    FROM TagInference
+                    WHERE key = 'tensorzero::evaluation_name'
+                    AND value = {evaluation_name:String}
+                )
+            SELECT DISTINCT value as evaluation_run_id, variant_name
+            FROM TagInference FINAL
+            WHERE key = 'tensorzero::evaluation_run_id'
+                AND function_name = {function_name:String}
+                AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
+                AND (positionCaseInsensitive(value, {query:String}) > 0 OR positionCaseInsensitive(variant_name, {query:String}) > 0)
+            ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+            LIMIT {limit:UInt32}
+            OFFSET {offset:UInt32}
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let evaluation_name_str = evaluation_name.to_string();
+        let function_name_str = function_name.to_string();
+        let query_str = query.to_string();
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("evaluation_name", evaluation_name_str.as_str());
+        params.insert("function_name", function_name_str.as_str());
+        params.insert("query", query_str.as_str());
+        params.insert("limit", limit_str.as_str());
+        params.insert("offset", offset_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[uuid::Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        // Format evaluation_run_ids as array for ClickHouse
+        let eval_run_ids_str: Vec<String> = evaluation_run_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect();
+        let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
+
+        let sql_query = r"
+            SELECT
+                any(run_tag.value) as evaluation_run_id,
+                any(run_tag.variant_name) as variant_name,
+                formatDateTime(
+                    max(UUIDv7ToDateTime(inference_id)),
+                    '%Y-%m-%dT%H:%i:%SZ'
+                ) as most_recent_inference_date
+            FROM
+                TagInference AS run_tag FINAL
+            WHERE
+                run_tag.key = 'tensorzero::evaluation_run_id'
+                AND run_tag.value IN ({evaluation_run_ids:Array(String)})
+                AND run_tag.function_name = {function_name:String}
+            GROUP BY
+                run_tag.value
+            ORDER BY
+                toUInt128(toUUID(evaluation_run_id)) DESC
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let function_name_str = function_name.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("evaluation_run_ids", eval_run_ids_joined.as_str());
+        params.insert("function_name", function_name_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
     }
 }
 
@@ -442,5 +534,211 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_evaluation_runs() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "WITH
+                    evaluation_inference_ids AS (
+                        SELECT inference_id
+                        FROM TagInference
+                        WHERE key = 'tensorzero::evaluation_name'
+                        AND value = {evaluation_name:String}
+                    )
+                SELECT DISTINCT value as evaluation_run_id, variant_name
+                FROM TagInference FINAL
+                WHERE key = 'tensorzero::evaluation_run_id'
+                    AND function_name = {function_name:String}
+                    AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
+                    AND (positionCaseInsensitive(value, {query:String}) > 0 OR positionCaseInsensitive(variant_name, {query:String}) > 0)
+                ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+                LIMIT {limit:UInt32}
+                OFFSET {offset:UInt32}
+                FORMAT JSONEachRow");
+                assert_eq!(params.get("evaluation_name"), Some(&"test_eval"));
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(params.get("query"), Some(&"variant"));
+                assert_eq!(params.get("limit"), Some(&"100"));
+                assert_eq!(params.get("offset"), Some(&"0"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .search_evaluation_runs("test_eval", "test_func", "variant", 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[1].variant_name, "variant2");
+    }
+
+    #[tokio::test]
+    async fn test_search_evaluation_runs_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .search_evaluation_runs("test_eval", "test_func", "nonexistent", 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "SELECT
+                    any(run_tag.value) as evaluation_run_id,
+                    any(run_tag.variant_name) as variant_name,
+                    formatDateTime(
+                        max(UUIDv7ToDateTime(inference_id)),
+                        '%Y-%m-%dT%H:%i:%SZ'
+                    ) as most_recent_inference_date
+                FROM
+                    TagInference AS run_tag FINAL
+                WHERE
+                    run_tag.key = 'tensorzero::evaluation_run_id'
+                    AND run_tag.value IN ({evaluation_run_ids:Array(String)})
+                    AND run_tag.function_name = {function_name:String}
+                GROUP BY
+                    run_tag.value
+                ORDER BY
+                    toUInt128(toUUID(evaluation_run_id)) DESC
+                FORMAT JSONEachRow");
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+                "test_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(
+            result[0].evaluation_run_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_multiple() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d','0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                ],
+                "test_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[1].variant_name, "variant2");
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_empty() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos(
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+                "nonexistent_func",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
     }
 }

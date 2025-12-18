@@ -38,3 +38,173 @@ async fn test_list_workflow_evaluation_projects_with_fixture_data() {
         "Expected at least one of the fixture projects to be present. Found: {project_names:?}",
     );
 }
+
+/// Ensures workflow evaluation project counts are returned from ClickHouse.
+#[tokio::test]
+async fn test_count_workflow_evaluation_projects_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .count_workflow_evaluation_projects()
+        .await
+        .unwrap();
+
+    assert!(
+        result >= 2,
+        "Expected at least 2 workflow evaluation projects from fixtures, got {result}",
+    );
+}
+
+/// Test listing workflow evaluation runs with default parameters.
+#[tokio::test]
+async fn test_list_workflow_evaluation_runs_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .list_workflow_evaluation_runs(100, 0, None, None)
+        .await
+        .unwrap();
+
+    // The fixture data has multiple runs
+    assert!(
+        !result.is_empty(),
+        "Expected at least one workflow evaluation run from fixture data"
+    );
+
+    // Verify runs have the expected fields populated
+    let first_run = &result[0];
+    assert!(!first_run.id.is_nil(), "Run ID should not be nil");
+}
+
+/// Test listing workflow evaluation runs with project_name filter.
+#[tokio::test]
+async fn test_list_workflow_evaluation_runs_with_project_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .list_workflow_evaluation_runs(100, 0, None, Some("21_questions"))
+        .await
+        .unwrap();
+
+    // All returned runs should have the specified project name
+    for run in &result {
+        assert_eq!(
+            run.project_name.as_deref(),
+            Some("21_questions"),
+            "Expected all runs to have project_name '21_questions'"
+        );
+    }
+}
+
+/// Test listing workflow evaluation runs with pagination.
+#[tokio::test]
+async fn test_list_workflow_evaluation_runs_with_pagination() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .list_workflow_evaluation_runs(1, 0, None, None)
+        .await
+        .unwrap();
+
+    // With limit=1, we should get at most 1 run
+    assert!(
+        result.len() <= 1,
+        "Expected at most 1 run with limit=1, got {}",
+        result.len()
+    );
+}
+
+/// Test counting workflow evaluation runs.
+#[tokio::test]
+async fn test_count_workflow_evaluation_runs_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse.count_workflow_evaluation_runs().await.unwrap();
+
+    assert!(
+        result >= 1,
+        "Expected at least 1 workflow evaluation run from fixtures, got {result}",
+    );
+}
+
+/// Test searching workflow evaluation runs with default parameters.
+#[tokio::test]
+async fn test_search_workflow_evaluation_runs_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .search_workflow_evaluation_runs(100, 0, None, None)
+        .await
+        .unwrap();
+
+    // The fixture data has multiple runs
+    assert!(
+        !result.is_empty(),
+        "Expected at least one workflow evaluation run from fixture data"
+    );
+
+    // Verify runs have the expected fields populated
+    let first_run = &result[0];
+    assert!(!first_run.id.is_nil(), "Run ID should not be nil");
+}
+
+/// Test searching workflow evaluation runs with project_name filter.
+#[tokio::test]
+async fn test_search_workflow_evaluation_runs_with_project_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .search_workflow_evaluation_runs(100, 0, Some("21_questions"), None)
+        .await
+        .unwrap();
+
+    // All returned runs should have the specified project name
+    for run in &result {
+        assert_eq!(
+            run.project_name.as_deref(),
+            Some("21_questions"),
+            "Expected all runs to have project_name '21_questions'"
+        );
+    }
+}
+
+/// Test searching workflow evaluation runs with search query.
+#[tokio::test]
+async fn test_search_workflow_evaluation_runs_with_search_query() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .search_workflow_evaluation_runs(100, 0, None, Some("baseline"))
+        .await
+        .unwrap();
+
+    // All returned runs should have names containing "baseline"
+    for run in &result {
+        let matches_name = run.name.as_ref().is_some_and(|n| n.contains("baseline"));
+        let matches_id = run.id.to_string().contains("baseline");
+        assert!(
+            matches_name || matches_id,
+            "Expected run to match search query 'baseline', got name={:?}, id={}",
+            run.name,
+            run.id
+        );
+    }
+}
+
+/// Test searching workflow evaluation runs with pagination.
+#[tokio::test]
+async fn test_search_workflow_evaluation_runs_with_pagination() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .search_workflow_evaluation_runs(1, 0, None, None)
+        .await
+        .unwrap();
+
+    // With limit=1, we should get at most 1 run
+    assert!(
+        result.len() <= 1,
+        "Expected at most 1 run with limit=1, got {}",
+        result.len()
+    );
+}

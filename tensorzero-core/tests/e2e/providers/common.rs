@@ -3718,6 +3718,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -3727,6 +3728,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
         &provider, episode_id, seed, &tag_value, false, true,
     )
     .await;
+
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true, true,
@@ -3858,16 +3860,20 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if (provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry"))
-        || check_cache
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if (provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry"))
+            || check_cache
+        {
+            assert_eq!(input_tokens, 0);
+            assert_eq!(output_tokens, 0);
+        } else {
+            assert!(input_tokens > 0);
+            assert!(output_tokens > 0);
+        }
     }
 
     assert!(finish_reason.is_some());
@@ -3970,15 +3976,19 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry")
+        {
+            assert!(input_tokens.is_null());
+            assert!(output_tokens.is_null());
+        } else {
+            assert!(input_tokens.as_u64().unwrap() > 0);
+            assert!(output_tokens.as_u64().unwrap() > 0);
+        }
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
