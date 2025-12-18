@@ -308,8 +308,8 @@ pub struct TensorZeroEventSource {
     stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
-    // We deliberately hold this span open,
-    // even across await points, as we want to track the total duration
+    // We deliberately hold this span across the entire lifetime of the event source stream,
+    // as we want the total duration to count as 'external' for our overhead metric.
     tensorzero_external_span: Span,
 }
 
@@ -562,6 +562,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 stream: Box::pin(stream),
                 ticket,
                 span: tensorzero_h2_workaround_span(),
+                tensorzero_external_span: tracing::debug_span!(
+                    "eventsource",
+                    { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+                ),
             },
             headers,
         ))
