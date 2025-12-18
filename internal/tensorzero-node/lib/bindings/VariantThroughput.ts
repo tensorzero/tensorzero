@@ -5,7 +5,7 @@
  */
 export type VariantThroughput = {
   /**
-   * Start datetime of the period in ISO 8601 format with milliseconds
+   * Start datetime of the period in RFC 3339 format with milliseconds
    */
   period_start: string;
   variant_name: string;

@@ -1,10 +1,9 @@
 //! ClickHouse queries for inference statistics.
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use async_trait::async_trait;
-use uuid::{Timestamp, Uuid};
 
 use super::ClickHouseConnectionInfo;
 use super::select_queries::parse_count;
@@ -161,24 +160,16 @@ fn build_count_demonstration_feedbacks_query(
     (query, query_params)
 }
 
-/// Converts a time window to milliseconds for UUIDv7 arithmetic.
-fn time_window_to_ms(time_window: &TimeWindow) -> u64 {
+/// Converts a time window to a Duration.
+fn time_window_to_duration(time_window: &TimeWindow) -> Duration {
     match time_window {
-        TimeWindow::Minute => 60 * 1000,
-        TimeWindow::Hour => 60 * 60 * 1000,
-        TimeWindow::Day => 24 * 60 * 60 * 1000,
-        TimeWindow::Week => 7 * 24 * 60 * 60 * 1000,
-        TimeWindow::Month => 30 * 24 * 60 * 60 * 1000,
-        TimeWindow::Cumulative => 365 * 24 * 60 * 60 * 1000, // 1 year for cumulative
+        TimeWindow::Minute => Duration::from_secs(60),
+        TimeWindow::Hour => Duration::from_secs(60 * 60),
+        TimeWindow::Day => Duration::from_secs(24 * 60 * 60),
+        TimeWindow::Week => Duration::from_secs(7 * 24 * 60 * 60),
+        TimeWindow::Month => Duration::from_secs(30 * 24 * 60 * 60),
+        TimeWindow::Cumulative => Duration::from_secs(365 * 24 * 60 * 60), // 1 year for cumulative
     }
-}
-
-/// Converts milliseconds to UInt128 string for ClickHouse UUIDv7 arithmetic.
-/// In UUIDv7, the timestamp occupies the first 48 bits of the 128-bit UUID.
-fn time_delta_ms_to_uint128_string(time_delta_ms: u64) -> String {
-    // Convert to u128 and shift by 80 bits to position timestamp in most significant bits
-    let uint128: u128 = (time_delta_ms as u128) << 80;
-    uint128.to_string()
 }
 
 /// Build query for getting function throughput by variant
@@ -210,11 +201,13 @@ fn build_function_throughput_by_variant_query(
         | TimeWindow::Day
         | TimeWindow::Week
         | TimeWindow::Month => {
-            // Calculate time delta for filtering
-            let time_window_ms = time_window_to_ms(&params.time_window);
-            let time_delta_ms = (params.max_periods as u64 + 1) * time_window_ms;
-            let time_delta_uint128 = time_delta_ms_to_uint128_string(time_delta_ms);
-            query_params.insert("time_delta_uint128".to_string(), time_delta_uint128);
+            // Calculate time delta using idiomatic Duration math in Rust.
+            // We use ClickHouse's UUIDv7ToDateTime for timestamp comparison,
+            // avoiding manual bit manipulation of UUIDv7 format.
+            let time_window_duration = time_window_to_duration(&params.time_window);
+            let time_delta = time_window_duration * (params.max_periods + 1);
+            let time_delta_secs = time_delta.as_secs();
+            query_params.insert("time_delta_secs".to_string(), time_delta_secs.to_string());
 
             let time_window_str = match params.time_window {
                 TimeWindow::Minute => "minute",
@@ -226,20 +219,22 @@ fn build_function_throughput_by_variant_query(
             };
             query_params.insert("time_window".to_string(), time_window_str.to_string());
 
+            // Use UUIDv7ToDateTime for timestamp-based filtering.
+            // This preserves the original semantics of filtering relative to the max timestamp.
             r"SELECT
-                    formatDateTime(dateTrunc({time_window:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
-                    i.variant_name AS variant_name,
-                    toUInt32(count()) AS count
-                FROM InferenceById i
-                WHERE i.function_name = {function_name:String}
-                AND i.id_uint >= (
-                    SELECT max(id_uint) - {time_delta_uint128:UInt128}
-                    FROM InferenceById
-                    WHERE function_name = {function_name:String}
-                )
-                GROUP BY period_start, variant_name
-                ORDER BY period_start DESC, variant_name DESC
-                FORMAT JSONEachRow".to_string()
+                formatDateTime(dateTrunc({time_window:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+                i.variant_name AS variant_name,
+                toUInt32(count()) AS count
+            FROM InferenceById i
+            WHERE i.function_name = {function_name:String}
+            AND UUIDv7ToDateTime(uint_to_uuid(i.id_uint)) >= (
+                SELECT max(UUIDv7ToDateTime(uint_to_uuid(id_uint))) - INTERVAL {time_delta_secs:UInt64} SECOND
+                FROM InferenceById
+                WHERE function_name = {function_name:String}
+            )
+            GROUP BY period_start, variant_name
+            ORDER BY period_start DESC, variant_name DESC
+            FORMAT JSONEachRow".to_string()
         }
     };
 
@@ -977,9 +972,9 @@ mod tests {
                 assert_query_contains(query, "GROUP BY variant_name");
                 assert_query_contains(query, "ORDER BY variant_name DESC");
                 assert_eq!(parameters.get("function_name"), Some(&"test_function"));
-                // Should not have time_window or time_delta for cumulative
+                // Should not have time_window or time_delta_secs for cumulative
                 assert!(!parameters.contains_key("time_window"));
-                assert!(!parameters.contains_key("time_delta_uint128"));
+                assert!(!parameters.contains_key("time_delta_secs"));
                 true
             })
             .returning(|_, _| {
@@ -1031,7 +1026,7 @@ mod tests {
                 assert_query_contains(query, "ORDER BY period_start DESC, variant_name DESC");
                 assert_eq!(parameters.get("function_name"), Some(&"test_function"));
                 assert_eq!(parameters.get("time_window"), Some(&"week"));
-                assert!(parameters.contains_key("time_delta_uint128"));
+                assert!(parameters.contains_key("time_delta_secs"));
                 true
             })
             .returning(|_, _| {

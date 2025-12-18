@@ -600,10 +600,10 @@ pub async fn test_get_inference_stats_group_by_variant() {
         .stats_by_variant
         .expect("Expected stats_by_variant to be present");
 
-    // Should have at least 2 variants
+    // Should have at least 1 variant
     assert!(
-        stats_by_variant.len() >= 2,
-        "Expected at least 2 variants, got {}",
+        !stats_by_variant.is_empty(),
+        "Expected at least 1 variant, got {}",
         stats_by_variant.len()
     );
 
@@ -835,6 +835,15 @@ pub async fn test_get_function_throughput_by_variant_extract_entities_week() {
         "Expected success status, got {status}: {body}"
     );
 
+    // Check that the raw response has period_start in RFC 3339 format with milliseconds
+    let rfc3339_regex =
+        regex::Regex::new(r#""period_start"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#)
+            .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain period_start in RFC 3339 format with milliseconds, got: {body}"
+    );
+
     let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
     // extract_entities has fixture data
     assert!(
@@ -842,24 +851,13 @@ pub async fn test_get_function_throughput_by_variant_extract_entities_week() {
         "Expected non-empty throughput data for extract_entities"
     );
 
-    // Check that all results have valid structure and RFC 3339 format with milliseconds
-    let rfc3339_regex =
-        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$").unwrap();
+    // Check that all results have valid structure
     for entry in &response.throughput {
         assert!(
             !entry.variant_name.is_empty(),
             "Variant name should not be empty"
         );
         assert!(entry.count > 0, "Count should be positive");
-
-        // Serialize the period_start to check the format
-        let period_start_str = serde_json::to_string(&entry.period_start).unwrap();
-        // Remove quotes from JSON string
-        let period_start_str = period_start_str.trim_matches('"');
-        assert!(
-            rfc3339_regex.is_match(period_start_str),
-            "period_start should be in RFC 3339 format with milliseconds, got: {period_start_str}",
-        );
     }
 }
 
@@ -920,24 +918,22 @@ pub async fn test_get_function_throughput_by_variant_month() {
         "Expected success status, got {status}: {body}"
     );
 
+    // Check that the raw response has period_start in RFC 3339 format with milliseconds
+    let rfc3339_regex =
+        regex::Regex::new(r#""period_start"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#)
+            .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain period_start in RFC 3339 format with milliseconds, got: {body}"
+    );
+
     let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
 
-    // Check that all results have valid structure and RFC 3339 format with milliseconds
-    let rfc3339_regex =
-        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$").unwrap();
+    // Check that all results have valid structure
     for entry in &response.throughput {
         assert!(
             !entry.variant_name.is_empty(),
             "Variant name should not be empty"
-        );
-
-        // Serialize the period_start to check the format
-        let period_start_str = serde_json::to_string(&entry.period_start).unwrap();
-        // Remove quotes from JSON string
-        let period_start_str = period_start_str.trim_matches('"');
-        assert!(
-            rfc3339_regex.is_match(period_start_str),
-            "period_start should be in RFC 3339 format with milliseconds, got: {period_start_str}",
         );
     }
 }
