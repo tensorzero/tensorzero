@@ -311,6 +311,11 @@ async fn main() -> Result<(), ExitCode> {
 
     let shutdown_signal = shutdown_signal().shared();
 
+    if args.early_exit_commands.validate_and_exit {
+        tracing::info!("Config file is valid. Exiting.");
+        return Ok(());
+    }
+
     let server_fut = axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal.clone())
         .into_future()

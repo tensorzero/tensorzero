@@ -551,6 +551,9 @@ jobs:
       - name: Build (Rust)
         run: cargo build --workspace --verbose
 
+      - name: Validate config
+        run: cargo run-e2e -- --validate-and-exit
+
   rust-test:
     permissions:
       contents: read
