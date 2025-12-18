@@ -1274,9 +1274,10 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create datapoints in.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A list of UUIDs of the created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences(
@@ -1286,18 +1287,23 @@ impl TensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
-
-        let fut =
-            client.create_datapoints_from_inferences(dataset_name, params, output_source_enum);
+        let fut = client.create_datapoints_from_inferences(dataset_name, params);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
@@ -2504,9 +2510,10 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create the datapoints from.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A `CreateDatapointsResponse` object containing the IDs of the newly-created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences<'a>(
@@ -2516,18 +2523,25 @@ impl AsyncTensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .create_datapoints_from_inferences(dataset_name, params, output_source_enum)
+                .create_datapoints_from_inferences(dataset_name, params)
                 .await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(

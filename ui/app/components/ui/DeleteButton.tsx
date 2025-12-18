@@ -29,6 +29,7 @@ export function DeleteButton({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            type="button"
             variant="destructiveOutline"
             size="iconSm"
             onClick={onDelete}

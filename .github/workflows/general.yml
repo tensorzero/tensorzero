@@ -214,7 +214,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -264,7 +264,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -481,7 +481,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -617,7 +617,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -651,6 +651,9 @@ jobs:
 
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
+
+      - name: end-of-file-fixer
+        run: uv run --with pre-commit pre-commit run end-of-file-fixer --all-files
 
       - name: check‑executables‑have‑shebangs
         run: uv run --with pre-commit pre-commit run check-executables-have-shebangs --all-files

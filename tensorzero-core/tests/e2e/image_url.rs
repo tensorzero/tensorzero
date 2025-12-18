@@ -119,7 +119,7 @@ type = "chat"
 
 [functions.describe_image.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-latest"
+model = "anthropic::claude-sonnet-4-5-20250929"
 "#;
 
 /// Test config with fetch_and_encode_input_files_before_inference = false
@@ -134,7 +134,7 @@ type = "chat"
 
 [functions.describe_image.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-latest"
+model = "anthropic::claude-sonnet-4-5-20250929"
 "#;
 
 /// Base64 encoded 1x1 red pixel PNG (same as Python test)

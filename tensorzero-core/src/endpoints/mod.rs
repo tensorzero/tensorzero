@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
+use crate::utils::gateway::AppStateData;
+use axum::routing::MethodRouter;
+use std::convert::Infallible;
 
 pub mod batch_inference;
 pub mod datasets;
@@ -19,9 +22,7 @@ pub mod stored_inferences;
 pub mod ui;
 pub mod variant_probabilities;
 pub mod workflow_evaluation_run;
-use crate::utils::gateway::AppStateData;
-use axum::routing::MethodRouter;
-use std::convert::Infallible;
+pub mod workflow_evaluations;
 
 /// Helper struct to hold the data needed for a call to `Router.route`
 /// We use this to pass the route names to middleware before they register the routes
