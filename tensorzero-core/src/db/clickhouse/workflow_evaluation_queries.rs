@@ -8,9 +8,9 @@ use uuid::Uuid;
 use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::workflow_evaluation_queries::{
-    WorkflowEvaluationProjectRow, WorkflowEvaluationQueries, WorkflowEvaluationRunRow,
-    WorkflowEvaluationRunStatisticsRaw, WorkflowEvaluationRunStatisticsRow,
-    WorkflowEvaluationRunWithEpisodeCountRow,
+    GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
+    WorkflowEvaluationQueries, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRaw,
+    WorkflowEvaluationRunStatisticsRow, WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -373,6 +373,185 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
             .collect();
 
         Ok(stats)
+    }
+
+    async fn list_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
+        if run_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Convert run_ids to a comma-separated string of quoted UUIDs for the query
+        let run_ids_array: Vec<String> = run_ids.iter().map(|id| format!("'{id}'")).collect();
+        let run_ids_str = run_ids_array.join(",");
+
+        let query = format!(
+            r"
+            WITH
+              -- 1) pull all episodes for these runIds
+              episodes_raw AS (
+                SELECT
+                  episode_id_uint,
+                  run_id_uint,
+                  tags,
+                  updated_at,
+                  -- for legacy reasons, `task_name` is stored as `datapoint_name`
+                  datapoint_name AS task_name
+                FROM DynamicEvaluationRunEpisodeByRunId
+                WHERE run_id_uint IN (
+                  SELECT arrayJoin(
+                    arrayMap(x -> toUInt128(toUUID(x)), [{run_ids_str}])
+                  )
+                )
+              ),
+
+              -- 2) pick out the distinct group_keys, page them
+              group_keys AS (
+                SELECT
+                  ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key,
+                  max(updated_at) as last_updated
+                FROM episodes_raw
+                GROUP BY group_key
+                ORDER BY last_updated DESC
+                LIMIT {{limit:UInt32}}
+                OFFSET {{offset:UInt32}}
+              ),
+
+              -- 3) only keep episodes whose group_key made the cut
+              episodes AS (
+                SELECT
+                  *,
+                  ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key
+                FROM episodes_raw
+                WHERE ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint)))
+                  IN (SELECT group_key FROM group_keys)
+              ),
+
+              -- 4) gather feedback just for those episodes
+              feedback_union AS (
+                SELECT target_id, metric_name,
+                       argMax(toString(value), toUInt128(id)) AS value
+                FROM FloatMetricFeedbackByTargetId
+                WHERE target_id IN (
+                  SELECT uint_to_uuid(episode_id_uint) FROM episodes
+                )
+                GROUP BY target_id, metric_name
+
+                UNION ALL
+
+                SELECT target_id, metric_name,
+                       argMax(toString(value), toUInt128(id)) AS value
+                FROM BooleanMetricFeedbackByTargetId
+                WHERE target_id IN (
+                  SELECT uint_to_uuid(episode_id_uint) FROM episodes
+                )
+                GROUP BY target_id, metric_name
+
+                UNION ALL
+
+                SELECT target_id,
+                       'comment' AS metric_name,
+                       value
+                FROM CommentFeedbackByTargetId
+                WHERE target_id IN (
+                  SELECT uint_to_uuid(episode_id_uint) FROM episodes
+                )
+              )
+
+            SELECT
+              e.group_key as group_key,
+              uint_to_uuid(e.episode_id_uint) AS episode_id,
+              formatDateTime(min(e.updated_at), '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
+              uint_to_uuid(e.run_id_uint) AS run_id,
+              e.tags,
+              e.task_name,
+              arrayMap(t -> t.1,
+                arraySort((t)->t.1,
+                  groupArrayIf((f.metric_name,f.value), f.metric_name!='')
+                )
+              ) AS feedback_metric_names,
+              arrayMap(t -> t.2,
+                arraySort((t)->t.1,
+                  groupArrayIf((f.metric_name,f.value), f.metric_name!='')
+                )
+              ) AS feedback_values
+            FROM episodes AS e
+            JOIN group_keys AS g USING group_key
+            LEFT JOIN feedback_union AS f
+              ON f.target_id = uint_to_uuid(e.episode_id_uint)
+            GROUP BY
+              e.group_key,
+              e.episode_id_uint,
+              e.run_id_uint,
+              e.tags,
+              e.task_name
+            ORDER BY
+              max(g.last_updated) DESC,
+              e.group_key,
+              e.episode_id_uint
+            FORMAT JSONEachRow"
+        );
+
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("limit", limit_str.as_str());
+        params.insert("offset", offset_str.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn count_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<u32, Error> {
+        if run_ids.is_empty() {
+            return Ok(0);
+        }
+
+        // Convert run_ids to a comma-separated string of quoted UUIDs for the query
+        let run_ids_array: Vec<String> = run_ids.iter().map(|id| format!("'{id}'")).collect();
+        let run_ids_str = run_ids_array.join(",");
+
+        let query = format!(
+            r"
+            WITH
+              episodes_raw AS (
+                SELECT
+                  episode_id_uint,
+                  run_id_uint,
+                  tags,
+                  updated_at,
+                  datapoint_name AS task_name
+                FROM DynamicEvaluationRunEpisodeByRunId
+                WHERE run_id_uint IN (
+                  SELECT arrayJoin(
+                    arrayMap(x -> toUInt128(toUUID(x)), [{run_ids_str}])
+                  )
+                )
+              )
+            SELECT toUInt32(countDistinct(ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))))) as count
+            FROM episodes_raw
+            FORMAT JSONEachRow"
+        );
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = parse_count(response.response.as_str())?;
+
+        u32::try_from(count).map_err(|error| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!(
+                    "Failed to convert workflow evaluation episode group count: {error}"
+                ),
+            })
+        })
     }
 }
 
@@ -743,5 +922,155 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].metric_name, "solved");
+    }
+
+    #[tokio::test]
+    async fn test_list_workflow_evaluation_run_episodes_by_task_name() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "WITH");
+                assert_query_contains(query, "episodes_raw AS");
+                assert_query_contains(query, "FROM DynamicEvaluationRunEpisodeByRunId");
+                assert_query_contains(query, "group_keys AS");
+                assert_query_contains(query, "ifNull(task_name, concat('NULL_EPISODE_'");
+                assert_query_contains(query, "feedback_union AS");
+                assert_query_contains(query, "FloatMetricFeedbackByTargetId");
+                assert_query_contains(query, "BooleanMetricFeedbackByTargetId");
+                assert_query_contains(query, "CommentFeedbackByTargetId");
+                assert_query_contains(query, "feedback_metric_names");
+                assert_query_contains(query, "feedback_values");
+                assert_query_contains(query, "LIMIT {limit:UInt32}");
+                assert_query_contains(query, "OFFSET {offset:UInt32}");
+
+                assert_eq!(params.get("limit"), Some(&"10"));
+                assert_eq!(params.get("offset"), Some(&"0"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"group_key":"task1","episode_id":"01942e26-4693-7e80-8591-47b98e25d721","timestamp":"2025-05-20T16:52:58Z","run_id":"01942e26-4693-7e80-8591-47b98e25d720","tags":{},"task_name":"task1","feedback_metric_names":["metric1"],"feedback_values":["0.5"]}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = uuid::Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d720").unwrap();
+        let result = conn
+            .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 10, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].group_key, "task1");
+        assert_eq!(result[0].task_name, Some("task1".to_string()));
+        assert_eq!(result[0].feedback_metric_names, vec!["metric1"]);
+        assert_eq!(result[0].feedback_values, vec!["0.5"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        // No expectations set - should not make any queries
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .list_workflow_evaluation_run_episodes_by_task_name(&[], 10, 0)
+            .await
+            .unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_workflow_evaluation_run_episodes_by_task_name_multiple_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"group_key":"task1","episode_id":"01942e26-4693-7e80-8591-47b98e25d721","timestamp":"2025-05-20T16:52:58Z","run_id":"01942e26-4693-7e80-8591-47b98e25d720","tags":{},"task_name":"task1","feedback_metric_names":[],"feedback_values":[]}
+{"group_key":"task1","episode_id":"01942e26-4693-7e80-8591-47b98e25d722","timestamp":"2025-05-20T16:53:58Z","run_id":"01942e26-4693-7e80-8591-47b98e25d723","tags":{},"task_name":"task1","feedback_metric_names":[],"feedback_values":[]}
+{"group_key":"task2","episode_id":"01942e26-4693-7e80-8591-47b98e25d724","timestamp":"2025-05-20T16:54:58Z","run_id":"01942e26-4693-7e80-8591-47b98e25d720","tags":{},"task_name":"task2","feedback_metric_names":["bool_metric"],"feedback_values":["true"]}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 3,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = uuid::Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d720").unwrap();
+        let result = conn
+            .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].group_key, "task1");
+        assert_eq!(result[1].group_key, "task1");
+        assert_eq!(result[2].group_key, "task2");
+    }
+
+    #[tokio::test]
+    async fn test_count_workflow_evaluation_run_episodes_by_task_name() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "WITH");
+                assert_query_contains(query, "episodes_raw AS");
+                assert_query_contains(query, "FROM DynamicEvaluationRunEpisodeByRunId");
+                assert_query_contains(
+                    query,
+                    "countDistinct(ifNull(task_name, concat('NULL_EPISODE_'",
+                );
+                assert!(params.is_empty());
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":5}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = uuid::Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d720").unwrap();
+        let count = conn
+            .count_workflow_evaluation_run_episodes_by_task_name(&[run_id])
+            .await
+            .unwrap();
+
+        assert_eq!(count, 5);
+    }
+
+    #[tokio::test]
+    async fn test_count_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        // No expectations set - should not make any queries
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let count = conn
+            .count_workflow_evaluation_run_episodes_by_task_name(&[])
+            .await
+            .unwrap();
+
+        assert_eq!(count, 0);
     }
 }

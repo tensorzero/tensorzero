@@ -18,6 +18,7 @@ import type {
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
+  CountWorkflowEvaluationRunEpisodesByTaskNameResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   CumulativeFeedbackTimeSeriesPoint,
@@ -53,6 +54,7 @@ import type {
   ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
   ListWorkflowEvaluationRunsResponse,
   SearchEvaluationRunsResponse,
   SearchWorkflowEvaluationRunsResponse,
@@ -1210,6 +1212,69 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetWorkflowEvaluationRunStatisticsResponse;
+  }
+
+  /**
+   * Lists workflow evaluation run episodes grouped by task name.
+   *
+   * Returns episodes grouped by task_name. Episodes with NULL task_name are grouped
+   * individually using a generated key based on their episode_id.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @param limit - Maximum number of groups to return (default: 15)
+   * @param offset - Number of groups to skip (default: 0)
+   * @returns A promise that resolves with the grouped episodes response
+   * @throws Error if the request fails
+   */
+  async listWorkflowEvaluationRunEpisodesByTaskName(
+    runIds: string[],
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<ListWorkflowEvaluationRunEpisodesByTaskNameResponse> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListWorkflowEvaluationRunEpisodesByTaskNameResponse;
+  }
+
+  /**
+   * Counts the number of distinct episode groups (by task_name) for the given run IDs.
+   *
+   * Episodes with NULL task_name are counted as individual groups.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @returns A promise that resolves with the count of episode groups
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodeGroupsByTaskName(
+    runIds: string[],
+  ): Promise<number> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/episodes-by-task-name/count${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesByTaskNameResponse;
+    return body.count;
   }
 
   /**
