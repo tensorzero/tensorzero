@@ -246,6 +246,12 @@ impl AutopilotClient {
     /// - An error occurs
     ///
     /// Use `params.last_event_id` to resume from a specific event.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AutopilotError::Http` if the server returns an error status code
+    /// (e.g., 401 Unauthorized, 404 Not Found). This is checked before returning
+    /// the stream, so connection errors are caught immediately.
     pub async fn stream_events(
         &self,
         session_id: Uuid,
@@ -261,9 +267,32 @@ impl AutopilotClient {
 
         let request = self.sse_http_client.get(url).headers(self.auth_headers());
 
-        let event_source =
+        let mut event_source =
             EventSource::new(request).map_err(|e| AutopilotError::Sse(e.to_string()))?;
 
+        // Wait for connection to be established or fail.
+        // The first event should be Open on success, or an error on failure.
+        match event_source.next().await {
+            Some(Ok(SseEvent::Open)) => {
+                // Connection established successfully
+            }
+            Some(Err(e)) => {
+                // Convert SSE error to appropriate AutopilotError
+                return Err(Self::convert_sse_error(e));
+            }
+            Some(Ok(SseEvent::Message(_))) => {
+                return Err(AutopilotError::Sse(
+                    "Received message before connection was established".to_string(),
+                ));
+            }
+            None => {
+                return Err(AutopilotError::Sse(
+                    "Connection closed unexpectedly".to_string(),
+                ));
+            }
+        }
+
+        // Connection is good, return the stream
         let stream = event_source.filter_map(|result| async move {
             match result {
                 Ok(SseEvent::Open) => None,
@@ -282,6 +311,22 @@ impl AutopilotClient {
         });
 
         Ok(stream)
+    }
+
+    /// Converts an SSE error to the appropriate AutopilotError.
+    /// HTTP errors are converted to AutopilotError::Http for consistency.
+    fn convert_sse_error(e: reqwest_eventsource::Error) -> AutopilotError {
+        use reqwest_eventsource::Error as SseError;
+        match e {
+            SseError::InvalidStatusCode(status, _response) => AutopilotError::Http {
+                status_code: status.as_u16(),
+                message: status
+                    .canonical_reason()
+                    .unwrap_or("Unknown error")
+                    .to_string(),
+            },
+            other => AutopilotError::Sse(other.to_string()),
+        }
     }
 
     // -------------------------------------------------------------------------
