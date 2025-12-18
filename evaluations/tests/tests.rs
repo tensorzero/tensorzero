@@ -3171,10 +3171,22 @@ mod topk_tests {
             .expect("Failed to create queue");
     }
 
-    /// Test that top-k evaluation runs successfully with the test_evaluation evaluation.
-    /// This test uses deterministic dummy providers and evaluators for reliable results.
+    /// Test that top-k evaluation identifies the correct winner (TopKFound).
+    ///
+    /// Setup:
+    /// - 3 variants: "echo" (uses echo model), "empty1" and "empty2" (use empty model)
+    /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (1 if output matches reference)
+    /// - Datapoints have reference output equal to input text
+    /// - Scoring: AverageEvaluatorScore averages all evaluator scores
+    ///
+    /// Expected scores:
+    /// - echo: (0 + 1 + 1) / 3 = 2/3 (exact_match=1 because echo returns input)
+    /// - empty1/empty2: (0 + 1 + 0) / 3 = 1/3 (exact_match=0 because empty returns "")
+    ///
+    /// The test verifies that "echo" is identified as the top-1 variant.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_topk_found() {
+        init_tracing_for_tests();
         // Setup
         let config = get_config().await;
         let clickhouse = get_clickhouse().await;
@@ -3183,19 +3195,20 @@ mod topk_tests {
         ensure_queue_exists(&pg_pool).await;
 
         // Create a unique dataset for this test with programmatically generated datapoints
-        let dataset_name = format!("topk_test_basic_{}", Uuid::now_v7());
+        let dataset_name = format!("topk_test_topk_found_{}", Uuid::now_v7());
 
-        // Write deterministic test datapoints for test_evaluation (uses dummy providers)
-        write_basic_test_datapoints(&dataset_name, 10).await;
+        // Write enough datapoints for the confidence sequences to converge
+        // Based on simulation, ~17 datapoints needed for top-1 identification
+        write_basic_test_datapoints(&dataset_name, 30).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
-        // Get the evaluation config for test_evaluation
-        // This evaluation uses basic_test function with dummy LLM judge evaluators
+        // Get the evaluation config for test_topk_evaluation
+        // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
         let evaluation_config = config
             .evaluations
-            .get("test_evaluation")
-            .expect("test_evaluation not found in config")
+            .get("test_topk_evaluation")
+            .expect("test_topk_evaluation not found in config")
             .clone();
 
         // Build the function configs table
@@ -3206,8 +3219,12 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Variant names for basic_test function (using dummy providers)
-        let variant_names = vec!["test".to_string(), "test2".to_string()];
+        // Use echo (score 2/3) and two empty variants (score 1/3 each)
+        let variant_names = vec![
+            "echo".to_string(),
+            "empty1".to_string(),
+            "empty2".to_string(),
+        ];
 
         // Create clients
         let clients = Arc::new(Clients {
@@ -3215,12 +3232,12 @@ mod topk_tests {
             clickhouse_client: clickhouse.clone(),
         });
 
-        // Create the top-k task state
+        // Create the top-k task state with AverageEvaluatorScore
         let state = TopKTaskState {
             clients,
             evaluation_config: evaluation_config.clone(),
             function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(FirstBooleanScore),
+            scoring_fn: Arc::new(AverageEvaluatorScore),
         };
 
         // Create the durable client
@@ -3230,18 +3247,18 @@ mod topk_tests {
 
         // Create task params
         let params = TopKTaskParams {
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
-            variant_names,
+            variant_names: variant_names.clone(),
             k_min: 1,
             k_max: 1,
-            epsilon: Some(0.1),
-            max_datapoints: Some(10), // Small for test speed
+            epsilon: None, // No epsilon relaxation - require strict separation
+            max_datapoints: Some(30),
             batch_size: Some(5),
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
-            concurrency: 2,
-            inference_cache: CacheEnabledMode::On,
+            concurrency: 1,                         // Sequential for determinism
+            inference_cache: CacheEnabledMode::Off, // No caching for clean test
         };
 
         // Spawn the task
@@ -3263,7 +3280,7 @@ mod topk_tests {
 
         // Wait for the task to complete (with timeout)
         let start = std::time::Instant::now();
-        let timeout = Duration::from_secs(120);
+        let timeout = Duration::from_secs(180);
 
         loop {
             if start.elapsed() > timeout {
@@ -3310,34 +3327,216 @@ mod topk_tests {
         // Shutdown worker
         worker.shutdown().await;
 
-        // Verify results
-        // The evaluation should have processed some datapoints
-        assert!(
-            output.num_datapoints_processed > 0,
-            "Should have processed at least one datapoint"
+        // Print full output for debugging
+        println!("=== TopKTaskOutput ===");
+        println!("evaluation_run_id: {}", output.evaluation_run_id);
+        println!(
+            "num_datapoints_processed: {}",
+            output.num_datapoints_processed
         );
+        println!("stopping_reason: {:?}", output.stopping_reason);
 
-        // Check that we got a stopping reason
+        println!("\n=== Variant Status ===");
+        for (name, status) in &output.variant_status {
+            println!("  {name}: {status:?}");
+        }
+
+        println!("\n=== Variant Performance (Confidence Sequences) ===");
+        for (name, cs) in &output.variant_performance {
+            println!("  {name}:");
+            println!("    count: {}", cs.count);
+            println!("    mean_est: {:.6}", cs.mean_est);
+            println!("    cs_lower: {:.6}", cs.cs_lower);
+            println!("    cs_upper: {:.6}", cs.cs_upper);
+            println!("    mean_regularized: {:.6}", cs.mean_regularized);
+            println!("    variance_regularized: {:.6}", cs.variance_regularized);
+        }
+
+        println!("\n=== Variant Failures ===");
+        for (name, cs) in &output.variant_failures {
+            println!(
+                "  {name}: count={}, mean_est={:.4}, cs=[{:.4}, {:.4}]",
+                cs.count, cs.mean_est, cs.cs_lower, cs.cs_upper
+            );
+        }
+
+        println!("\n=== Evaluator Failures ===");
+        for (name, cs) in &output.evaluator_failures {
+            println!(
+                "  {name}: count={}, mean_est={:.4}, cs=[{:.4}, {:.4}]",
+                cs.count, cs.mean_est, cs.cs_lower, cs.cs_upper
+            );
+        }
+
+        // === Assertions ===
+
+        // 1. Check stopping reason is TopKFound with k=1 and echo as winner
         match &output.stopping_reason {
             GlobalStoppingReason::TopKFound { k, top_variants } => {
                 assert_eq!(*k, 1, "Should have found top-1");
                 assert_eq!(top_variants.len(), 1, "Should have exactly one top variant");
-                println!("Top variant: {top_variants:?}");
+                assert_eq!(
+                    top_variants[0], "echo",
+                    "Echo should be the top variant (score 2/3 vs 1/3)"
+                );
             }
             other => {
-                panic!("Unexpected stopping reason: {other:?}");
+                panic!("Expected TopKFound, got: {other:?}");
             }
         }
 
-        // Verify variant statuses make sense
-        for (variant_name, status) in &output.variant_status {
-            println!("Variant {variant_name}: {status:?}");
+        // 2. Check variant statuses
+        assert_eq!(
+            output.variant_status.get("echo"),
+            Some(&VariantStatus::Include),
+            "Echo should be Included (winner)"
+        );
+        assert_eq!(
+            output.variant_status.get("empty1"),
+            Some(&VariantStatus::Exclude),
+            "Empty1 should be Excluded (loser)"
+        );
+        assert_eq!(
+            output.variant_status.get("empty2"),
+            Some(&VariantStatus::Exclude),
+            "Empty2 should be Excluded (loser)"
+        );
+
+        // 3. Check that echo's lower bound > empty variants' upper bounds
+        let echo_cs = output
+            .variant_performance
+            .get("echo")
+            .expect("Echo performance not found");
+        let empty1_cs = output
+            .variant_performance
+            .get("empty1")
+            .expect("Empty1 performance not found");
+        let empty2_cs = output
+            .variant_performance
+            .get("empty2")
+            .expect("Empty2 performance not found");
+
+        assert!(
+            echo_cs.cs_lower > empty1_cs.cs_upper,
+            "Echo lower bound ({:.4}) should be > empty1 upper bound ({:.4})",
+            echo_cs.cs_lower,
+            empty1_cs.cs_upper
+        );
+        assert!(
+            echo_cs.cs_lower > empty2_cs.cs_upper,
+            "Echo lower bound ({:.4}) should be > empty2 upper bound ({:.4})",
+            echo_cs.cs_lower,
+            empty2_cs.cs_upper
+        );
+
+        // 4. Expected values computed by calculate_topk_expected_values.py
+        // These are the exact values the Rust implementation should produce
+        // Top-1 found at datapoint 25
+
+        // Number of datapoints processed when top-1 was found
+        assert_eq!(
+            output.num_datapoints_processed, 25,
+            "Should process exactly 25 datapoints before finding top-1"
+        );
+
+        // Echo variant confidence sequence
+        assert_eq!(echo_cs.count, 25, "echo count");
+        assert!(
+            (echo_cs.mean_est - 0.666000000000000).abs() < 1e-10,
+            "echo mean_est {} != 0.666",
+            echo_cs.mean_est
+        );
+        assert!(
+            (echo_cs.cs_lower - 0.505000000000000).abs() < 1e-10,
+            "echo cs_lower {} != 0.505",
+            echo_cs.cs_lower
+        );
+        assert!(
+            (echo_cs.cs_upper - 0.748000000000000).abs() < 1e-10,
+            "echo cs_upper {} != 0.748",
+            echo_cs.cs_upper
+        );
+        assert!(
+            (echo_cs.mean_regularized - 0.660256410256410).abs() < 1e-10,
+            "echo mean_regularized {} != 0.660256410256410",
+            echo_cs.mean_regularized
+        );
+        assert!(
+            (echo_cs.variance_regularized - 0.010264105441808).abs() < 1e-10,
+            "echo variance_regularized {} != 0.010264105441808",
+            echo_cs.variance_regularized
+        );
+
+        // Empty1 variant confidence sequence
+        assert_eq!(empty1_cs.count, 25, "empty1 count");
+        assert!(
+            (empty1_cs.mean_est - 0.333000000000000).abs() < 1e-10,
+            "empty1 mean_est {} != 0.333",
+            empty1_cs.mean_est
+        );
+        assert!(
+            (empty1_cs.cs_lower - 0.252000000000000).abs() < 1e-10,
+            "empty1 cs_lower {} != 0.252",
+            empty1_cs.cs_lower
+        );
+        assert!(
+            (empty1_cs.cs_upper - 0.495000000000000).abs() < 1e-10,
+            "empty1 cs_upper {} != 0.495",
+            empty1_cs.cs_upper
+        );
+        assert!(
+            (empty1_cs.mean_regularized - 0.339743589743590).abs() < 1e-10,
+            "empty1 mean_regularized {} != 0.339743589743590",
+            empty1_cs.mean_regularized
+        );
+        assert!(
+            (empty1_cs.variance_regularized - 0.010264105441808).abs() < 1e-10,
+            "empty1 variance_regularized {} != 0.010264105441808",
+            empty1_cs.variance_regularized
+        );
+
+        // Empty2 variant confidence sequence (should be identical to empty1)
+        assert_eq!(empty2_cs.count, 25, "empty2 count");
+        assert!(
+            (empty2_cs.mean_est - 0.333000000000000).abs() < 1e-10,
+            "empty2 mean_est {} != 0.333",
+            empty2_cs.mean_est
+        );
+        assert!(
+            (empty2_cs.cs_lower - 0.252000000000000).abs() < 1e-10,
+            "empty2 cs_lower {} != 0.252",
+            empty2_cs.cs_lower
+        );
+        assert!(
+            (empty2_cs.cs_upper - 0.495000000000000).abs() < 1e-10,
+            "empty2 cs_upper {} != 0.495",
+            empty2_cs.cs_upper
+        );
+
+        // 5. Check evaluator failures are empty (no errors in test_topk_evaluation)
+        for (name, cs) in &output.evaluator_failures {
+            assert_eq!(
+                cs.count, 75,
+                "Evaluator {name} should have processed 25 datapoints"
+            );
+            // Failure rate should be 0 (or very low)
             assert!(
-                matches!(
-                    status,
-                    VariantStatus::Include | VariantStatus::Exclude | VariantStatus::Active
-                ),
-                "Variant should be in a valid state"
+                cs.mean_est < 0.01,
+                "Evaluator {name} should have ~0% failure rate, got {:.4}",
+                cs.mean_est
+            );
+        }
+
+        // 6. Check variant failures are empty (no inference errors)
+        for (name, cs) in &output.variant_failures {
+            assert_eq!(
+                cs.count, 25,
+                "Variant {name} failures should have processed 25 datapoints"
+            );
+            assert!(
+                cs.mean_est < 0.01,
+                "Variant {name} should have ~0% failure rate, got {:.4}",
+                cs.mean_est
             );
         }
     }

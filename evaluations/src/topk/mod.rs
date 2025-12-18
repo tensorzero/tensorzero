@@ -832,6 +832,12 @@ async fn process_batch_step(
                             .as_ref()
                             .map(|v| get_variant_name(v))
                             .unwrap_or_else(|| "unknown".to_string());
+                        tracing::warn!(
+                            datapoint_id = %error.datapoint_id,
+                            variant = %variant_name,
+                            error = %error.message,
+                            "Batch item error in top-k evaluation"
+                        );
                         (error.datapoint_id, variant_name)
                     }
                     BatchItemResult::Cancelled => {
