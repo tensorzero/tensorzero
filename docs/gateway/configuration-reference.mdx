@@ -977,7 +977,7 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENV
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.gcp_vertex]
+[models."gemini-2.5-flash".providers.gcp_vertex]
 # ...
 type = "gcp_vertex_gemini"
 credential_location = "dynamic::gcp_credentials_path"
@@ -1005,7 +1005,7 @@ Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models 
 Defines the location (region) of the GCP Vertex Gemini model.
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.gcp_vertex]
+[models."gemini-2.5-flash".providers.gcp_vertex]
 # ...
 type = "gcp_vertex_gemini"
 location = "us-central1"
@@ -1022,10 +1022,10 @@ Defines the model ID of the GCP Vertex AI model.
 See [GCP Vertex AI's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions) for the list of available model IDs.
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.gcp_vertex]
+[models."gemini-2.5-flash".providers.gcp_vertex]
 # ...
 type = "gcp_vertex_gemini"
-model_id = "gemini-1.5-flash-001"
+model_id = "gemini-2.5-flash"
 # ...
 ```
 
@@ -1037,7 +1037,7 @@ model_id = "gemini-1.5-flash-001"
 Defines the project ID of the GCP Vertex AI model.
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.gcp_vertex]
+[models."gemini-2.5-flash".providers.gcp_vertex]
 # ...
 type = "gcp_vertex_gemini"
 project_id = "your-project-id"
@@ -1060,7 +1060,7 @@ Can be either a string for a single credential location, or an object with `defa
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.google_ai_studio_gemini]
+[models."gemini-2.5-flash".providers.google_ai_studio_gemini]
 # ...
 type = "google_ai_studio_gemini"
 api_key_location = "dynamic::google_ai_studio_api_key"
@@ -1079,10 +1079,10 @@ Defines the model name to use with the Google AI Studio Gemini API.
 See [Google AI Studio's documentation](https://ai.google.dev/gemini-api/docs/models/gemini) for the list of available model names.
 
 ```toml title="tensorzero.toml"
-[models."gemini-1.5-flash".providers.google_ai_studio_gemini]
+[models."gemini-2.5-flash".providers.google_ai_studio_gemini]
 # ...
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-flash-001"
+model_name = "gemini-2.5-flash"
 # ...
 ```
 

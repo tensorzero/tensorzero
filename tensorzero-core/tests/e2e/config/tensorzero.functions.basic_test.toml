@@ -223,20 +223,20 @@ max_tokens = 100
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-extra-body]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-extra-headers]
 type = "chat_completion"
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
@@ -268,33 +268,33 @@ max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-body]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-headers]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite"
+model = "gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Content-Length", value = "2" }]
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-dynamic]
 type = "chat_completion"
-model = "gemini-2.0-flash-lite-dynamic"
+model = "gemini-2.5-flash-lite-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-shorthand]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -458,7 +458,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.gcp_vertex_gemini_shorthand]
 type = "chat_completion"
-model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

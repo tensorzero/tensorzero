@@ -2207,7 +2207,7 @@ async fn test_gcp_no_endpoint_and_model() {
         type = "gcp_vertex_gemini"
         location = "us-central1"
         project_id = "test-project"
-        model_id = "gemini-2.0-flash-001"
+        model_id = "gemini-2.5-flash"
         endpoint_id = "4094940393049"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
