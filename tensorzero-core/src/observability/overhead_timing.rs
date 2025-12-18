@@ -225,9 +225,13 @@ where
                         return;
                     }
                 }
-                error_within_tracing("Failed to find parent for external span {id:?}");
+                error_within_tracing(
+                    format!("Failed to find parent for external span {id:?}").as_str(),
+                );
             } else {
-                error_within_tracing("Failed to find span scope for external span {id:?}");
+                error_within_tracing(
+                    format!("Failed to find span scope for external span {id:?}").as_str(),
+                );
             }
         }
     }
