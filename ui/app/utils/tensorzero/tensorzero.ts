@@ -29,6 +29,7 @@ import type {
   GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
@@ -1287,6 +1288,24 @@ export class TensorZeroClient {
     }
 
     return (await response.json()) as SearchEvaluationRunsResponse;
+  }
+
+  /**
+   * Queries feedback bounds for a given target ID.
+   * @param targetId - The target ID (inference_id or episode_id) to query feedback bounds for
+   * @returns A promise that resolves with the feedback bounds across all feedback types
+   * @throws Error if the request fails
+   */
+  async getFeedbackBoundsByTargetId(
+    targetId: string,
+  ): Promise<GetFeedbackBoundsResponse> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/bounds`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetFeedbackBoundsResponse;
   }
 
   /**

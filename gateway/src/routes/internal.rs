@@ -38,6 +38,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::get_feedback_by_target_id_handler),
         )
         .route(
+            "/internal/feedback/{target_id}/bounds",
+            get(endpoints::feedback::internal::get_feedback_bounds_by_target_id_handler),
+        )
+        .route(
             "/internal/feedback/{target_id}/latest-id-by-metric",
             get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
         )
