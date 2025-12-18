@@ -12973,7 +12973,7 @@ pub async fn test_multi_turn_thought_streaming_with_provider(provider: E2ETestPr
     let mut inference_id = None;
 
     // Just validate that all of the chunks are valid JSON,
-    // and then check the `collect_chunks` result stored in the databsae
+    // and then check the `collect_chunks` result stored in the database
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
         println!("Chunk: {chunk_json}");
