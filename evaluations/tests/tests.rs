@@ -3185,7 +3185,7 @@ mod topk_tests {
     ///
     /// The test verifies that "echo" is identified as the top-1 variant.
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_topk_topk_found() {
+    async fn test_topk_found_topk() {
         init_tracing_for_tests();
         // Setup
         let config = get_config().await;
