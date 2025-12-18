@@ -1,0 +1,313 @@
+---
+title: GEPA
+description: Learn how to use automated prompt engineering to optimize your LLM applications.
+---
+
+[GEPA](https://arxiv.org/abs/2507.19457) is an automated prompt engineering algorithm that iteratively refines your [message templates](/gateway/create-a-prompt-template) based on collected inferences and [evaluation](/evaluations/inference-evaluations/tutorial) scores.
+You can run GEPA using the TensorZero Gateway to optimize the message templates of any [TensorZero function](/gateway/configure-functions-and-variants).
+
+## Optimize an LLM function with GEPA
+
+### 1. Configure your LLM application
+
+Define a function and variant for your application.
+
+```toml
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+The variant must have at least one message template (e.g., the LLM system instructions).
+
+```text
+You are an assistant that is performing a named entity recognition task.
+Your job is to extract entities from a given text.
+
+The entities you are extracting are:
+- people
+- organizations
+- locations
+- miscellaneous other entities
+
+Please return the entities in the following JSON format:
+
+{
+    "person": ["person1", "person2", ...],
+    "organization": ["organization1", "organization2", ...],
+    "location": ["location1", "location2", ...],
+    "miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+```
+
+<Tip>
+
+Don't worry if your function has multiple templates, variable formatting, or response constraints.
+GEPA optimizes all templates simultaneously and is designed to preserve template arguments and structured outputs.
+
+</Tip>
+
+### 2. Deploy your LLM application
+
+Deploy [ClickHouse](/deployment/clickhouse) and the [TensorZero Gateway](/deployment/tensorzero-gateway) so that every inference is automatically structured and stored as a potential training example for GEPA.
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_embedded(
+    config_file="config/tensorzero.toml",
+    clickhouse_url=os.environ.get("TENSORZERO_CLICKHOUSE_URL"),
+)
+
+response = t0.inference(
+    function_name="extract_entities",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "The Edmonton Oilers have signed Connor McDavid to..."
+            }
+        ]
+    },
+)
+```
+
+### 3. Fetch optimization data
+
+Fetch your stored inferences from clickhouse using the gateway
+
+```python
+# Fetch the stored inferences from the database
+stored_inferences = t0.experimental_list_inferences(
+    function_name="extract_entities",
+    variant_name=None,
+    output_source="inference",
+)
+# Format the stored inferences for optimization
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=stored_inferences,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+GEPA requires two datasets: one for template mutation and one for Pareto frontier estimation.
+
+```python
+import random
+
+random.shuffle(rendered_samples)
+split_idx = len(rendered_samples) // 2
+train_samples = rendered_samples[:split_idx]
+val_samples = rendered_samples[split_idx:]
+```
+
+### 4. Configure an evaluation
+
+GEPA template refinement is guided by evaluator scores.
+Define a [TensorZero Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your application's TensorZero config file.
+You can define multiple evaluators per evaluation and GEPA will optimize your message templates against the Pareto frontier of evaluator scores.
+
+```toml
+[evaluations.extract_entities_eval]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement]
+type = "llm_judge"
+output_type = "float"
+include = { reference_output = true }
+optimize = "max"
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Prioritizes correctness, schema compliance, completeness, and clarity."
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.extract_entities_eval.evaluators.judge_verbatim]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+description = "Evaluate if the extracted named entities appear exactly as written in the source document, preserving original spelling, capitalization, and formatting. Scores: True (verbatim), False (altered)."
+
+[evaluations.extract_entities_eval.evaluators.judge_verbatim.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_verbatim/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.extract_entities_eval.evaluators.judge_repetition]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+description = "Evaluate if named entities are extracted only once to their most appropriate category, without duplication across categories. Scores: True (entity repeated), False (no repetition)."
+
+[evaluations.extract_entities_eval.evaluators.judge_repetition.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_repetition/system_instructions.txt"
+json_mode = "strict"
+
+```
+
+<Tip>
+
+The `description` field of an LLM Judge evaluator gives context to the GEPA analyst and mutation LLMs. Let them know what is being scored and what the score means.
+
+</Tip>
+
+### 5. Configure and launch GEPA
+
+Configure GEPA by specifying the name of your function and evaluation.
+You are also free to choose the models used to analyze inferences and generate new templates.
+We recommend using strong models for these tasks.
+
+```python
+from tensorzero import GEPAConfig
+
+optimization_config = GEPAConfig(
+    function_name="extract_entities",
+    evaluation_name="extract_entities_eval",
+    analysis_model="anthropic::claude-sonnet-4-5",
+    mutation_model="anthropic::claude-sonnet-4-5",
+    initial_variants=["baseline"],
+    max_iterations=10,
+    max_tokens=16384,
+)
+```
+
+<Tip>
+
+GEPA optimization can take a while to run so keep `max_iterations` small. You can iterate by setting `initial_variants` with the result of a previous GEPA run.
+
+</Tip>
+
+```python
+job_handle = t0.experimental_launch_optimization(
+    train_samples=train_samples,
+    val_samples=val_samples,
+    optimization_config=optimization_config,
+)
+
+job_info = t0.experimental_poll_optimization(
+    job_handle=job_handle
+)
+```
+
+### 6. Update your application config
+
+Review the generated templates and write them to your config directory:
+
+```python
+variant_configs = job_info.output["content"]
+
+for variant_name, variant_config in variant_configs.items():
+    print(f"\n# Optimized variant: {variant_name}")
+    for template_name, template in variant_config["templates"].items():
+        print(f"## '{template_name}' template:")
+        print(template["path"]["__data"])
+```
+
+```toml
+[functions.extract_entities.variants.gepa_optimized]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/gepa_iter_9/system_template.minijinja"
+json_mode = "strict"
+```
+
+That's it! You are now ready to deploy your GEPA optimized LLM application!
+
+<Tip>
+
+GEPA returns a set of Pareto optimal variants based on the evaluation you defined. You can roll out your new variants responsibly using [TensorZero Adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
+
+</Tip>
+
+## GEPAConfig
+
+Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
+
+### Required Parameters
+
+| Parameter         | Type  | Description                                                                       |
+| ----------------- | ----- | --------------------------------------------------------------------------------- |
+| `function_name`   | `str` | Name of the TensorZero function to optimize.                                      |
+| `evaluation_name` | `str` | Name of the evaluation used to score candidate variants.                          |
+| `analysis_model`  | `str` | Model used to analyze inference results (e.g., `"anthropic::claude-sonnet-4-5"`). |
+| `mutation_model`  | `str` | Model used to generate prompt mutations (e.g., `"anthropic::claude-sonnet-4-5"`). |
+
+### Optional Parameters
+
+| Parameter                        | Type          | Default      | Description                                                                                                                                                                             |
+| -------------------------------- | ------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initial_variants`               | `list[str]`   | All variants | List of variant names to initialize GEPA with. If not specified, uses all variants defined for the function.                                                                            |
+| `variant_prefix`                 | `str`         | `None`       | Prefix for naming newly generated variants.                                                                                                                                             |
+| `batch_size`                     | `int`         | `5`          | Number of training samples to analyze per iteration.                                                                                                                                    |
+| `max_iterations`                 | `int`         | `1`          | Maximum number of optimization iterations.                                                                                                                                              |
+| `max_concurrency`                | `int`         | `10`         | Maximum number of concurrent inference calls.                                                                                                                                           |
+| `seed`                           | `int`         | `None`       | Random seed for reproducibility.                                                                                                                                                        |
+| `timeout`                        | `int`         | `300`        | Client timeout in seconds for TensorZero gateway operations.                                                                                                                            |
+| `include_inference_for_mutation` | `bool`        | `True`       | Whether to include inference input/output in the analysis passed to the mutation model. Useful for few-shot examples but can cause context overflow with long conversations or outputs. |
+| `retries`                        | `RetryConfig` | `None`       | Retry configuration for inference calls during optimization.                                                                                                                            |
+| `max_tokens`                     | `int`         | `None`       | Maximum tokens for analysis and mutation model calls. Required for Anthropic models.                                                                                                    |
+
+## Curate training data using feedback
+
+Providing [feedback](/gateway/guides/metrics-feedback) allows you to control the quality of the training data used for GEPA optimization.
+You can provide feedback on the stored inference responses using the [TensorZero UI](/deployment/tensorzero-ui) or programmatically using the gateway:
+
+```python
+demonstration = {
+    "person": ["Connor McDavid"],
+    "organization": ["Edmonton Oilers"],
+    "location": [],
+    "miscellaneous": []
+}
+
+t0.feedback(
+    metric_name="demonstration",
+    value=demonstration,
+    inference_id=response.inference_id,
+)
+t0.feedback(
+    metric_name="jaccard_similarity",
+    value=compute_jaccard_similarity(response.output.parsed, demonstration),
+    inference_id=response.inference_id,
+)
+```
+
+For example, you can just use the examples with demonstrations:
+
+```python
+stored_inferences = t0.experimental_list_inferences(
+    function_name="extract_entities",
+    variant_name=None,
+    output_source="demonstration",
+)
+```
+
+Or, you can just use the examples satisfying a metric filter:
+
+```python
+from tensorzero import FloatMetricFilter
+
+metric_filter = FloatMetricFilter(
+    metric_name="jaccard_similarity",
+    value="0.8",
+    comparison_operator=">=",
+)
+stored_inferences = t0.experimental_list_inferences(
+    function_name="extract_entities",
+    variant_name=None,
+    output_source="inference",  # could also be "demonstration"
+    filters=metric_filter,
+)
+```
