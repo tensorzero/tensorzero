@@ -23,12 +23,8 @@ model = "echo"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 # Empty variants: return empty string (for exact_match testing with reference outputs)
-[functions.basic_test.variants.empty]
-type = "chat_completion"
-model = "empty"
-system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
-[functions.basic_test.variants.empty1]
+[functions.basic_test.variants.empty]
 type = "chat_completion"
 model = "empty"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
