@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
@@ -8,52 +7,6 @@ import {
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
-
-describe("getEvaluationRunInfos", () => {
-  test("should return correct run infos for specific evaluation run ids", async () => {
-    const evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const evaluation_run_id2 = "0196368e-53a8-7e82-a88d-db7086926d81";
-
-    const runInfos = await getEvaluationRunInfos(
-      [evaluation_run_id1, evaluation_run_id2],
-      "extract_entities",
-    );
-    expect(runInfos).toMatchObject([
-      {
-        evaluation_run_id: evaluation_run_id1,
-        most_recent_inference_date: "2025-04-14T23:07:50Z",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: evaluation_run_id2,
-        most_recent_inference_date: "2025-04-14T23:06:59Z",
-        variant_name: "gpt4o_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return empty array when no matching run ids are found", async () => {
-    const runInfos = await getEvaluationRunInfos(
-      ["non-existent-id"],
-      "extract_entities",
-    );
-    expect(runInfos).toEqual([]);
-  });
-
-  test("should handle a single run id correctly", async () => {
-    const evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const runInfos = await getEvaluationRunInfos(
-      [evaluation_run_id],
-      "extract_entities",
-    );
-    expect(runInfos).toMatchObject([
-      {
-        evaluation_run_id,
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-});
 
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {

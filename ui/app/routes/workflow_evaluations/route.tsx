@@ -7,10 +7,6 @@ import {
   SectionHeader,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import {
-  getWorkflowEvaluationRuns,
-  countWorkflowEvaluationRuns,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { logger } from "~/utils/logger";
@@ -25,16 +21,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
   const tensorZeroClient = getTensorZeroClient();
   const [
-    workflowEvaluationRuns,
+    workflowEvaluationRunsResponse,
     count,
     workflowEvaluationProjectsResponse,
     projectCount,
   ] = await Promise.all([
-    getWorkflowEvaluationRuns(runLimit, runOffset),
-    countWorkflowEvaluationRuns(),
+    tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
+    tensorZeroClient.countWorkflowEvaluationRuns(),
     tensorZeroClient.getWorkflowEvaluationProjects(projectLimit, projectOffset),
     tensorZeroClient.countWorkflowEvaluationProjects(),
   ]);
+  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   const workflowEvaluationProjects =
     workflowEvaluationProjectsResponse.projects;
 

@@ -17,6 +17,7 @@ import type {
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
+  CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   DatapointStatsResponse,
   EvaluationRunStatsResponse,
@@ -46,7 +47,9 @@ import type {
   ListEvaluationRunsResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListWorkflowEvaluationRunsResponse,
   SearchEvaluationRunsResponse,
+  SearchWorkflowEvaluationRunsResponse,
   StatusResponse,
   TimeWindow,
   TableBoundsWithCount,
@@ -57,6 +60,7 @@ import type {
   UpdateDatapointsResponse,
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
+  GetEvaluationRunInfosResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -1027,6 +1031,94 @@ export class TensorZeroClient {
   }
 
   /**
+   * Searches workflow evaluation runs by project name and/or search query.
+   * @param limit - Maximum number of runs to return (default: 100)
+   * @param offset - Number of runs to skip (default: 0)
+   * @param projectName - Optional project name to filter by
+   * @param searchQuery - Optional search query to filter by (searches run name and ID)
+   * @returns A promise that resolves with the search results
+   * @throws Error if the request fails
+   */
+  async searchWorkflowEvaluationRuns(
+    limit: number = 100,
+    offset: number = 0,
+    projectName?: string,
+    searchQuery?: string,
+  ): Promise<SearchWorkflowEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    if (projectName) {
+      searchParams.append("project_name", projectName);
+    }
+    if (searchQuery) {
+      searchParams.append("q", searchQuery);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/runs/search?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as SearchWorkflowEvaluationRunsResponse;
+  }
+
+  /**
+   * Lists workflow evaluation runs with episode counts.
+   * @param limit - Maximum number of runs to return (default: 100)
+   * @param offset - Number of runs to skip (default: 0)
+   * @param runId - Optional run ID to filter by
+   * @param projectName - Optional project name to filter by
+   * @returns A promise that resolves with the workflow evaluation runs response
+   * @throws Error if the request fails
+   */
+  async listWorkflowEvaluationRuns(
+    limit: number = 100,
+    offset: number = 0,
+    runId?: string,
+    projectName?: string,
+  ): Promise<ListWorkflowEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    if (runId) {
+      searchParams.append("run_id", runId);
+    }
+    if (projectName) {
+      searchParams.append("project_name", projectName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/list-runs?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListWorkflowEvaluationRunsResponse;
+  }
+
+  /**
+   * Counts workflow evaluation runs.
+   * @returns A promise that resolves with the workflow evaluation run count
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRuns(): Promise<number> {
+    const response = await this.fetch(
+      "/internal/workflow-evaluations/runs/count",
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as CountWorkflowEvaluationRunsResponse;
+    return body.count;
+  }
+
+  /**
    * Lists inference metadata with optional cursor-based pagination and filtering.
    * @param params - Optional pagination and filter parameters
    * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
@@ -1219,6 +1311,31 @@ export class TensorZeroClient {
         (entry): entry is [string, string] => entry[1] !== undefined,
       ),
     );
+  }
+
+  /**
+   * Gets information about specific evaluation runs.
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @param functionName - The name of the function being evaluated
+   * @returns A promise that resolves with information about the evaluation runs
+   * @throws Error if the request fails
+   */
+  async getEvaluationRunInfos(
+    evaluationRunIds: string[],
+    functionName: string,
+  ): Promise<GetEvaluationRunInfosResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    searchParams.append("function_name", functionName);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/run-infos?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunInfosResponse;
   }
 
   private async fetch(
