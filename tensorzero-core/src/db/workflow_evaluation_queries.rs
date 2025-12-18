@@ -67,7 +67,6 @@ pub struct WorkflowEvaluationRunStatisticsRow {
     pub ci_lower: Option<f64>,
     pub ci_upper: Option<f64>,
 }
-
 /// Trait for workflow evaluation-related queries.
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -146,6 +145,18 @@ pub trait WorkflowEvaluationQueries {
         &self,
         run_ids: &[Uuid],
     ) -> Result<u32, Error>;
+
+    /// Gets workflow evaluation run episodes with their feedback for a specific run.
+    /// Returns episodes with feedback metric names and values, sorted by episode_id descending.
+    async fn get_workflow_evaluation_run_episodes_with_feedback(
+        &self,
+        run_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationRunEpisodeWithFeedbackRow>, Error>;
+
+    /// Counts the total number of episodes for a specific workflow evaluation run.
+    async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error>;
 }
 
 /// A single workflow evaluation run episode with its associated feedback.
