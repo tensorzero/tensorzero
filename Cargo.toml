@@ -16,6 +16,7 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
+    "internal/autopilot-client",
 ]
 resolver = "2"
 
@@ -51,6 +52,7 @@ anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
+thiserror = "2.0.17"
 lazy_static = { version = "1.5.0" }
 minijinja = { version = "2.14.0", features = [
     "loader",

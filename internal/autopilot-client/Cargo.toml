@@ -1,0 +1,22 @@
+[package]
+name = "autopilot-client"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+futures.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+reqwest-eventsource.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+tensorzero-core = { path = "../../tensorzero-core" }
+
+[lints]
+workspace = true
