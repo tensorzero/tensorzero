@@ -3,9 +3,6 @@ import type {
   CacheEnabledMode,
   ClientInferenceParams,
   EvaluationRunEvent,
-  CumulativeFeedbackTimeSeriesPoint,
-  FeedbackByVariant,
-  GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
   OptimizationJobHandle,
@@ -13,7 +10,6 @@ import type {
   StaleDatasetResponse,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
-  GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
 import type {
@@ -216,28 +212,6 @@ export class DatabaseClient {
         paramsString,
       );
     return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
-  }
-
-  async getCumulativeFeedbackTimeseries(
-    params: GetCumulativeFeedbackTimeseriesParams,
-  ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
-    const paramsString = safeStringify(params);
-    const feedbackTimeseriesString =
-      await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
-        paramsString,
-      );
-    return JSON.parse(
-      feedbackTimeseriesString,
-    ) as CumulativeFeedbackTimeSeriesPoint[];
-  }
-
-  async getFeedbackByVariant(
-    params: GetFeedbackByVariantParams,
-  ): Promise<FeedbackByVariant[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
-    return JSON.parse(result) as FeedbackByVariant[];
   }
 }
 
