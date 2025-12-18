@@ -230,11 +230,6 @@ api_key_location = "env::MISSING_LOCAL_KEY"
     let output_str = output.join("\n");
 
     assert!(
-        failed,
-        "Gateway should fail to start with invalid credentials for skip_relay model, got: {output_str}"
-    );
-
-    assert!(
         output_str.contains("MISSING_LOCAL_KEY") || output_str.contains("missing"),
         "Expected error about missing credentials, got: {output_str}"
     );
@@ -258,11 +253,6 @@ api_key_location = "env::TOTALLY_NONEXISTENT_KEY"
 
     let output = try_start_gateway_expect_failure(config).await;
     let output_str = output.join("\n");
-
-    assert!(
-        failed,
-        "Gateway should fail to start with invalid credentials (no relay mode), got: {output_str}"
-    );
 
     assert!(
         output_str.contains("TOTALLY_NONEXISTENT_KEY")
