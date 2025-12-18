@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::endpoints::feedback::internal::{
-    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+    GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
 };
 use uuid::Uuid;
 
@@ -177,6 +177,86 @@ async fn test_get_latest_feedback_id_by_metric_invalid_uuid() {
     // Use an invalid UUID
     let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/latest-id-by-metric");
 
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 for invalid UUID"
+    );
+}
+
+// ==================== Get Feedback Bounds By Target ID Tests ====================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_feedback_bounds_by_target_id_with_feedback() {
+    let http_client = Client::new();
+
+    let inference_id = create_inference(&http_client, "basic_test").await;
+    let feedback_id =
+        submit_inference_feedback(&http_client, inference_id, "task_success", json!(true)).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{inference_id}/bounds"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Expected success when querying feedback bounds"
+    );
+
+    let response: GetFeedbackBoundsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        response.first_id,
+        Some(feedback_id),
+        "Expected first_id to match the submitted feedback"
+    );
+    assert_eq!(
+        response.last_id,
+        Some(feedback_id),
+        "Expected last_id to match the submitted feedback"
+    );
+    assert_eq!(
+        response.by_type.boolean.first_id,
+        Some(feedback_id),
+        "Expected boolean bounds to include the feedback id"
+    );
+    assert!(
+        response.by_type.float.first_id.is_none(),
+        "Expected float bounds to be empty"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_feedback_bounds_by_target_id_nonexistent_target() {
+    let http_client = Client::new();
+    let nonexistent_id = Uuid::now_v7();
+
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{nonexistent_id}/bounds"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Expected success for nonexistent target"
+    );
+
+    let response: GetFeedbackBoundsResponse = resp.json().await.unwrap();
+    assert!(
+        response.first_id.is_none() && response.last_id.is_none(),
+        "Expected no bounds for nonexistent target"
+    );
+    assert!(
+        response.by_type.boolean.first_id.is_none(),
+        "Expected boolean bounds to be empty"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_feedback_bounds_by_target_id_invalid_uuid() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/bounds");
     let resp = http_client.get(url).send().await.unwrap();
 
     assert_eq!(

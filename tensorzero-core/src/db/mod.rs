@@ -178,12 +178,12 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct TableBounds {
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
 }
 
