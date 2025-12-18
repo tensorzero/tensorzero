@@ -7,9 +7,11 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::Config;
+use crate::db::TimeWindow;
 use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, InferenceStatsQueries,
+    CountInferencesWithFeedbackParams, GetFunctionThroughputByVariantParams, InferenceStatsQueries,
+    VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
@@ -81,6 +83,28 @@ pub struct InferenceWithFeedbackStatsResponse {
     pub feedback_count: u64,
     /// Number of inferences matching the metric threshold criteria
     pub inference_count: u64,
+}
+
+/// Query parameters for the function throughput by variant endpoint
+#[derive(Debug, Deserialize)]
+pub struct FunctionThroughputByVariantQueryParams {
+    /// Time granularity for grouping throughput data
+    pub time_window: TimeWindow,
+    /// Maximum number of time periods to return (default: 10)
+    #[serde(default = "default_max_periods")]
+    pub max_periods: u32,
+}
+
+fn default_max_periods() -> u32 {
+    10
+}
+
+/// Response containing function throughput data grouped by variant and time period
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetFunctionThroughputByVariantResponse {
+    /// Throughput data for each (period, variant) combination
+    pub throughput: Vec<VariantThroughput>,
 }
 
 /// HTTP handler for the inference stats endpoint
@@ -247,6 +271,50 @@ async fn get_inference_with_feedback_stats(
         feedback_count,
         inference_count,
     })
+}
+
+/// HTTP handler for the function throughput by variant endpoint
+#[debug_handler(state = AppStateData)]
+#[instrument(
+    name = "get_function_throughput_by_variant_handler",
+    skip_all,
+    fields(function_name = %function_name),
+)]
+pub async fn get_function_throughput_by_variant_handler(
+    State(state): State<AppStateData>,
+    Path(function_name): Path<String>,
+    Query(params): Query<FunctionThroughputByVariantQueryParams>,
+) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
+    let response = get_function_throughput_by_variant(
+        &state.config,
+        &state.clickhouse_connection_info,
+        &function_name,
+        params,
+    )
+    .await?;
+    Ok(Json(response))
+}
+
+/// Core business logic for getting function throughput by variant.
+/// Validates the function exists and returns throughput data grouped by variant and time period.
+pub async fn get_function_throughput_by_variant(
+    config: &Config,
+    clickhouse_connection_info: &impl InferenceStatsQueries,
+    function_name: &str,
+    params: FunctionThroughputByVariantQueryParams,
+) -> Result<GetFunctionThroughputByVariantResponse, Error> {
+    // Validate function exists
+    config.get_function(function_name)?;
+
+    let throughput = clickhouse_connection_info
+        .get_function_throughput_by_variant(GetFunctionThroughputByVariantParams {
+            function_name,
+            time_window: params.time_window,
+            max_periods: params.max_periods,
+        })
+        .await?;
+
+    Ok(GetFunctionThroughputByVariantResponse { throughput })
 }
 
 #[cfg(test)]
