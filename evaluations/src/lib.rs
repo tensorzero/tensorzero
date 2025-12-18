@@ -715,6 +715,12 @@ pub struct ProcessBatchParams {
 }
 
 /// Result of processing a single (datapoint, variant) pair.
+///
+/// Note: Fields are wrapped in `Arc` because they are shared across multiple concurrent tasks
+/// during batch processing:
+/// - `datapoint`: Shared across evaluator tasks for the same (datapoint, variant) pair
+/// - `variant`: Shared across all datapoints being evaluated against this variant
+/// - `inference_response`: Shared across evaluator tasks for the same (datapoint, variant) pair
 pub struct DatapointVariantResult {
     /// The datapoint that was evaluated
     pub datapoint: Arc<Datapoint>,
