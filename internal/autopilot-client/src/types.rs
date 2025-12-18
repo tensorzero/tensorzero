@@ -21,6 +21,7 @@ pub use tensorzero_core::inference::types::{
     Unknown,
     UrlFile,
 };
+use tensorzero_core::tool::ToolCall;
 pub use tensorzero_core::tool::{ToolCallWrapper, ToolResult};
 use uuid::Uuid;
 
@@ -54,12 +55,7 @@ pub struct Event {
 pub enum EventPayload {
     Message(InputMessage),
     StatusUpdate { status_update: StatusUpdate },
-}
-
-/// Payload for an assistant message event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssistantMessagePayload {
-    pub content: Vec<serde_json::Value>,
+    ToolCall(ToolCall),
 }
 
 /// A status update within a session.
@@ -83,7 +79,8 @@ pub struct CreateEventRequest {
     ///
     /// When provided (for non-nil `session_id`), the server validates that this ID matches
     /// the most recent `user_message` event in the session. This prevents duplicate events
-    /// from being created if a client retries a request that already succeeded.
+    /// from being created if a client retries a create user request that already succeeded.
+    /// This should only apply to Message events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }
@@ -133,8 +130,13 @@ pub struct CreateEventResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
-    /// The most recent `user_message` event in this session.
+    /// The most recent `message` event with role `user` in this session.
     pub previous_user_message_event_id: Uuid,
+    /// All tool calls in Event history that do not have responses.
+    /// These may be duplicates of some of the values in events.
+    /// All EventPayloads in these Events should be of type ToolCall.
+    #[serde(default)]
+    pub pending_tool_calls: Vec<Event>,
 }
 
 /// Response from listing sessions.
