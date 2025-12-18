@@ -382,21 +382,6 @@ export function getInferenceTableName(
   }
 }
 
-export const TableBoundsSchema = z.object({
-  first_id: z.string().uuid().nullable(), // UUIDv7 string
-  last_id: z.string().uuid().nullable(), // UUIDv7 string
-});
-
-export const FeedbackBoundsSchema = TableBoundsSchema.extend({
-  by_type: z.object({
-    boolean: TableBoundsSchema,
-    float: TableBoundsSchema,
-    demonstration: TableBoundsSchema,
-    comment: TableBoundsSchema,
-  }),
-});
-export type ZodFeedbackBounds = z.infer<typeof FeedbackBoundsSchema>;
-
 export const CountSchema = z.object({
   count: z.number(),
 });

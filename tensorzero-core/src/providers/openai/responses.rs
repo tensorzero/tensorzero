@@ -442,7 +442,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 let tool_refs = allowed_tool_names
                     .iter()
                     .map(|name| OpenAIResponsesToolReference::Function {
-                        name: name.to_string(),
+                        name: (*name).to_owned(),
                     })
                     .collect();
 
