@@ -3115,6 +3115,37 @@ mod topk_tests {
         }
     }
 
+    /// A scoring function that averages all non-failed evaluator scores for each variant.
+    /// This is useful for testing TopKFound with deterministic evaluators that produce
+    /// different scores per variant (e.g., exact_match with echo vs empty variants).
+    struct AverageEvaluatorScore;
+
+    impl ScoringFunction for AverageEvaluatorScore {
+        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+            let mut scores = HashMap::new();
+            for (variant_name, eval_result) in evaluations {
+                let mut sum = 0.0;
+                let mut count = 0;
+                for result in eval_result.values() {
+                    if let Ok(Some(value)) = result {
+                        // Handle both numeric and boolean values
+                        if let Some(num) = value.as_f64() {
+                            sum += num;
+                            count += 1;
+                        } else if let Some(b) = value.as_bool() {
+                            sum += if b { 1.0 } else { 0.0 };
+                            count += 1;
+                        }
+                    }
+                }
+                if count > 0 {
+                    scores.insert(variant_name.clone(), sum / count as f64);
+                }
+            }
+            scores
+        }
+    }
+
     /// Helper to get a Postgres pool for tests
     async fn get_postgres_pool() -> sqlx_alpha::PgPool {
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
