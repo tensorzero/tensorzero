@@ -19,7 +19,7 @@ use crate::observability::overhead_timing::{
 struct ConnectionDropGuard {
     span: Span,
     start_time: Instant,
-    finished: Cell<Option<Duration>>,
+    finished_with_latency: Cell<Option<Duration>>,
     status: Option<StatusCode>,
 }
 
@@ -32,7 +32,8 @@ impl ConnectionDropGuard {
         // Calculate the elapsed time when we've finished sending the response to
         // the client - this is the latency that we want to log to users,
         // and use for computing the `tensorzero_overhead` metric
-        self.finished.set(Some(self.start_time.elapsed()));
+        self.finished_with_latency
+            .set(Some(self.start_time.elapsed()));
     }
 }
 
@@ -42,7 +43,7 @@ impl Drop for ConnectionDropGuard {
         // If we didn't explicitly mark the request as 'finished' (due to the connection
         // getting dropped early), then use the current time to compute the latency.
         let latency_duration = self
-            .finished
+            .finished_with_latency
             .get()
             .unwrap_or_else(|| self.start_time.elapsed());
         self.span.record(
@@ -54,7 +55,7 @@ impl Drop for ConnectionDropGuard {
 
         // If we did not explicitly set 'finished', then `ConnectionDropGuard` was dropped before the response was sent
         // We log a warning and the latency of the request.
-        if self.finished.get().is_none() {
+        if self.finished_with_latency.get().is_none() {
             tracing::warn!(
                 %latency,
                 "Client closed the connection before the response was sent",
@@ -160,7 +161,7 @@ pub async fn request_logging_middleware(
     let mut guard = ConnectionDropGuard {
         span: span.clone(),
         start_time,
-        finished: Cell::new(None),
+        finished_with_latency: Cell::new(None),
         status: None,
     };
     let response = next.run(request).instrument(span).await;

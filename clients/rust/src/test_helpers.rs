@@ -119,6 +119,7 @@ pub async fn get_metrics(client: &reqwest::Client, url: &str) -> HashMap<String,
         .lines()
         .filter(|line| !line.starts_with('#'))
         .filter_map(|line| {
+            // Split on the last space, since the metric name may itself have spaces
             let mut parts = line.rsplitn(2, ' ');
             match (parts.next(), parts.next()) {
                 (Some(value), Some(key)) => Some((key.to_string(), value.to_string())),
