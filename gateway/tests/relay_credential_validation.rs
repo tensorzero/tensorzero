@@ -16,8 +16,8 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use uuid::Uuid;
 
-/// Try to start gateway and return whether it failed to start
-async fn try_start_gateway_expect_failure(config_suffix: &str) -> (bool, Vec<String>) {
+/// Assert that the gateway fails to start, and return the output lines.
+async fn try_start_gateway_expect_failure(config_suffix: &str) -> Vec<String> {
     let config_str = format!(
         r#"
         [gateway]
@@ -93,7 +93,13 @@ async fn try_start_gateway_expect_failure(config_suffix: &str) -> (bool, Vec<Str
     drop(stdout);
     drop(stderr);
 
-    (failed, output)
+    for line in &output {
+        println!("{line}");
+    }
+
+    assert!(failed, "Gateway should have failed to start");
+
+    output
 }
 
 #[tokio::test]
@@ -220,7 +226,7 @@ model_name = "gpt-4"
 api_key_location = "env::MISSING_LOCAL_KEY"
 "#;
 
-    let (failed, output) = try_start_gateway_expect_failure(relay_config).await;
+    let output = try_start_gateway_expect_failure(relay_config).await;
     let output_str = output.join("\n");
 
     assert!(
@@ -250,7 +256,7 @@ model_name = "gpt-4"
 api_key_location = "env::TOTALLY_NONEXISTENT_KEY"
 "#;
 
-    let (failed, output) = try_start_gateway_expect_failure(config).await;
+    let output = try_start_gateway_expect_failure(config).await;
     let output_str = output.join("\n");
 
     assert!(
