@@ -1139,21 +1139,14 @@ pub fn stream_openai_responses(
                             request_id.clone().or_else(|| super::request_id_from_event_source_error(inner))
                         }
                     };
-                    if let Some(request_id) = request_id_for_error {
-                        tracing::warn!(
-                            provider = %provider_type,
-                            request_id = %request_id,
-                            "OpenAI Responses streaming request errored"
-                        );
-                    }
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
                             encountered_error = true;
-                            yield Err(e);
+                            yield Err(super::with_request_id(e, request_id_for_error.as_deref()));
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }

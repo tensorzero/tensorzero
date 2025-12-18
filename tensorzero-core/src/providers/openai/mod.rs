@@ -409,14 +409,8 @@ impl InferenceProvider for OpenAIProvider {
         )
         .await
         .map_err(|(e, headers)| {
-            if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
-                tracing::warn!(
-                    provider = %PROVIDER_TYPE,
-                    request_id = %request_id,
-                    "OpenAI request failed"
-                );
-            }
-            e
+            let request_id = headers.as_ref().and_then(extract_request_id);
+            with_request_id(e, request_id.as_deref())
         })?;
 
         let status = res.status();
@@ -583,13 +577,6 @@ impl InferenceProvider for OpenAIProvider {
                 .await
                 .map_err(|(e, headers)| {
                     let request_id = headers.as_ref().and_then(extract_request_id);
-                    if let Some(ref request_id) = request_id {
-                        tracing::warn!(
-                            provider = %PROVIDER_TYPE,
-                            request_id = %request_id,
-                            "OpenAI Responses streaming request failed"
-                        );
-                    }
                     with_request_id(e, request_id.as_deref())
                 })?;
 
@@ -644,13 +631,6 @@ impl InferenceProvider for OpenAIProvider {
                 .await
                 .map_err(|(e, headers)| {
                     let request_id = headers.as_ref().and_then(extract_request_id);
-                    if let Some(ref request_id) = request_id {
-                        tracing::warn!(
-                            provider = %PROVIDER_TYPE,
-                            request_id = %request_id,
-                            "OpenAI streaming request failed"
-                        );
-                    }
                     with_request_id(e, request_id.as_deref())
                 })?;
 
@@ -1040,21 +1020,14 @@ pub fn stream_openai(
                             request_id.clone().or_else(|| request_id_from_event_source_error(inner))
                         }
                     };
-                    if let Some(request_id) = request_id_for_error {
-                        tracing::warn!(
-                            provider = %provider_type,
-                            request_id = %request_id,
-                            "OpenAI streaming request errored"
-                        );
-                    }
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
                             encountered_error = true;
-                            yield Err(e);
+                            yield Err(with_request_id(e, request_id_for_error.as_deref()));
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1240,9 +1213,10 @@ pub(super) fn request_id_from_event_source_error(
     }
 }
 
-/// Append a request_id to a FatalStreamError's message.
-/// If the error is not a FatalStreamError, it is returned unchanged.
-fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
+/// Append a request_id to an error's message.
+/// Handles FatalStreamError, InferenceClient, and InferenceServer errors.
+/// Other error types are returned unchanged.
+pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
     let Some(request_id) = request_id else {
         return error;
     };
@@ -1257,6 +1231,30 @@ fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
             provider_type: provider_type.clone(),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
+        }),
+        ErrorDetails::InferenceClient {
+            status_code,
+            message,
+            raw_request,
+            raw_response,
+            provider_type,
+        } => Error::new(ErrorDetails::InferenceClient {
+            status_code: *status_code,
+            message: format!("{message} [request_id: {request_id}]"),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+            provider_type: provider_type.clone(),
+        }),
+        ErrorDetails::InferenceServer {
+            message,
+            raw_request,
+            raw_response,
+            provider_type,
+        } => Error::new(ErrorDetails::InferenceServer {
+            message: format!("{message} [request_id: {request_id}]"),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+            provider_type: provider_type.clone(),
         }),
         _ => error,
     }
@@ -5498,6 +5496,77 @@ mod tests {
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 0);
             }
             _ => panic!("Expected AllowedTools variant with empty list"),
+        }
+    }
+
+    #[test]
+    fn test_with_request_id() {
+        // Test with FatalStreamError
+        let error = Error::new(ErrorDetails::FatalStreamError {
+            message: "Stream error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_123"));
+        if let ErrorDetails::FatalStreamError { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Stream error [request_id: req_123]");
+        } else {
+            panic!("Expected FatalStreamError");
+        }
+
+        // Test with InferenceClient
+        let error = Error::new(ErrorDetails::InferenceClient {
+            status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+            message: "Bad request".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_456"));
+        if let ErrorDetails::InferenceClient { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Bad request [request_id: req_456]");
+        } else {
+            panic!("Expected InferenceClient");
+        }
+
+        // Test with InferenceServer
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "Server error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_789"));
+        if let ErrorDetails::InferenceServer { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Server error [request_id: req_789]");
+        } else {
+            panic!("Expected InferenceServer");
+        }
+
+        // Test with None request_id - should return error unchanged
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "Server error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_unchanged = with_request_id(error, None);
+        if let ErrorDetails::InferenceServer { message, .. } = error_unchanged.get_details() {
+            assert_eq!(message, "Server error");
+        } else {
+            panic!("Expected InferenceServer");
+        }
+
+        // Test with unsupported error type - should return unchanged
+        let error = Error::new(ErrorDetails::InvalidRequest {
+            message: "Invalid".to_string(),
+        });
+        let error_unchanged = with_request_id(error, Some("req_abc"));
+        if let ErrorDetails::InvalidRequest { message, .. } = error_unchanged.get_details() {
+            assert_eq!(message, "Invalid"); // unchanged
+        } else {
+            panic!("Expected InvalidRequest");
         }
     }
 }

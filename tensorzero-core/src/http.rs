@@ -308,6 +308,7 @@ impl Stream for TensorZeroEventSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let _guard = this.span.enter();
+        // Just forward to the underlying `stream`, without doing anything else.
         this.stream.poll_next(cx)
     }
 }
