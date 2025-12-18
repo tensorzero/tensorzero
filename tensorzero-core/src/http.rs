@@ -604,9 +604,13 @@ fn validate_event_stream_response(response: Response) -> Result<Response, Reqwes
             response,
         ));
     };
+    // Check if the media type (ignoring parameters like charset) is text/event-stream
     if content_type
         .to_str()
-        .map(|value| value.trim().eq_ignore_ascii_case("text/event-stream"))
+        .map(|value| {
+            let media_type = value.split(';').next().unwrap_or("").trim();
+            media_type.eq_ignore_ascii_case("text/event-stream")
+        })
         .unwrap_or(false)
     {
         Ok(response)

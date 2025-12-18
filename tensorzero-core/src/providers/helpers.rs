@@ -293,28 +293,51 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
     )
     .map_err(|e| (e, None))?;
     let raw_request = body.to_string();
-    let (event_source, response_headers) = builder
+    let (event_source, response_headers) = match builder
         .body(raw_request.clone())
         .header("content-type", "application/json")
         .headers(headers)
         .eventsource_with_headers()
         .await
-        .map_err(|(e, headers)| {
-            let status_code = match &e {
-                reqwest_eventsource::Error::InvalidStatusCode(status, _) => Some(*status),
-                _ => None,
+    {
+        Ok(result) => result,
+        Err((e, headers)) => {
+            // Extract status code first (by borrowing), then consume Response to read body
+            let (message, raw_response) = match e {
+                reqwest_eventsource::Error::InvalidStatusCode(status, resp) => {
+                    let body = resp.text().await.ok();
+                    (
+                        format!("Error sending request: InvalidStatusCode({status})"),
+                        body,
+                    )
+                }
+                reqwest_eventsource::Error::InvalidContentType(content_type, resp) => {
+                    let body = resp.text().await.ok();
+                    (
+                        format!(
+                            "Error sending request: InvalidContentType({})",
+                            content_type.to_str().unwrap_or("<invalid>")
+                        ),
+                        body,
+                    )
+                }
+                other => (
+                    format!(
+                        "Error sending request: {}",
+                        DisplayOrDebugGateway::new(other)
+                    ),
+                    None,
+                ),
             };
-            (
-                Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                    status_code,
-                    provider_type: provider_type.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                }),
-                headers,
-            )
-        })?;
+            let error = Error::new(ErrorDetails::FatalStreamError {
+                message,
+                provider_type: provider_type.to_string(),
+                raw_request: Some(raw_request),
+                raw_response,
+            });
+            return Err((error, headers));
+        }
+    };
     Ok(InjectedResponse {
         response: event_source,
         raw_request,
