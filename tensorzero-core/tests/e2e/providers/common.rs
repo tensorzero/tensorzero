@@ -9254,11 +9254,17 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             if !(provider.model_provider_name == "tgi"
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
             {
-                let json = serde_json::to_string(&response).unwrap();
-                assert!(
-                    !json.to_lowercase().contains("tensorzero"),
-                    "TensorZero should not be in the response: `{json}`"
-                );
+                // Thought content blocks can contain the stop-sequence on some providers,
+                // so just check the text content blocks
+                for block in response.content {
+                    if let ContentBlockChatOutput::Text(text) = block {
+                        assert!(
+                            !text.text.to_lowercase().contains("tensorzero"),
+                            "TensorZero should not be in the response: `{}`",
+                            text.text
+                        );
+                    }
+                }
             }
         }
         tensorzero::InferenceOutput::Streaming(_) => {
@@ -11538,8 +11544,12 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let output: Vec<StoredContentBlock> = serde_json::from_str::<Vec<StoredContentBlock>>(output)
+        .unwrap()
+        .into_iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect();
+
     match &output[0] {
         StoredContentBlock::Text(text) => {
             let parsed: Value = serde_json::from_str(&text.text).unwrap();

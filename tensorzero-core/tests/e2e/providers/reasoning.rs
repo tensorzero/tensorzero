@@ -142,7 +142,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 2);
     let mut found_text = false;
     let mut found_thought = false;
     let mut clickhouse_content = String::new();
@@ -243,7 +242,18 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Missing text block in output: {output:#?}"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+        "Missing thought block in output: {output:#?}"
+    );
 
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
@@ -319,7 +329,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut full_thought = String::new();
+    let mut full_thought = None;
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     for chunk in chunks.clone() {
@@ -349,8 +359,12 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 let content = content_block.get("text").unwrap().as_str().unwrap();
                 full_content.push_str(content);
             } else if content_block.get("type").unwrap().as_str().unwrap() == "thought" {
-                let content = content_block.get("text").unwrap().as_str().unwrap();
-                full_thought.push_str(content);
+                // Some providers give signature-only thought blocks
+                if let Some(thought_text) = content_block.get("text").and_then(|v| v.as_str()) {
+                    full_thought
+                        .get_or_insert_with(String::new)
+                        .push_str(thought_text);
+                }
             }
         }
 
@@ -362,7 +376,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
-    assert!(full_thought.to_lowercase().contains("tokyo"));
+    // Some providers give signature-only thought blocks,
+    // so only check the content if we had at least one thought block with text
+    if let Some(full_thought) = &full_thought {
+        assert!(full_thought.to_lowercase().contains("tokyo"));
+    }
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
@@ -413,21 +431,24 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
     println!("output: {output:#?}");
-    assert_eq!(output.len(), 2);
     let mut found_text = false;
     let mut found_thought = false;
     let mut clickhouse_content = String::new();
-    let mut clickhouse_thought = String::new();
+    let mut clickhouse_thought = None;
     for block in output {
         let block_type = block.get("type").unwrap().as_str().unwrap();
         match block_type {
             "text" => {
                 found_text = true;
-                clickhouse_content = block.get("text").unwrap().as_str().unwrap().to_string();
+                clickhouse_content.push_str(block.get("text").unwrap().as_str().unwrap());
             }
             "thought" => {
                 found_thought = true;
-                clickhouse_thought = block.get("text").unwrap().as_str().unwrap().to_string();
+                if let Some(thought_text) = block.get("text").and_then(|v| v.as_str()) {
+                    clickhouse_thought
+                        .get_or_insert_with(String::new)
+                        .push_str(thought_text);
+                }
             }
             _ => panic!("Unexpected content block type: {block_type}"),
         }
@@ -693,14 +714,15 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     );
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
-    // Check that the auxiliary content is correct
+    // Check that the auxiliary content contains a thought block
     let auxiliary_content: Vec<ContentBlockOutput> =
         serde_json::from_str(result.get("auxiliary_content").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(auxiliary_content.len(), 1);
-    assert!(matches!(
-        auxiliary_content[0],
-        ContentBlockOutput::Thought(_)
-    ));
+    assert!(
+        auxiliary_content
+            .iter()
+            .any(|c| matches!(c, ContentBlockOutput::Thought(_))),
+        "Unexpected auxiliary content: {auxiliary_content:#?}"
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -754,7 +776,12 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Unexpected output: {output:#?}"
+    );
 }
 
 pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(

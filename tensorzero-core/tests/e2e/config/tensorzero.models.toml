@@ -292,7 +292,7 @@ model_name = "gemini-2.5-pro"
 # hitting our token limit
 extra_body = [
     { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
-    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = "true" },
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
 ]
 
 [models."gemini-3-flash"]
@@ -301,6 +301,9 @@ routing = ["google_ai_studio_gemini"]
 [models."gemini-3-flash".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
 model_name = "gemini-3-flash-preview"
+extra_body = [
+    { pointer = "/generationConfig/thinkingConfig/includeThoughts", value = true },
+]
 
 [models."gemini-2.5-pro-dynamic"]
 routing = ["google_ai_studio_gemini"]
