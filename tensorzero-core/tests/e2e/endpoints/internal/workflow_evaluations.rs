@@ -1,7 +1,9 @@
 //! E2E tests for the workflow evaluation endpoints.
 
 use reqwest::Client;
-use tensorzero_core::endpoints::workflow_evaluations::internal::GetWorkflowEvaluationProjectsResponse;
+use tensorzero_core::endpoints::workflow_evaluations::internal::{
+    GetWorkflowEvaluationProjectCountResponse, GetWorkflowEvaluationProjectsResponse,
+};
 
 use crate::common::get_gateway_endpoint;
 
@@ -56,5 +58,25 @@ async fn test_get_workflow_evaluation_projects_with_pagination() {
         response.projects.len() <= 1,
         "Expected at most 1 project with limit=1, got {}",
         response.projects.len()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_workflow_evaluation_project_count_endpoint() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/workflow-evaluations/projects/count");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_workflow_evaluation_project_count request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetWorkflowEvaluationProjectCountResponse = resp.json().await.unwrap();
+
+    assert!(
+        response.count > 0,
+        "Expected workflow evaluation project count to be greater than 0"
     );
 }

@@ -1,7 +1,7 @@
-import { searchEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { getConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { abortableTimeout } from "~/utils/common";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -24,13 +24,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  const runs = await searchEvaluationRuns(
-    evaluationName,
-    function_name,
-    query,
-    100,
-    0,
-  );
+  const runs = await getTensorZeroClient()
+    .searchEvaluationRuns(
+      evaluationName,
+      function_name,
+      query,
+      /*limit=*/ 100,
+      /*offset=*/ 0,
+    )
+    .then((response) => response.results);
   return new Response(JSON.stringify(runs), {
     headers: {
       "Content-Type": "application/json",

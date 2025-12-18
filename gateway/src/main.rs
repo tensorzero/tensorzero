@@ -282,6 +282,11 @@ async fn main() -> Result<(), ExitCode> {
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
+    if config.gateway.observability.async_writes {
+        tracing::info!("├ Async Writes: enabled");
+    } else {
+        tracing::info!("├ Async Writes: disabled");
+    }
 
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");

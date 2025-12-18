@@ -11,7 +11,7 @@
 [functions.codex]
 type = "chat"
 
-[functions.codex.variants.anthropic_claude_3_7_sonnet]
+[functions.codex.variants.anthropic_claude_4_5_sonnet]
 type = "chat_completion"
-model = "anthropic::claude-3-7-sonnet-20240620"
+model = "anthropic::claude-sonnet-4-5-20250929"
 retries = { num_retries = 4, max_delay_s = 10 }

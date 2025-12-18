@@ -154,12 +154,15 @@ impl JoinRegistry {
             params_map,
             param_idx_counter,
         );
+        // Use toNullable() so that unmatched LEFT JOIN rows have NULL values
+        // instead of ClickHouse's default values (0 for numbers, nil UUID for UUIDs).
+        // This allows COALESCE in the filter conditions to work correctly.
         format!(
             r"
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM {table_name}
     WHERE metric_name = {metric_name_placeholder}
     GROUP BY target_id
@@ -218,8 +221,8 @@ impl InferenceFilter {
                 );
 
                 // 3. return the filter condition
-                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
-                // We handle this farther up the recursive tree
+                // NOTE: The subquery uses Nullable types, so unmatched LEFT JOIN rows have NULL values.
+                // The COALESCE wrapper in AND/OR handles NULL -> false conversion.
                 let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
                 Ok(format!(
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
@@ -247,9 +250,9 @@ impl InferenceFilter {
                     params_map,
                     param_idx_counter,
                 );
-                // 4. return the filter condition
-                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
-                // We handle this farther up the recursive tree
+                // 3. return the filter condition
+                // NOTE: The subquery uses Nullable types, so unmatched LEFT JOIN rows have NULL values.
+                // The COALESCE wrapper in AND/OR handles NULL -> false conversion.
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
             InferenceFilter::DemonstrationFeedback(demo_filter) => {
@@ -666,7 +669,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -942,7 +945,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1015,7 +1018,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1104,7 +1107,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1113,7 +1116,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
@@ -1212,7 +1215,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1221,7 +1224,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -1230,7 +1233,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p5:String}
     GROUP BY target_id
@@ -1359,7 +1362,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1456,7 +1459,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1465,7 +1468,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -1474,7 +1477,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p5:String}
     GROUP BY target_id
@@ -1556,7 +1559,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -1740,7 +1743,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {{p1:String}}
     GROUP BY target_id
@@ -2039,7 +2042,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -2136,7 +2139,7 @@ JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationF
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p2:String}
     GROUP BY target_id
@@ -2145,7 +2148,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
@@ -2384,7 +2387,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
@@ -2857,7 +2860,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -2936,7 +2939,7 @@ FROM
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id

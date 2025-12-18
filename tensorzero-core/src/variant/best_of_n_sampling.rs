@@ -765,7 +765,7 @@ impl BestOfNEvaluatorConfig {
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .or_else(|| self.inner.json_mode().cloned())
+            .or_else(|| self.inner.json_mode().copied())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
             JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),

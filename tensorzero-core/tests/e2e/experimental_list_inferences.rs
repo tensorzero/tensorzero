@@ -248,9 +248,60 @@ async fn test_or_filter_mixed_metrics() {
     }
 }
 
+/// Tests that NOT filter correctly inverts the child filter.
+/// NOT (exact_match = true OR exact_match = false) should return rows WITHOUT the metric,
+/// since rows without the metric don't match either boolean value.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
     let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences
+    let opts_total = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let total_count = client
+        .experimental_list_inferences(opts_total)
+        .await
+        .unwrap()
+        .len();
+
+    // Get count with exact_match = true
+    let filter_true = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let opts_true = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_true),
+        limit: 1000,
+        ..Default::default()
+    };
+    let true_count = client
+        .experimental_list_inferences(opts_true)
+        .await
+        .unwrap()
+        .len();
+
+    // Get count with exact_match = false
+    let filter_false = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: false,
+    });
+    let opts_false = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_false),
+        limit: 1000,
+        ..Default::default()
+    };
+    let false_count = client
+        .experimental_list_inferences(opts_false)
+        .await
+        .unwrap()
+        .len();
+
+    // Now test NOT (true OR false) - should return rows WITHOUT the metric
     let filter_node = InferenceFilter::Not {
         child: Box::new(InferenceFilter::Or {
             children: vec![
@@ -265,13 +316,32 @@ async fn test_not_filter() {
             ],
         }),
     };
-    let opts = ListInferencesParams {
+    let opts_not = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
+        limit: 1000,
         ..Default::default()
     };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 0);
+    let not_count = client
+        .experimental_list_inferences(opts_not)
+        .await
+        .unwrap()
+        .len();
+
+    // Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    let rows_with_metric = true_count + false_count;
+    assert_eq!(
+        rows_with_metric + not_count,
+        total_count,
+        "NOT filter should return exactly the rows without the metric. \
+         true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    );
+
+    // Also verify that NOT actually returned something (there are rows without the metric)
+    assert!(
+        not_count > 0,
+        "Expected some rows without the exact_match metric"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -712,4 +782,130 @@ pub async fn test_query_by_ids_with_order_by_metric_errors() {
     assert!(res.is_err());
     let err_msg = format!("{:?}", res.unwrap_err());
     assert!(err_msg.contains("not supported"));
+}
+
+/// Tests that float metric filters only return inferences that HAVE the metric.
+/// A filter like `metric >= 0` should NOT match inferences without the metric.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_float_metric_filter_excludes_rows_without_metric() {
+    let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences for the function (without filter)
+    let opts_no_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_no_filter = client
+        .experimental_list_inferences(opts_no_filter)
+        .await
+        .unwrap();
+    let total_count = res_no_filter.len();
+
+    // Now filter by jaccard_similarity >= 0 (should match ALL rows that have the metric)
+    let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "jaccard_similarity".to_string(),
+        value: 0.0,
+        comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+    });
+    let opts_with_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_node),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_with_filter = client
+        .experimental_list_inferences(opts_with_filter)
+        .await
+        .unwrap();
+
+    // The filtered count should be LESS than total count because not all inferences
+    // have the jaccard_similarity metric
+    assert!(
+        res_with_filter.len() < total_count,
+        "Filter should return fewer results than total. Got {} with filter, {} total. \
+         If they're equal, the filter is incorrectly matching rows without the metric.",
+        res_with_filter.len(),
+        total_count
+    );
+
+    // Verify the filter actually returned some results (not empty)
+    assert!(
+        !res_with_filter.is_empty(),
+        "Expected at least one inference with jaccard_similarity metric"
+    );
+}
+
+/// Tests that boolean metric filters with value=false only return inferences that HAVE the metric.
+/// A filter like `exact_match = false` should NOT match inferences without the metric.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_boolean_metric_filter_false_excludes_rows_without_metric() {
+    let client = make_embedded_gateway().await;
+
+    // First, get total count of inferences for the function (without filter)
+    let opts_no_filter = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_no_filter = client
+        .experimental_list_inferences(opts_no_filter)
+        .await
+        .unwrap();
+    let total_count = res_no_filter.len();
+
+    // Filter by exact_match = true (only rows with metric value true)
+    let filter_true = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let opts_true = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_true),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_true = client
+        .experimental_list_inferences(opts_true)
+        .await
+        .unwrap();
+
+    // Filter by exact_match = false (only rows with metric value false)
+    let filter_false = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: false,
+    });
+    let opts_false = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_false),
+        limit: 1000,
+        ..Default::default()
+    };
+    let res_false = client
+        .experimental_list_inferences(opts_false)
+        .await
+        .unwrap();
+
+    // The sum of true + false results should be LESS than total count
+    // because not all inferences have the exact_match metric
+    let sum_with_metric = res_true.len() + res_false.len();
+    assert!(
+        sum_with_metric < total_count,
+        "Sum of true ({}) + false ({}) = {} should be less than total ({}). \
+         If they're equal, the filter is incorrectly matching rows without the metric.",
+        res_true.len(),
+        res_false.len(),
+        sum_with_metric,
+        total_count
+    );
+
+    // Verify we got some results for each filter
+    assert!(
+        !res_true.is_empty(),
+        "Expected at least one inference with exact_match = true"
+    );
+    assert!(
+        !res_false.is_empty(),
+        "Expected at least one inference with exact_match = false"
+    );
 }
