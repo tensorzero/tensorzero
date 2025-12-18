@@ -5,8 +5,8 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::config::Config;
-use crate::db::feedback::{FeedbackQueries, MetricWithFeedback};
+use crate::config::{Config, MetricConfigType};
+use crate::db::feedback::{FeedbackQueries, MetricType, MetricWithFeedback};
 use crate::error::Error;
 use crate::function::get_function;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -65,6 +65,25 @@ pub async fn get_function_metrics(
     let metrics = clickhouse
         .query_metrics_with_feedback(function_name, inference_table, variant_name)
         .await?;
+
+    // Enrich metric_type from config for metrics that don't have it set
+    let metrics =
+        metrics
+            .into_iter()
+            .map(|mut metric| {
+                if metric.metric_type.is_none() {
+                    // Look up metric type from config
+                    metric.metric_type = config.metrics.get(&metric.metric_name).map(|mc| match mc
+                        .r#type
+                    {
+                        MetricConfigType::Boolean => MetricType::Boolean,
+                        MetricConfigType::Float => MetricType::Float,
+                    });
+                }
+                metric
+            })
+            .collect();
+
     Ok(MetricsWithFeedbackResponse { metrics })
 }
 
