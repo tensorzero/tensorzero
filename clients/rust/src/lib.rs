@@ -1,6 +1,8 @@
+#![recursion_limit = "256"]
+
 use std::{collections::HashMap, sync::Arc};
-use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
+use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
@@ -18,20 +20,20 @@ use uuid::Uuid;
 
 // Client core types
 pub use tensorzero_core::client::{
-    get_config_no_verify_credentials, Client, ClientBuilder, ClientBuilderMode, ClientMode,
-    EmbeddedGateway, HTTPGateway,
+    Client, ClientBuilder, ClientBuilderMode, ClientMode, EmbeddedGateway, HTTPGateway,
+    get_config_no_verify_credentials,
 };
 
 // Client error types
 pub use tensorzero_core::client::{
-    err_to_http, with_embedded_timeout, ClientBuilderError, TensorZeroError,
-    TensorZeroInternalError,
+    ClientBuilderError, TensorZeroError, TensorZeroInternalError, err_to_http,
+    with_embedded_timeout,
 };
 
 // Client input types
 pub use tensorzero_core::client::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, Input, InputMessage,
+    InputMessageContent,
 };
 
 // Input handling utilities
@@ -45,30 +47,35 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
-    GetDatasetRowsParams,
+    DatasetQueries, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
+pub use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
+};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
-    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
-    DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
-    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
-    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
-    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
+    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
+    GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
+    UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
-    StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
-    InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
+    ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
+    InferenceResponseChunk, InferenceStream,
 };
+pub use tensorzero_core::endpoints::internal::action::{
+    ActionInput, ActionInputInfo, ActionResponse,
+};
+pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
@@ -81,8 +88,8 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
-    Base64File, ContentBlockChunk, File, Input, InputMessage, InputMessageContent,
-    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile, Usage,
+    Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
+    UrlFile, Usage,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
@@ -101,6 +108,7 @@ pub use tensorzero_optimizers::endpoints::{
 };
 
 // Keep git module for Git-related extension traits
+#[cfg(feature = "git")]
 mod git;
 
 #[cfg(feature = "e2e_tests")]
@@ -110,6 +118,7 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
+#[cfg(feature = "git")]
 use crate::git::GitInfo;
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
@@ -252,10 +261,13 @@ pub trait ClientExt {
         datapoints: Vec<UpdateDatapointRequest>,
     ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
 
-    /// Gets datapoints by their IDs.
+    /// Gets datapoints by their IDs and dataset name.
+    /// Including the dataset name improves query performance because the dataset is part of the
+    /// sorting key for datapoints.
     ///
     /// # Arguments
     ///
+    /// * `dataset_name` - The name of the dataset containing the datapoints.
     /// * `datapoint_ids` - The IDs of the datapoints to get.
     ///
     /// # Returns
@@ -267,6 +279,7 @@ pub trait ClientExt {
     /// Returns a `TensorZeroError` if the request fails.
     async fn get_datapoints(
         &self,
+        dataset_name: Option<String>,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<GetDatapointsResponse, TensorZeroError>;
 
@@ -347,7 +360,6 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
     // ================================================================
@@ -455,11 +467,51 @@ pub trait ClientExt {
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
     // ================================================================
+    // Action operations
+    // ================================================================
+
+    /// Executes an action (inference or feedback) using a historical config snapshot.
+    ///
+    /// This allows replaying actions with the exact configuration that was used
+    /// at the time the snapshot was created.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The action parameters including the snapshot hash and action type.
+    ///
+    /// # Returns
+    ///
+    /// An `ActionResponse` containing either an inference or feedback response.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError>;
+
+    // ================================================================
     // Config access
     // ================================================================
     fn config(&self) -> Option<&Config>;
 
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
+
+    /// Gets a config snapshot by hash, or the live config if no hash is provided.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Optional hash of the config snapshot to retrieve. If `None`, returns the live config.
+    ///
+    /// # Returns
+    ///
+    /// A `GetConfigResponse` containing the config snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails or the config snapshot is not found.
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<&str>,
+    ) -> Result<GetConfigResponse, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
@@ -481,7 +533,7 @@ async fn create_datapoints_internal(
                 .into(),
             })?;
             let builder = http_client.http_client.post(url).json(&params);
-            http_client.send_and_parse_http_response(builder).await
+            Ok(http_client.send_and_parse_http_response(builder).await?.0)
         }
         ClientMode::EmbeddedGateway { gateway, timeout } => {
             Ok(with_embedded_timeout(*timeout, async {
@@ -517,6 +569,36 @@ impl ClientExt for Client {
                 .health()
                 .await
                 .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        }
+    }
+
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/action").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/action endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::internal::action::action(
+                        &gateway.handle.app_state,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
         }
     }
 
@@ -571,6 +653,7 @@ impl ClientExt for Client {
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
         // Apply the git information to the tags so it gets stored for our workflow evaluation run
+        #[cfg(feature = "git")]
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
@@ -592,7 +675,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&params);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -622,7 +705,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&params);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -655,7 +738,9 @@ impl ClientExt for Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        tracing::warn!(
+            "`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead."
+        );
         create_datapoints_internal(self, dataset_name, params, "datapoints/bulk").await
     }
 
@@ -716,13 +801,13 @@ impl ClientExt for Client {
                         .into(),
                     })?;
                 let builder = client.http_client.get(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     let mut response = tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
+                        Some(dataset_name.clone()),
                         GetDatapointsRequest {
                             ids: vec![datapoint_id],
                         },
@@ -772,7 +857,7 @@ impl ClientExt for Client {
                         .into(),
                     })?;
                 let builder = client.http_client.delete(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
         }
     }
@@ -792,7 +877,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = http_client.http_client.post(url).json(&request);
-                http_client.send_and_parse_http_response(builder).await
+                Ok(http_client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -826,7 +911,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.patch(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -845,25 +930,39 @@ impl ClientExt for Client {
 
     async fn get_datapoints(
         &self,
+        dataset_name: Option<String>,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<GetDatapointsResponse, TensorZeroError> {
         let request = GetDatapointsRequest { ids: datapoint_ids };
         match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("v1/datasets/get_datapoints").map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /v1/datasets/get_datapoints endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+            ClientMode::HTTPGateway(http_client) => {
+                let url = match dataset_name.as_ref() {
+                    Some(dataset_name) => http_client
+                        .base_url
+                        .join(&format!("v1/datasets/{dataset_name}/get_datapoints"))
+                        .map_err(|e| TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /v1/datasets/{dataset_name}/get_datapoints endpoint: {e}"
+                                ),
+                            })
+                            .into(),
+                        })?,
+                    None => http_client.base_url.join("v1/datasets/get_datapoints").map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!("Failed to join base URL with /v1/datasets/get_datapoints endpoint: {e}"),
+                        })
+                        .into(),
+                    })?,
+                };
+                let builder = http_client.http_client.post(url).json(&request);
+                Ok(http_client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
+                        dataset_name,
                         request,
                     )
                     .await
@@ -888,13 +987,12 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::list_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
                         dataset_name,
                         request,
                     )
@@ -921,7 +1019,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.patch(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -953,7 +1051,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -983,7 +1081,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1003,12 +1101,8 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError> {
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
+        let request = CreateDatapointsFromInferenceRequest { params };
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/from_inferences")).map_err(|e| TensorZeroError::Other {
@@ -1018,7 +1112,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -1100,7 +1194,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1130,7 +1224,7 @@ impl ClientExt for Client {
                     .into(),
                 })?;
                 let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1281,7 +1375,7 @@ impl ClientExt for Client {
                     })?;
                 let builder = client.http_client.get(url);
                 let resp: OptimizationJobInfo =
-                    client.send_and_parse_http_response(builder).await?;
+                    client.send_and_parse_http_response(builder).await?.0;
                 Ok(resp)
             }
         }
@@ -1299,6 +1393,60 @@ impl ClientExt for Client {
                 })
                 .into(),
             }),
+        }
+    }
+
+    async fn get_config_snapshot(
+        &self,
+        hash: Option<&str>,
+    ) -> Result<GetConfigResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let endpoint = match hash {
+                    Some(h) => format!("internal/config/{h}"),
+                    None => "internal/config".to_string(),
+                };
+                let url = client
+                    .base_url
+                    .join(&endpoint)
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /{endpoint} endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client.http_client.get(url);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    use tensorzero_core::db::ConfigQueries;
+                    let snapshot_hash = match hash {
+                        Some(h) => h.parse().map_err(|_| {
+                            err_to_http(Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                                snapshot_hash: h.to_string(),
+                            }))
+                        })?,
+                        None => gateway.handle.app_state.config.hash.clone(),
+                    };
+                    let snapshot = gateway
+                        .handle
+                        .app_state
+                        .clickhouse_connection_info
+                        .get_config_snapshot(snapshot_hash)
+                        .await
+                        .map_err(err_to_http)?;
+                    Ok(GetConfigResponse {
+                        hash: snapshot.hash.to_string(),
+                        config: snapshot.config,
+                        extra_templates: snapshot.extra_templates,
+                        tags: snapshot.tags,
+                    })
+                })
+                .await
+            }
         }
     }
 
@@ -1322,7 +1470,7 @@ impl ClientExt for Client {
                     })?;
                 let builder = client.http_client.get(url);
                 let response: GetVariantSamplingProbabilitiesResponse =
-                    client.send_and_parse_http_response(builder).await?;
+                    client.send_and_parse_http_response(builder).await?.0;
                 Ok(response.probabilities)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {

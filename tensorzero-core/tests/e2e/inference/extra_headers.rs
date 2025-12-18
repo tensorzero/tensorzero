@@ -3,7 +3,7 @@ use tensorzero::{ClientInferenceParams, InferenceOutput, InferenceResponse};
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 
 // Import shared helpers and config from extra_body
-use super::extra_body::{create_test_gateway, create_test_input, STANDARD_CONFIG};
+use super::extra_body::{STANDARD_CONFIG, create_test_gateway, create_test_input};
 
 // Helper function to parse injected headers from response
 fn parse_injected_headers(response: InferenceOutput) -> Vec<(String, String)> {
@@ -39,9 +39,11 @@ async fn test_extra_headers_always_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-always-header" && v == "always_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-always-header" && v == "always_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -64,9 +66,11 @@ async fn test_extra_headers_variant_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-variant-header" && v == "variant_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-variant-header" && v == "variant_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -89,9 +93,11 @@ async fn test_extra_headers_provider_fully_qualified_config_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-provider-header" && v == "provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-provider-header" && v == "provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -114,9 +120,11 @@ async fn test_extra_headers_provider_fully_qualified_shorthand_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -140,9 +148,11 @@ async fn test_extra_headers_model_provider_no_shorthand_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-header" && v == "mp_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-header" && v == "mp_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -166,9 +176,11 @@ async fn test_extra_headers_model_provider_shorthand_function() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-shorthand-header" && v == "mp_shorthand_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-shorthand-header" && v == "mp_shorthand_works")
+    );
 }
 
 // ========== Model Name + Dynamic Extra Headers ==========
@@ -192,9 +204,11 @@ async fn test_extra_headers_always_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-always-header" && v == "always_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-always-header" && v == "always_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -217,9 +231,11 @@ async fn test_extra_headers_provider_fully_qualified_config_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-provider-header" && v == "provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-provider-header" && v == "provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -242,9 +258,11 @@ async fn test_extra_headers_provider_fully_qualified_shorthand_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -268,9 +286,11 @@ async fn test_extra_headers_model_provider_no_shorthand_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-header" && v == "mp_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-header" && v == "mp_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -294,9 +314,11 @@ async fn test_extra_headers_model_provider_shorthand_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-shorthand-header" && v == "mp_shorthand_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-shorthand-header" && v == "mp_shorthand_works")
+    );
 }
 
 // ========== Optional provider_name Tests ==========
@@ -321,9 +343,11 @@ async fn test_extra_headers_model_provider_no_provider_name_explicit_function() 
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-no-provider-header" && v == "mp_no_provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-no-provider-header" && v == "mp_no_provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -346,10 +370,12 @@ async fn test_extra_headers_model_provider_no_provider_name_shorthand_function()
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-no-provider-shorthand-header"
-            && v == "mp_no_provider_shorthand_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-no-provider-shorthand-header"
+                && v == "mp_no_provider_shorthand_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -372,9 +398,11 @@ async fn test_extra_headers_model_provider_no_provider_name_explicit_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-no-provider-header" && v == "mp_no_provider_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-no-provider-header" && v == "mp_no_provider_works")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -397,8 +425,10 @@ async fn test_extra_headers_model_provider_no_provider_name_shorthand_model() {
         .unwrap();
 
     let headers = parse_injected_headers(result);
-    assert!(headers
-        .iter()
-        .any(|(k, v)| k == "x-mp-no-provider-shorthand-header"
-            && v == "mp_no_provider_shorthand_works"));
+    assert!(
+        headers
+            .iter()
+            .any(|(k, v)| k == "x-mp-no-provider-shorthand-header"
+                && v == "mp_no_provider_shorthand_works")
+    );
 }

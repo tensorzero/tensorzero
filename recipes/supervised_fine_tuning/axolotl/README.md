@@ -3,6 +3,7 @@
 The `axolotl.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning of models using [Axolotl](https://axolotl.ai/#learnmore) based on data collected by the TensorZero Gateway.
 
 You will need to set a few environment variables in the shell your notebook will run in.
+
 - Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero`.
 - Set `HF_TOKEN=<your-hf-token>` to your huggingface token to use gated models like Llama and Gemma.
 - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`. We use `firectl` for deployment to Fireworks in this example but you can serve the model however you prefer.

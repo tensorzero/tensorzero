@@ -1,7 +1,7 @@
-use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
-use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
+use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
+use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::types::{
     AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
     ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
@@ -11,10 +11,10 @@ use aws_sdk_bedrockruntime::types::{
     StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
     ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
-use aws_smithy_types::{error::display::DisplayErrorContext, Document, Number};
+use aws_smithy_types::{Document, Number, error::display::DisplayErrorContext};
 use aws_types::region::Region;
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use reqwest::StatusCode;
 use secrecy::ExposeSecret;
 use serde::Serialize;
@@ -25,27 +25,27 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
+use super::aws_common::{self, InterceptorAndRawBody, build_interceptor};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
-    ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Role,
+    Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
-use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, EndpointLocation};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
@@ -620,35 +620,34 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        if let Some(tool_config) = &request.tool_config {
-            if !matches!(tool_config.tool_choice, ToolChoice::None) {
-                let tools: Vec<Tool> = tool_config
-                    .strict_tools_available()?
-                    .map(Tool::try_from)
-                    .collect::<Result<Vec<_>, _>>()?;
+        if let Some(tool_config) = &request.tool_config
+            && !matches!(tool_config.tool_choice, ToolChoice::None)
+        {
+            let tools: Vec<Tool> = tool_config
+                .strict_tools_available()?
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice =
-                    tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
 
-                let aws_bedrock_tool_config = ToolConfiguration::builder()
-                    .set_tools(Some(tools))
-                    .tool_choice(tool_choice)
-                    .build()
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!(
-                                "Error configuring AWS Bedrock tool config: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: format!(
+                            "Error configuring AWS Bedrock tool config: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-            }
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
         bedrock_request = apply_inference_params(bedrock_request, &request.inference_params_v2);
@@ -761,35 +760,34 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        if let Some(tool_config) = &request.tool_config {
-            if !matches!(tool_config.tool_choice, ToolChoice::None) {
-                let tools: Vec<Tool> = tool_config
-                    .strict_tools_available()?
-                    .map(Tool::try_from)
-                    .collect::<Result<Vec<_>, _>>()?;
+        if let Some(tool_config) = &request.tool_config
+            && !matches!(tool_config.tool_choice, ToolChoice::None)
+        {
+            let tools: Vec<Tool> = tool_config
+                .strict_tools_available()?
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice =
-                    tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
 
-                let aws_bedrock_tool_config = ToolConfiguration::builder()
-                    .set_tools(Some(tools))
-                    .tool_choice(tool_choice)
-                    .build()
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                            message: format!(
-                                "Error configuring AWS Bedrock tool config: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: format!(
+                            "Error configuring AWS Bedrock tool config: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-            }
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
         bedrock_request =
@@ -963,7 +961,9 @@ fn bedrock_to_tensorzero_stream_message(
                                 )))
                             }
                             ReasoningContentBlockDelta::RedactedContent(_) => {
-                                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                                tracing::warn!(
+                                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
+                                );
                                 Ok(None)
                             }
                             _ => {
@@ -1227,18 +1227,19 @@ async fn bedrock_content_block_from_content_block(
                     ReasoningContentBlock::ReasoningText(block),
                 )))
             } else if thought.signature.is_some() {
-                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                tracing::warn!(
+                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
+                );
                 Ok(None)
             } else {
                 // We have a thought block with no text or signature, so just ignore it
-                tracing::warn!("The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it.");
+                tracing::warn!(
+                    "The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it."
+                );
                 Ok(None)
             }
         }
-        ContentBlock::Unknown {
-            data: _,
-            model_provider_name: _,
-        } => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+        ContentBlock::Unknown(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
             content_block_type: "unknown".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
         })),
@@ -1279,7 +1280,9 @@ fn bedrock_content_block_to_output(
                 })))
             }
             ReasoningContentBlock::RedactedContent(_) => {
-                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                tracing::warn!(
+                    "The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks."
+                );
                 Ok(None)
             }
             _ => {
@@ -1573,8 +1576,8 @@ mod tests {
 
         // We want auto-detection to fail, so we clear this environment variable.
         // We use 'nextest' as our runner, so each test runs in its own process
-        std::env::remove_var("AWS_REGION");
-        std::env::remove_var("AWS_DEFAULT_REGION");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
         let err = AWSBedrockProvider::new(
             "test".to_string(),
             None,

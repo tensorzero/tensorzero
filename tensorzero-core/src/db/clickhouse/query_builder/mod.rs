@@ -5,7 +5,10 @@ use std::{
 
 use crate::{
     config::{Config, MetricConfigType},
-    db::{clickhouse::query_builder::parameters::add_parameter, inferences::ListInferencesParams},
+    db::{
+        clickhouse::query_builder::parameters::add_parameter,
+        inferences::{ListInferencesParams, PaginationParams},
+    },
     error::{Error, ErrorDetails},
 };
 
@@ -15,9 +18,9 @@ pub use datapoint_queries::DatapointFilter;
 
 // Re-export filter and ordering types from v1 API for backwards compatibility
 pub use crate::endpoints::stored_inferences::v1::types::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
-    OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter, TimeComparisonOperator,
-    TimeFilter,
+    BooleanMetricFilter, DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter,
+    InferenceFilter, OrderBy, OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
 };
 
 #[cfg(test)]
@@ -63,6 +66,13 @@ impl OrderDirection {
         match self {
             OrderDirection::Asc => "ASC",
             OrderDirection::Desc => "DESC",
+        }
+    }
+
+    pub fn inverted(&self) -> Self {
+        match self {
+            OrderDirection::Asc => OrderDirection::Desc,
+            OrderDirection::Desc => OrderDirection::Asc,
         }
     }
 }
@@ -144,12 +154,15 @@ impl JoinRegistry {
             params_map,
             param_idx_counter,
         );
+        // Use toNullable() so that unmatched LEFT JOIN rows have NULL values
+        // instead of ClickHouse's default values (0 for numbers, nil UUID for UUIDs).
+        // This allows COALESCE in the filter conditions to work correctly.
         format!(
             r"
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM {table_name}
     WHERE metric_name = {metric_name_placeholder}
     GROUP BY target_id
@@ -208,8 +221,8 @@ impl InferenceFilter {
                 );
 
                 // 3. return the filter condition
-                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
-                // We handle this farther up the recursive tree
+                // NOTE: The subquery uses Nullable types, so unmatched LEFT JOIN rows have NULL values.
+                // The COALESCE wrapper in AND/OR handles NULL -> false conversion.
                 let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
                 Ok(format!(
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
@@ -237,10 +250,21 @@ impl InferenceFilter {
                     params_map,
                     param_idx_counter,
                 );
-                // 4. return the filter condition
-                // NOTE: if the join_alias is NULL, the filter condition will be NULL also
-                // We handle this farther up the recursive tree
+                // 3. return the filter condition
+                // NOTE: The subquery uses Nullable types, so unmatched LEFT JOIN rows have NULL values.
+                // The COALESCE wrapper in AND/OR handles NULL -> false conversion.
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
+            }
+            InferenceFilter::DemonstrationFeedback(demo_filter) => {
+                let operator = if demo_filter.has_demonstration {
+                    "IN"
+                } else {
+                    "NOT IN"
+                };
+                let predicate = format!(
+                    "i.id {operator} (SELECT DISTINCT inference_id FROM DemonstrationFeedback)"
+                );
+                Ok(predicate)
             }
             InferenceFilter::Tag(TagFilter {
                 key,
@@ -252,8 +276,11 @@ impl InferenceFilter {
                 let value_placeholder =
                     add_parameter(value, ClickhouseType::String, params_map, param_idx_counter);
                 let comparison_operator = comparison_operator.to_clickhouse_operator();
+                // Add mapContains check to ensure the tag exists before comparing.
+                // Without this, a != filter would match rows without the tag (since
+                // accessing a missing key returns empty string, and '' != value is true).
                 Ok(format!(
-                    "i.tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
+                    "(mapContains(i.tags, {key_placeholder}) AND i.tags[{key_placeholder}] {comparison_operator} {value_placeholder})"
                 ))
             }
             InferenceFilter::Time(TimeFilter {
@@ -272,6 +299,10 @@ impl InferenceFilter {
                 ))
             }
             InferenceFilter::And { children } => {
+                // Empty AND is vacuously true - all zero conditions are met
+                if children.is_empty() {
+                    return Ok("TRUE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -293,6 +324,10 @@ impl InferenceFilter {
                 Ok(format!("({child_sqls_str})"))
             }
             InferenceFilter::Or { children } => {
+                // Empty OR is false - no conditions can be met
+                if children.is_empty() {
+                    return Ok("FALSE".to_string());
+                }
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -337,13 +372,28 @@ pub fn generate_order_by_sql(
     param_idx_counter: &mut usize,
     joins: &mut JoinRegistry,
 ) -> Result<String, Error> {
+    // Build a fallback "order by id" as tie-breaker for deterministic ordering
+    // For before/after pagination, the direction depends on the pagination type
+    // For offset pagination or no pagination, use DESC (most recent first)
+    let order_by_id_clause = if let Some(pagination) = &opts.pagination {
+        match pagination {
+            PaginationParams::After { .. } => "toUInt128(i.id) ASC".to_string(),
+            PaginationParams::Before { .. } => "toUInt128(i.id) DESC".to_string(),
+        }
+    } else {
+        // Add id tie-breaker when ordering to ensure deterministic results
+        "toUInt128(i.id) DESC".to_string()
+    };
+
+    // If we have cursor pagination but no user-specified ordering, just use the id clause
     let Some(order_by) = opts.order_by else {
-        return Ok(String::new());
+        return Ok(format!("\nORDER BY {order_by_id_clause}"));
     };
     if order_by.is_empty() {
-        return Ok(String::new());
+        return Ok(format!("\nORDER BY {order_by_id_clause}"));
     }
 
+    // Validate the order by clauses.
     for term in order_by {
         // TODO(shuyangli): Validate that if ORDER BY includes a metric, we should have an appropriate
         // metric inference filter.
@@ -359,6 +409,10 @@ pub fn generate_order_by_sql(
             }));
         }
     }
+
+    // Build the explicit ordering clauses.
+    // For "After" pagination, we need to invert all ordering directions because we'll reverse the list in memory
+    let should_invert_directions = matches!(opts.pagination, Some(PaginationParams::After { .. }));
 
     let mut order_by_clauses = Vec::new();
     for term in order_by {
@@ -386,9 +440,19 @@ pub fn generate_order_by_sql(
                 "total_term_frequency".to_string()
             }
         };
-        let direction = term.direction.to_clickhouse_direction();
+        // Invert direction for "After" pagination since we'll reverse the list
+        let effective_direction = if should_invert_directions {
+            term.direction.inverted()
+        } else {
+            term.direction
+        };
+        let direction = effective_direction.to_clickhouse_direction();
         order_by_clauses.push(format!("{sql_expr} {direction} NULLS LAST"));
     }
+
+    // Add the tie-breaker clause.
+    order_by_clauses.push(order_by_id_clause);
+
     let joined_clauses = order_by_clauses.join(", ");
     Ok(format!("\nORDER BY {joined_clauses}"))
 }
@@ -456,7 +520,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config
+        .into_config_without_writing_for_tests()
     }
 
     /// Tests the simplest possible query: list inferences for a function with no filters
@@ -485,13 +549,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -502,10 +571,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -536,13 +601,18 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -553,10 +623,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -593,21 +659,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -626,10 +697,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -697,6 +764,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -704,8 +775,9 @@ FROM
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -717,9 +789,117 @@ FORMAT JSONEachRow";
                 name: "p1".to_string(),
                 value: "20".to_string(),
             },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_demonstration_feedback_filter_has_feedback() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: true,
+        });
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r"
+SELECT
+    'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)
+ORDER BY toUInt128(i.id) DESC
+LIMIT {p1:UInt64}
+
+FORMAT JSONEachRow";
+        assert_query_equals(&sql, expected_sql);
+        let expected_params = vec![
             QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+        ];
+        assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_demonstration_feedback_filter_no_feedback() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: false,
+        });
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let expected_sql = r"
+SELECT
+    'json' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    i.output_schema as output_schema,
+    i.tags as tags,
+    '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
+    i.output as output
+FROM
+    JsonInference AS i
+WHERE
+    i.function_name = {p0:String} AND i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)
+ORDER BY toUInt128(i.id) DESC
+LIMIT {p1:UInt64}
+
+FORMAT JSONEachRow";
+        assert_query_equals(&sql, expected_sql);
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -755,21 +935,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -788,10 +973,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -827,21 +1008,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -860,10 +1046,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -915,13 +1097,17 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -930,15 +1116,16 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
-OFFSET {p7:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -969,10 +1156,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p7".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1022,13 +1205,17 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1037,7 +1224,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -1046,15 +1233,16 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p5:String}
     GROUP BY target_id
 ) AS j2 ON i.episode_id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1090,12 +1278,38 @@ FORMAT JSONEachRow";
                 name: "p7".to_string(),
                 value: "20".to_string(),
             },
-            QueryParameter {
-                name: "p8".to_string(),
-                value: "0".to_string(),
-            },
         ];
         assert_eq!(params, expected_params);
+    }
+
+    /// Tests that an empty AND filter generates valid SQL (returns 1, meaning all rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_and_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::And { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty AND is vacuously true
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND TRUE");
+    }
+
+    /// Tests that an empty OR filter generates valid SQL (returns 0, meaning no rows match)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_or_filter() {
+        let config = get_e2e_config().await;
+        let filter_node = InferenceFilter::Or { children: vec![] };
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        // Empty OR is vacuously false
+        assert_query_contains(&sql, "WHERE i.function_name = {p0:String} AND FALSE");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1138,21 +1352,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p4:UInt64}
-OFFSET {p5:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1175,10 +1394,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p4".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p5".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1234,13 +1449,17 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
@@ -1249,7 +1468,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
@@ -1258,18 +1477,19 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p5:String}
     GROUP BY target_id
 ) AS j2 ON i.id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 9); // p0 (function) + 6 metric-related params + 2 limit/offset params
+        assert_eq!(params.len(), 8); // p0 (function) + 6 metric-related params + 1 limit param (no offset when 0)
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1329,24 +1549,29 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE((mapContains(i.tags, {p5:String}) AND i.tags[{p5:String}] = {p6:String}), 0)), 0)), 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p7:UInt64}
-OFFSET {p8:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 9); // p0 (function) + 6 filter-related params + 2 limit/offset params
+        assert_eq!(params.len(), 8); // p0 (function) + 6 filter-related params + 1 limit param (no offset when 0)
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1376,13 +1601,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1397,10 +1627,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1433,11 +1659,16 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
 OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
@@ -1502,21 +1733,25 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {{p1:String}}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
+ORDER BY toUInt128(i.id) DESC
 LIMIT {{p3:UInt64}}
-OFFSET {{p4:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -1536,10 +1771,6 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p3".to_string(),
                     value: "20".to_string(),
-                },
-                QueryParameter {
-                    name: "p4".to_string(),
-                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -1577,13 +1808,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
+    i.function_name = {p0:String} AND (mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1602,10 +1838,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1642,13 +1874,18 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
-    i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
+    i.function_name = {p0:String} AND (mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] != {p2:String})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p3:UInt64}
-OFFSET {p4:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1667,10 +1904,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p3".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p4".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1716,13 +1949,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
+    i.function_name = {p0:String} AND (COALESCE((mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String}), 0) AND COALESCE((mapContains(i.tags, {p3:String}) AND i.tags[{p3:String}] = {p4:String}), 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
-OFFSET {p6:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1749,10 +1987,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p5".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p6".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1798,21 +2032,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p3:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE((mapContains(i.tags, {p1:String}) AND i.tags[{p1:String}] = {p2:String}), 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p5:UInt64}
-OFFSET {p6:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1839,10 +2078,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p5".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p6".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1891,6 +2126,10 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
 FROM
@@ -1900,7 +2139,7 @@ JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationF
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p2:String}
     GROUP BY target_id
@@ -1909,13 +2148,14 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM BooleanMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String} AND (COALESCE(j0.value > {p3:Float64}, 0) AND COALESCE(j1.value = {p5:Bool}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
 OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
@@ -1988,13 +2228,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -2009,10 +2254,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2059,13 +2300,17 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
+ORDER BY toUInt128(i.id) DESC
 LIMIT {{p2:UInt64}}
-OFFSET {{p3:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -2081,10 +2326,6 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p2".to_string(),
                     value: "20".to_string(),
-                },
-                QueryParameter {
-                    name: "p3".to_string(),
-                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -2136,21 +2377,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p4:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
-    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
+    i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((mapContains(i.tags, {p2:String}) AND i.tags[{p2:String}] = {p3:String}), 0) AND COALESCE(j0.value > {p5:Float64}, 0))
+ORDER BY toUInt128(i.id) DESC
 LIMIT {p6:UInt64}
-OFFSET {p7:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -2181,10 +2427,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "10".to_string(),
-            },
-            QueryParameter {
-                name: "p7".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2547,14 +2789,18 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
-ORDER BY i.timestamp DESC NULLS LAST
+ORDER BY i.timestamp DESC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p1:UInt64}
-OFFSET {p2:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2566,10 +2812,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p2".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2608,22 +2850,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String}
-ORDER BY j0.value ASC NULLS LAST
+ORDER BY j0.value ASC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2639,10 +2885,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2687,22 +2929,26 @@ SELECT
     NULL as tool_choice,
     NULL as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
     SELECT
         target_id,
-        argMax(value, timestamp) as value
+        toNullable(argMax(value, timestamp)) as value
     FROM FloatMetricFeedback
     WHERE metric_name = {p1:String}
     GROUP BY target_id
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String}
-ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
+ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2718,10 +2964,6 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "20".to_string(),
-            },
-            QueryParameter {
-                name: "p3".to_string(),
-                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2760,6 +3002,10 @@ SELECT
     i.tool_choice as tool_choice,
     i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
+    i.extra_body as extra_body,
+    i.inference_params as inference_params,
+    i.processing_time_ms as processing_time_ms,
+    i.ttft_ms as ttft_ms,
     i.output as output,
     countSubstringsCaseInsensitiveUTF8(i.input, {p1:String}) as input_term_frequency,
     countSubstringsCaseInsensitiveUTF8(i.output, {p1:String}) as output_term_frequency,
@@ -2768,9 +3014,9 @@ FROM ChatInference AS i
 WHERE
     i.function_name = {p0:String}
     AND total_term_frequency > 0
-ORDER BY total_term_frequency DESC NULLS LAST
+ORDER BY total_term_frequency DESC NULLS LAST, toUInt128(i.id) DESC
 LIMIT {p2:UInt64}
-OFFSET {p3:UInt64}
+
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2796,9 +3042,15 @@ FORMAT JSONEachRow";
         let (sql, _) = generate_list_inferences_sql(&config, &opts).unwrap();
 
         // SQL should order by total_term_frequency DESC for both tables
-        assert_query_contains(&sql, "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         assert_query_contains(&sql, "UNION ALL");
-        assert_query_contains(&sql, "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(
+            &sql,
+            "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC",
+        );
         // Should also order by total_term_frequency DESC for the combined result
         assert_query_contains(&sql, "AS combined ORDER BY total_term_frequency DESC");
     }

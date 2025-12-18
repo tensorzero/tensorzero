@@ -42,8 +42,8 @@ import type { ToolChoice } from "./ToolChoice";
  *
  * # Conversion from Storage Format
  * Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
- * 1. `dynamic_tools` → `additional_tools`
- * 2. `allowed_tools` → `allowed_tools` (based on choice enum)
+ * 1. `dynamic_tools` -> `additional_tools`
+ * 2. `allowed_tools` -> `allowed_tools` (based on choice enum)
  * 3. Other fields copied directly
  *
  * Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.

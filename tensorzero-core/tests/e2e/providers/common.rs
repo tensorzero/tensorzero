@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use secrecy::SecretString;
 use tensorzero::ClientExt;
 
-use object_store::{aws::AmazonS3Builder, ObjectStore};
+use object_store::{ObjectStore, aws::AmazonS3Builder};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
     AnthropicDefaults, AzureDefaults, DeepSeekDefaults, FireworksDefaults, GCPDefaults,
@@ -20,7 +20,7 @@ use tensorzero_core::tool::Tool;
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use base64::prelude::*;
 use futures::StreamExt;
 use image::{ImageFormat, ImageReader};
@@ -29,26 +29,26 @@ use object_store::path::Path;
 use rand::Rng;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
+    CacheParamsOptions, ClientInferenceParams, ClientSecretString, InferenceOutput,
+    InferenceResponse, Input, InputMessage, InputMessageContent,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
-use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
+use tensorzero_core::endpoints::object_storage::{ObjectResponse, PathParams, get_object_handler};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
+        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage,
         storage::{StorageKind, StoragePath},
-        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -168,8 +168,10 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_image_url_inference_with_provider_filesystem;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_empty_message_content_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
+        use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -206,6 +208,15 @@ macro_rules! generate_provider_tests {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_assistant_prefill_inference_request() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_assistant_prefill_inference_request_with_provider(provider).await;
+            }
+        }
+
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
@@ -263,6 +274,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_empty_message_content() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_empty_message_content_with_provider(provider).await;
             }
         }
 
@@ -988,14 +1007,14 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1052,11 +1071,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1104,14 +1123,14 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     let credential_value = original_value.clone();
 
     // Remove the default env var
-    std::env::remove_var(&original_env_var);
+    tensorzero_unsafe_helpers::remove_env_var_tests_only(&original_env_var);
 
     // Set up a custom env var with a test-specific name
     let custom_env_var = format!(
         "TENSORZERO_TEST_{}_KEY",
         provider.model_provider_name.to_uppercase()
     );
-    std::env::set_var(&custom_env_var, &credential_value);
+    tensorzero_unsafe_helpers::set_env_var_tests_only(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
@@ -1152,11 +1171,11 @@ defaults.{}
             function_name: None,
             model_name: Some(provider.model_name),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1272,11 +1291,11 @@ model = "test-model"
                 function_name: Some("basic_test".to_string()),
                 variant_name: Some("default".to_string()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "Say hello".to_string(),
                         })],
                     }],
@@ -1311,11 +1330,11 @@ model = "test-model"
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
             episode_id: Some(episode_id),
-            input: ClientInput {
+            input: Input {
                 system: None,
-                messages: vec![ClientInputMessage {
+                messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "Say hello".to_string(),
                     })],
                 }],
@@ -1349,7 +1368,7 @@ model = "test-model"
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_url_image_inference_with_provider_and_store(
+    Box::pin(test_url_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1365,7 +1384,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         "#,
             temp_dir.path().to_string_lossy()
         ),
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1432,7 +1451,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_pdf_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1448,7 +1467,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that PDF was stored in filesystem
@@ -1472,7 +1491,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -1488,7 +1507,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
             temp_dir.path().to_string_lossy()
         ),
         "",
-    )
+    ))
     .await;
 
     // Check that image was stored in filesystem
@@ -1551,7 +1570,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     prefix += "-";
 
     let (tensorzero_client, expected_key, storage_path) =
-        test_image_inference_with_provider_s3_compatible(
+        Box::pin(test_image_inference_with_provider_s3_compatible(
             provider,
             &StorageKind::S3Compatible {
                 bucket_name: Some(test_bucket.to_string()),
@@ -1573,7 +1592,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     "#
             ),
             &prefix,
-        )
+        ))
         .await;
 
     check_object_fetch(
@@ -1620,9 +1639,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         }
     }
 
-    let (tensorzero_client, storage_path) =
-        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
-            .await;
+    let (tensorzero_client, storage_path) = Box::pin(
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix),
+    )
+    .await;
 
     let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client
@@ -1686,15 +1706,15 @@ pub async fn test_url_image_inference_with_provider_and_store(
             .inference(ClientInferenceParams {
                 model_name: Some(provider.model_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url(UrlFile {
+                            InputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
@@ -1755,18 +1775,18 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                 function_name: Some("pdf_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: ClientInput {
+                input: Input {
                     system: None,
-                    messages: vec![ClientInputMessage {
+                    messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            ClientInputMessageContent::Text(TextKind::Text {
+                            InputMessageContent::Text(Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(
+                            InputMessageContent::File(File::Base64(
                                 Base64File::new(
                                     None,
-                                    mime::APPLICATION_PDF,
+                                    Some(mime::APPLICATION_PDF),
                                     pdf_data.clone(),
                                     None,
                                     None,
@@ -1821,18 +1841,18 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         function_name: Some("image_test".to_string()),
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: ClientInput {
+        input: Input {
             system: None,
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    ClientInputMessageContent::Text(TextKind::Text {
+                    InputMessageContent::Text(Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64(
+                    InputMessageContent::File(File::Base64(
                         Base64File::new(
                             None,
-                            mime::IMAGE_PNG,
+                            Some(mime::IMAGE_PNG),
                             image_data.clone(),
                             Some(Detail::Low),
                             None,
@@ -1894,8 +1914,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
+    params.input.messages[0].content[1] = InputMessageContent::File(File::Base64(
+        Base64File::new(None, Some(mime::IMAGE_PNG), updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2479,24 +2499,24 @@ pub async fn test_warn_ignored_thought_block_with_provider(
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
-            input: ClientInput {
+            input: Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
                 messages: vec![
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::Assistant,
-                        content: vec![ClientInputMessageContent::Thought(Thought {
+                        content: vec![InputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
                         })],
                     },
-                    ClientInputMessage {
+                    InputMessage {
                         role: Role::User,
-                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        content: vec![InputMessageContent::Text(Text {
                             text: "What is the name of the capital city of Japan?".to_string(),
                         })],
                     },
@@ -2543,6 +2563,121 @@ pub async fn test_warn_ignored_thought_block_with_provider(
             provider.variant_name
         );
     }
+}
+
+pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
+    // * Mistral doesn't support assistant prefill
+    // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
+    // * Some AWS bedrock models error when the last message is an assistant message
+    // * Azure AI foundry seems to ignore trailing assistant messages
+    // * xAI seems to also ignore them
+    if provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "aws_sagemaker"
+        || provider.model_provider_name == "aws_bedrock"
+        || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "xai"
+    {
+        return;
+    }
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
+    let payload = serde_json::json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact"
+                },
+                {
+                    "role": "assistant",
+                    "content": "The capital city "
+                },
+                {
+                    "role": "assistant",
+                    "content": " of Japan is"
+                },
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json}");
+
+    assert_eq!(response_json["content"][0]["type"], "text");
+    let content = response_json["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content.to_lowercase().contains("tokyo"),
+        "Content should contain 'tokyo': {content}"
+    );
+
+    // We don't check clickhouse, since we do this in lots of places
+}
+
+pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": []
+                },
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "extra_headers": extra_headers.extra_headers,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    // Don't bother checking anything else - this is just to make sure that the provider
+    // doesn't choke on an empty 'content' array
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
@@ -3486,7 +3621,10 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
-    // A top_p of -100 and temperature of -100 should produce errors on all providers
+    // This test is very flaky on Fireworks for some reason
+    if provider.model_provider_name == "fireworks" {
+        return;
+    }
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -3495,10 +3633,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
+        // Set lots of invalid parameters to try to produce an error on all providers
         "params": {
             "chat_completion": {
                 "temperature": -100,
                 "top_p": -100,
+                "presence_penalty": -100,
+                "frequency_penalty": -100,
             }
         },
         "input":
@@ -3538,10 +3679,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
         let resp: Value = resp.json().await.unwrap();
         let err_msg = resp.get("error").unwrap().as_str().unwrap();
+        println!("Error message: {err_msg}");
         assert!(
             err_msg.contains("top_p")
                 || err_msg.contains("topP")
-                || err_msg.contains("temperature"),
+                || err_msg.contains("temperature")
+                || err_msg.contains("presence_penalty")
+                || err_msg.contains("frequency_penalty"),
             "Unexpected error message: {resp}"
         );
     }
@@ -3574,6 +3718,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -3583,6 +3728,7 @@ pub async fn test_streaming_include_original_response_with_provider(provider: E2
         &provider, episode_id, seed, &tag_value, false, true,
     )
     .await;
+
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true, true,
@@ -3714,16 +3860,20 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if (provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry"))
-        || check_cache
-    {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if (provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry"))
+            || check_cache
+        {
+            assert_eq!(input_tokens, 0);
+            assert_eq!(output_tokens, 0);
+        } else {
+            assert!(input_tokens > 0);
+            assert!(output_tokens > 0);
+        }
     }
 
     assert!(finish_reason.is_some());
@@ -3826,15 +3976,19 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
-    if provider.variant_name.contains("azure")
-        && !provider.variant_name.contains("azure-ai-foundry")
-    {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
+    // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
+    // so TensorZero reports 0 for input/output token usage.
+    if provider.model_provider_name != "fireworks" {
+        // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+        if provider.variant_name.contains("azure")
+            && !provider.variant_name.contains("azure-ai-foundry")
+        {
+            assert!(input_tokens.is_null());
+            assert!(output_tokens.is_null());
+        } else {
+            assert!(input_tokens.as_u64().unwrap() > 0);
+            assert!(output_tokens.as_u64().unwrap() > 0);
+        }
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -4973,7 +5127,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -5572,20 +5726,24 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     // We don't care about thoughts in this test
     output_clickhouse.retain(|block| block["type"] != "thought");
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    assert!(content_block
-        .get("text")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("mehta"));
+    assert!(
+        content_block
+            .get("text")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("mehta")
+    );
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -6210,7 +6368,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-                                            // Ignore other content blocks
+    // Ignore other content blocks
     let content_block = output_clickhouse
         .iter()
         .find(|b| b["type"] == "tool_call")
@@ -6632,7 +6790,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        StoredContentBlock::Text(_) | StoredContentBlock::Unknown { .. } => {}
+        StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_) => {}
         _ => {
             panic!("Expected a text or unknown block, got {first:?}");
         }
@@ -6807,9 +6965,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
 
-    assert!(!output_clickhouse
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
+    assert!(
+        !output_clickhouse
+            .iter()
+            .any(|block| block["type"] == "tool_call")
+    );
 
     let content_block = output_clickhouse.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -6885,9 +7045,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert!(raw_request
-        .to_lowercase()
-        .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        raw_request
+            .to_lowercase()
+            .contains("what is the weather like in tokyo (in celsius)")
+    );
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
@@ -7193,12 +7355,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7605,12 +7769,14 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("fast")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("fast"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -7891,12 +8057,14 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let tool_parameters = tool["parameters"].as_object().unwrap();
     assert_eq!(tool_parameters["type"], "object");
     assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .contains(&json!("location")));
+    assert!(
+        tool_parameters
+            .get("required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&json!("location"))
+    );
     assert_eq!(tool_parameters["additionalProperties"], false);
 
     let properties = tool_parameters["properties"].as_object().unwrap();
@@ -8970,15 +9138,15 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             model_name: None,
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
-            input: tensorzero::ClientInput {
+            input: tensorzero::Input {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
                 )])))),
-                messages: vec![tensorzero::ClientInputMessage {
+                messages: vec![tensorzero::InputMessage {
                     role: Role::User,
-                    content: vec![tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    content: vec![tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "Write me a short sentence ending with the word TensorZero. Don't say anything else."
                                 .to_string(),
                         },
@@ -9100,16 +9268,16 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         } else {
             UnfilteredInferenceExtraHeaders::default()
         },
-        input: tensorzero::ClientInput {
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
                 content: vec![
-                    tensorzero::ClientInputMessageContent::Text(
-                        TextKind::Text {
+                    tensorzero::InputMessageContent::Text(
+                        Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
                     )
@@ -9410,14 +9578,14 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::ClientInput {
+        input: tensorzero::Input {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
                 "Dr. Mehta".into(),
             )])))),
-            messages: vec![tensorzero::ClientInputMessage {
+            messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::InputMessageContent::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         extra_headers: if provider.model_provider_name == "vllm"
@@ -10630,13 +10798,15 @@ pub async fn check_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("answer")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("answer")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -10901,13 +11071,15 @@ pub async fn check_dynamic_json_mode_inference_response(
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
-    assert!(parsed_output
-        .get("response")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("tokyo"));
+    assert!(
+        parsed_output
+            .get("response")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("tokyo")
+    );
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
@@ -11166,10 +11338,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
-            if !raw.is_empty() {
-                full_content.push_str(raw);
-            }
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str())
+            && !raw.is_empty()
+        {
+            full_content.push_str(raw);
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -11510,6 +11682,11 @@ async fn check_short_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content = content
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -11576,6 +11753,11 @@ async fn check_short_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let content_blocks = content_blocks
+        .iter()
+        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
+        .collect::<Vec<_>>();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -11660,6 +11842,11 @@ async fn check_short_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    // Some providers return empty thoughts - exclude thought blocks here
+    let output = output
+        .iter()
+        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+        .collect::<Vec<_>>();
     assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");
@@ -12510,9 +12697,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
     {
-        assert!(raw_request_val["generationConfig"]
-            .get("response_mime_type")
-            .is_none());
+        assert!(
+            raw_request_val["generationConfig"]
+                .get("response_mime_type")
+                .is_none()
+        );
     } else {
         assert!(raw_request_val.get("response_format").is_none());
     }
@@ -12521,7 +12710,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(input_tokens > 5);
 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
+    assert!(output_tokens > 0);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);

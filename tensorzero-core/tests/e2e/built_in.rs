@@ -15,7 +15,7 @@
 
 use crate::common::get_gateway_endpoint;
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_chat_inference_clickhouse, select_json_inference_clickhouse,

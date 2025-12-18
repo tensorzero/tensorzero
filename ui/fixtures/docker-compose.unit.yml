@@ -70,10 +70,12 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PASSWORD: chpassword
-      CLICKHOUSE_USER: chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
     depends_on:
       gateway:
         condition: service_healthy
@@ -100,12 +102,9 @@ services:
         NODE_VERSION: ${NODE_VERSION:-22}
         PNPM_VERSION: ${PNPM_VERSION:-9}
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-notused}
-      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-notused}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_UI_CONFIG_PATH: /app/ui/fixtures/config/tensorzero.toml
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       # For mock server during SFT jobs

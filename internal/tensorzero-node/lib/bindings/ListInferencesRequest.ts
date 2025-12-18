@@ -39,10 +39,22 @@ export type ListInferencesRequest = {
    */
   offset?: number;
   /**
+   * Optional inference ID to paginate before (exclusive).
+   * Returns inferences with IDs before this one (earlier in time).
+   * Cannot be used together with `after` or `offset`.
+   */
+  before?: string;
+  /**
+   * Optional inference ID to paginate after (exclusive).
+   * Returns inferences with IDs after this one (later in time).
+   * Cannot be used together with `before` or `offset`.
+   */
+  after?: string;
+  /**
    * Optional filter to apply when querying inferences.
    * Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
    */
-  filter?: InferenceFilter;
+  filters?: InferenceFilter;
   /**
    * Optional ordering criteria for the results.
    * Supports multiple sort criteria (e.g., sort by timestamp then by metric).

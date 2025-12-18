@@ -2,7 +2,7 @@ use crate::config::UninitializedVariantConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::model_table::ProviderTypeDefaultCredentials;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -113,6 +113,14 @@ impl std::fmt::Display for OptimizationJobHandle {
     }
 }
 
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OptimizationJobHandle {
+    fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
 #[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
@@ -178,6 +186,14 @@ impl std::fmt::Display for OptimizationJobStatus {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
+impl OptimizationJobStatus {
+    fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
 impl OptimizationJobInfoPyClass {
     #[getter]
     fn get_message(&self) -> &str {
@@ -216,6 +232,10 @@ impl OptimizationJobInfoPyClass {
             } => estimated_finish.map(|dt| dt.timestamp()),
             _ => None,
         }
+    }
+
+    fn __repr__(&self) -> String {
+        self.to_string()
     }
 }
 

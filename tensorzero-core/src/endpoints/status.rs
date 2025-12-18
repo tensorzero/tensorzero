@@ -2,29 +2,30 @@ use crate::{
     db::HealthCheckable,
     utils::gateway::{AppState, AppStateData},
 };
-use axum::debug_handler;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Json;
 use futures::join;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// A handler for a simple liveness check
-#[debug_handler]
-pub async fn status_handler() -> Json<StatusResponse> {
-    Json(StatusResponse {
-        status: "ok".to_string(),
-        version: TENSORZERO_VERSION.to_string(),
-    })
-}
-
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StatusResponse {
     pub status: String,
     pub version: String,
+    pub config_hash: String,
+}
+
+/// A handler for a simple liveness check
+pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> {
+    Json(StatusResponse {
+        status: "ok".to_string(),
+        version: TENSORZERO_VERSION.to_string(),
+        config_hash: app_state.config.hash.to_string(),
+    })
 }
 
 /// A handler for a health check that includes availability of related services (for now, ClickHouse)
@@ -129,7 +130,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_status_handler() {
-        let response = status_handler().await;
+        let config = Arc::new(Config::default());
+        let gateway_handle = get_unit_test_gateway_handle_with_options(
+            config.clone(),
+            GatewayHandleTestOptions {
+                clickhouse_client: Arc::new(FakeClickHouseClient::new(true)),
+                postgres_healthy: true,
+            },
+        );
+        let response = status_handler(State(gateway_handle.app_state.clone())).await;
         assert_eq!(response.version, TENSORZERO_VERSION);
+        assert!(!response.config_hash.is_empty());
     }
 }

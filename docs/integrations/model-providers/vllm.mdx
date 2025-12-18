@@ -34,10 +34,10 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.llama3_1_8b_instruct]
+[models.llama3_3_70b_instruct]
 routing = ["vllm"]
 
-[models.llama3_1_8b_instruct.providers.vllm]
+[models.llama3_3_70b_instruct.providers.vllm]
 type = "vllm"
 api_base = "http://host.docker.internal:8000/v1/"  # for vLLM running locally on the host
 model_name = "meta-llama/Llama-3.1-8B-Instruct"
@@ -48,7 +48,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "llama3_1_8b_instruct"
+model = "llama3_3_70b_instruct"
 ```
 
 ### Credentials

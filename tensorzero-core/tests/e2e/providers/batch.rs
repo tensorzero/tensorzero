@@ -8,22 +8,22 @@
 use std::collections::HashMap;
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::tool::Tool;
 use tensorzero_core::{
     db::clickhouse::{
-        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
+        ClickHouseConnectionInfo, TableName, test_helpers::select_batch_model_inferences_clickhouse,
     },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
-        batch::{BatchModelInferenceRow, BatchRequestRow},
         Role, Text,
+        batch::{BatchModelInferenceRow, BatchRequestRow},
     },
     tool::{ToolCall, ToolResult},
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use url::Url;
 use uuid::Uuid;
 
@@ -569,14 +569,14 @@ async fn get_all_batch_inferences(
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
-    let rows = response
+
+    response
         .response
         .lines()
         .filter(|line| !line.is_empty())
         .map(serde_json::from_str::<BatchModelInferenceRow>)
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    rows
+        .unwrap()
 }
 
 pub struct InsertedFakeDataIds {
@@ -1110,9 +1110,11 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -1448,7 +1450,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         .collect();
     assert_eq!(inference_ids.len(), 5);
     let mut inference_id_to_index: HashMap<Uuid, usize> =
-        inference_ids.iter().cloned().zip(0..).collect();
+        inference_ids.iter().copied().zip(0..).collect();
 
     let response_episode_ids = response_json
         .get("episode_ids")
@@ -4150,9 +4152,11 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4497,9 +4501,11 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 

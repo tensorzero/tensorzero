@@ -105,6 +105,38 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
+  if (actionType === "update") {
+    try {
+      const publicId = formData.get("publicId");
+      if (typeof publicId !== "string" || !publicId.trim()) {
+        return {
+          error: "Public ID is required",
+        };
+      }
+
+      const description = formData.get("description");
+      const descriptionStr =
+        description && typeof description === "string"
+          ? description.trim() || null
+          : null;
+
+      const postgresClient = await getPostgresClient();
+      await postgresClient.updateApiKeyDescription(
+        publicId.trim(),
+        descriptionStr,
+      );
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error("Failed to update API key description", error);
+      return {
+        error: "Failed to update API key description. Please try again.",
+      };
+    }
+  }
+
   return {
     error: "Invalid action",
   };

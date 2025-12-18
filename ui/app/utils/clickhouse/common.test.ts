@@ -1,11 +1,5 @@
-import { expect, describe, test } from "vitest";
-import { checkClickHouseConnection } from "./client.server";
+import { describe, test } from "vitest";
 import { storageKindSchema } from "./common";
-
-test("checkClickHouseConnection", async () => {
-  const result = await checkClickHouseConnection();
-  expect(result).toBe(true);
-});
 
 describe("parsing storageKind", () => {
   test("storagekind with undefined region", () => {

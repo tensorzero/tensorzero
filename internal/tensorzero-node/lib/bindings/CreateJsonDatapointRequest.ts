@@ -21,8 +21,6 @@ export type CreateJsonDatapointRequest = {
   input: Input;
   /**
    * JSON datapoint output. Optional.
-   * If provided, it will be validated against the output_schema. Invalid raw outputs will be stored as-is (not parsed), because we allow
-   * invalid outputs in datapoints by design.
    */
   output?: JsonDatapointOutputUpdate;
   /**

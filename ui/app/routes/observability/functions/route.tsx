@@ -9,6 +9,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { useMemo, useState } from "react";
 
 export async function loader() {
   const countsInfo = await countInferencesByFunction();
@@ -18,13 +19,46 @@ export async function loader() {
 export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
   const { countsInfo } = loaderData;
   const functions = useConfig().functions;
-  const totalFunctions = Object.keys(functions).length;
+
+  const [showInternalFunctions, setShowInternalFunctions] = useState(false);
+
+  const filteredFunctions = useMemo(() => {
+    if (showInternalFunctions) return functions;
+
+    return Object.fromEntries(
+      Object.entries(functions).filter(
+        ([functionName]) => !functionName.startsWith("tensorzero::"),
+      ),
+    );
+  }, [functions, showInternalFunctions]);
+
+  const filteredCountsInfo = useMemo(() => {
+    if (showInternalFunctions) return countsInfo;
+
+    return countsInfo.filter(
+      (info) => !info.function_name.startsWith("tensorzero::"),
+    );
+  }, [countsInfo, showInternalFunctions]);
+
+  const displayedFunctionCount = useMemo(() => {
+    const functionNames = new Set<string>([
+      ...Object.keys(filteredFunctions),
+      ...filteredCountsInfo.map((info) => info.function_name),
+    ]);
+
+    return functionNames.size;
+  }, [filteredCountsInfo, filteredFunctions]);
 
   return (
     <PageLayout>
-      <PageHeader heading="Functions" count={totalFunctions} />
+      <PageHeader heading="Functions" count={displayedFunctionCount} />
       <SectionLayout>
-        <FunctionsTable functions={functions} countsInfo={countsInfo} />
+        <FunctionsTable
+          functions={filteredFunctions}
+          countsInfo={filteredCountsInfo}
+          showInternalFunctions={showInternalFunctions}
+          onToggleShowInternalFunctions={setShowInternalFunctions}
+        />
       </SectionLayout>
     </PageLayout>
   );

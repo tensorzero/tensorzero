@@ -17,7 +17,7 @@
 
 use http::StatusCode;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse, endpoints::batch_inference::PollPathParams,
@@ -30,8 +30,9 @@ use crate::{
     providers::{
         batch::{check_clickhouse_batch_request_status, get_poll_batch_inference_url},
         common::{
-            check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-            check_inference_params_response, check_json_mode_inference_response,
+            E2ETestProvider, check_dynamic_json_mode_inference_response,
+            check_dynamic_tool_use_inference_response, check_inference_params_response,
+            check_json_mode_inference_response,
             check_multi_turn_parallel_tool_use_inference_response,
             check_parallel_tool_use_inference_response, check_simple_image_inference_response,
             check_tool_use_multi_turn_inference_response,
@@ -40,7 +41,7 @@ use crate::{
             check_tool_use_tool_choice_auto_used_inference_response,
             check_tool_use_tool_choice_none_inference_response,
             check_tool_use_tool_choice_required_inference_response,
-            check_tool_use_tool_choice_specific_inference_response, E2ETestProvider,
+            check_tool_use_tool_choice_specific_inference_response,
         },
     },
 };
@@ -353,6 +354,8 @@ pub async fn test_simple_image_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -419,6 +422,8 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
     check_json_mode_inference_response(inferences_json[0].clone(), provider, None, true).await;
 
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -588,6 +593,8 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     .await;
 
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -670,6 +677,8 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
     .await;
 
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -748,6 +757,8 @@ pub async fn test_inference_params_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -833,6 +844,8 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(1000)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -939,6 +952,8 @@ pub async fn test_multi_turn_parallel_tool_use_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -1025,6 +1040,8 @@ pub async fn test_dynamic_tool_use_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -1116,6 +1133,8 @@ pub async fn test_dynamic_json_mode_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(
@@ -1186,6 +1205,8 @@ pub async fn test_allowed_tools_unified_mock_batch_with_provider(
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow ClickHouse async_insert to become visible
+    sleep(Duration::from_millis(200)).await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
 
     println!(

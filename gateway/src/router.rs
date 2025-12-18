@@ -4,22 +4,18 @@
 //! and defines authentication and version header middlewares.
 
 use axum::{
-    extract::{DefaultBodyLimit, MatchedPath, Request, State},
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
     Router,
+    extract::{DefaultBodyLimit, Request},
+    middleware::{self, Next},
+    response::Response,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
-use tensorzero_auth::{key::TensorZeroApiKey, postgres::AuthResult};
-use tensorzero_core::endpoints::RequestApiKeyExtension;
+use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
+use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
+use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tensorzero_core::{
-    error::{Error, ErrorDetails},
-    observability::TracerWrapper,
-};
-use tower_http::metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer};
-use tracing::Instrument;
+use tower_http::metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter};
 
 use crate::routes::build_api_routes;
 
@@ -44,9 +40,15 @@ pub fn build_axum_router(
     router = router.fallback(endpoints::fallback::handle_404);
 
     if app_state.config.gateway.auth.enabled {
+        let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
+            unauthenticated_routes: UNAUTHENTICATED_ROUTES,
+            auth_cache: app_state.auth_cache.clone(),
+            pool: app_state.postgres_connection_info.get_alpha_pool().cloned(),
+            error_json: app_state.config.gateway.unstable_error_json,
+        });
         router = router.layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            tensorzero_auth_middleware,
+            state,
+            tensorzero_auth::middleware::tensorzero_auth_middleware,
         ));
     }
     // Everything added from this point onwards does *NOT* have authentication applied - that is,
@@ -69,116 +71,6 @@ pub fn build_axum_router(
 /// to accidentally skip running authentication on a route, especially if we later refactor
 /// how we build up our router.
 const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health"];
-
-#[axum::debug_middleware]
-async fn tensorzero_auth_middleware(
-    State(app_state): State<AppStateData>,
-    mut request: Request,
-    next: Next,
-) -> Response {
-    let route = request
-        .extensions()
-        .get::<MatchedPath>()
-        .map(MatchedPath::as_str);
-    if let Some(route) = route {
-        if UNAUTHENTICATED_ROUTES.contains(&route) {
-            return next.run(request).await;
-        }
-    }
-    let headers = request.headers();
-    // This block holds all of the actual authentication logic.
-    // We use `.instrument` on this future, so that we don't include the '.next.run(request)' inside
-    // of our `tensorzero_auth` OpenTelemetry span.
-    let do_auth = async {
-        let Some(auth_header) = headers.get(http::header::AUTHORIZATION) else {
-            return Err(Error::new(ErrorDetails::TensorZeroAuth {
-                message: "Authorization header is required".to_string(),
-            }));
-        };
-        let auth_header_value = auth_header.to_str().map_err(|e| {
-            Error::new(ErrorDetails::TensorZeroAuth {
-                message: format!("Invalid authorization header: {e}"),
-            })
-        })?;
-        let raw_api_key = auth_header_value.strip_prefix("Bearer ").ok_or_else(|| {
-            Error::new(ErrorDetails::TensorZeroAuth {
-                message: "Authorization header must start with 'Bearer '".to_string(),
-            })
-        })?;
-
-        let parsed_key = match TensorZeroApiKey::parse(raw_api_key) {
-            Ok(key) => key,
-            Err(e) => {
-                return Err(Error::new(ErrorDetails::TensorZeroAuth {
-                    message: format!("Invalid API key: {e}"),
-                }))
-            }
-        };
-        let Some(pool) = app_state.postgres_connection_info.get_alpha_pool() else {
-            return Err(Error::new(ErrorDetails::TensorZeroAuth {
-                message: "PostgreSQL connection is disabled".to_string(),
-            }));
-        };
-
-        // Check cache first if available
-        if let Some(cache) = &app_state.auth_cache {
-            let cache_key = parsed_key.cache_key();
-            if let Some(cached_result) = cache.get(&cache_key) {
-                return match cached_result {
-                    AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
-                    AuthResult::Disabled(disabled_at) => {
-                        Err(Error::new(ErrorDetails::TensorZeroAuth {
-                            message: format!("API key was disabled at: {disabled_at}"),
-                        }))
-                    }
-                    AuthResult::MissingKey => Err(Error::new(ErrorDetails::TensorZeroAuth {
-                        message: "Provided API key does not exist in the database".to_string(),
-                    })),
-                };
-            }
-        }
-
-        // Cache miss or no cache - query database
-        let postgres_key = match tensorzero_auth::postgres::check_key(&parsed_key, pool).await {
-            Ok(key) => key,
-            Err(e) => {
-                return Err(Error::new(ErrorDetails::TensorZeroAuth {
-                    message: format!("Failed to check API key: {e}"),
-                }));
-            }
-        };
-
-        // Store result in cache if available
-        if let Some(cache) = &app_state.auth_cache {
-            let cache_key = parsed_key.cache_key();
-            cache.insert(cache_key, postgres_key.clone());
-        }
-
-        match postgres_key {
-            AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
-            AuthResult::Disabled(disabled_at) => Err(Error::new(ErrorDetails::TensorZeroAuth {
-                message: format!("API key was disabled at: {disabled_at}"),
-            })),
-            AuthResult::MissingKey => Err(Error::new(ErrorDetails::TensorZeroAuth {
-                message: "Provided API key does not exist in the database".to_string(),
-            })),
-        }
-    }
-    .instrument(tracing::trace_span!(
-        "tensorzero_auth",
-        otel.name = "tensorzero_auth"
-    ));
-
-    match do_auth.await {
-        Ok((parsed_key, _key_info)) => {
-            request.extensions_mut().insert(RequestApiKeyExtension {
-                api_key: Arc::new(parsed_key),
-            });
-            next.run(request).await
-        }
-        Err(e) => e.into_response(),
-    }
-}
 
 async fn add_version_header(request: Request, next: Next) -> Response {
     #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]

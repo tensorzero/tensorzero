@@ -3,9 +3,10 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
+use futures::future::{join_all, try_join_all};
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::time::timeout;
@@ -18,12 +19,12 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
-    System,
-};
-use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+};
+use crate::inference::types::{
+    ModelInferenceRequest, RequestMessage, Role, System,
+    batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -40,8 +41,8 @@ use crate::{
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 use super::{
-    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant, infer_model_request,
+    infer_model_request_stream, prepare_model_inference_request,
 };
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -87,7 +88,7 @@ impl MixtureOfNConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct UninitializedMixtureOfNConfig {
@@ -110,7 +111,7 @@ pub struct FuserConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct UninitializedFuserConfig {
@@ -409,7 +410,7 @@ fn make_stream_from_non_stream(
                     id += 1;
                     Ok(chunk)
                 }
-                ContentBlockChatOutput::Unknown { .. } => {
+                ContentBlockChatOutput::Unknown(_) => {
                     Err(ErrorDetails::Inference {
                         message: "MixtureOfNConfig variant does not support unknown content blocks in streaming mode".to_string(),
                     }
@@ -521,11 +522,9 @@ impl MixtureOfNConfig {
         }
 
         // Wait for all the inference tasks to complete
-        let inference_results: Vec<_> = join_all(
-            inference_futures
-                .into_iter()
-                .map(|(candidate_name, future)| async move { (candidate_name, future.await) }),
-        )
+        let inference_results: Vec<_> = join_all(inference_futures.into_iter().map(
+            |(candidate_name, future)| async move { (candidate_name, Box::pin(future).await) },
+        ))
         .await;
 
         // Collect the successful results
@@ -918,7 +917,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode().cloned(),
+            self.inner.json_mode().copied(),
             extra_body,
             extra_headers,
         )?;
@@ -936,7 +935,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
+        config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         experimentation::ExperimentationConfig,
@@ -1268,9 +1267,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
@@ -1435,6 +1436,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1461,6 +1463,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1555,6 +1558,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1636,6 +1640,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();

@@ -7,9 +7,10 @@ use evaluations::EvaluationInfo;
 use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
-    config::{path::ResolvedTomlPathData, SchemaData},
+    config::{SchemaData, path::ResolvedTomlPathData},
+    db::stored_datapoint::StoredChatInferenceDatapoint,
     endpoints::{
-        datasets::{Datapoint, StoredChatInferenceDatapoint},
+        datasets::Datapoint,
         inference::{ChatInferenceResponse, InferenceResponse},
     },
     evaluations::{
@@ -144,6 +145,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let calculator_tool = StaticToolConfig {
         name: "calculator".to_string(),
+        key: "calculator".to_string(),
         description: "Evaluates mathematical expressions".to_string(),
         parameters: calculator_schema,
         strict: true,
@@ -164,6 +166,7 @@ pub fn create_test_function_config_with_static_tools() -> (
 
     let weather_tool = StaticToolConfig {
         name: "weather".to_string(),
+        key: "weather".to_string(),
         description: "Gets weather information".to_string(),
         parameters: weather_schema,
         strict: true,
@@ -340,11 +343,10 @@ pub fn create_test_evaluation_info(
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
+        snapshot_hash: None,
     };
 
-    // Convert StoredDatapoint to Datapoint
-    let function_config = create_test_function_config();
-    let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
+    let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
 
     let response = InferenceResponse::Chat(ChatInferenceResponse {
         inference_id: Uuid::now_v7(),
@@ -732,7 +734,7 @@ async fn test_analyze_input_echo_helper(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_includes_system_template() {
-    let payload = test_analyze_input_echo_helper(
+    let payload = Box::pin(test_analyze_input_echo_helper(
         vec![create_test_evaluation_info(
             "test_function",
             "Test input",
@@ -741,7 +743,7 @@ async fn test_analyze_input_includes_system_template() {
         create_test_function_config(),
         None,
         create_test_evaluation_config(),
-    )
+    ))
     .await;
 
     let system_prompt = payload
@@ -824,7 +826,7 @@ async fn test_analyze_input_format_scenarios() {
             Some(false), // parallel_tool_calls
         );
 
-        let datapoint = tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint {
+        let datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: uuid::Uuid::now_v7(),
@@ -844,6 +846,7 @@ async fn test_analyze_input_format_scenarios() {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let response = InferenceResponse::Chat(
@@ -863,9 +866,7 @@ async fn test_analyze_input_format_scenarios() {
         );
 
         evaluations::stats::EvaluationInfo {
-            datapoint: Datapoint::Chat(
-                datapoint.into_datapoint(&tools_function_config_tool_params),
-            ),
+            datapoint: Datapoint::Chat(datapoint.into_datapoint()),
             response,
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
@@ -957,12 +958,12 @@ async fn test_analyze_input_format_scenarios() {
     ];
 
     for scenario in scenarios {
-        let payload = test_analyze_input_echo_helper(
+        let payload = Box::pin(test_analyze_input_echo_helper(
             scenario.eval_infos,
             scenario.function_config,
             scenario.static_tools,
             scenario.eval_config,
-        )
+        ))
         .await;
 
         (scenario.assert_fn)(&payload);

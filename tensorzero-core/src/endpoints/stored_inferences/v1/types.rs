@@ -5,9 +5,13 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
-    InferenceOutputSource, ListInferencesParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, ListInferencesParams, PaginationParams,
 };
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
+
+// Re-exported for backwards compatibility.
+pub use crate::endpoints::shared_types::OrderDirection;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
@@ -89,14 +93,11 @@ pub enum TagComparisonOperator {
     NotEqual,
 }
 
-/// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
+/// Filter by whether an inference has a demonstration.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
-pub enum OrderDirection {
-    #[serde(rename = "ascending")]
-    Asc,
-    #[serde(rename = "descending")]
-    Desc,
+pub struct DemonstrationFeedbackFilter {
+    pub has_demonstration: bool,
 }
 
 /// The property to order by.
@@ -153,6 +154,10 @@ pub enum InferenceFilter {
     #[schemars(title = "InferenceFilterBooleanMetric")]
     BooleanMetric(BooleanMetricFilter),
 
+    /// Filter by whether an inference has a demonstration.
+    #[schemars(title = "InferenceFilterDemonstrationFeedback")]
+    DemonstrationFeedback(DemonstrationFeedbackFilter),
+
     /// Filter by tag key-value pair
     #[schemars(title = "InferenceFilterTag")]
     Tag(TagFilter),
@@ -204,8 +209,24 @@ pub struct ListInferencesRequest {
     /// Defaults to 0.
     pub offset: Option<u32>,
 
+    /// Optional inference ID to paginate before (exclusive).
+    /// Returns inferences with IDs before this one (earlier in time).
+    /// Cannot be used together with `after` or `offset`.
+    pub before: Option<Uuid>,
+
+    /// Optional inference ID to paginate after (exclusive).
+    /// Returns inferences with IDs after this one (later in time).
+    /// Cannot be used together with `before` or `offset`.
+    pub after: Option<Uuid>,
+
     /// Optional filter to apply when querying inferences.
     /// Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
+    pub filters: Option<InferenceFilter>,
+
+    /// **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    #[deprecated(note = "Use `filters` instead")]
+    #[serde(skip_serializing)]
+    #[ts(skip)]
     pub filter: Option<InferenceFilter>,
 
     /// Optional ordering criteria for the results.
@@ -229,19 +250,57 @@ pub struct ListInferencesRequest {
 
 impl ListInferencesRequest {
     /// Convert the request to a `ListInferencesParams` struct for the database query layer.
-    pub fn as_list_inferences_params<'a>(&'a self) -> ListInferencesParams<'a> {
-        ListInferencesParams {
+    pub fn as_list_inferences_params<'a>(&'a self) -> Result<ListInferencesParams<'a>, Error> {
+        // Construct cursor-based pagination params, and validate that before and after are mutually exclusive
+        let pagination = match (self.before, self.after) {
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both 'before' and 'after' parameters".to_string(),
+                }));
+            }
+            (Some(before), None) => Some(PaginationParams::Before { id: before }),
+            (None, Some(after)) => Some(PaginationParams::After { id: after }),
+            (None, None) => None,
+        };
+
+        // Validate that offset and cursor pagination are mutually exclusive
+        if pagination.is_some() && self.offset.is_some() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "Cannot use 'offset' with cursor pagination ('before' or 'after')"
+                    .to_string(),
+            }));
+        }
+
+        // Handle deprecated `filter` field - prefer `filters` if both are set
+        #[expect(
+            deprecated,
+            reason = "intentionally accessing deprecated field for backwards compatibility"
+        )]
+        let filters = match (&self.filters, &self.filter) {
+            (Some(filters), _) => Some(filters),
+            (None, Some(filter)) => {
+                tracing::warn!(
+                    "The 'filter' field is deprecated and will be removed in a future release. \
+                     Please use 'filters' instead."
+                );
+                Some(filter)
+            }
+            (None, None) => None,
+        };
+
+        Ok(ListInferencesParams {
             ids: None,
             function_name: self.function_name.as_deref(),
             variant_name: self.variant_name.as_deref(),
             episode_id: self.episode_id.as_ref(),
-            filters: self.filter.as_ref(),
+            filters,
             output_source: self.output_source,
             limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
             offset: self.offset.unwrap_or(0),
+            pagination,
             order_by: self.order_by.as_deref(),
             search_query_experimental: self.search_query_experimental.as_deref(),
-        }
+        })
     }
 }
 
@@ -273,20 +332,4 @@ pub struct GetInferencesRequest {
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
-}
-
-/// Response containing the inference table bounds.
-/// Used by the `GET /internal/inferences/bounds` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[serde_with::skip_serializing_none]
-#[ts(export, optional_fields)]
-pub struct GetInferenceBoundsResponse {
-    /// The most recent inference ID (MAX id_uint).
-    pub latest_id: Option<Uuid>,
-
-    /// The oldest inference ID (MIN id_uint).
-    pub earliest_id: Option<Uuid>,
-
-    /// The total number of inferences matching the filter criteria.
-    pub count: u64,
 }

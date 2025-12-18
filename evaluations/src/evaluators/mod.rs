@@ -4,28 +4,28 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::client::{ClientInput, FeedbackParams, InferenceResponse};
+use tensorzero_core::client::{FeedbackParams, InferenceResponse, Input};
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
-use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
 pub mod llm_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
-use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams};
+use llm_judge::{LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-use crate::stopping::CancellationTokens;
 use crate::Clients;
+use crate::stopping::CancellationTokens;
 
 pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 
 pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
     pub datapoint: Arc<Datapoint>,
-    pub input: Arc<ClientInput>,
+    pub input: Arc<Input>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: Arc<String>,
     pub clients: Arc<Clients>,
@@ -201,7 +201,7 @@ struct RunEvaluatorParams<'a> {
     datapoint: &'a Datapoint,
     evaluation_name: &'a str,
     evaluation_run_id: Uuid,
-    input: &'a ClientInput,
+    input: &'a Input,
     inference_cache: CacheEnabledMode,
 }
 

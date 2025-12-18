@@ -3,8 +3,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::parse_macro_input;
-use syn::punctuated::Punctuated;
 use syn::DeriveInput;
 use syn::Expr;
 use syn::ExprLit;
@@ -12,6 +10,8 @@ use syn::Fields;
 use syn::Lit;
 use syn::Meta;
 use syn::Token;
+use syn::parse_macro_input;
+use syn::punctuated::Punctuated;
 
 struct TagData {
     tag: String,
@@ -295,4 +295,14 @@ pub fn export_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[cfg(test)]
+mod tests {
+    // Tests various errors emitted by the derive macro.
+    #[test]
+    fn ui() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/*.rs");
+    }
 }

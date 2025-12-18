@@ -170,13 +170,12 @@ pub fn parse_tool(
 /// ```
 pub fn convert_response_to_python_dataclass<T: serde::Serialize>(
     py: Python<'_>,
-    // TODO(shuyangli): this should be &T.
-    response: T,
+    response: &T,
     python_module: &str,
     python_class: &str,
 ) -> PyResult<Py<PyAny>> {
     // Serialize Rust response to JSON dict
-    let dict = serialize_to_dict(py, &response)?;
+    let dict = serialize_to_dict(py, response)?;
 
     // Import the target dataclass
     let module = PyModule::import(py, python_module)?;

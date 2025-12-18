@@ -82,7 +82,7 @@ export default function FeedbackTable({
         {feedback.length === 0 ? (
           <TableEmptyState message="No feedback found" />
         ) : (
-          feedback.map((item) => {
+          feedback.map((item, index) => {
             const isLatestOfType =
               item.type === "comment"
                 ? item.id === latestCommentId
@@ -91,7 +91,7 @@ export default function FeedbackTable({
                   : latestFeedbackIdByMetric?.[item.metric_name] === item.id;
 
             return (
-              <TableRow key={item.id}>
+              <TableRow key={`${item.id}-${index}`}>
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid id={item.id} />
                 </TableCell>

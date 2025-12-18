@@ -6,7 +6,7 @@ use tensorzero::{
     ClientExt, FunctionTool, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
     StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
 };
-use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
+use tensorzero_core::db::stored_datapoint::StoredJsonInferenceDatapoint;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
@@ -62,6 +62,10 @@ pub async fn test_render_samples_no_function() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client
@@ -98,6 +102,10 @@ pub async fn test_render_samples_no_variant() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let error = client
@@ -107,9 +115,11 @@ pub async fn test_render_samples_no_variant() {
         )
         .await
         .unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variant notavariant for function basic_test not found."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variant notavariant for function basic_test not found.")
+    );
     assert!(logs_contain(
         "Variant notavariant for function basic_test not found."
     ));
@@ -145,6 +155,10 @@ pub async fn test_render_samples_missing_variable() {
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client
@@ -168,9 +182,10 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -185,19 +200,27 @@ pub async fn test_render_samples_normal() {
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![(
+                            "country".to_string(),
+                            json!("Japan"),
+                        )])),
                     })],
                 }],
             },
@@ -214,14 +237,19 @@ pub async fn test_render_samples_normal() {
                 raw: Some("{}".to_string()), // This should not be validated
             }],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -229,13 +257,15 @@ pub async fn test_render_samples_normal() {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                name: Some("get_temperature".to_string()),
-                arguments: Some(json!({"location": "Tokyo"})),
-                id: Uuid::now_v7().to_string(),
-                raw_name: "get_temperature".to_string(),
-                raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
-            })],
+            output: vec![ContentBlockChatOutput::ToolCall(
+                InferenceResponseToolCall {
+                    name: Some("get_temperature".to_string()),
+                    arguments: Some(json!({"location": "Tokyo"})),
+                    id: Uuid::now_v7().to_string(),
+                    raw_name: "get_temperature".to_string(),
+                    raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
+                },
+            )],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::new_for_test(
@@ -258,14 +288,19 @@ pub async fn test_render_samples_normal() {
                 text: "Hello, world!".to_string(),
             })]],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -285,7 +320,9 @@ pub async fn test_render_samples_normal() {
                                         endpoint: None,
                                         allow_http: None,
                                     },
-                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                                    path: Path::from(
+                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
                                 },
                                 filename: None,
                             },
@@ -300,6 +337,10 @@ pub async fn test_render_samples_normal() {
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         }),
     ];
 
@@ -493,6 +534,10 @@ pub async fn test_render_samples_template_no_schema() {
         tool_params: ToolCallConfigDatabaseInsert::default(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
+        extra_body: Default::default(),
+        inference_params: Default::default(),
+        processing_time_ms: None,
+        ttft_ms: None,
     })];
 
     let rendered_inferences = client
@@ -599,6 +644,7 @@ pub async fn test_render_datapoints_no_function() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client
@@ -640,6 +686,7 @@ pub async fn test_render_datapoints_no_variant() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let error = client
@@ -649,9 +696,11 @@ pub async fn test_render_datapoints_no_variant() {
         )
         .await
         .unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variant notavariant for function basic_test not found."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variant notavariant for function basic_test not found.")
+    );
     assert!(logs_contain(
         "Variant notavariant for function basic_test not found."
     ));
@@ -692,6 +741,7 @@ pub async fn test_render_datapoints_missing_variable() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client
@@ -718,9 +768,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -737,6 +788,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -745,14 +797,18 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![(
+                            "country".to_string(),
+                            json!("Japan"),
+                        )])),
                     })],
                 }],
             },
@@ -768,6 +824,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -776,9 +833,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -786,13 +844,15 @@ pub async fn test_render_datapoints_normal() {
                     })],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                name: Some("get_temperature".to_string()),
-                arguments: Some(json!({"location": "Tokyo"})),
-                id: Uuid::now_v7().to_string(),
-                raw_name: "get_temperature".to_string(),
-                raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
-            })]),
+            output: Some(vec![ContentBlockChatOutput::ToolCall(
+                InferenceResponseToolCall {
+                    name: Some("get_temperature".to_string()),
+                    arguments: Some(json!({"location": "Tokyo"})),
+                    id: Uuid::now_v7().to_string(),
+                    raw_name: "get_temperature".to_string(),
+                    raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
+                },
+            )]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
@@ -815,6 +875,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
         StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
@@ -823,9 +884,10 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), "Dr. Mehta".into()),
-                ])))),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -845,7 +907,9 @@ pub async fn test_render_datapoints_normal() {
                                         endpoint: None,
                                         allow_http: None,
                                     },
-                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
+                                    path: Path::from(
+                                        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                                    ),
                                 },
                                 filename: None,
                             },
@@ -862,6 +926,7 @@ pub async fn test_render_datapoints_normal() {
             staled_at: None,
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
+            snapshot_hash: None,
         }),
     ];
 
@@ -1046,6 +1111,7 @@ pub async fn test_render_datapoints_template_no_schema() {
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
+        snapshot_hash: None,
     })];
 
     let rendered_samples = client

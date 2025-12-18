@@ -1,3 +1,9 @@
+/**
+ * Server-side utilities for resolving file content for inputs and model inferences.
+ *
+ * TODO(shuyangli): find a nice way to avoid duplicating all the types with resolved files; possibly lazily load them.
+ */
+
 import type {
   ZodDisplayInput,
   ZodDisplayInputMessage,
@@ -6,22 +12,25 @@ import type {
   ZodInput,
   ZodInputMessage,
   ZodInputMessageContent,
-  ZodModelInferenceInputMessage,
-  ZodModelInferenceInputMessageContent,
   ZodResolvedBase64File,
   ZodRole,
   ZodLegacyTextInput,
 } from "./clickhouse/common";
 import type {
+  File,
   FunctionConfig,
   JsonValue,
-  StoredInput,
-  StoredInputMessage,
-  StoredInputMessageContent,
   Input,
   InputMessageContent,
+  StoredInput,
+  StoredInputMessageContent,
+  StoredFile,
+  ModelInference,
+  StoredRequestMessage,
+  StoredContentBlock,
 } from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
+import type { ParsedModelInferenceRow } from "./clickhouse/inference";
 
 export async function resolveInput(
   input: ZodInput,
@@ -48,8 +57,28 @@ export async function resolveMessages(
   );
 }
 
-export async function resolveModelInferenceMessages(
-  messages: ZodModelInferenceInputMessage[],
+/**
+ * Resolves model inferences by transforming input_messages for display.
+ * This fetches file content from object storage and prepares messages for rendering.
+ */
+export async function resolveModelInferences(
+  modelInferences: ModelInference[],
+): Promise<ParsedModelInferenceRow[]> {
+  return Promise.all(
+    modelInferences.map(async (row) => {
+      const resolvedMessages = await resolveModelInferenceMessages(
+        row.input_messages,
+      );
+      return {
+        ...row,
+        input_messages: resolvedMessages,
+      } as ParsedModelInferenceRow;
+    }),
+  );
+}
+
+async function resolveModelInferenceMessages(
+  messages: StoredRequestMessage[],
 ): Promise<ZodDisplayInputMessage[]> {
   return Promise.all(
     messages.map(async (message) => {
@@ -57,6 +86,7 @@ export async function resolveModelInferenceMessages(
     }),
   );
 }
+
 async function resolveMessage(
   message: ZodInputMessage,
   functionConfig: FunctionConfig | null,
@@ -73,7 +103,7 @@ async function resolveMessage(
 }
 
 async function resolveModelInferenceMessage(
-  message: ZodModelInferenceInputMessage,
+  message: StoredRequestMessage,
 ): Promise<ZodDisplayInputMessage> {
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
@@ -140,7 +170,7 @@ async function resolveContent(
 }
 
 async function resolveModelInferenceContent(
-  content: ZodModelInferenceInputMessageContent,
+  content: StoredContentBlock,
 ): Promise<ZodDisplayInputMessageContent> {
   switch (content.type) {
     case "text":
@@ -152,46 +182,32 @@ async function resolveModelInferenceContent(
       };
     case "tool_call":
     case "tool_result":
-    case "raw_text":
     case "thought":
     case "unknown":
       return content;
-    // Convert legacy 'image' content block to 'file' when resolving input
-    case "image":
-      try {
-        return {
-          type: "file",
-          file: await resolveFile({
-            type: "file",
-            file: content.image,
-            storage_path: content.storage_path,
-          }),
-          storage_path: content.storage_path,
-        };
-      } catch (error) {
-        return {
-          file: {
-            url: null,
-            mime_type: content.image.mime_type,
-          },
-          storage_path: content.storage_path,
-          type: "file_error",
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    case "file":
+    case "file": {
+      const fileContent: ZodFileContent = {
+        type: "file",
+        file: {
+          mime_type: content.mime_type,
+          url: content.source_url,
+        },
+        storage_path: content.storage_path,
+      };
       try {
         return {
           ...content,
-          file: await resolveFile(content),
+          file: await resolveFile(fileContent),
         };
       } catch (error) {
         return {
           ...content,
           type: "file_error",
+          file: fileContent.file,
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    }
   }
 }
 async function resolveFile(
@@ -285,103 +301,18 @@ function prepareDisplayText(
   };
 }
 
-// ===== StoredInput =====
-// TODO (#4674 #4675): This will be handled in the gateway.
-
-export async function resolveStoredInput(
-  input: StoredInput,
-): Promise<ZodDisplayInput> {
-  const resolvedMessages = await resolveStoredInputMessages(input.messages);
-  return {
-    ...input,
-    messages: resolvedMessages,
-  };
-}
-
-export async function resolveStoredInputMessages(
-  messages: StoredInputMessage[],
-): Promise<ZodDisplayInputMessage[]> {
-  return Promise.all(
-    messages.map(async (message) => {
-      return resolveStoredInputMessage(message);
-    }),
-  );
-}
-
-async function resolveStoredInputMessage(
-  message: StoredInputMessage,
-): Promise<ZodDisplayInputMessage> {
-  const resolvedContent = await Promise.all(
-    message.content.map(async (content) => {
-      return resolveStoredInputMessageContent(content);
-    }),
-  );
-  return {
-    ...message,
-    content: resolvedContent,
-  };
-}
-
-async function resolveStoredInputMessageContent(
-  content: StoredInputMessageContent,
-): Promise<ZodDisplayInputMessageContent> {
-  switch (content.type) {
-    case "tool_call":
-    case "tool_result":
-    case "raw_text":
-    case "thought":
-    case "unknown":
-    case "template":
-    case "text":
-      return content;
-    case "file":
-      try {
-        // Convert flattened ObjectStorageFile to nested FileContent structure
-        const fileContent: ZodFileContent = {
-          type: "file",
-          file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
-          },
-          storage_path: content.storage_path,
-        };
-        const resolvedFile = await resolveFile(fileContent);
-        return {
-          type: "file",
-          file: {
-            data: resolvedFile.data,
-            mime_type: resolvedFile.mime_type,
-          },
-          storage_path: content.storage_path,
-        };
-      } catch (error) {
-        return {
-          type: "file_error",
-          file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
-          },
-          storage_path: content.storage_path,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-  }
-}
-
 /**
- * Resolves a StoredInput to an Input with resolved file references.
- * Converts StoredFile (ObjectStoragePointer) to File with file_type: "object_storage".
+ * Loads the content of files for an `Input`.
+ * Converts `ObjectStoragePointer` to `File` with `file_type: "object_storage"`.
  *
  * TODO (#4674 #4675): This will be handled in the gateway.
  */
-export async function resolveStoredInputToInput(
-  storedInput: StoredInput,
-): Promise<Input> {
+export async function loadFileDataForInput(input: Input): Promise<Input> {
   const resolvedMessages = await Promise.all(
-    storedInput.messages.map(async (message) => {
+    input.messages.map(async (message) => {
       const resolvedContent = await Promise.all(
         message.content.map(async (content) => {
-          return resolveStoredInputContentToInputContent(content);
+          return loadFileDataForInputContent(content);
         }),
       );
       return {
@@ -392,7 +323,7 @@ export async function resolveStoredInputToInput(
   );
 
   return {
-    system: storedInput.system,
+    system: input.system,
     messages: resolvedMessages,
   };
 }
@@ -401,7 +332,120 @@ export async function resolveStoredInputToInput(
  * Resolves a StoredInputMessageContent to InputMessageContent.
  * For files: converts StoredFile to File with file_type: "object_storage" by fetching data.
  */
-async function resolveStoredInputContentToInputContent(
+async function loadFileDataForInputContent(
+  content: InputMessageContent,
+): Promise<InputMessageContent> {
+  switch (content.type) {
+    case "tool_call":
+    case "tool_result":
+    case "raw_text":
+    case "thought":
+    case "unknown":
+    case "template":
+    case "text":
+      return content;
+    case "file": {
+      const loadedFile = await loadInputFileData(content);
+      return {
+        type: "file",
+        ...loadedFile,
+      };
+    }
+  }
+}
+
+/**
+ * Loads the data of a `file`, converting `ObjectStoragePointer` to `ObjectStorage` or `ObjectStorageError`.
+ * @param file - The file to load.
+ * @returns Loaded file.
+ */
+async function loadInputFileData(file: File): Promise<File> {
+  switch (file.file_type) {
+    // These types should be input-only, and if we need to resolve then on the FE,
+    // it represents an error (because we needed to store them).
+    case "url":
+    case "base64": {
+      throw new Error(
+        "URL and base64 files should not be passed to `loadInputFile`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    }
+    // These types are already resolved on the backend.
+    case "object_storage":
+      return file;
+    case "object_storage_error":
+      return file;
+    // ObjectStoragePointer can be loaded in the UI.
+    case "object_storage_pointer": {
+      try {
+        const fileContent: ZodFileContent = {
+          type: "file",
+          file: {
+            url: file.source_url,
+            mime_type: file.mime_type,
+          },
+          storage_path: file.storage_path,
+        };
+        const resolvedFile = await resolveFile(fileContent);
+        const loadedFile: File = {
+          file_type: "object_storage",
+          data: resolvedFile.data,
+          mime_type: resolvedFile.mime_type,
+          storage_path: file.storage_path,
+          source_url: file.source_url,
+          detail: file.detail,
+          filename: file.filename,
+        };
+        return loadedFile;
+      } catch (error) {
+        const loadFileError: File = {
+          file_type: "object_storage_error",
+          source_url: file.source_url,
+          mime_type: file.mime_type,
+          storage_path: file.storage_path,
+          detail: file.detail,
+          filename: file.filename,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        return loadFileError;
+      }
+    }
+  }
+}
+
+/**
+ * Loads the content of files for an `StoredInput`.
+ * Converts `ObjectStoragePointer` to `File` with `file_type: "object_storage"`.
+ *
+ * TODO (#4674 #4675): This will be handled in the gateway.
+ */
+export async function loadFileDataForStoredInput(
+  input: StoredInput,
+): Promise<Input> {
+  const resolvedMessages = await Promise.all(
+    input.messages.map(async (message) => {
+      const resolvedContent = await Promise.all(
+        message.content.map(async (content) => {
+          return loadFileDataForStoredInputContent(content);
+        }),
+      );
+      return {
+        role: message.role,
+        content: resolvedContent,
+      };
+    }),
+  );
+
+  return {
+    system: input.system,
+    messages: resolvedMessages,
+  };
+}
+
+/**
+ * Resolves a StoredInputMessageContent to InputMessageContent.
+ * For files: converts StoredFile to File with file_type: "object_storage" by fetching data.
+ */
+async function loadFileDataForStoredInputContent(
   content: StoredInputMessageContent,
 ): Promise<InputMessageContent> {
   switch (content.type) {
@@ -413,41 +457,52 @@ async function resolveStoredInputContentToInputContent(
     case "template":
     case "text":
       return content;
-    case "file":
-      try {
-        // Fetch the file data from object storage
-        const objectData = await getTensorZeroClient().getObject(
-          content.storage_path,
-        );
-        const json = JSON.parse(objectData);
-        const data = `data:${content.mime_type};base64,${json.data}`;
+    case "file": {
+      const loadedFile = await loadStoredInputFileData(content);
+      return {
+        type: "file",
+        ...loadedFile,
+      };
+    }
+  }
+}
 
-        // Return as File with file_type: "object_storage" and data
-        return {
-          type: "file",
-          file_type: "object_storage",
-          data: data,
-          source_url: content.source_url,
-          mime_type: content.mime_type,
-          storage_path: content.storage_path,
-          detail: content.detail,
-          filename: content.filename,
-        };
-      } catch (error) {
-        // On error, return as `object_storage_error`
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch file data.";
-
-        return {
-          type: "file",
-          file_type: "object_storage_error",
-          source_url: content.source_url,
-          mime_type: content.mime_type,
-          storage_path: content.storage_path,
-          detail: content.detail,
-          filename: content.filename,
-          error: errorMessage,
-        };
-      }
+/**
+ * Loads the data of a `file`, converting `ObjectStoragePointer` to `ObjectStorage` or `ObjectStorageError`.
+ * @param file - The file to load.
+ * @returns Loaded file.
+ */
+async function loadStoredInputFileData(file: StoredFile): Promise<File> {
+  try {
+    const fileContent: ZodFileContent = {
+      type: "file",
+      file: {
+        url: file.source_url,
+        mime_type: file.mime_type,
+      },
+      storage_path: file.storage_path,
+    };
+    const resolvedFile = await resolveFile(fileContent);
+    const loadedFile: File = {
+      file_type: "object_storage",
+      data: resolvedFile.data,
+      mime_type: resolvedFile.mime_type,
+      storage_path: file.storage_path,
+      source_url: file.source_url,
+      detail: file.detail,
+      filename: file.filename,
+    };
+    return loadedFile;
+  } catch (error) {
+    const loadFileError: File = {
+      file_type: "object_storage_error",
+      source_url: file.source_url,
+      mime_type: file.mime_type,
+      storage_path: file.storage_path,
+      detail: file.detail,
+      filename: file.filename,
+      error: error instanceof Error ? error.message : String(error),
+    };
+    return loadFileError;
   }
 }

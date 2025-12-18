@@ -17,7 +17,7 @@ routing = ["fireworks"]
 
 [models."llama-3.1-8b-instruct".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]

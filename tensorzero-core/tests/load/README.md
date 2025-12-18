@@ -14,7 +14,6 @@
   ```
 
 - Launch the gateway.
-
   - With observability:
 
     ```

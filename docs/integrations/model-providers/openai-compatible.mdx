@@ -32,10 +32,10 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.llama3_1_8b_instruct]
+[models.llama3_3_70b_instruct]
 routing = ["ollama"]
 
-[models.llama3_1_8b_instruct.providers.ollama]
+[models.llama3_3_70b_instruct.providers.ollama]
 type = "openai"
 api_base = "http://host.docker.internal:11434/v1"  # for Ollama running locally on the host
 model_name = "llama3.1"
@@ -46,7 +46,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "llama3_1_8b_instruct"
+model = "llama3_3_70b_instruct"
 ```
 
 ### Credentials

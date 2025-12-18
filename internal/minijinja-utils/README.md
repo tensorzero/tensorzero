@@ -146,6 +146,7 @@ When a template uses a conditional include without an else clause, the static te
 ```
 
 This will:
+
 - ✓ Extract `'optional.html'` as a dependency
 - ✓ Require that `'optional.html'` exists at analysis time
 - ⚠️ The template may or may not be loaded at runtime depending on the condition

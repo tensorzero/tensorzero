@@ -27,7 +27,7 @@ import {
   SnippetContent,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
-import ModelInferenceOutput from "~/components/inference/ModelInferenceOutput";
+import ModelInferenceOutput from "~/components/input_output/ModelInferenceOutput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
@@ -69,12 +69,12 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
               <div className="flex flex-row gap-1">
                 <Chip
                   icon={<InputIcon className="text-fg-tertiary" />}
-                  label={`${inference.input_tokens} tok`}
+                  label={`${inference.input_tokens === undefined ? "null" : inference.input_tokens} tok`}
                   tooltip="Input Tokens"
                 />
                 <Chip
                   icon={<Output className="text-fg-tertiary" />}
-                  label={`${inference.output_tokens} tok`}
+                  label={`${inference.output_tokens === undefined ? "null" : inference.output_tokens} tok`}
                   tooltip="Output Tokens"
                 />
                 {inference.response_time_ms !== null && (

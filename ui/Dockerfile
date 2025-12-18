@@ -3,9 +3,10 @@ ARG DEBUG_BUILD=0
 
 # ========== base ==========
 
-FROM node:24.11.0-bookworm-slim AS base
+FROM node:24.12.0-bookworm-slim AS base
 
 RUN npm install -g pnpm
+
 # ========== package-jsons-layer ==========
 
 FROM base AS package-jsons-layer
@@ -109,7 +110,6 @@ ENV HOST=0.0.0.0
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV RUST_LOG=warn
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
 HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health

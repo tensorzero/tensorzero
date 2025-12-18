@@ -125,7 +125,9 @@ impl Migration for Migration0028<'_> {
         let view_timestamp_where_clause = if clean_start {
             String::new()
         } else {
-            format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+            format!(
+                "AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))"
+            )
         };
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")

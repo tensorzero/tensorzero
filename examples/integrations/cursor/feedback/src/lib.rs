@@ -14,12 +14,12 @@ use tensorzero_core::{config::BatchWritesConfig, db::clickhouse::ClickHouseConne
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::{get_inferences_in_time_range, InferenceInfo},
+    clickhouse::{InferenceInfo, get_inferences_in_time_range},
     cursor::parse_cursor_output,
-    git::{find_paths_in_repo, CommitInterval, DiffAddition},
-    parsing::{parse_hunk, InferenceWithTrees},
-    ted::{minimum_ted, TedInfo},
-    util::{generate_demonstration, NormalizedInferenceTreeInfo, TreeInfo},
+    git::{CommitInterval, DiffAddition, find_paths_in_repo},
+    parsing::{InferenceWithTrees, parse_hunk},
+    ted::{TedInfo, minimum_ted},
+    util::{NormalizedInferenceTreeInfo, TreeInfo, generate_demonstration},
 };
 
 /// Parses git diff additions into AST trees for edit distance analysis

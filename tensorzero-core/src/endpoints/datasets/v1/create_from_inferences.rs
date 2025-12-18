@@ -1,13 +1,12 @@
 use std::collections::HashSet;
 
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
-use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
@@ -50,44 +49,37 @@ pub async fn create_from_inferences(
 ) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
-    // If output_source is not specified, default to Inference.
-    let request_output_source = request
-        .output_source
-        .unwrap_or(CreateDatapointsFromInferenceOutputSource::Inference);
-
-    let inference_output_source = match request_output_source {
-        CreateDatapointsFromInferenceOutputSource::None => {
-            // If we are not including any output in the datapoints, we use Inference for the query to
-            // avoid doing a join with the DemonstrationFeedback table. Then, we will drop it when constructing the datapoints.
-            InferenceOutputSource::Inference
-        }
-        CreateDatapointsFromInferenceOutputSource::Inference => InferenceOutputSource::Inference,
-        CreateDatapointsFromInferenceOutputSource::Demonstration => {
-            InferenceOutputSource::Demonstration
-        }
-    };
-
-    let list_inferences_params = match &request.params {
-        CreateDatapointsFromInferenceRequestParams::InferenceIds { inference_ids } => {
-            ListInferencesParams {
+    // Build list_inferences_params based on request type
+    let (list_inferences_params, datapoint_output_source) = match &request.params {
+        CreateDatapointsFromInferenceRequestParams::InferenceIds {
+            inference_ids,
+            output_source,
+        } => {
+            // Default to Inference if not specified
+            let output_source = output_source.unwrap_or(InferenceOutputSource::Inference);
+            // For None output_source, we query with Inference to avoid join, then drop output
+            let query_output_source = match output_source {
+                InferenceOutputSource::None => InferenceOutputSource::Inference,
+                other => other,
+            };
+            let params = ListInferencesParams {
                 ids: Some(inference_ids),
-                output_source: inference_output_source,
+                output_source: query_output_source,
                 limit: inference_ids.len() as u32,
                 ..Default::default()
-            }
+            };
+            (params, output_source)
         }
-        CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-            function_name,
-            variant_name,
-            filters,
-        } => ListInferencesParams {
-            function_name: Some(function_name),
-            variant_name: variant_name.as_deref(),
-            filters: filters.as_ref(),
-            output_source: inference_output_source,
-            limit: u32::MAX,
-            ..Default::default()
-        },
+        CreateDatapointsFromInferenceRequestParams::InferenceQuery { query } => {
+            let mut params = query.as_list_inferences_params()?;
+            // If the user didn't specify a limit, default to fetching all matching inferences
+            // (the standard list_inferences API defaults to 20, but for dataset creation we want all)
+            if query.limit.is_none() {
+                params.limit = u32::MAX;
+            }
+            let output_source = params.output_source;
+            (params, output_source)
+        }
     };
 
     // Step 1: Query inferences
@@ -100,6 +92,7 @@ pub async fn create_from_inferences(
 
     if let CreateDatapointsFromInferenceRequestParams::InferenceIds {
         inference_ids: request_inference_ids,
+        ..
     } = &request.params
     {
         // Check if all inferences are found. If not, we fail early without creating any datapoints for a pseudo-transactional behavior.
@@ -122,7 +115,7 @@ pub async fn create_from_inferences(
 
     for inference in inferences {
         let datapoint_insert =
-            inference.into_datapoint_insert(&dataset_name, &request_output_source, config)?;
+            inference.into_datapoint_insert(&dataset_name, &datapoint_output_source, config)?;
         ids.push(datapoint_insert.id());
         datapoints_to_insert.push(datapoint_insert);
     }
@@ -139,9 +132,10 @@ pub async fn create_from_inferences(
 mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
-    use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
-    use crate::db::datasets::DatapointInsert;
+    use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
+    use crate::db::stored_datapoint::StoredDatapoint;
+    use crate::endpoints::stored_inferences::v1::types::ListInferencesRequest;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
@@ -206,6 +200,10 @@ mod tests {
             inference_id: id,
             tool_params: ToolCallConfigDatabaseInsert::default(),
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         })
     }
 
@@ -249,11 +247,13 @@ mod tests {
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: function_name.to_string(),
-                variant_name: Some(variant_name.to_string()),
-                filters: None,
+                query: Box::new(ListInferencesRequest {
+                    function_name: Some(function_name.to_string()),
+                    variant_name: Some(variant_name.to_string()),
+                    output_source: InferenceOutputSource::Inference,
+                    ..Default::default()
+                }),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(
@@ -295,11 +295,13 @@ mod tests {
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: function_name.to_string(),
-                variant_name: Some(variant_name.to_string()),
-                filters: None,
+                query: Box::new(ListInferencesRequest {
+                    function_name: Some(function_name.to_string()),
+                    variant_name: Some(variant_name.to_string()),
+                    output_source: InferenceOutputSource::Inference,
+                    ..Default::default()
+                }),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(
@@ -337,11 +339,13 @@ mod tests {
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: function_name.to_string(),
-                variant_name: Some(variant_name.to_string()),
-                filters: None,
+                query: Box::new(ListInferencesRequest {
+                    function_name: Some(function_name.to_string()),
+                    variant_name: Some(variant_name.to_string()),
+                    output_source: InferenceOutputSource::Demonstration,
+                    ..Default::default()
+                }),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Demonstration),
         };
 
         create_from_inferences(
@@ -391,8 +395,8 @@ mod tests {
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
                 inference_ids: vec![id1, id2],
+                output_source: Some(InferenceOutputSource::Inference),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(
@@ -432,8 +436,8 @@ mod tests {
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
                 inference_ids: vec![existing_id, missing_id],
+                output_source: Some(InferenceOutputSource::Inference),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(
@@ -470,8 +474,8 @@ mod tests {
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
                 inference_ids: vec![Uuid::now_v7()],
+                output_source: Some(InferenceOutputSource::Inference),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         // Dataset name "builder" is reserved
@@ -508,7 +512,7 @@ mod tests {
             .times(1)
             .withf(|datapoints| {
                 // Verify that the datapoint has no output when output_source is None
-                let Some(DatapointInsert::Chat(dp)) = datapoints.first() else {
+                let Some(StoredDatapoint::Chat(dp)) = datapoints.first() else {
                     panic!("Expected a chat datapoint")
                 };
                 assert!(dp.output.is_none(), "Datapoint output should be dropped");
@@ -519,8 +523,8 @@ mod tests {
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
                 inference_ids: vec![id],
+                output_source: Some(InferenceOutputSource::None),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::None),
         };
 
         let result = create_from_inferences(
@@ -557,7 +561,7 @@ mod tests {
             .times(1)
             .withf(|datapoints| {
                 // Verify that the datapoint has the output when output_source is Inference
-                let Some(DatapointInsert::Chat(dp)) = datapoints.first() else {
+                let Some(StoredDatapoint::Chat(dp)) = datapoints.first() else {
                     panic!("Expected a chat datapoint")
                 };
                 assert_eq!(
@@ -574,8 +578,8 @@ mod tests {
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
                 inference_ids: vec![id],
+                output_source: Some(InferenceOutputSource::Inference),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(
@@ -646,11 +650,14 @@ mod tests {
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: function_name.to_string(),
-                variant_name: None,
-                filters: Some(test_filter),
+                query: Box::new(ListInferencesRequest {
+                    function_name: Some(function_name.to_string()),
+                    variant_name: None,
+                    filters: Some(test_filter),
+                    output_source: InferenceOutputSource::Inference,
+                    ..Default::default()
+                }),
             },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
         let result = create_from_inferences(

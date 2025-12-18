@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 /// Implements a Python tensorzero client, using `pyo3` to wrap the existing Rust client.
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
@@ -10,14 +11,17 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
+use evaluations::{
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
+    run_evaluation_core_streaming,
+};
 use futures::StreamExt;
 use pyo3::{
+    IntoPyObjectExt,
     exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
     ffi::c_str,
     prelude::*,
     types::{PyDict, PyList, PyString, PyType},
-    IntoPyObjectExt,
 };
 use python_helpers::{
     convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
@@ -31,20 +35,19 @@ use tensorzero_core::{
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
-        pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_rendered_sample,
-            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
-            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
-            JSON_LOADS,
-        },
         ResolvedInput, ResolvedInputMessage,
+        pyo3_helpers::{
+            JSON_DUMPS, JSON_LOADS, deserialize_from_pyobj, deserialize_from_rendered_sample,
+            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
+            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class,
+        },
     },
     optimization::{
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
-        openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
-        OptimizationJobStatus, UninitializedOptimizerInfo,
+        gepa::UninitializedGEPAConfig, openai_rft::UninitializedOpenAIRFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
     },
     tool::ProviderTool,
     variant::{
@@ -63,22 +66,22 @@ use tensorzero_core::{
     utils::gateway::ShutdownHandle,
 };
 use tensorzero_rust::{
-    err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
-    WorkflowEvaluationRunParams,
+    CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
+    ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
+use uuid::Uuid;
 
 mod evaluation_handlers;
 mod gil_helpers;
 mod python_helpers;
 
 use crate::evaluation_handlers::{AsyncEvaluationJobHandler, EvaluationJobHandler};
-use crate::gil_helpers::{tokio_block_on_without_gil, DropInTokio};
+use crate::gil_helpers::{DropInTokio, tokio_block_on_without_gil};
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -107,6 +110,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedGEPAConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
@@ -508,7 +512,7 @@ impl BaseTensorZeroGateway {
                 None
             };
 
-        let input: ClientInput = deserialize_from_pyobj(py, &input)?;
+        let input: Input = deserialize_from_pyobj(py, &input)?;
 
         Ok(ClientInferenceParams {
             function_name,
@@ -536,6 +540,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             internal_dynamic_variant_config,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            api_key: None,
         })
     }
 }
@@ -1115,7 +1120,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1142,7 +1147,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1152,8 +1157,23 @@ impl TensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints(this: PyRef<'_, Self>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (*, ids, dataset_name = None))]
+    fn get_datapoints(
+        this: PyRef<'_, Self>,
+        ids: Vec<Bound<'_, PyAny>>,
+        dataset_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .iter()
@@ -1163,12 +1183,12 @@ impl TensorZeroGateway {
                     .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid UUID: {e}")))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let fut = client.get_datapoints(ids);
+        let fut = client.get_datapoints(dataset_name, ids);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1195,7 +1215,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "UpdateDatapointsResponse",
         )
@@ -1226,7 +1246,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1244,7 +1264,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "DeleteDatapointsResponse",
         )
@@ -1254,9 +1274,10 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create datapoints in.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A list of UUIDs of the created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences(
@@ -1266,23 +1287,28 @@ impl TensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
-
-        let fut =
-            client.create_datapoints_from_inferences(dataset_name, params, output_source_enum);
+        let fut = client.create_datapoints_from_inferences(dataset_name, params);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "CreateDatapointsResponse",
         )
@@ -1307,7 +1333,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), res).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetDatapointsResponse",
         )
@@ -1335,7 +1361,8 @@ impl TensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -1343,13 +1370,14 @@ impl TensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -1399,13 +1427,51 @@ impl TensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs (keeping as Option)
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
+            })
+            .transpose()?;
+
+        // Extract evaluation config from app_state
+        let evaluation_config = app_state
+            .config
+            .evaluations
+            .get(&evaluation_name)
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "evaluation '{evaluation_name}' not found"
+                ))
+            })?
+            .clone();
+
+        // Build function configs table from all functions in the config
+        let function_configs: EvaluationFunctionConfigTable = app_state
+            .config
+            .functions
+            .iter()
+            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+            .collect();
+        let function_configs = Arc::new(function_configs);
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
-            config: app_state.config.clone(),
+            evaluation_config,
+            function_configs,
             evaluation_name,
             evaluation_run_id,
             dataset_name,
+            datapoint_ids,
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
@@ -1545,7 +1611,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -1565,7 +1631,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -1601,9 +1667,14 @@ impl TensorZeroGateway {
         // for JSON schema compilation
         // TODO (#4259): remove the tokio spawn from that function and remove this guard.
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -2270,7 +2341,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2300,7 +2371,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2313,22 +2384,34 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
+    #[pyo3(signature = (*, ids, dataset_name = None))]
     fn get_datapoints<'a>(
         this: PyRef<'a, Self>,
         ids: Vec<Bound<'a, PyAny>>,
+        dataset_name: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .into_iter()
             .map(|id| python_uuid_to_uuid("id", id))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.get_datapoints(ids).await;
+            let res = client.get_datapoints(dataset_name, ids).await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2360,7 +2443,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "UpdateDatapointsResponse",
                 ),
@@ -2390,7 +2473,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2414,7 +2497,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "DeleteDatapointsResponse",
                 ),
@@ -2427,9 +2510,10 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to create the datapoints from.
     /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
+    ///                 For InferenceIds: pass `{"type": "inference_ids", "inference_ids": [...], "output_source": "inference"}`
+    ///                 For InferenceQuery: pass `{"type": "inference_query", "function_name": "...", "output_source": "inference", ...}`
+    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration".
+    ///                       Can also be specified inside `params.output_source`. If both are provided, an error is raised.
     /// :return: A `CreateDatapointsResponse` object containing the IDs of the newly-created datapoints.
     #[pyo3(signature = (*, dataset_name, params, output_source=None))]
     fn create_datapoints_from_inferences<'a>(
@@ -2439,23 +2523,30 @@ impl AsyncTensorZeroGateway {
         output_source: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+
+        // Handle output_source: can be passed as parameter or inside params, but not both
+        if let Some(source) = &output_source {
+            let existing = params.getattr("output_source").ok();
+            if let Some(existing) = existing
+                && !existing.is_none()
+            {
+                return Err(PyValueError::new_err(
+                    "You must specify `output_source` either at the root or inside the `params` parameter but not both.",
+                ));
+            }
+            params.setattr("output_source", source)?;
+        }
+
         let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source_enum = output_source
-            .map(|s| {
-                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
-                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
-                })
-            })
-            .transpose()?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .create_datapoints_from_inferences(dataset_name, params, output_source_enum)
+                .create_datapoints_from_inferences(dataset_name, params)
                 .await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "CreateDatapointsResponse",
                 ),
@@ -2483,7 +2574,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
@@ -2514,7 +2605,8 @@ impl AsyncTensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -2522,13 +2614,14 @@ impl AsyncTensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -2571,6 +2664,21 @@ impl AsyncTensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
+            })
+            .transpose()?;
+
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
             let app_state = client.get_app_state_data().ok_or_else(|| {
@@ -2579,13 +2687,36 @@ impl AsyncTensorZeroGateway {
 
             let evaluation_run_id = uuid::Uuid::now_v7();
 
+            // Extract evaluation config from app_state
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "evaluation '{evaluation_name}' not found"
+                    ))
+                })?
+                .clone();
+
+            // Build function configs table from all functions in the config
+            let function_configs: EvaluationFunctionConfigTable = app_state
+                .config
+                .functions
+                .iter()
+                .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+                .collect();
+            let function_configs = Arc::new(function_configs);
+
             let core_args = EvaluationCoreArgs {
                 tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
-                config: app_state.config.clone(),
+                evaluation_config,
+                function_configs,
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
+                datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
@@ -2734,7 +2865,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
@@ -2760,7 +2891,7 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,
-                    response,
+                    &response,
                     "tensorzero",
                     "GetInferencesResponse",
                 ),
@@ -2826,7 +2957,11 @@ impl AsyncTensorZeroGateway {
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
@@ -2942,7 +3077,10 @@ fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {
         PyErr::warn(
             py,
             &user_warning,
-            c_str!("No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."), 0
+            c_str!(
+                "No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."
+            ),
+            0,
         )?;
     }
     Ok(())

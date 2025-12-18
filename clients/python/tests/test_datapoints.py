@@ -27,9 +27,10 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapoint,
     ChatDatapointInsert,
+    InputMessageContentTemplate,
+    InputMessageContentText,
     JsonDatapoint,
     JsonDatapointInsert,
-    Template,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -278,11 +279,11 @@ async def test_async_insert_delete_datapoints(
     assert isinstance(datapoint, ChatDatapoint)
     assert datapoint.function_name == "basic_test"
     assert datapoint.input.system == {"assistant_name": "foo"}
-    assert len(datapoint.input.messages) == 1
+    assert datapoint.input.messages is not None and len(datapoint.input.messages) == 1
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "text"
-    assert isinstance(datapoint.input.messages[0].content[0], Text)
+    assert isinstance(datapoint.input.messages[0].content[0], InputMessageContentText)
     assert datapoint.input.messages[0].content[0].text == "bar"
     assert datapoint.output is None
 
@@ -291,11 +292,11 @@ async def test_async_insert_delete_datapoints(
     assert isinstance(datapoint, JsonDatapoint)
     assert datapoint.function_name == "json_success"
     assert datapoint.input.system == {"assistant_name": "foo"}
-    assert len(datapoint.input.messages) == 1
+    assert datapoint.input.messages is not None and len(datapoint.input.messages) == 1
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "template"
-    assert isinstance(datapoint.input.messages[0].content[0], Template)
+    assert isinstance(datapoint.input.messages[0].content[0], InputMessageContentTemplate)
     assert datapoint.input.messages[0].content[0].arguments == {"country": "US"}
     assert datapoint.output is None
     assert datapoint.is_custom

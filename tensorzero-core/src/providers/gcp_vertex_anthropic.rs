@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
-use futures::future::try_join_all;
 use futures::StreamExt;
+use futures::future::try_join_all;
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -16,37 +16,37 @@ use crate::config::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, FunctionType, Latency,
-    ModelInferenceRequestJsonMode,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
 };
-use crate::inference::InferenceProvider;
+use crate::inference::types::{
+    FunctionType, Latency, ModelInferenceRequestJsonMode,
+    batch::StartBatchProviderInferenceResponse,
+};
 use crate::model::CredentialLocationWithFallback;
-use crate::model::{fully_qualified_name, ModelProvider};
+use crate::model::ModelProvider;
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::providers::anthropic::{
-    anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
-    AnthropicToolChoice,
+    AnthropicStreamMessage, AnthropicToolChoice, anthropic_to_tensorzero_stream_message,
+    handle_anthropic_error,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolChoice};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent,
-    AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason, AnthropicSystemBlock,
-    AnthropicTool,
+    AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
+    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, prefill_json_chunk_response,
+    prefill_json_response,
 };
-use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
+use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
 use super::helpers::{convert_stream_error, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -163,8 +163,12 @@ impl GCPVertexAnthropicProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
-        let request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
-        let streaming_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
+        let request_url = format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict"
+        );
+        let streaming_request_url = format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict"
+        );
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
@@ -381,7 +385,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -424,8 +428,6 @@ fn stream_anthropic(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 
@@ -515,15 +517,13 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
             None => None,
         };
-        let request_messages: Vec<AnthropicMessage> =
+        let mut messages: Vec<AnthropicMessage> =
             try_join_all(request.messages.iter().map(|m| {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?
             .into_iter()
-            .filter(|m| !m.content.is_empty())
             .collect::<Vec<_>>();
-        let mut messages = prepare_messages(request_messages)?;
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -599,85 +599,22 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     } else if model_id.starts_with("claude-sonnet-4@")
         || model_id.starts_with("claude-haiku-4-5@")
         || model_id.starts_with("claude-sonnet-4-5@")
+        || model_id.starts_with("claude-opus-4-5@")
     {
         Ok(64_000)
     } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
-            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."),
+            message: format!(
+                "The TensorZero Gateway doesn't know the output token limit for `{model_id}` and GCP Vertex AI Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."
+            ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
             raw_request: None,
             raw_response: None,
         }))
     }
-}
-
-/// Anthropic API doesn't support consecutive messages from the same role.
-/// This function consolidates messages from the same role into a single message
-/// so as to satisfy the API.
-/// It also makes modifications to the messages to make Anthropic happy.
-/// For example, it will prepend a default User message if the first message is an Assistant message.
-/// It will also append a default User message if the last message is an Assistant message.
-fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
-    let mut consolidated_messages: Vec<AnthropicMessage> = Vec::new();
-    let mut last_role: Option<AnthropicRole> = None;
-    for message in messages {
-        let this_role = message.role.clone();
-        match last_role {
-            Some(role) => {
-                if role == this_role {
-                    let mut last_message =
-                        consolidated_messages.pop().ok_or_else(|| Error::new(ErrorDetails::InvalidRequest {
-                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                                .to_string(),
-                        }))?;
-                    last_message.content.extend(message.content);
-                    consolidated_messages.push(last_message);
-                } else {
-                    consolidated_messages.push(message);
-                }
-            }
-            None => {
-                consolidated_messages.push(message);
-            }
-        }
-        last_role = Some(this_role);
-    }
-    // Anthropic also requires that there is at least one message and it is a User message.
-    // If it's not we will prepend a default User message.
-    match consolidated_messages.first() {
-        Some(&AnthropicMessage {
-            role: AnthropicRole::User,
-            ..
-        }) => {}
-        _ => {
-            consolidated_messages.insert(
-                0,
-                AnthropicMessage {
-                    role: AnthropicRole::User,
-                    content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "[listening]",
-                    })],
-                },
-            );
-        }
-    }
-    // Anthropic will continue any assistant messages passed in.
-    // Since we don't want to do that, we'll append a default User message in the case that the last message was
-    // an assistant message
-    if let Some(last_message) = consolidated_messages.last() {
-        if last_message.role == AnthropicRole::Assistant {
-            consolidated_messages.push(AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "[listening]",
-                })],
-            });
-        }
-    }
-    Ok(consolidated_messages)
 }
 
 fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
@@ -748,10 +685,11 @@ fn convert_to_output(
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
-        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
+        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown(Unknown {
             data: obj.into_owned(),
-            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-        }),
+            model_name: Some(model_name.to_string()),
+            provider_name: Some(provider_name.to_string()),
+        })),
     }
 }
 
@@ -854,7 +792,7 @@ mod tests {
 
     use super::*;
 
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::time::Duration;
     use uuid::Uuid;
 
@@ -952,12 +890,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize_anthropic_request_body() {
-        let listening_message = AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "[listening]",
-            })],
-        };
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1042,7 +974,6 @@ mod tests {
                     )
                     .await
                     .unwrap(),
-                    listening_message.clone(),
                 ],
                 max_tokens: 32_000,
                 stream: Some(false),
@@ -1098,17 +1029,20 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    AnthropicMessage {
-                        role: AnthropicRole::User,
-                        content: vec![
-                            FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                                text: "test_user"
-                            }),
-                            FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                                text: "test_user2"
-                            })
-                        ],
-                    },
+                    AnthropicMessage::from_request_message(
+                        &messages[0],
+                        message_config,
+                        PROVIDER_TYPE
+                    )
+                    .await
+                    .unwrap(),
+                    AnthropicMessage::from_request_message(
+                        &messages[1],
+                        message_config,
+                        PROVIDER_TYPE
+                    )
+                    .await
+                    .unwrap(),
                     AnthropicMessage::from_request_message(
                         &messages[2],
                         message_config,
@@ -1116,7 +1050,6 @@ mod tests {
                     )
                     .await
                     .unwrap(),
-                    listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
@@ -1315,247 +1248,6 @@ mod tests {
     }
 
     #[test]
-    fn test_consolidate_messages() {
-        let listening_message = AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "[listening]",
-            })],
-        };
-        // Test case 1: No consolidation needed
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-        ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 2: Consolidation needed
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "How are you?",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-        ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text { text: "Hello" }),
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "How are you?",
-                    }),
-                ],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 3: Multiple consolidations needed
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hello",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "How are you?",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "Hi",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "I am here to help.",
-                })],
-            },
-        ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text { text: "Hello" }),
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "How are you?",
-                    }),
-                ],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text { text: "Hi" }),
-                    FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                        text: "I am here to help.",
-                    }),
-                ],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 4: No messages
-        let messages: Vec<AnthropicMessage> = vec![];
-        let expected: Vec<AnthropicMessage> = vec![listening_message.clone()];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 5: Single message
-        let messages = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Hello",
-            })],
-        }];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Hello",
-            })],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 6: Consolidate tool uses
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    AnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool1",
-                        content: vec![AnthropicMessageContent::Text {
-                            text: "Tool call 1",
-                        }],
-                    },
-                )],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    AnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool2",
-                        content: vec![AnthropicMessageContent::Text {
-                            text: "Tool call 2",
-                        }],
-                    },
-                )],
-            },
-        ];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![
-                FlattenUnknown::Normal(AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }),
-                FlattenUnknown::Normal(AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool2",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 2",
-                    }],
-                }),
-            ],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 7: Consolidate mixed text and tool use
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "User message 1",
-                })],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(
-                    AnthropicMessageContent::ToolResult {
-                        tool_use_id: "tool1",
-                        content: vec![AnthropicMessageContent::Text {
-                            text: "Tool call 1",
-                        }],
-                    },
-                )],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "User message 2",
-                })],
-            },
-        ];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![
-                FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "User message 1",
-                }),
-                FlattenUnknown::Normal(AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }),
-                FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                    text: "User message 2",
-                }),
-            ],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-    }
-
-    #[test]
     fn test_anthropic_usage_to_usage() {
         let anthropic_usage = GCPVertexAnthropic {
             input_tokens: 100,
@@ -1639,12 +1331,11 @@ mod tests {
             inference_response.output,
             vec![
                 "Response text".to_string().into(),
-                ContentBlockOutput::Unknown {
+                ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::json!({"my_custom": "content"}),
-                    model_provider_name: Some(
-                        "tensorzero::model_name::my-model::provider_name::my-provider".to_string()
-                    )
-                }
+                    model_name: Some("my-model".to_string()),
+                    provider_name: Some("my-provider".to_string()),
+                })
             ]
         );
 

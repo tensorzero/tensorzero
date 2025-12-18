@@ -1,10 +1,10 @@
 #![expect(clippy::print_stdout)]
 use tensorzero::TimeWindow;
 use tensorzero_core::db::{
+    SelectQueries,
     clickhouse::{
         migration_manager::migrations::migration_0037::QUANTILES, test_helpers::get_clickhouse,
     },
-    SelectQueries,
 };
 
 #[tokio::test]
@@ -678,10 +678,12 @@ async fn test_clickhouse_query_episode_table() {
         )
         .await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Cannot specify both before and after"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot specify both before and after")
+    );
 
     // Verify each episode has valid data
     for episode in &episodes {

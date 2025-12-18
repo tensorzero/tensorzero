@@ -15,6 +15,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use tensorzero_core::config::BatchWritesConfig;
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
@@ -27,15 +29,14 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::feedback::FeedbackQueries;
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
+use tensorzero_core::inference::types::StoredModelInference;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
-    self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
-    RunMigrationArgs, RunMigrationManagerArgs,
+    self, MigrationRecordDatabaseInsert, RunMigrationArgs, RunMigrationManagerArgs,
+    get_all_migration_records, make_all_migrations,
 };
-use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_core::db::clickhouse::test_helpers::{CLICKHOUSE_URL, get_clickhouse};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
@@ -164,6 +165,11 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap()
         .to_string();
 
+    // Only insert a few at a time in order to prevent ClickHouse from OOMing
+    let concurrency_limit = 2;
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency_limit));
+
     // We use our latest fixtures - new columns will get ignored when inserting.
     let insert_futures = [
         ("large_chat_inference_v2.parquet", "ChatInference"),
@@ -194,7 +200,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     .into_iter()
     .map(|(file, table)| {
         let password = password.clone();
+        let semaphore = Arc::clone(&semaphore);
         async move {
+            let _permit = semaphore.acquire().await.unwrap();
             // If we are running in CI (TENSORZERO_CI=1), we should have the clickhouse client installed locally
             // so we should not use Docker
             let mut command = if std::env::var("TENSORZERO_CI").is_ok() {
@@ -509,7 +517,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38
     ]
 );
 
@@ -627,8 +635,12 @@ async fn test_clickhouse_migration_manager() {
                     );
                 }
             }
-            assert!(!logs_contain("Materialized view `CumulativeUsageView` was not written because it was recently created"),
-                "CumulativeUsage backfilling failed.");
+            assert!(
+                !logs_contain(
+                    "Materialized view `CumulativeUsageView` was not written because it was recently created"
+                ),
+                "CumulativeUsage backfilling failed."
+            );
 
             let run_migration = || async {
                 migration_manager::run_migration(RunMigrationArgs {
@@ -776,14 +788,14 @@ async fn test_clickhouse_migration_manager() {
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
     // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
-    let row = ModelInferenceDatabaseInsert {
+    let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         raw_request: String::new(),
         raw_response: String::new(),
         system: None,
-        input_messages: String::new(),
-        output: String::new(),
+        input_messages: vec![],
+        output: vec![],
         input_tokens: Some(123),
         output_tokens: None,
         response_time_ms: None,
@@ -792,6 +804,8 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         finish_reason: None,
+        snapshot_hash: Some(SnapshotHash::new_test()),
+        timestamp: None,
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

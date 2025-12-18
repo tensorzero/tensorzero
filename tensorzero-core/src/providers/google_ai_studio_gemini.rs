@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use futures::{future::try_join_all, StreamExt};
+use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -15,29 +15,29 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
-use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Usage,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, UnknownChunk,
+    Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
-use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
+use crate::inference::types::{
+    ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
+    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -191,10 +191,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -286,10 +286,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut url = self.streaming_request_url.clone();
-        url.query_pairs_mut()
-            .append_pair("key", api_key.expose_secret());
-        let builder = http_client.post(url);
+        let url = self.streaming_request_url.clone();
+        let builder = http_client
+            .post(url)
+            .header("x-goog-api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -360,7 +360,7 @@ fn stream_google_ai_studio_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -515,7 +515,7 @@ impl<'a> GeminiContent<'a> {
                                     raw_response: None,
                                 }));
                             }
-                            Some(ContentBlock::Unknown { .. }) => {
+                            Some(ContentBlock::Unknown(_)) => {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -534,10 +534,12 @@ impl<'a> GeminiContent<'a> {
                                             data: FlattenUnknown::Normal(part),
                                         });
                                     }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
-                                            message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                                            message: format!(
+                                                "Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                                            ),
                                         }));
                                     }
                                 }
@@ -588,14 +590,12 @@ async fn convert_non_thought_content_block(
                 "name": tool_result.name,
                 "content": tool_result.result,
             });
-            Ok(FlattenUnknown::Normal(
-                GeminiPartData::FunctionResponse {
-                    function_response: GeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
-                    },
+            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
+                function_response: GeminiFunctionResponse {
+                    name: &tool_result.name,
+                    response,
                 },
-            ))
+            }))
         }
         ContentBlock::ToolCall(tool_call) => {
             // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
@@ -646,12 +646,13 @@ async fn convert_non_thought_content_block(
             }))
         }
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
-            message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
+            message: format!(
+                "Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         })),
-        ContentBlock::Unknown {
-            data,
-            model_provider_name: _,
-        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => {
+            Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
+        }
     }
 }
 
@@ -716,12 +717,22 @@ impl<'a> GoogleAIStudioGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Auto,
-                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some() {
+                    GeminiFunctionCallingMode::Any
+                } else {
+                    GeminiFunctionCallingMode::Auto
+                };
+                GoogleAIStudioGeminiToolConfig {
+                    function_calling_config: GeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::Any,
@@ -1014,14 +1025,13 @@ fn content_part_to_tensorzero_chunk(
             }
             _ => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                        message:
-                            format!(
-                                "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
-                            ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
-                    }));
+                    message: format!(
+                        "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
+                }));
             }
         }
         return Ok(());
@@ -1088,7 +1098,8 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1124,7 +1135,7 @@ fn convert_part_to_output(
                 }));
             }
             _ => {
-                output.push(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -1132,8 +1143,9 @@ fn convert_part_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-                });
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
+                }));
             }
         }
         return Ok(());
@@ -1171,10 +1183,11 @@ fn convert_part_to_output(
             }));
         }
         FlattenUnknown::Unknown(part) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-            });
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
+            }));
         }
     }
     Ok(())
@@ -1445,8 +1458,8 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
-    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use serde_json::json;
 
     use super::*;
@@ -1711,7 +1724,7 @@ mod tests {
             }
         );
 
-        // Test Auto mode with specific allowed tools (new behavior)
+        // Test Auto mode with specific allowed tools - should use Any mode
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
@@ -1729,7 +1742,7 @@ mod tests {
         let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GeminiFunctionCallingMode::Auto
+            GeminiFunctionCallingMode::Any
         );
         let mut allowed_names = tool_config
             .function_calling_config
@@ -2146,8 +2159,10 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text }),
+            ContentBlockOutput::ToolCall(tool_call),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
             assert_eq!(tool_call.name, "get_temperature");
@@ -2259,8 +2274,12 @@ mod tests {
         assert_eq!(model_inference_response.raw_request, raw_request);
 
         assert_eq!(model_inference_response.raw_response, raw_response);
-        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
-            &model_inference_response.output[..]
+        if let [
+            ContentBlockOutput::Text(Text { text: text1 }),
+            ContentBlockOutput::ToolCall(tool_call1),
+            ContentBlockOutput::Text(Text { text: text2 }),
+            ContentBlockOutput::ToolCall(tool_call2),
+        ] = &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");

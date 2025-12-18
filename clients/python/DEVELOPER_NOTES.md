@@ -43,13 +43,13 @@ There are several different names in use in this client:
 
 For pure value types (mostly used in APIs), we generate them from Rust, via JSON Schema.
 
- ```
- Rust Types (with annotations)
-     ↓ (cargo test export_schema)
- JSON Schemas (in clients/schemas/)
-     ↓ (python generate_schema_types.py)
- Python Dataclasses (in clients/python/tensorzero/generated_types/generated_types.py)
- ```
+```
+Rust Types (with annotations)
+    ↓ (cargo test export_schema)
+JSON Schemas (in clients/schemas/)
+    ↓ (python generate_schema_types.py)
+Python Dataclasses (in clients/python/tensorzero/generated_types/generated_types.py)
+```
 
 ## (WIP) Customizing generated types
 
@@ -133,5 +133,5 @@ The generated python is:
 ```python
 @dataclass
 class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
 ```

@@ -14,7 +14,9 @@ permissions:
 # that actually merging a PR requires the real 'check-all-general-jobs-passed' job to pass.
 
 on:
-  pull_request:
+  # We need to use 'pull_request_target' so that we have proper permissions to add statuses to the PR,
+  # even when the PR is from a fork.
+  pull_request_target:
     types: [labeled, unlabeled]
 
 jobs:
@@ -25,8 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      -
-        name: Attach a 'check-all-general-jobs-passed' status to the PR
+      - name: Attach a 'check-all-general-jobs-passed' status to the PR
         # Note that GitHub doesn't let you remove a commit status, so we don't do anything if the label is removed.
         # Pushing a new commit to the PR will trigger a new 'general.yml' run, which will become the latest status
         # for the PR.

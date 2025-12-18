@@ -16,26 +16,27 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlockChunk, ContentBlockOutput, Latency,
-    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
+    batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
-    get_chat_url, handle_openai_error, prepare_system_or_developer_message,
-    tensorzero_to_openai_messages, OpenAIAssistantRequestMessage, OpenAIContentBlock,
-    OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
-    OpenAIUsage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
+    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage,
+    StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
 
@@ -240,6 +241,7 @@ impl InferenceProvider for DeepSeekProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -420,7 +422,9 @@ impl<'a> DeepSeekRequest<'a> {
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
+            tracing::warn!(
+                "DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode."
+            );
         }
 
         let response_format = DeepSeekResponseFormat::new(request.json_mode);
@@ -477,7 +481,7 @@ fn stream_deepseek(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -504,8 +508,6 @@ fn stream_deepseek(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

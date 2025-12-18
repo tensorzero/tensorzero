@@ -6,22 +6,23 @@ use std::sync::Arc;
 use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, System,
+    FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    System, batch::StartBatchModelInferenceWithMetadata,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
@@ -84,7 +85,7 @@ impl BestOfNSamplingConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
@@ -107,7 +108,7 @@ pub struct BestOfNEvaluatorConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
@@ -383,11 +384,9 @@ impl BestOfNSamplingConfig {
         }
 
         // Wait for all the inference tasks to complete
-        let inference_results: Vec<_> = join_all(
-            inference_futures
-                .into_iter()
-                .map(|(candidate_name, future)| async move { (candidate_name, future.await) }),
-        )
+        let inference_results: Vec<_> = join_all(inference_futures.into_iter().map(
+            |(candidate_name, future)| async move { (candidate_name, Box::pin(future).await) },
+        ))
         .await;
 
         // Collect the successful results
@@ -556,7 +555,7 @@ async fn inner_select_best_candidate<'a>(
         .find_map(|block| match block {
             ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown { .. } => None,
+            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown(_) => None,
         }) {
         Some(text) => text,
         None => {
@@ -764,7 +763,7 @@ impl BestOfNEvaluatorConfig {
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .or_else(|| self.inner.json_mode().cloned())
+            .or_else(|| self.inner.json_mode().copied())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
             JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),
@@ -849,7 +848,7 @@ mod tests {
     use crate::rate_limiting::ScopeInfo;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
+        config::{UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
@@ -1200,9 +1199,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            output: vec!["{\"response\": \"Malformed JSON response\""
-                .to_string()
-                .into()], // missing closing brace
+            output: vec![
+                "{\"response\": \"Malformed JSON response\""
+                    .to_string()
+                    .into(),
+            ], // missing closing brace
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
@@ -1367,6 +1368,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1393,6 +1395,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1482,6 +1485,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1557,6 +1561,7 @@ mod tests {
                         },
                     )]),
                     timeouts: Default::default(),
+                    skip_relay: false,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1650,6 +1655,7 @@ mod tests {
                     },
                 )]),
                 timeouts: Default::default(),
+                skip_relay: false,
             },
         );
         let provider_types = ProviderTypesConfig::default();

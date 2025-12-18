@@ -34,6 +34,33 @@ model = "anthropic::claude-haiku-4-5"
 During an episode, multiple inference requests to the same function will receive the same variant (unless fallbacks are necessary).
 This consistent variant assignment acts as a randomized controlled experiment, providing the statistical foundation needed to make causal inferences about which configurations perform best.
 
+## Configure candidate variants explicitly
+
+You can explicitly specify which variants to sample uniformly from using `candidate_variants`.
+
+```toml
+[functions.draft_email]
+type = "chat"
+
+[functions.draft_email.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+
+[functions.draft_email.variants.claude_haiku_4_5]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+
+[functions.draft_email.variants.grok_4]
+type = "chat_completion"
+model = "xai::grok-4-0709"
+
+[functions.draft_email.experimentation]  // [!code ++:3]
+type = "uniform"
+candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
+```
+
+In this example, the gateway samples uniformly between `gpt_5_mini` and `claude_haiku_4_5` (50% each).
+
 ## Configure sampling weights for variants
 
 You can configure weights for variants to control the probability of each variant being sampled.
@@ -68,6 +95,7 @@ For example, if a variant has weight 5 and another has weight 1, the first varia
 ## Configure fallback-only variants
 
 You can configure variants that are only used as fallbacks with `fallback_variants`.
+You can use this field with both `uniform` and `static_weights` sampling.
 
 ```toml
 [functions.draft_email]

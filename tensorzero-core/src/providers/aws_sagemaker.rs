@@ -1,14 +1,14 @@
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{build_interceptor, InterceptorAndRawBody};
+use crate::providers::aws_common::{InterceptorAndRawBody, build_interceptor};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
     },
     model::ModelProvider,
 };

@@ -3,6 +3,7 @@ import type { UIMatch } from "react-router";
 export interface CrumbItem {
   label: string;
   isIdentifier?: boolean;
+  noLink?: boolean;
 }
 
 declare module "react-router" {

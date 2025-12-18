@@ -4,6 +4,7 @@ use itertools::izip;
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -22,6 +23,8 @@ use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::Role;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -29,8 +32,6 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -40,7 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -111,7 +112,7 @@ pub struct ChainOfThoughtConfigPyClass {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -330,34 +331,32 @@ impl Variant for VariantInfo {
                         .await
                 }
                 VariantConfig::MixtureOfN(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::ChainOfThought(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
             }
         };
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
             let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+            Box::pin(tokio::time::timeout(timeout, fut))
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
                 // so that it can be handled by the `match response` block below
@@ -369,7 +368,7 @@ impl Variant for VariantInfo {
                     }))
                 })
         } else {
-            fut.await
+            Box::pin(fut).await
         }
     }
 
@@ -429,28 +428,26 @@ impl Variant for VariantInfo {
                         .await
                 }
                 VariantConfig::MixtureOfN(params) => {
-                    params
-                        .infer_stream(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer_stream(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::ChainOfThought(params) => {
-                    params
-                        .infer_stream(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer_stream(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
             }
         };
@@ -459,7 +456,7 @@ impl Variant for VariantInfo {
         // `streaming_ttft_timeout` is correct.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
             let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+            Box::pin(tokio::time::timeout(timeout, fut))
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
@@ -469,7 +466,7 @@ impl Variant for VariantInfo {
                     }))
                 })
         } else {
-            fut.await
+            Box::pin(fut).await
         }
     }
 
@@ -919,8 +916,8 @@ mod tests {
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelProvider, ProviderConfig};
     use crate::providers::dummy::{
-        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
-        DUMMY_STREAMING_RESPONSE,
+        DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
+        DummyProvider,
     };
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1180,6 +1177,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1259,6 +1257,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1371,6 +1370,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1437,6 +1437,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
 
         // Create the arguments struct
@@ -1486,6 +1487,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1583,6 +1585,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1656,6 +1659,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1697,6 +1701,7 @@ mod tests {
                 },
             )]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
 
         // Prepare the model inference request
@@ -1786,7 +1791,7 @@ mod tests {
         full_response.push_str(&received_text);
 
         // Verify the full response
-        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.concat();
         assert_eq!(full_response, expected_response);
     }
 
@@ -1814,6 +1819,7 @@ mod tests {
                 tags: Arc::new(HashMap::new()),
                 api_key_public_id: None,
             },
+            relay: None,
         };
         let inference_params = InferenceParams::default();
 
@@ -1895,6 +1901,7 @@ mod tests {
                 ),
             ]),
             timeouts: Default::default(),
+            skip_relay: false,
         }));
         let retry_config = RetryConfig::default();
 
@@ -1961,7 +1968,7 @@ mod tests {
         full_response.push_str(&received_text);
 
         // Verify the full response
-        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.concat();
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(

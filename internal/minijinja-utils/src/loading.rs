@@ -18,7 +18,7 @@
 // The analysis is conservative: when uncertain, expressions are marked dynamic.
 // Conditional expressions like `"a.html" if x else "b.html"` analyze both branches.
 
-use minijinja::machinery::{self, ast, Span, WhitespaceConfig};
+use minijinja::machinery::{self, Span, WhitespaceConfig, ast};
 use minijinja::syntax::SyntaxConfig;
 use minijinja::value::Value;
 use minijinja::{Environment, Error};

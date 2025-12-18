@@ -39,7 +39,9 @@ pub struct EstimateOptimalProbabilitiesArgs {
 /// Errors that can occur when computing optimal sampling probabilities.
 #[derive(Debug, Error)]
 pub enum EstimateOptimalProbabilitiesError {
-    #[error("Length mismatch: pull_counts = {pull_counts_len}, means = {means_len}, variances = {variances_len}")]
+    #[error(
+        "Length mismatch: pull_counts = {pull_counts_len}, means = {means_len}, variances = {variances_len}"
+    )]
     MismatchedLengths {
         pull_counts_len: usize,
         means_len: usize,

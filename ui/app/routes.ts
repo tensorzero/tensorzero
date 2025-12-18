@@ -15,13 +15,10 @@ export default [
       "routes/api/curated_inferences/count.route.ts",
     ),
 
+    route("inferences/count", "routes/api/inferences/count.route.ts"),
+
     ...prefix("datasets", [
       route("counts", "routes/api/datasets/counts.route.ts"),
-      route("count_inserts", "routes/api/datasets/count_inserts.route.ts"),
-      route(
-        "count/dataset/:dataset_name/function/:function_name",
-        "routes/api/datasets/count_dataset_function.route.ts",
-      ),
     ]),
 
     route(
@@ -43,6 +40,18 @@ export default [
       route("inference", "routes/api/tensorzero/inference.ts"),
       route("status", "routes/api/tensorzero/status.ts"),
     ]),
+
+    route(
+      "inference/:inference_id",
+      "routes/api/inference/$inference_id/route.ts",
+    ),
+
+    route(
+      "datasets/datapoints/from-inference",
+      "routes/api/datasets/datapoints/from-inference/route.ts",
+    ),
+
+    route("feedback", "routes/api/feedback/route.ts"),
   ]),
 
   // Datasets
@@ -56,6 +65,11 @@ export default [
         "routes/datasets/$dataset_name/datapoint/$id/route.tsx",
       ),
     ]),
+  ]),
+
+  // Datapoints
+  route("datapoints", "routes/datapoints/layout.tsx", [
+    route("new", "routes/datapoints/new/route.tsx"),
   ]),
 
   // Evaluations

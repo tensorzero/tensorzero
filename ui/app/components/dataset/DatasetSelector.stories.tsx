@@ -45,7 +45,7 @@ const meta = {
       control: "boolean",
       description: "Allow creating new datasets",
     },
-    placeholder: {
+    label: {
       control: "text",
       description: "Placeholder text when no dataset is selected",
     },
@@ -68,7 +68,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     allowCreation: true,
-    placeholder: "Select a dataset",
+    label: "Select a dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -90,7 +90,7 @@ export const Default: Story = {
 export const EmptyDatasets: Story = {
   args: {
     allowCreation: true,
-    placeholder: "Select a dataset",
+    label: "Select a dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -112,7 +112,7 @@ export const EmptyDatasets: Story = {
 export const DisallowCreation: Story = {
   args: {
     allowCreation: false,
-    placeholder: "Select a dataset",
+    label: "Select a dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
@@ -135,7 +135,7 @@ export const DisallowCreation: Story = {
 export const ManyDatasets: Story = {
   args: {
     allowCreation: true,
-    placeholder: "Select a dataset",
+    label: "Select a dataset",
   },
   render: function Render(args) {
     const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();

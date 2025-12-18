@@ -4,6 +4,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{DynamicExtraBody, UnfilteredInferenceExtraBody};
 use crate::inference::types::extra_headers::{DynamicExtraHeader, UnfilteredInferenceExtraHeaders};
 use crate::model::ModelTable;
+use crate::relay::TensorzeroRelay;
 
 /// Validate all filters in extra_body and extra_headers
 pub async fn validate_inference_filters(
@@ -11,6 +12,7 @@ pub async fn validate_inference_filters(
     extra_headers: &UnfilteredInferenceExtraHeaders,
     function: Option<&FunctionConfig>,
     models: &ModelTable,
+    relay: &Option<TensorzeroRelay>,
 ) -> Result<(), Error> {
     // Validate extra_body filters
     for filter in extra_body.as_slice() {
@@ -30,7 +32,12 @@ pub async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name)?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_body objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_provider_filter(model_provider_name)?;
+                }
             }
             DynamicExtraBody::ModelProvider {
                 model_name,
@@ -42,8 +49,13 @@ pub async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                    .await?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_body objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
+                        .await?;
+                }
             }
             DynamicExtraBody::Always { .. } | DynamicExtraBody::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
@@ -69,7 +81,12 @@ pub async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name)?;
+                // Don't validate provider names in relay mode, since we're ignoring all providers
+                // The extra_header objects will be forwarded to the downstream gateway, which will validate
+                // and apply provider-level filters
+                if relay.is_none() {
+                    validate_provider_filter(model_provider_name)?;
+                }
             }
             DynamicExtraHeader::ModelProvider {
                 model_name,
@@ -81,8 +98,10 @@ pub async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name.as_deref(), models)
-                    .await?;
+                if relay.is_none() {
+                    validate_model_provider_filter(model_name, provider_name.as_deref(), models)
+                        .await?;
+                }
             }
             DynamicExtraHeader::Always { .. } | DynamicExtraHeader::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
@@ -137,15 +156,15 @@ async fn validate_model_provider_filter(
     // Check if the model exists in the table (supports shorthand notation)
     if let Some(model_config) = models.get(model_name).await? {
         // Check if the provider exists in that model (if provider_name is specified)
-        if let Some(provider_name) = provider_name {
-            if !model_config.providers.contains_key(provider_name) {
-                return Err(ErrorDetails::InvalidInferenceTarget {
+        if let Some(provider_name) = provider_name
+            && !model_config.providers.contains_key(provider_name)
+        {
+            return Err(ErrorDetails::InvalidInferenceTarget {
                     message: format!(
                         "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}`.",
                     ),
                 }
                 .into());
-            }
         }
         Ok(())
     } else {
@@ -200,6 +219,23 @@ mod tests {
         })
     }
 
+    fn create_test_relay() -> Option<TensorzeroRelay> {
+        use crate::config::UninitializedRelayConfig;
+        use crate::relay::{RelayCredentials, TensorzeroRelay};
+
+        let relay_config = UninitializedRelayConfig {
+            gateway_url: Some("http://localhost:3000".parse().unwrap()),
+            api_key_location: None,
+        };
+
+        TensorzeroRelay::new(
+            "http://localhost:3000".parse().unwrap(),
+            RelayCredentials::None,
+            relay_config,
+        )
+        .ok()
+    }
+
     fn create_test_model_table() -> ModelTable {
         use crate::config::provider_types::ProviderTypesConfig;
         use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
@@ -226,6 +262,7 @@ mod tests {
                     },
                 )]),
                 timeouts: Default::default(),
+                skip_relay: false,
             },
         )]);
 
@@ -280,6 +317,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());
@@ -304,6 +342,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -328,6 +367,7 @@ mod tests {
             &extra_headers,
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -351,6 +391,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             None,
             &models,
+            &None,
         )
         .await;
         assert!(result.is_err());
@@ -375,6 +416,7 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());
@@ -390,8 +432,283 @@ mod tests {
             &UnfilteredInferenceExtraHeaders::default(),
             Some(&function),
             &models,
+            &None,
         )
         .await;
         assert!(result.is_ok());
+    }
+
+    // Tests for skip validation behavior
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_variant_validation_when_no_function() {
+        let models = create_test_model_table();
+
+        // Invalid variant name but function is None, so validation should be skipped
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "variant_name": "nonexistent_variant",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            None, // No function context
+            &models,
+            &None,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip variant validation when function is None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_variant_validation_in_extra_headers() {
+        let models = create_test_model_table();
+
+        // Invalid variant name in extra_headers but function is None
+        let extra_headers: UnfilteredInferenceExtraHeaders = serde_json::from_value(json!([
+            {
+                "variant_name": "nonexistent_variant",
+                "name": "X-Custom-Header",
+                "value": "value"
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &UnfilteredInferenceExtraBody::default(),
+            &extra_headers,
+            None, // No function context
+            &models,
+            &None,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip variant validation when function is None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_provider_validation_in_relay_mode() {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+        let relay = create_test_relay();
+
+        // Invalid provider format but relay mode is enabled
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "model_provider_name": "invalid::format",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            Some(&function),
+            &models,
+            &relay,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip provider validation in relay mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_provider_validation_in_extra_headers_relay_mode()
+    {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+        let relay = create_test_relay();
+
+        // Invalid provider format in extra_headers but relay mode is enabled
+        let extra_headers: UnfilteredInferenceExtraHeaders = serde_json::from_value(json!([
+            {
+                "model_provider_name": "invalid::format",
+                "name": "X-Custom-Header",
+                "value": "value"
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &UnfilteredInferenceExtraBody::default(),
+            &extra_headers,
+            Some(&function),
+            &models,
+            &relay,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip provider validation in relay mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_model_provider_validation_in_relay_mode() {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+        let relay = create_test_relay();
+
+        // Invalid model name but relay mode is enabled
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "model_name": "nonexistent-model",
+                "provider_name": "nonexistent-provider",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            Some(&function),
+            &models,
+            &relay,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip model provider validation in relay mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_model_provider_validation_in_extra_headers_relay_mode()
+     {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+        let relay = create_test_relay();
+
+        // Invalid model name in extra_headers but relay mode is enabled
+        let extra_headers: UnfilteredInferenceExtraHeaders = serde_json::from_value(json!([
+            {
+                "model_name": "nonexistent-model",
+                "provider_name": "nonexistent-provider",
+                "name": "X-Custom-Header",
+                "value": "value"
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &UnfilteredInferenceExtraBody::default(),
+            &extra_headers,
+            Some(&function),
+            &models,
+            &relay,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip model provider validation in relay mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_skip_model_provider_validation_with_valid_model_invalid_provider_relay_mode()
+     {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+        let relay = create_test_relay();
+
+        // Valid model but invalid provider, relay mode enabled
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "model_name": "test-model",
+                "provider_name": "nonexistent-provider",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            Some(&function),
+            &models,
+            &relay,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "Should skip model provider validation in relay mode even with invalid provider"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_validate_model_provider_when_not_relay_mode() {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+
+        // Invalid model name, relay mode disabled
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "model_name": "nonexistent-model",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            Some(&function),
+            &models,
+            &None, // Not relay mode
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "Should validate model provider when not in relay mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_inference_filters_validate_model_provider_invalid_provider_when_not_relay_mode()
+     {
+        let function = create_test_function_config();
+        let models = create_test_model_table();
+
+        // Valid model but invalid provider, relay mode disabled
+        let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+            {
+                "model_name": "test-model",
+                "provider_name": "nonexistent-provider",
+                "pointer": "/test",
+                "value": {"key": "value"}
+            }
+        ]))
+        .unwrap();
+
+        let result = validate_inference_filters(
+            &extra_body,
+            &UnfilteredInferenceExtraHeaders::default(),
+            Some(&function),
+            &models,
+            &None, // Not relay mode
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "Should validate provider when not in relay mode"
+        );
     }
 }

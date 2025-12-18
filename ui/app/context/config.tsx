@@ -9,9 +9,9 @@
  */
 
 import { createContext, useContext } from "react";
-import type { Config } from "~/types/tensorzero";
+import type { UiConfig } from "~/types/tensorzero";
 
-const ConfigContext = createContext<Config | null>(null);
+const ConfigContext = createContext<UiConfig | null>(null);
 
 export function useConfig() {
   const config = useContext(ConfigContext);
@@ -49,7 +49,7 @@ export function ConfigProvider({
   value,
 }: {
   children: React.ReactNode;
-  value: Config;
+  value: UiConfig;
 }) {
   return (
     <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

@@ -33,6 +33,7 @@ describe("dump_optimizer_output", () => {
             ttft_ms: null,
           },
         },
+        skip_relay: false,
       },
     };
     const result_string = dump_optimizer_output(optimizerOutput);
@@ -67,6 +68,7 @@ describe("dump_optimizer_output", () => {
             ttft_ms: null,
           },
         },
+        skip_relay: false,
       },
     };
     const result_string = dump_optimizer_output(optimizerOutput);

@@ -5,24 +5,23 @@ use futures::StreamExt;
 use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero::{
-    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
-    UrlFile,
+    ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, UrlFile, test_helpers::make_embedded_gateway_with_config,
 };
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     common::get_gateway_endpoint,
-    providers::common::{E2ETestProvider, E2ETestProviders, DEEPSEEK_PAPER_PDF, FERRIS_PNG},
+    providers::common::{DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, FERRIS_PNG},
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, TextKind},
+    inference::types::{ContentBlockChatOutput, Text},
 };
 
 use super::common::ModelTestProvider;
@@ -186,7 +185,7 @@ async fn test_thinking_rejected_128k() {
     // since we want to test the current Anthropic behavior.
     let random = Uuid::now_v7();
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": "anthropic::claude-sonnet-4-5-20250929",
         "input":{
             "messages": [
                 {
@@ -226,143 +225,80 @@ async fn test_thinking_rejected_128k() {
     );
 }
 
-async fn test_thinking_helper(client: &Client, payload: &serde_json::Value) -> serde_json::Value {
-    let response = client
+#[tokio::test]
+async fn test_empty_chunks_success() {
+    let payload = json!({
+        "model_name": "anthropic::claude-sonnet-4-5",
+        "input":{
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "Can you clarify that?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "max_tokens": 256,
+            }
+        },
+        "stream": true,
+    });
+
+    let client = Client::new();
+
+    let mut event_source = client
         .post(get_gateway_endpoint("/inference"))
-        .json(payload)
-        .send()
-        .await
+        .json(&payload)
+        .eventsource()
         .unwrap();
-
-    let status = response.status();
-    let resp_json = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "Unexpected status code with response: {resp_json}"
-    );
-    let content = resp_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 2, "Unexpected content length: {content:?}");
-    assert_eq!(content[0]["type"], "thought", "Unexpected content type");
-    assert_eq!(content[1]["type"], "text", "Unexpected content type");
-    assert!(
-        !content[1]["text"]
-            .as_str()
-            .unwrap()
-            .contains("my_custom_stop"),
-        "Found my_custom_stop in content: {}",
-        content[1]["text"].as_str().unwrap()
-    );
-    resp_json
-}
-
-#[tokio::test]
-async fn test_thinking_inference_extra_header_128k() {
-    let client = Client::new();
-
-    // This model uses a custom stop sequence, as we want to make sure that
-    // we don't actually generate 128k tokens of output. This test just verifies
-    // that we can pass through the necessary 'anthropic-beta' header to support
-    // a large 'max_tokens'
-    let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
-        "input":{
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Output a haiku that ends in the word 'my_custom_stop'"
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
                 }
-            ]},
-        "extra_headers": [
-            {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
-                "provider_name": "anthropic",
-                "name": "anthropic-beta",
-                "value": "output-128k-2025-02-19"
+                chunks.push(message.data);
             }
-        ],
-        "extra_body": [
-            {
-                "model_name": "anthropic::claude-3-7-sonnet-20250219",
-                "provider_name": "anthropic",
-                "pointer": "/stop_sequences",
-                "value": [
-                    "my_custom_stop",
-                ]
-            }
-        ],
-        // We use a budget tokens of 1024 to make sure that it doesn't think for too long,
-        // since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
-        // to 128k in 'test_thinking_128k'
-        "params": {
-            "chat_completion": {
-                "max_tokens": 128000,
-                "thinking_budget_tokens": 1024,
-            }
-        },
-    });
+        }
+    }
 
-    let response = test_thinking_helper(&client, &payload).await;
-    let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
+    println!("Chunks: {chunks:?}");
+    let mut first_inference_id = None;
 
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+        let inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
+        let inference_id = Uuid::parse_str(inference_id).unwrap();
+        if first_inference_id.is_none() {
+            first_inference_id = Some(inference_id);
+        }
+        assert_eq!(chunk_json["content"].as_array().unwrap().len(), 0);
+    }
 
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse
     let clickhouse = get_clickhouse().await;
+    // Sleep for 500ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, first_inference_id.unwrap())
         .await
         .unwrap();
-
-    // Check that thinking_budget_tokens was stored correctly
-    let inference_params: Value =
-        serde_json::from_str(result["inference_params"].as_str().unwrap()).unwrap();
-    println!("inference_params: {inference_params:?}");
-    assert_eq!(
-        inference_params["chat_completion"]["thinking_budget_tokens"],
-        1024
+    println!("Chat inference: {chat_inference:?}");
+    assert_eq!(chat_inference["output"], "[]");
+    let ttft_ms = chat_inference["ttft_ms"].as_u64().unwrap();
+    assert!(
+        ttft_ms > 0,
+        "ttft_ms should be greater than 0, but was {ttft_ms}"
     );
-}
-
-#[tokio::test]
-async fn test_thinking_128k() {
-    let client = Client::new();
-
-    // This model uses a custom stop sequence, as we want to make sure that
-    // we don't actually generate 128k tokens of output. This test just verifies
-    // that we can pass through the necessary 'anthropic-beta' header to support
-    // a large 'max_tokens'
-    let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking-128k",
-        "input":{
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Output a haiku that ends in the word 'my_custom_stop'"
-                }
-            ]},
-        "params": {
-            "chat_completion": {
-                "thinking_budget_tokens": 1024,
-                "max_tokens": 128000,
-            }
-        },
-        "stream": false,
-    });
-
-    test_thinking_helper(&client, &payload).await;
-
-    // We don't check the database, as we already do that in lots of places.
 }
 
 #[tokio::test]
 pub async fn test_thinking_signature() {
     test_thinking_signature_helper(
         "anthropic-thinking",
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
     )
     .await;
@@ -553,7 +489,7 @@ pub async fn test_thinking_signature_helper(
 #[tokio::test]
 pub async fn test_redacted_thinking() {
     test_redacted_thinking_helper(
-        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic::claude-sonnet-4-5-20250929",
         "anthropic",
         "anthropic",
     )
@@ -609,7 +545,7 @@ pub async fn test_redacted_thinking_helper(
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(first_block_type, "thought");
-    assert_eq!(first_block["_internal_provider_type"], provider_type);
+    assert_eq!(first_block["provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
 
     let second_block = &content_blocks[1];
@@ -658,7 +594,7 @@ pub async fn test_redacted_thinking_helper(
     let first_block = &content_blocks[0];
     // Check the type and content in the block
     assert_eq!(first_block["type"], "thought");
-    assert_eq!(first_block["_internal_provider_type"], provider_type);
+    assert_eq!(first_block["provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
@@ -719,6 +655,10 @@ pub async fn test_redacted_thinking_helper(
         "role": "assistant",
         "content": tensorzero_content_blocks,
     }));
+    array.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "text", "text": "What were you thinking about?"}],
+    }));
 
     let payload = json!({
         "model_name": model_name,
@@ -743,6 +683,8 @@ pub async fn test_redacted_thinking_helper(
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+
+    println!("New response JSON: {response_json}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(
@@ -841,9 +783,15 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
 
     let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
     if stream {
-        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+        assert_eq!(
+            raw_request,
+            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+        );
     } else {
-        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+        assert_eq!(
+            raw_request,
+            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+        );
     }
 }
 
@@ -936,16 +884,22 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
 
     let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
     if stream {
-        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+        assert_eq!(
+            raw_request,
+            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
+        );
     } else {
-        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+        assert_eq!(
+            raw_request,
+            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
+        );
     }
 }
 
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
-    test_streaming_thinking_helper("anthropic::claude-3-7-sonnet-20250219", "anthropic").await;
+    test_streaming_thinking_helper("anthropic::claude-sonnet-4-5-20250929", "anthropic").await;
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
@@ -1109,7 +1063,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
             "type": "thought",
             "text": content_blocks[&("thought".to_string(), "0".to_string())],
             "signature": content_block_signatures["0"],
-            "_internal_provider_type": provider_type,
+            "provider_type": provider_type,
         })
     );
 
@@ -1248,11 +1202,11 @@ async fn test_forward_image_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-3-haiku-20240307".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the image".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
@@ -1282,7 +1236,10 @@ async fn test_forward_image_url() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!(raw_request, "{\"model\":\"claude-3-haiku-20240307\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":4096,\"stream\":false}");
+    assert_eq!(
+        raw_request,
+        "{\"model\":\"claude-3-haiku-20240307\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":4096,\"stream\":false}"
+    );
 
     let file_path =
         "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
@@ -1327,11 +1284,11 @@ async fn test_forward_file_url() {
 
     let response = client.inference(ClientInferenceParams {
         model_name: Some("anthropic::claude-sonnet-4-5-20250929".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url(UrlFile {
+                content: vec![InputMessageContent::Text(Text { text: "Describe the contents of the PDF".to_string() }),
+                InputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,
@@ -1361,7 +1318,10 @@ async fn test_forward_file_url() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}");
+    assert_eq!(
+        raw_request,
+        "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}"
+    );
 
     let file_path =
         "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";

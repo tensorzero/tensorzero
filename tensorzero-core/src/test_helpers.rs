@@ -21,5 +21,5 @@ pub async fn get_e2e_config() -> Config {
     Config::load_from_path_optional_verify_credentials(&config_glob, false)
         .await
         .unwrap()
-        .config
+        .into_config_without_writing_for_tests()
 }

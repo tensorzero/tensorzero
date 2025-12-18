@@ -16,4 +16,4 @@ spec:
   selector:
     {{- include "tensorzero.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: ui
-{{- end }} 
+{{- end }}

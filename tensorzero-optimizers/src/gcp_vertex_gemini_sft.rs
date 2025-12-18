@@ -14,17 +14,17 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     model_table::{GCPVertexGeminiKind, ProviderTypeDefaultCredentials},
     optimization::{
-        gcp_vertex_gemini_sft::{GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle},
         OptimizationJobInfo,
+        gcp_vertex_gemini_sft::{GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle},
     },
     providers::gcp_vertex_gemini::{
+        GCPVertexCredentials, GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
         location_subdomain_prefix,
         optimization::{
-            convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
-            GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
+            EncryptionSpec, GCPVertexGeminiFineTuningJob, GCPVertexGeminiFineTuningRequest,
+            SupervisedHyperparameters, SupervisedTuningSpec, convert_to_optimizer_status,
         },
-        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiSupervisedRow,
-        PROVIDER_TYPE,
+        upload_rows_to_gcp_object_store,
     },
     stored_inference::RenderedSample,
 };

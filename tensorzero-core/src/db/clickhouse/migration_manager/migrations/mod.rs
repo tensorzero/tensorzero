@@ -40,6 +40,9 @@ pub mod migration_0039;
 pub mod migration_0040;
 pub mod migration_0041;
 pub mod migration_0042;
+pub mod migration_0043;
+pub mod migration_0044;
+pub mod migration_0045;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -60,7 +63,7 @@ pub async fn check_table_exists(
                 id: migration_id.to_string(),
                 message: e.to_string(),
             }
-            .into())
+            .into());
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -90,7 +93,7 @@ pub async fn check_detached_table_exists(
                 id: migration_id.to_string(),
                 message: e.to_string(),
             }
-            .into())
+            .into());
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -128,7 +131,7 @@ async fn check_column_exists(
                 id: migration_id.to_string(),
                 message: e.to_string(),
             }
-            .into())
+            .into());
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -216,7 +219,12 @@ async fn check_index_exists(
     table: &str,
     index: &str,
 ) -> Result<bool, Error> {
-    let query = format!("SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'", clickhouse.database(), table, index);
+    let query = format!(
+        "SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'",
+        clickhouse.database(),
+        table,
+        index
+    );
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim() == "1")
 }

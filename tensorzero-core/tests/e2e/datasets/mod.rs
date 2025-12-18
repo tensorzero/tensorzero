@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
-use tensorzero::{ClientExt, JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use serde_json::{Value, json};
+use tensorzero::{ClientExt, InputMessageContent, JsonInferenceDatapoint, Role, System};
 use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
@@ -13,7 +13,7 @@ use tensorzero_core::{
         },
         datasets::{DatasetQueries, GetDatapointsParams},
     },
-    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
+    endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, DatapointKind},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
     tool::Tool,
 };
@@ -86,6 +86,14 @@ async fn test_datapoint_insert_synthetic_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -278,11 +286,13 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -293,18 +303,20 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
+        assert!(matches!(first_content, InputMessageContent::Text(_)));
 
         // Verify output if present
         if let Some(output) = &datapoint.output {
@@ -596,6 +608,14 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     let updated_at = chrono::NaiveDateTime::parse_from_str(
         updated_at.as_str().unwrap(),
         CLICKHOUSE_DATETIME_FORMAT,
@@ -674,6 +694,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -787,6 +813,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let new_updated_at = datapoint
         .as_object_mut()
@@ -902,6 +934,12 @@ async fn test_datapoint_insert_synthetic_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id)
         .await
         .unwrap();
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1049,11 +1087,13 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1062,16 +1102,18 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Template { .. }
+            InputMessageContent::Template { .. }
         ));
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(match input.system.as_ref().unwrap() {
-            System::Template(arguments) => arguments.0.get("assistant_name"),
-            System::Text(_) => panic!("Expected System::Template"),
-        }
-        .is_some());
+        assert!(
+            match input.system.as_ref().unwrap() {
+                System::Template(arguments) => arguments.0.get("assistant_name"),
+                System::Text(_) => panic!("Expected System::Template"),
+            }
+            .is_some()
+        );
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1080,7 +1122,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Template { .. }
+            InputMessageContent::Template { .. }
         ));
 
         // Get the output schema
@@ -1479,6 +1521,15 @@ async fn test_datapoint_insert_output_inherit_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
@@ -1517,9 +1568,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    assert!(select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .is_none());
+    assert!(
+        select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -1600,6 +1653,14 @@ async fn test_datapoint_insert_output_none_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let expected = json!({
       "dataset_name": dataset_name,
@@ -1773,6 +1834,14 @@ async fn test_datapoint_insert_output_demonstration_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     println!(
         "Datapoint: {}",
@@ -1863,6 +1932,14 @@ async fn test_datapoint_insert_output_inherit_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1916,9 +1993,11 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    assert!(select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .is_none());
+    assert!(
+        select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -1979,6 +2058,14 @@ async fn test_datapoint_insert_output_none_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2094,6 +2181,14 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     let updated_at = datapoint
         .as_object_mut()
@@ -2261,6 +2356,15 @@ async fn test_datapoint_insert_missing_output_chat() {
         .await
         .unwrap();
 
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
+
     datapoint
         .as_object_mut()
         .unwrap()
@@ -2331,7 +2435,14 @@ async fn test_datapoint_insert_null_output_chat() {
     let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
-
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
     datapoint
         .as_object_mut()
         .unwrap()
@@ -2403,6 +2514,14 @@ async fn test_datapoint_insert_missing_output_json() {
     let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
+    // We remove the snapshot hash and assert it is a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    println!("snapshot hash: {snapshot_hash}");
+    assert!(snapshot_hash.is_string());
 
     datapoint
         .as_object_mut()
@@ -2476,7 +2595,13 @@ async fn test_datapoint_insert_null_output_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-
+    // Remove the snapshot hash because it is hard to assert on and check it's a string
+    let snapshot_hash = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshot_hash")
+        .unwrap();
+    assert!(snapshot_hash.is_string());
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
@@ -2940,7 +3065,8 @@ async fn test_stale_dataset_mixed_staled_fresh() {
 #[tokio::test]
 async fn test_update_datapoint_preserves_tool_call_ids() {
     use tensorzero_core::{
-        db::datasets::{ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries},
+        db::datasets::DatasetQueries,
+        db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint},
         inference::types::{ContentBlockChatOutput, StoredInput},
         tool::InferenceResponseToolCall,
     };
@@ -2977,7 +3103,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     });
 
     // Create initial datapoint using ClickHouse directly with tool calls that have IDs
-    let initial_datapoint = ChatInferenceDatapointInsert {
+    let initial_datapoint = StoredChatInferenceDatapoint {
         dataset_name: dataset_name.to_string(),
         function_name: "basic_test".to_string(),
         id: datapoint_id,
@@ -3002,10 +3128,13 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
     };
 
     clickhouse
-        .insert_datapoints(&[DatapointInsert::Chat(initial_datapoint)])
+        .insert_datapoints(&[StoredDatapoint::Chat(initial_datapoint)])
         .await
         .unwrap();
 
@@ -3022,6 +3151,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -3085,6 +3216,8 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();

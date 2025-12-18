@@ -4,8 +4,8 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 use super::{
-    prepare_gcp_vertex_gemini_messages, tensorzero_to_gcp_vertex_gemini_content,
-    GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow,
+    GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow, prepare_gcp_vertex_gemini_messages,
+    tensorzero_to_gcp_vertex_gemini_content,
 };
 use crate::{
     config::TimeoutsConfig,
@@ -230,6 +230,7 @@ pub fn convert_to_optimizer_status(
                     routing: vec![model_name.clone().into()],
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
+                    skip_relay: None,
                 }),
             }
         }
@@ -420,9 +421,11 @@ mod tests {
         assert!(result.is_err());
         // Optionally, you can also check the error message
         if let Err(error) = result {
-            assert!(error
-                .to_string()
-                .contains("Tuned model must have an endpoint"));
+            assert!(
+                error
+                    .to_string()
+                    .contains("Tuned model must have an endpoint")
+            );
         }
 
         // Test for "running" status

@@ -171,7 +171,9 @@ impl Migration for Migration0038<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `EpisodeByIdChatView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `EpisodeByIdChatView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
 
             let create_json_table = self
@@ -203,7 +205,9 @@ impl Migration for Migration0038<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `EpisodeByIdJsonView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!(
+                    "Materialized view `EpisodeByIdJsonView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
+                );
             }
         }
 

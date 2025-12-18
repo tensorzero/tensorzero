@@ -3,7 +3,8 @@ import { FileCode } from "lucide-react";
 import { z } from "zod";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import { Input } from "~/components/ui/input";
-import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
+import { useFormattedJson } from "~/components/ui/code-editor";
+import { VirtualizedCodeEditor } from "~/components/ui/virtualized-code-editor";
 import { type Template } from "~/types/tensorzero";
 import { ZodJsonValueSchema } from "~/utils/clickhouse/common";
 
@@ -64,10 +65,13 @@ export function TemplateContentBlock({
           </div>
         )}
       </ContentBlockLabel>
-      <CodeEditor
+      <VirtualizedCodeEditor
         allowedLanguages={["json"]}
         value={formattedJson}
         readOnly={!isEditing}
+        ariaLabel={
+          block.name === "system" ? "System template editor" : undefined
+        }
         // TODO (GabrielBianconi): DANGER! This does not prevent form submission!
         // The user can submit a stale value if an error is present.
         onChange={(updatedArgumentsString) => {

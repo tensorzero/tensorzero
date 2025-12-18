@@ -4,10 +4,10 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::{
-    test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
+    test_helpers::{CLICKHOUSE_URL, get_clickhouse},
 };
-use tensorzero_core::endpoints::datasets::{
+use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use uuid::Uuid;

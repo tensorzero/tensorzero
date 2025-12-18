@@ -17,17 +17,17 @@ import {
 } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
-import { listDatapoints } from "~/utils/tensorzero.server";
-import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
+import type { GetDatapointsResponse, Datapoint } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
-import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt, symmetricDifference } from "~/utils/common";
@@ -144,7 +144,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const functionConfig = functionName
     ? await getFunctionConfig(functionName, config)
-    : null;
+    : undefined;
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
       status: 404,
@@ -152,16 +152,25 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const datasetName = searchParams.get("datasetName");
 
-  let datapoints, totalDatapoints;
+  let getDatapointsResponse: GetDatapointsResponse | undefined,
+    totalDatapoints: number | undefined;
   try {
-    [datapoints, totalDatapoints] = datasetName
+    const client = getTensorZeroClient();
+    [getDatapointsResponse, totalDatapoints] = datasetName
       ? await Promise.all([
-          listDatapoints(datasetName, functionName ?? undefined, limit, offset),
+          client.listDatapoints(datasetName, {
+            function_name: functionName ?? undefined,
+            limit,
+            offset,
+          }),
           functionName
-            ? countDatapointsForDatasetFunction(datasetName, functionName)
-            : null,
+            ? client
+                .getDatapointCount(datasetName, { functionName })
+                .then((stats) => Number(stats.datapoint_count))
+                .catch(() => undefined)
+            : undefined,
         ])
-      : [undefined, null];
+      : [undefined, undefined];
   } catch (error) {
     throw data(
       `Failed to load datapoints: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -171,12 +180,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
+  const datapoints: Datapoint[] = getDatapointsResponse?.datapoints ?? [];
+
   let inputs;
   try {
-    inputs = datapoints
+    inputs = getDatapointsResponse
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
-            const inputData = tensorZeroStoredInputToInput(datapoint.input);
+            const inputData = datapointInputToZodInput(datapoint.input);
             return await resolveInput(inputData, functionConfig ?? null);
           }),
         )
@@ -331,6 +342,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
       <div className="flex max-w-180 flex-col gap-2">
         <Label>Dataset</Label>
         <DatasetSelector
+          label="Select a dataset"
           functionName={functionName ?? undefined}
           disabled={!functionName}
           selected={datasetName ?? undefined}
@@ -429,67 +441,69 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 </GridRow>
 
                 <HydrationBoundary state={dehydratedState}>
-                  {datapoints.map(
-                    (datapoint: TensorZeroDatapoint, index: number) => (
-                      <GridRow
-                        key={datapoint.id}
-                        variantCount={variants.length}
-                      >
-                        <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
-                          <div className="text-xs font-medium text-gray-500">
-                            Datapoint:{" "}
-                            <Link
-                              to={toDatapointUrl(datasetName, datapoint.id)}
-                              className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {datapoint.id}
-                            </Link>
-                          </div>
-                          <div>
-                            <h3 className="mb-2 text-sm font-medium text-gray-500">
-                              Input
-                            </h3>
-                            <Input
-                              messages={inputs[index].messages}
-                              system={inputs[index].system}
-                              maxHeight={150}
-                            />
-                          </div>
-                          <div>
-                            <h3 className="mb-2 text-sm font-medium text-gray-500">
-                              Reference Output
-                            </h3>
-                            {datapoint.output ? (
-                              <Output output={datapoint.output} />
-                            ) : (
-                              <div className="text-sm text-gray-500">None</div>
-                            )}
-                          </div>
+                  {datapoints.map((datapoint: Datapoint, index: number) => (
+                    <GridRow key={datapoint.id} variantCount={variants.length}>
+                      <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
+                        <div className="text-xs font-medium text-gray-500">
+                          Datapoint:{" "}
+                          <Link
+                            to={toDatapointUrl(datasetName, datapoint.id)}
+                            className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {datapoint.id}
+                          </Link>
                         </div>
-                        {variants.length > 0 && (
-                          <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                            {variants.map((variant) => {
-                              return (
-                                <div
-                                  key={`${datapoint.id}-${variant.name}`}
-                                  className="border-r p-4 last:border-r-0"
-                                >
-                                  <DatapointPlaygroundOutput
-                                    datapoint={datapoint}
-                                    variant={variant}
-                                    input={inputs[index]}
-                                    functionName={functionName}
-                                    functionConfig={functionConfig}
-                                    toolsConfig={config.tools}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </GridRow>
-                    ),
-                  )}
+                        <div>
+                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                            Input
+                          </h3>
+                          <Input
+                            messages={inputs[index].messages}
+                            system={inputs[index].system}
+                            maxHeight={150}
+                          />
+                        </div>
+                        <div>
+                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                            Reference Output
+                          </h3>
+                          {datapoint.output ? (
+                            datapoint.type === "json" ? (
+                              <JsonOutputElement
+                                output={datapoint.output}
+                                outputSchema={datapoint.output_schema}
+                              />
+                            ) : (
+                              <ChatOutputElement output={datapoint.output} />
+                            )
+                          ) : (
+                            <div className="text-sm text-gray-500">None</div>
+                          )}
+                        </div>
+                      </div>
+                      {variants.length > 0 && (
+                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                          {variants.map((variant) => {
+                            return (
+                              <div
+                                key={`${datapoint.id}-${variant.name}`}
+                                className="border-r p-4 last:border-r-0"
+                              >
+                                <DatapointPlaygroundOutput
+                                  datapoint={datapoint}
+                                  variant={variant}
+                                  input={inputs[index]}
+                                  functionName={functionName}
+                                  functionConfig={functionConfig}
+                                  toolsConfig={config.tools}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </GridRow>
+                  ))}
                 </HydrationBoundary>
               </div>
             </div>
@@ -504,7 +518,9 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
               }}
               disablePrevious={offset === 0}
               disableNext={
-                totalDatapoints ? offset + limit >= totalDatapoints : false
+                totalDatapoints === undefined
+                  ? false
+                  : offset + limit >= totalDatapoints
               }
             />
           </>

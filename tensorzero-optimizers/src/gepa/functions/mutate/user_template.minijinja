@@ -1,0 +1,52 @@
+<function_context>
+<function_config>
+{{function_config | tojson(indent=2)}}
+</function_config>
+{% if static_tools is defined -%}
+<tool_schemas>
+{{static_tools | tojson(indent=2)}}
+</tool_schemas>
+{%- endif %}
+<evaluation_config>
+{{evaluation_config | tojson(indent=2)}}
+</evaluation_config>
+</function_context>
+
+<message_templates>
+{{templates_map | tojson(indent=2)}}
+</message_templates>
+
+<analyses>
+{%- for analysis in analyses %}
+<example n="{{loop.index}}">
+{% if analysis.input is defined -%}
+<input>
+{{analysis.input | tojson(indent=2)}}
+</input>
+<output>
+{{analysis.output | tojson(indent=2)}}
+</output>
+{%- endif -%}
+<analysis>
+{{analysis.analysis}}
+</analysis>
+</example>
+{%- endfor %}
+</analyses>
+
+Read the function_context, message_templates, and analyses above. Extract insights from the analyses and improve the message_templates to address identified issues while preserving what works well.
+Return your improved templates in the following JSON format:
+```json
+{
+    "templates": [
+        {% for template_name in templates_map %}{"name": "{{template_name}}", "content": "<your improved {{template_name}} template as a string>"}{% if not loop.last %},
+        {% endif %}{% endfor %}
+    ]
+}
+```
+
+Notes:
+- Return improved versions of ALL message_templates: {% for template_name in templates_map %}{{template_name}}{% if not loop.last %}, {% endif %}{% endfor %}
+- Each template must have a "name" and "content" field
+- Preserve variable placeholders exactly as they appear in the schemas
+- If output_schema is provided in the function_config section, ensure your improved instructions align with it.

@@ -4,29 +4,50 @@
 //! including parameter structures and conversion logic between OpenAI's embedding
 //! format and TensorZero's internal embedding representations.
 
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use secrecy::ExposeSecret;
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::cache::CacheParamsOptions;
 use crate::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
-use crate::endpoints::embeddings::{EmbeddingResponse, Params as EmbeddingParams};
+use crate::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams as EmbeddingParams};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 
 const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_model_name::";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct OpenAICompatibleEmbeddingParams {
-    input: EmbeddingInput,
-    model: String,
-    dimensions: Option<u32>,
+    pub input: EmbeddingInput,
+    pub model: String,
+    pub dimensions: Option<u32>,
     #[serde(default)]
-    encoding_format: EmbeddingEncodingFormat,
-    #[serde(default, rename = "tensorzero::credentials")]
-    tensorzero_credentials: InferenceCredentials,
+    pub encoding_format: EmbeddingEncodingFormat,
+    #[serde(
+        default,
+        rename = "tensorzero::credentials",
+        serialize_with = "serialize_inference_credentials"
+    )]
+    pub tensorzero_credentials: InferenceCredentials,
     #[serde(rename = "tensorzero::dryrun")]
-    tensorzero_dryrun: Option<bool>,
+    pub tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::cache_options")]
-    tensorzero_cache_options: Option<CacheParamsOptions>,
+    pub tensorzero_cache_options: Option<CacheParamsOptions>,
+}
+
+fn serialize_inference_credentials<S>(
+    credentials: &InferenceCredentials,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    credentials
+        .iter()
+        .map(|(key, value)| (key, value.expose_secret()))
+        .collect::<HashMap<_, _>>()
+        .serialize(serializer)
 }
 
 impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
@@ -38,7 +59,9 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
         {
             Some(model_name) => model_name.to_string(),
             None => {
-                crate::utils::deprecation_warning("Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
+                crate::utils::deprecation_warning(
+                    "Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'",
+                );
                 params.model
             }
         };
@@ -54,7 +77,7 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
     List {
@@ -64,16 +87,16 @@ pub enum OpenAIEmbeddingResponse {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbedding {
     Embedding { embedding: Embedding, index: usize },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct OpenAIEmbeddingUsage {
-    prompt_tokens: Option<u32>,
-    total_tokens: Option<u32>,
+    pub prompt_tokens: Option<u32>,
+    pub total_tokens: Option<u32>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
@@ -117,7 +140,9 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(logs_contain(
+            "Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
+        ));
     }
 
     #[test]
@@ -136,6 +161,8 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(!logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(!logs_contain(
+            "Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"
+        ));
     }
 }

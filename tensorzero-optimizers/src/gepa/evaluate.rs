@@ -10,18 +10,19 @@ use tensorzero_core::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::v1::{
         create_datapoints,
-        types::{CreateDatapointRequest, CreateDatapointsRequest},
+        types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse},
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
+    function::FunctionConfig,
     http::TensorzeroHttpClient,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
 use evaluations::{
-    stats::EvaluationInfo, EvaluationCoreArgs, EvaluationStats, EvaluationVariant, EvaluatorStats,
-    OutputFormat,
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationStats,
+    EvaluationVariant, EvaluatorStats, OutputFormat, stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering
@@ -54,14 +55,14 @@ pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 /// * `dataset_name` - The name of the dataset to create
 ///
 /// # Returns
-/// * `()` - Returns success or error
+/// * `CreateDatapointsResponse` - The IDs of the created datapoints
 pub async fn create_evaluation_dataset(
     config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     samples: Vec<RenderedSample>,
     dataset_name: &str,
-) -> Result<(), Error> {
+) -> Result<CreateDatapointsResponse, Error> {
     // Convert RenderedSamples to CreateDatapointRequest using the helper method
     let datapoints: Result<Vec<CreateDatapointRequest>, Error> = samples
         .into_iter()
@@ -73,7 +74,7 @@ pub async fn create_evaluation_dataset(
     };
 
     // Call the datasets v1 create_datapoints function
-    create_datapoints(
+    let response = create_datapoints(
         config,
         http_client,
         clickhouse_connection_info,
@@ -82,7 +83,7 @@ pub async fn create_evaluation_dataset(
     )
     .await?;
 
-    Ok(())
+    Ok(response)
 }
 
 /// Holds the results of evaluating variants on a dataset
@@ -131,7 +132,7 @@ impl EvaluationResults {
 pub struct EvaluateVariantParams {
     pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
-    pub tensorzero_config: Arc<Config>,
+    pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: String,
     pub variant_name: String,
@@ -160,14 +161,25 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         timeouts: None,
     };
 
+    // Get function name from evaluation config and look up function
+    // Build function configs table from all functions
+    let function_configs: EvaluationFunctionConfigTable = params
+        .functions
+        .iter()
+        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
+        .collect();
+    let function_configs = Arc::new(function_configs);
+
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
         tensorzero_client: params.gateway_client.clone(),
         clickhouse_client: params.clickhouse_connection_info.clone(),
-        config: params.tensorzero_config,
+        evaluation_config: params.evaluation_config.clone(),
+        function_configs,
         evaluation_name: params.evaluation_name,
         evaluation_run_id,
-        dataset_name: params.dataset_name,
+        dataset_name: Some(params.dataset_name),
+        datapoint_ids: None,
         variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
         concurrency: params.concurrency,
         inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation

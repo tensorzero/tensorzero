@@ -19,7 +19,7 @@ use crate::{
         deepseek::DeepSeekCredentials,
         fireworks::FireworksCredentials,
         gcp_vertex_anthropic::make_gcp_sdk_credentials,
-        gcp_vertex_gemini::{build_gcp_non_sdk_credentials, GCPVertexCredentials},
+        gcp_vertex_gemini::{GCPVertexCredentials, build_gcp_non_sdk_credentials},
         google_ai_studio_gemini::GoogleAIStudioCredentials,
         groq::GroqCredentials,
         hyperbolic::HyperbolicCredentials,
@@ -554,7 +554,7 @@ impl std::fmt::Debug for ProviderTypeDefaultCredentials {
 
 fn load_credential(
     location: &CredentialLocation,
-    provider_type: ProviderType,
+    provider_type: impl Display,
 ) -> Result<Credential, Error> {
     match location {
         CredentialLocation::Env(key_name) => match env::var(key_name) {
@@ -564,8 +564,8 @@ fn load_credential(
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
                         tracing::warn!(
-                                "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
-                            );
+                            "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
+                        );
                     }
                     Ok(Credential::Missing)
                 } else {
@@ -586,8 +586,8 @@ fn load_credential(
                         {
                             tracing::warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
-                                env_key, provider_type
-
+                                env_key,
+                                provider_type
                             );
                         }
                         return Ok(Credential::Missing);
@@ -610,7 +610,8 @@ fn load_credential(
                         {
                             tracing::warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                                provider_type, e
+                                provider_type,
+                                e
                             );
                         }
                         Ok(Credential::Missing)
@@ -630,8 +631,9 @@ fn load_credential(
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
                         tracing::warn!(
-                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                            provider_type, e
+                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                            provider_type,
+                            e
                         );
                     }
                     Ok(Credential::Missing)
@@ -649,11 +651,17 @@ fn load_credential(
     }
 }
 
+pub fn load_tensorzero_relay_credential(
+    location_with_fallback: &crate::model::CredentialLocationWithFallback,
+) -> Result<Credential, Error> {
+    load_credential_with_fallback(location_with_fallback, "tensorzero::relay")
+}
+
 /// Load credential with fallback support
 /// Constructs a WithFallback credential that will be resolved at inference time
 fn load_credential_with_fallback(
     location_with_fallback: &crate::model::CredentialLocationWithFallback,
-    provider_type: ProviderType,
+    provider_type: impl Display + Copy,
 ) -> Result<Credential, Error> {
     let default_credential =
         load_credential(location_with_fallback.default_location(), provider_type)?;

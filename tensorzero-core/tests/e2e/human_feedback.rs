@@ -1,15 +1,15 @@
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
         select_inference_evaluation_human_feedback_clickhouse,
     },
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text,
     },
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -1218,16 +1218,16 @@ async fn test_fast_inference_then_feedback() {
                     model_name: None,
                     variant_name: None,
                     episode_id: None,
-                    input: tensorzero::ClientInput {
+                    input: tensorzero::Input {
                         system: Some(System::Template(Arguments(
                             json!({"assistant_name": "Alfred Pennyworth"})
                                 .as_object()
                                 .unwrap()
                                 .clone(),
                         ))),
-                        messages: vec![tensorzero::ClientInputMessage {
+                        messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::InputMessageContent::Text(Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

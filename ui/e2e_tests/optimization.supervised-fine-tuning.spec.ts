@@ -62,10 +62,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .filter({ hasText: "Select a function" })
           .click();
         await page.getByRole("option", { name: "extract_entities" }).click();
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a metric" })
-          .click();
+        await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
         await page
           .getByRole("combobox")
@@ -75,13 +72,8 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
           .getByLabel("gpt4o_mini_initial_prompt")
           .getByText("gpt4o_mini_initial_prompt")
           .click();
-        await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a model..." })
-          .click();
-        await page
-          .getByRole("option", { name: [model, provider].join(" ") })
-          .click();
+        await page.getByPlaceholder("Select model...").click();
+        await page.getByRole("option", { name: model }).click();
         await page
           .getByRole("button", { name: "Start Fine-tuning Job" })
           .click();
@@ -115,10 +107,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
     await page
       .getByRole("combobox")
@@ -128,13 +117,8 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
-      .click();
+    await page.getByPlaceholder("Select model...").click();
+    await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
     await page
@@ -174,23 +158,15 @@ model_name = "mock-inference-finetune-1234"
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "image_judger" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByRole("option", { name: "None" }).click();
     await page
       .getByRole("combobox")
       .filter({ hasText: "Select a variant name" })
       .click();
     await page.getByLabel("honest_answer").getByText("honest_answer").click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
-      .click();
+    await page.getByPlaceholder("Select model...").click();
+    await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
     await page
@@ -233,10 +209,7 @@ model_name = "mock-inference-finetune-1234"
     await page.getByRole("option", { name: "write_haiku" }).click();
 
     // Open metric selector
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
 
     // Verify demonstration option is visible and can be selected
     await expect(
@@ -261,10 +234,7 @@ test.describe("Error handling", () => {
       .filter({ hasText: "Select a function" })
       .click();
     await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
+    await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();
     await page
       .getByRole("combobox")
@@ -274,16 +244,13 @@ test.describe("Error handling", () => {
       .getByLabel("gpt4o_mini_initial_prompt")
       .getByText("gpt4o_mini_initial_prompt")
       .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    // Fill in the input of the popover with "error"
-    await page.getByPlaceholder("Search models...").fill("error");
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await modelInput.fill("error");
     // Wait for the options to load
-    await page.getByRole("option", { name: "error OpenAI" }).waitFor();
-    // Click on the option that has text "error" and provider "OpenAI"
-    await page.getByRole("option", { name: "error OpenAI" }).click();
+    await page.getByRole("option", { name: "error" }).waitFor();
+    // Click on the option that has text "error"
+    await page.getByRole("option", { name: "error" }).click();
     // Click on the Start Fine-tuning Job button
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
@@ -301,7 +268,7 @@ test.describe("should expose configured providers", () => {
     "together",
   ];
 
-  // ensure each provider we expect is in the list
+  // Ensure each provider we expect is in the list
   providers.forEach((provider) => {
     test(provider, async ({ page }) => {
       await page.goto("/optimization/supervised-fine-tuning");
@@ -309,19 +276,19 @@ test.describe("should expose configured providers", () => {
       const modelName = "test-name";
       const providerName = formatProvider(provider).name;
 
-      await page
-        .getByRole("combobox")
-        .filter({ hasText: "Select a model..." })
-        .click();
+      const modelInput = page.getByPlaceholder("Select model...");
+      await modelInput.click();
+      await modelInput.fill(modelName);
 
-      await page.getByPlaceholder("Search models...").fill(modelName);
+      // Wait for the custom model option to appear and open its provider dropdown
+      const customOption = page.getByRole("option").first();
+      await customOption.waitFor();
+      await customOption.getByRole("combobox").click();
 
-      // Wait for the options to load
-      await page
-        .getByRole("option", {
-          name: `${modelName} ${providerName}`,
-        })
-        .waitFor();
+      // Verify this provider is available in the dropdown
+      await expect(
+        page.getByRole("option", { name: providerName }),
+      ).toBeVisible();
     });
   });
 
@@ -334,14 +301,16 @@ test.describe("should expose configured providers", () => {
 
     const modelName = "test-name";
 
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
+    const modelInput = page.getByPlaceholder("Select model...");
+    await modelInput.click();
+    await modelInput.fill(modelName);
 
-    await page.getByPlaceholder("Search models...").fill(modelName);
+    // Wait for the custom model option to appear and open its provider dropdown
+    const customOption = page.getByRole("option").first();
+    await customOption.waitFor();
+    await customOption.getByRole("combobox").click();
 
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("option")).toHaveCount(providers.length);
+    // Verify all providers are available in the dropdown
+    await expect(page.getByRole("option")).toHaveCount(providers.length);
   });
 });

@@ -10,8 +10,14 @@ import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import type { InferenceResponse } from "~/utils/tensorzero";
+import type {
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+  StoredInference,
+} from "~/types/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 import { Link } from "react-router";
@@ -59,7 +65,11 @@ function ResponseColumn({
           <>
             {response.output && (
               <div className="flex-1">
-                <Output output={response.output} />
+                {response.type === "json" ? (
+                  <JsonOutputElement output={response.output} />
+                ) : (
+                  <ChatOutputElement output={response.output} />
+                )}
               </div>
             )}
 
@@ -103,7 +113,7 @@ interface VariantResponseModalProps {
   isLoading: boolean;
   onClose: () => void;
   // Use a union type to accept either inference or datapoint
-  item: ParsedInferenceRow | Datapoint;
+  item: StoredInference | Datapoint;
   // Make inferenceUsage optional since datasets don't have it by default
   inferenceUsage?: InferenceUsage;
   selectedVariant: string;
@@ -133,16 +143,25 @@ export function VariantResponseModal({
   const [showRawResponse, setShowRawResponse] = useState(false);
 
   // Set up baseline response based on source type
-  const baselineResponse: VariantResponseInfo = {
-    output: item.output,
-    usage: source === "inference" ? inferenceUsage : undefined,
-  };
+  // Datapoint has `type`, ParsedInferenceRow has `function_type`
+  const itemType =
+    "type" in item ? item.type : (item as ParsedInferenceRow).function_type;
+  const baselineResponse: VariantResponseInfo =
+    itemType === "json"
+      ? {
+          type: "json",
+          output: item.output as JsonInferenceOutput | undefined,
+          usage: source === "inference" ? inferenceUsage : undefined,
+        }
+      : {
+          type: "chat",
+          output: item.output as ContentBlockChatOutput[] | undefined,
+          usage: source === "inference" ? inferenceUsage : undefined,
+        };
 
   // Get original variant name if available (only for inferences)
   const originalVariant =
-    source === "inference"
-      ? (item as ParsedInferenceRow).variant_name
-      : undefined;
+    source === "inference" ? (item as StoredInference).variant_name : undefined;
 
   const refreshButton = onRefresh && (
     <Button

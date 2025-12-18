@@ -1,5 +1,5 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
@@ -79,7 +79,7 @@ pub async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    let params = request.as_list_inferences_params();
+    let params = request.as_list_inferences_params()?;
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
@@ -94,7 +94,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
     use crate::db::inferences::{
-        InferenceOutputSource, MockInferenceQueries, DEFAULT_INFERENCE_QUERY_LIMIT,
+        DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, MockInferenceQueries,
     };
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat};
@@ -144,6 +144,10 @@ mod tests {
             inference_id: id,
             tool_params: ToolCallConfigDatabaseInsert::default(),
             tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
         })
     }
 

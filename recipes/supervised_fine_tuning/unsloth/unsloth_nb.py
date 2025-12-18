@@ -172,7 +172,7 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 
 # %%
 rendered_samples = tensorzero_client.experimental_render_samples(
-    stored_inferences=stored_inferences,
+    stored_samples=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
 
@@ -292,7 +292,7 @@ trainer_stats = trainer.train()
 # Now that the model is done training, we need to [deploy](https://docs.fireworks.ai/fine-tuning/fine-tuning-models#deploying-and-using-a-model) it to Fireworks serverless inference. If you need high or guaranteed throughput you can also deploy the model to [reserved capacity](https://docs.fireworks.ai/deployments/reservations) or an on-demand [deployment](https://docs.fireworks.ai/guides/ondemand-deployments).
 
 # %%
-base_model_id = "llama-v3p1-8b-instruct"
+base_model_id = "llama-v3p3-70b-instruct"
 fine_tuned_model_id = f"{MODEL_NAME.lower().replace('/', '-').replace('.', 'p')}-{str(uuid7()).split('-')[-1]}"
 
 with tempfile.TemporaryDirectory() as tmpdirname:

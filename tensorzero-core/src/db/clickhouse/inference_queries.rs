@@ -1,14 +1,16 @@
 use async_trait::async_trait;
 use itertools::Itertools;
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
-    generate_order_by_sql, ClickhouseType, JoinRegistry, OrderByTerm, QueryParameter,
+    ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
+    generate_order_by_sql,
 };
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::inferences::{
-    ClickHouseStoredInferenceWithDispreferredOutputs, GetInferenceBoundsParams, InferenceBounds,
-    InferenceOutputSource, InferenceQueries, ListInferencesParams,
+    ClickHouseStoredInferenceWithDispreferredOutputs, CountInferencesParams,
+    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceMetadata, InferenceOutputSource, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
 use crate::function::FunctionConfigType;
 use crate::{
@@ -39,7 +41,7 @@ impl InferenceQueries for ClickHouseConnectionInfo {
             .map(|p| (p.name.as_str(), p.value.as_str()))
             .collect();
         let response = self.inner.run_query_synchronous(sql, &query_params).await?;
-        let inferences = response
+        let mut inferences = response
             .response
             .trim()
             .lines()
@@ -53,105 +55,314 @@ impl InferenceQueries for ClickHouseConnectionInfo {
                     .and_then(ClickHouseStoredInferenceWithDispreferredOutputs::try_into)
             })
             .collect::<Result<Vec<StoredInferenceDatabase>, Error>>()?;
+
+        // Reverse the list for "After" pagination, we queried with inverted ordering to get results after the cursor,
+        // but we want to return them in original order (most recent first).
+        if matches!(params.pagination, Some(PaginationParams::After { .. })) {
+            inferences.reverse();
+        }
+
         Ok(inferences)
     }
 
-    async fn get_inference_bounds(
+    async fn list_inference_metadata(
         &self,
-        params: GetInferenceBoundsParams,
-    ) -> Result<InferenceBounds, Error> {
-        let mut query_params: Vec<QueryParameter> = Vec::new();
-        let mut param_idx_counter = 0;
-        let mut where_clauses: Vec<String> = Vec::new();
-
-        // Add function_name filter
-        if let Some(function_name) = params.function_name {
-            let function_name_param = add_parameter(
-                function_name,
-                ClickhouseType::String,
-                &mut query_params,
-                &mut param_idx_counter,
-            );
-            where_clauses.push(format!("function_name = {function_name_param}"));
-        }
-
-        // Add variant_name filter
-        if let Some(variant_name) = params.variant_name {
-            let variant_name_param = add_parameter(
-                variant_name,
-                ClickhouseType::String,
-                &mut query_params,
-                &mut param_idx_counter,
-            );
-            where_clauses.push(format!("variant_name = {variant_name_param}"));
-        }
-
-        // Add episode_id filter
-        if let Some(episode_id) = params.episode_id {
-            let episode_id_param = add_parameter(
-                episode_id.to_string(),
-                ClickhouseType::String,
-                &mut query_params,
-                &mut param_idx_counter,
-            );
-            where_clauses.push(format!("episode_id = {episode_id_param}"));
-        }
-
-        // Build WHERE clause
-        let where_clause = if where_clauses.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", where_clauses.join(" AND "))
-        };
-
-        // Build the query
-        // Note: We use uint_to_uuid() to convert UInt128 back to UUID format
-        // MIN(id_uint) = oldest (earliest_id), MAX(id_uint) = most recent (latest_id)
-        let mut query = format!(
-            r"SELECT
-    uint_to_uuid(MAX(id_uint)) AS latest_id,
-    uint_to_uuid(MIN(id_uint)) AS earliest_id,
-    toUInt64(COUNT()) AS count
-FROM InferenceById FINAL
-{where_clause}"
-        );
-        query.push_str("\nFORMAT JSONEachRow");
-
-        // Execute the query
-        let query_params_map = query_params
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        let (sql, query_params) = generate_list_inference_metadata_sql(params);
+        let query_params_refs: std::collections::HashMap<&str, &str> = query_params
             .iter()
-            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-
         let response = self
             .inner
-            .run_query_synchronous(query, &query_params_map)
+            .run_query_synchronous(sql, &query_params_refs)
             .await?;
 
-        let rows: Vec<InferenceBounds> = response
+        if response.response.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut results: Vec<InferenceMetadata> = response
             .response
-            .trim()
             .lines()
+            .filter(|line| !line.is_empty())
             .map(|line| {
                 serde_json::from_str(line).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize bounds response: {e:?}"),
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to parse InferenceMetadata row: {e}"),
                     })
                 })
             })
-            .try_collect()?;
+            .collect::<Result<Vec<_>, Error>>()?;
 
-        // Handle empty results
-        if rows.is_empty() || rows[0].count == 0 {
-            return Ok(InferenceBounds::empty());
+        // Reverse results for "after" pagination (we queried ASC, but want DESC output)
+        if matches!(params.pagination, Some(PaginationParams::After { .. })) {
+            results.reverse();
         }
 
-        Ok(InferenceBounds {
-            latest_id: rows[0].latest_id,
-            earliest_id: rows[0].earliest_id,
-            count: rows[0].count,
-        })
+        Ok(results)
     }
+
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &CountInferencesParams<'_>,
+    ) -> Result<u64, Error> {
+        let (sql, bound_parameters) = generate_count_inferences_sql(config, params)?;
+        let query_params = bound_parameters
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+        let response = self.inner.run_query_synchronous(sql, &query_params).await?;
+
+        // Parse the count directly (no JSON format)
+        let count_str = response.response.trim();
+        let count: u64 = count_str.parse().map_err(|e: std::num::ParseIntError| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to parse count '{count_str}': {e}"),
+            })
+        })?;
+
+        Ok(count)
+    }
+}
+
+/// Generates the SQL query and parameters for counting inferences.
+pub(crate) fn generate_count_inferences_sql(
+    config: &Config,
+    opts: &CountInferencesParams<'_>,
+) -> Result<(String, Vec<QueryParameter>), Error> {
+    let mut query_params: Vec<QueryParameter> = Vec::new();
+    let mut param_idx_counter = 0;
+
+    let sql = match opts.function_name {
+        // If function_name is provided, we know which table to query
+        Some(function_name) => {
+            let mut joins = JoinRegistry::new();
+            let function_config = config.get_function(function_name)?;
+            let query = generate_count_query_for_table(
+                config,
+                opts,
+                function_config.table_name(),
+                &mut joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            // Construct final query: SELECT COUNT(*) FROM table + JOINs + WHERE
+            let mut sql = query.select_from_sql_fragment;
+            if !joins.get_clauses().is_empty() {
+                sql.push_str(&joins.get_clauses().join("\n"));
+            }
+            sql.push('\n');
+            sql.push_str(&query.where_sql_fragment);
+            sql
+        }
+        None => {
+            // Query both tables with UNION ALL, then count
+            let mut chat_joins = JoinRegistry::new();
+            let chat_query = generate_count_query_for_table(
+                config,
+                opts,
+                "ChatInference",
+                &mut chat_joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            let mut json_joins = JoinRegistry::new();
+            let json_query = generate_count_query_for_table(
+                config,
+                opts,
+                "JsonInference",
+                &mut json_joins,
+                &mut query_params,
+                &mut param_idx_counter,
+            )?;
+
+            // Build subqueries that select just the id for counting
+            let chat_sql = format!(
+                "SELECT i.id FROM ChatInference AS i {joins} {where_clause}",
+                joins = chat_joins.get_clauses().join("\n"),
+                where_clause = chat_query.where_sql_fragment,
+            );
+            let json_sql = format!(
+                "SELECT i.id FROM JsonInference AS i {joins} {where_clause}",
+                joins = json_joins.get_clauses().join("\n"),
+                where_clause = json_query.where_sql_fragment,
+            );
+
+            format!("SELECT toUInt64(COUNT(*)) FROM ({chat_sql} UNION ALL {json_sql})")
+        }
+    };
+
+    Ok((sql, query_params))
+}
+
+/// Generates WHERE clauses and JOINs for a count query on a specific table.
+/// Returns a SingleTableQuery with just the WHERE part filled in.
+fn generate_count_query_for_table(
+    config: &Config,
+    opts: &CountInferencesParams<'_>,
+    table_name: &str,
+    joins: &mut JoinRegistry,
+    query_params: &mut Vec<QueryParameter>,
+    param_idx_counter: &mut usize,
+) -> Result<SingleTableQuery, Error> {
+    let mut where_clauses: Vec<String> = Vec::new();
+    let mut select_clauses: Vec<String> = Vec::new();
+
+    // Add function_name filter if provided
+    if let Some(function_name) = opts.function_name {
+        let function_name_param_placeholder = add_parameter(
+            function_name,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!(
+            "i.function_name = {function_name_param_placeholder}"
+        ));
+    }
+
+    // Add variant_name filter
+    if let Some(variant_name) = opts.variant_name {
+        let variant_name_param_placeholder = add_parameter(
+            variant_name,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!("i.variant_name = {variant_name_param_placeholder}"));
+    }
+
+    // Add episode_id filter
+    if let Some(episode_id) = opts.episode_id {
+        let episode_id_param_placeholder = add_parameter(
+            episode_id.to_string(),
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+        where_clauses.push(format!("i.episode_id = {episode_id_param_placeholder}"));
+    }
+
+    // Handle filters
+    if let Some(filter_node) = opts.filters {
+        let filter_condition_sql = filter_node.to_clickhouse_sql(
+            config,
+            query_params,
+            &mut select_clauses,
+            joins,
+            param_idx_counter,
+        )?;
+        where_clauses.push(filter_condition_sql);
+    }
+
+    // Add text query filter
+    if let Some(search_query_experimental) = opts.search_query_experimental {
+        let json_escaped_text_query = json_escape_string_without_quotes(search_query_experimental)?;
+        let text_query_param = add_parameter(
+            json_escaped_text_query,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+
+        // For count, we just need to filter, not return the term frequency
+        where_clauses.push(format!(
+            "(countSubstringsCaseInsensitiveUTF8(i.input, {text_query_param}) + countSubstringsCaseInsensitiveUTF8(i.output, {text_query_param})) > 0"
+        ));
+    }
+
+    let select_from_sql_fragment = format!("SELECT toUInt64(COUNT(*)) FROM {table_name} AS i");
+
+    let where_sql_fragment = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    Ok(SingleTableQuery {
+        select_from_sql_fragment,
+        where_sql_fragment,
+    })
+}
+
+/// Generates the SQL query and parameters for listing inference metadata.
+fn generate_list_inference_metadata_sql(
+    params: &ListInferenceMetadataParams,
+) -> (String, std::collections::HashMap<String, String>) {
+    let limit = if params.limit == 0 {
+        DEFAULT_INFERENCE_QUERY_LIMIT
+    } else {
+        params.limit
+    };
+
+    let mut where_clauses: Vec<String> = Vec::new();
+    let mut query_params: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // Handle pagination
+    let order_direction = match &params.pagination {
+        Some(PaginationParams::Before { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint < toUInt128({cursor_id:UUID})".to_string());
+            "DESC"
+        }
+        Some(PaginationParams::After { id }) => {
+            query_params.insert("cursor_id".to_string(), id.to_string());
+            where_clauses.push("id_uint > toUInt128({cursor_id:UUID})".to_string());
+            "ASC" // For after, we order ASC and then reverse
+        }
+        None => "DESC", // Default: most recent first
+    };
+
+    // Handle function_name filter
+    if let Some(function_name) = &params.function_name {
+        query_params.insert("function_name".to_string(), function_name.clone());
+        where_clauses.push("function_name = {function_name:String}".to_string());
+    }
+
+    // Handle variant_name filter
+    if let Some(variant_name) = &params.variant_name {
+        query_params.insert("variant_name".to_string(), variant_name.clone());
+        where_clauses.push("variant_name = {variant_name:String}".to_string());
+    }
+
+    // Handle episode_id filter
+    if let Some(episode_id) = &params.episode_id {
+        query_params.insert("episode_id".to_string(), episode_id.to_string());
+        where_clauses.push("episode_id = {episode_id:UUID}".to_string());
+    }
+
+    query_params.insert("limit".to_string(), limit.to_string());
+
+    let where_clause = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    let query = format!(
+        r"
+        SELECT
+            uint_to_uuid(id_uint) as id,
+            function_name,
+            variant_name,
+            episode_id,
+            function_type,
+            if(isNull(snapshot_hash), NULL, lower(hex(snapshot_hash))) as snapshot_hash
+        FROM InferenceById
+        {where_clause}
+        ORDER BY id_uint {order_direction}
+        LIMIT {{limit:UInt64}}
+        FORMAT JSONEachRow
+        "
+    );
+
+    (query, query_params)
 }
 
 /// Escapes a string for JSON without quotes.
@@ -162,6 +373,49 @@ fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
     json_escaped.remove(0);
     json_escaped.pop();
     Ok(json_escaped)
+}
+
+/// Validates that before/after pagination works with the rest of the request:
+/// - If order_by is provided, only timestamp ordering is supported.
+/// - Offset must not be provided.
+///
+/// Returns an error if the request is invalid.
+fn validate_before_after_pagination(opts: &ListInferencesParams<'_>) -> Result<(), Error> {
+    if opts.pagination.is_none() {
+        return Ok(());
+    };
+    let Some(order_by) = opts.order_by else {
+        return Ok(());
+    };
+
+    for order in order_by {
+        match &order.term {
+            OrderByTerm::Timestamp => {
+                // Timestamp ordering is compatible with before/after pagination (UUIDv7 is time-ordered)
+                continue;
+            }
+            OrderByTerm::Metric { name } => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Cannot order by metric '{name}'; only ordering by timestamp is supported with before/after pagination.",
+                    ),
+                }));
+            }
+            OrderByTerm::SearchRelevance => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot order by search relevance; only ordering by timestamp is supported with before/after pagination.".to_string(),
+                }));
+            }
+        }
+    }
+
+    if opts.offset != 0 {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "OFFSET is not supported when using before/after pagination".to_string(),
+        }));
+    }
+
+    Ok(())
 }
 
 /// Generates the ClickHouse query and a list of parameters to be set.
@@ -180,6 +434,8 @@ pub(crate) fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
 ) -> Result<(String, Vec<QueryParameter>), Error> {
+    validate_before_after_pagination(opts)?;
+
     let mut query_params: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0;
 
@@ -202,17 +458,14 @@ pub(crate) fn generate_list_inferences_sql(
 
             // For single-table queries, use proper ORDER BY generation that supports joining with metrics.
             // Reuse the join registry from the filter so we don't create duplicate joins
-            let order_by_sql = if opts.order_by.is_some() {
-                generate_order_by_sql(
-                    opts,
-                    config,
-                    &mut query_params,
-                    &mut param_idx_counter,
-                    &mut joins,
-                )?
-            } else {
-                String::new()
-            };
+            // generate_order_by_sql also always adds id as tie-breaker for deterministic ordering.
+            let order_by_sql = generate_order_by_sql(
+                opts,
+                config,
+                &mut query_params,
+                &mut param_idx_counter,
+                &mut joins,
+            )?;
 
             // Construct final query: SELECT/FROM + JOINs + WHERE + ORDER BY
             let mut sql = query.select_from_sql_fragment;
@@ -230,7 +483,7 @@ pub(crate) fn generate_list_inferences_sql(
         None => {
             // Otherwise, we need to query both tables with UNION ALL
             let mut chat_joins = JoinRegistry::new();
-            let chat_query = generate_single_table_query_for_type(
+            let chat_query_snippets = generate_single_table_query_for_type(
                 config,
                 opts,
                 "ChatInference",
@@ -240,16 +493,8 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut param_idx_counter,
             )?;
 
-            // Construct chat query: SELECT/FROM + JOINs + WHERE
-            let mut chat_sql = chat_query.select_from_sql_fragment;
-            if !chat_joins.get_clauses().is_empty() {
-                chat_sql.push_str(&chat_joins.get_clauses().join("\n"));
-            }
-            chat_sql.push('\n');
-            chat_sql.push_str(&chat_query.where_sql_fragment);
-
             let mut json_joins = JoinRegistry::new();
-            let json_query = generate_single_table_query_for_type(
+            let json_query_snippets = generate_single_table_query_for_type(
                 config,
                 opts,
                 "JsonInference",
@@ -259,51 +504,63 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut param_idx_counter,
             )?;
 
-            // Construct json query: SELECT/FROM + JOINs + WHERE
-            let mut json_sql = json_query.select_from_sql_fragment;
-            if !json_joins.get_clauses().is_empty() {
-                json_sql.push_str(&json_joins.get_clauses().join("\n"));
-            }
-            json_sql.push('\n');
-            json_sql.push_str(&json_query.where_sql_fragment);
-
             // Generate ORDER BY clause for both inner and outer queries
             // For UNION ALL queries, we only support timestamp ordering (not metrics)
             // TODO(#4181): this should support proper ORDER BY generation that supports joining with metrics.
-            let order_by_sql = if let Some(order_by) = opts.order_by {
-                let order_clauses: Vec<String> = order_by
-                    .iter()
-                    .map(|o| {
-                        let column = match &o.term {
-                            OrderByTerm::Timestamp => "timestamp",
-                            OrderByTerm::Metric { name } => {
+            //
+            // For "After" pagination, we need to invert all ordering directions because we'll reverse the list in memory
+            let should_invert_directions =
+                matches!(opts.pagination, Some(PaginationParams::After { .. }));
+            let mut order_clauses = Vec::new();
+
+            // Add user-specified ordering if present
+            if let Some(order_by) = opts.order_by {
+                for o in order_by {
+                    let column = match &o.term {
+                        OrderByTerm::Timestamp => "timestamp",
+                        OrderByTerm::Metric { name } => {
+                            return Err(Error::new(ErrorDetails::InvalidRequest {
+                                message: format!(
+                                    "ORDER BY metric '{name}' is not supported when querying without function_name"
+                                ),
+                            }));
+                        }
+                        OrderByTerm::SearchRelevance => {
+                            if opts.search_query_experimental.is_none() {
                                 return Err(Error::new(ErrorDetails::InvalidRequest {
-                                    message: format!(
-                                        "ORDER BY metric '{name}' is not supported when querying without function_name"
-                                    ),
+                                    message: "ORDER BY relevance requires search_query_experimental in the request".to_string(),
                                 }));
                             }
-                            OrderByTerm::SearchRelevance => {
-                                if opts.search_query_experimental.is_none() {
-                                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                                        message: "ORDER BY relevance requires search_query_experimental in the request".to_string(),
-                                    }));
-                                }
-                                "total_term_frequency"
-                            }
-                        };
-                        Ok(format!("{column} {}", o.direction.to_clickhouse_direction()))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
+                            "total_term_frequency"
+                        }
+                    };
+                    // Invert direction for "After" pagination since we'll reverse the list
+                    let effective_direction = if should_invert_directions {
+                        o.direction.inverted()
+                    } else {
+                        o.direction
+                    };
+                    let direction = effective_direction.to_clickhouse_direction();
+                    order_clauses.push(format!("{column} {direction}"));
+                }
+            }
 
-                if order_clauses.is_empty() {
-                    String::new()
-                } else {
-                    format!("\nORDER BY {}", order_clauses.join(", "))
+            // Always add id as tie-breaker for deterministic ordering
+            let id_direction = if let Some(pagination) = &opts.pagination {
+                match pagination {
+                    PaginationParams::After { .. } => OrderDirection::Asc,
+                    PaginationParams::Before { .. } => OrderDirection::Desc,
                 }
             } else {
-                String::new()
+                OrderDirection::Desc
             };
+
+            // For inner queries (chat/json subqueries), use "id" (the actual column name)
+            let mut inner_order_by_clauses = order_clauses.clone();
+            inner_order_by_clauses.push(format!(
+                "toUInt128(id) {}",
+                id_direction.to_clickhouse_direction()
+            ));
 
             // Push LIMIT down into each subquery before UNION ALL
             // For UNION ALL, we need to fetch (LIMIT + OFFSET) rows from each table
@@ -316,27 +573,21 @@ pub(crate) fn generate_list_inferences_sql(
             // (e.g., timestamp DESC), resulting in incorrect results.
             let inner_limit = opts.limit + opts.offset;
 
-            if !order_by_sql.is_empty() {
-                chat_sql.push_str(&order_by_sql);
-            }
-            let chat_limit_param_placeholder = add_parameter(
+            let inner_limit_param_placeholder = add_parameter(
                 inner_limit,
                 ClickhouseType::UInt64,
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            chat_sql.push_str(&format!("\nLIMIT {chat_limit_param_placeholder}"));
 
-            if !order_by_sql.is_empty() {
-                json_sql.push_str(&order_by_sql);
-            }
-            let json_limit_param_placeholder = add_parameter(
-                inner_limit,
-                ClickhouseType::UInt64,
-                &mut query_params,
-                &mut param_idx_counter,
-            );
-            json_sql.push_str(&format!("\nLIMIT {json_limit_param_placeholder}"));
+            // For outer query (after UNION ALL), use "inference_id" (the aliased name)
+            let mut outer_order_by_clauses = order_clauses;
+            outer_order_by_clauses.push(format!(
+                "toUInt128(inference_id) {}",
+                id_direction.to_clickhouse_direction()
+            ));
+
+            let outer_order_by_sql = format!("\nORDER BY {}", outer_order_by_clauses.join(", "));
 
             // Combine with UNION ALL and apply outer ORDER BY and LIMIT/OFFSET
             let outer_limit_param_placeholder = add_parameter(
@@ -345,15 +596,57 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            let outer_offset_param_placeholder = add_parameter(
-                opts.offset,
-                ClickhouseType::UInt64,
-                &mut query_params,
-                &mut param_idx_counter,
+
+            let outer_offset_clause = if opts.offset != 0 {
+                let param_name = add_parameter(
+                    opts.offset,
+                    ClickhouseType::UInt64,
+                    &mut query_params,
+                    &mut param_idx_counter,
+                );
+                format!("OFFSET {param_name}")
+            } else {
+                String::new()
+            };
+
+            // Build inner queries.
+            let chat_sql = format!(
+                "
+            {select_from_clause}
+            {joins_clause}
+            {where_clause}
+            ORDER BY {order_by_clause}
+            LIMIT {limit_param}",
+                select_from_clause = chat_query_snippets.select_from_sql_fragment,
+                joins_clause = chat_joins.get_clauses().join("\n"),
+                where_clause = chat_query_snippets.where_sql_fragment,
+                order_by_clause = inner_order_by_clauses.join(", "),
+                limit_param = inner_limit_param_placeholder
+            );
+            let json_sql = format!(
+                "
+            {select_from_clause}
+            {joins_clause}
+            {where_clause}
+            ORDER BY {order_by_clause}
+            LIMIT {limit_param}",
+                select_from_clause = json_query_snippets.select_from_sql_fragment,
+                joins_clause = json_joins.get_clauses().join("\n"),
+                where_clause = json_query_snippets.where_sql_fragment,
+                order_by_clause = inner_order_by_clauses.join(", "),
+                limit_param = inner_limit_param_placeholder
             );
 
+            // Build outer query.
             format!(
-                "SELECT * FROM (\n{chat_sql}\nUNION ALL\n{json_sql}\n) AS combined{order_by_sql}\nLIMIT {outer_limit_param_placeholder}\nOFFSET {outer_offset_param_placeholder}"
+                "SELECT * FROM (
+                {chat_sql}
+                UNION ALL
+                {json_sql}
+                ) AS combined
+                {outer_order_by_sql}
+                LIMIT {outer_limit_param_placeholder}
+                {outer_offset_clause}"
             )
         }
     };
@@ -368,13 +661,15 @@ pub(crate) fn generate_list_inferences_sql(
         );
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
 
-        let offset_param_placeholder = add_parameter(
-            opts.offset,
-            ClickhouseType::UInt64,
-            &mut query_params,
-            &mut param_idx_counter,
-        );
-        sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
+        if opts.offset != 0 {
+            let offset_param_placeholder = add_parameter(
+                opts.offset,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
+        }
     }
 
     sql.push_str("\nFORMAT JSONEachRow");
@@ -440,6 +735,10 @@ fn generate_single_table_query_for_type(
     }
 
     select_clauses.push("i.variant_name as variant_name".to_string());
+    select_clauses.push("i.extra_body as extra_body".to_string());
+    select_clauses.push("i.inference_params as inference_params".to_string());
+    select_clauses.push("i.processing_time_ms as processing_time_ms".to_string());
+    select_clauses.push("i.ttft_ms as ttft_ms".to_string());
 
     let mut where_clauses: Vec<String> = Vec::new();
 
@@ -487,9 +786,39 @@ fn generate_single_table_query_for_type(
         where_clauses.push(format!("i.episode_id = {episode_id_param_placeholder}"));
     }
 
+    // Add before/after pagination filters
+    if let Some(ref pagination) = opts.pagination {
+        match pagination {
+            PaginationParams::Before { id } => {
+                let id_param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    query_params,
+                    param_idx_counter,
+                );
+                where_clauses.push(format!(
+                    "toUInt128(i.id) < toUInt128(toUUID({id_param_placeholder}))"
+                ));
+            }
+            PaginationParams::After { id } => {
+                let id_param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    query_params,
+                    param_idx_counter,
+                );
+                where_clauses.push(format!(
+                    "toUInt128(i.id) > toUInt128(toUUID({id_param_placeholder}))"
+                ));
+            }
+        }
+    }
+
     // Handle OutputSource
     match opts.output_source {
-        InferenceOutputSource::Inference => {
+        InferenceOutputSource::None | InferenceOutputSource::Inference => {
+            // For None, we still select the inference output but it will be dropped
+            // when creating the datapoint. This avoids an unnecessary join.
             select_clauses.push("i.output as output".to_string());
         }
         InferenceOutputSource::Demonstration => {
@@ -571,8 +900,8 @@ mod tests {
         assert_query_contains, assert_query_does_not_contain,
     };
     use crate::db::clickhouse::query_builder::{
-        FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy, OrderByTerm,
-        OrderDirection, QueryParameter,
+        DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+        OrderBy, OrderByTerm, OrderDirection, QueryParameter,
     };
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
@@ -624,7 +953,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config
+        .into_config_without_writing_for_tests()
     }
 
     #[tokio::test]
@@ -641,7 +970,7 @@ mod tests {
 
         let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
-        // Verify both tables are queried
+        // Verify both tables are queried with ORDER BY for deterministic results
         assert_query_contains(
             &sql,
             "SELECT * FROM (
@@ -661,11 +990,16 @@ mod tests {
             i.tool_choice as tool_choice,
             i.parallel_tool_calls as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             ChatInference AS i
         WHERE
             i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']
+        ORDER BY toUInt128(id) DESC
         LIMIT {p0:UInt64}
         UNION ALL
         SELECT
@@ -684,15 +1018,20 @@ mod tests {
             NULL as tool_choice,
             NULL as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             JsonInference AS i
         WHERE
             i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']
-        LIMIT {p1:UInt64}
+        ORDER BY toUInt128(id) DESC
+        LIMIT {p0:UInt64}
         ) AS combined
-        LIMIT {p2:UInt64}
-        OFFSET {p3:UInt64}",
+        ORDER BY toUInt128(inference_id) DESC
+        LIMIT {p1:UInt64}",
         );
     }
 
@@ -710,6 +1049,7 @@ mod tests {
 
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
+        // ORDER BY is always present for deterministic results
         assert_query_contains(
             &sql,
             "SELECT
@@ -728,14 +1068,18 @@ mod tests {
             NULL as tool_choice,
             NULL as parallel_tool_calls,
             i.variant_name as variant_name,
+            i.extra_body as extra_body,
+            i.inference_params as inference_params,
+            i.processing_time_ms as processing_time_ms,
+            i.ttft_ms as ttft_ms,
             i.output as output
         FROM
             JsonInference AS i
         WHERE
             i.function_name = {p0:String}
             AND i.id IN ['01234567-89ab-cdef-0123-456789abcdef']
-        LIMIT {p1:UInt64}
-        OFFSET {p2:UInt64}",
+        ORDER BY toUInt128(i.id) DESC
+        LIMIT {p1:UInt64}",
         );
 
         // Verify NO UNION ALL
@@ -785,7 +1129,7 @@ mod tests {
         LEFT JOIN (
             SELECT
                 target_id,
-                argMax(value, timestamp) as value
+                toNullable(argMax(value, timestamp)) as value
             FROM FloatMetricFeedback
             WHERE metric_name = {p1:String}
             GROUP BY target_id
@@ -803,6 +1147,50 @@ mod tests {
             name: "p2".to_string(),
             value: "0.5".to_string(),
         }));
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_positive() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: true,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_with_demonstration_feedback_filter_negative() {
+        let config = get_e2e_config().await;
+
+        let filter_node = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: false,
+        });
+
+        let opts = ListInferencesParams {
+            function_name: Some("extract_entities"),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        assert_query_contains(
+            &sql,
+            "i.id NOT IN (SELECT DISTINCT inference_id FROM DemonstrationFeedback)",
+        );
     }
 
     #[tokio::test]
@@ -844,9 +1232,8 @@ mod tests {
             "LIMIT should appear 3 times: 2 inner + 1 outer"
         );
 
-        // Verify OFFSET only appears once in the outer query
-        let offset_count = sql.matches("OFFSET {p").count();
-        assert_eq!(offset_count, 1, "OFFSET should appear once in outer query");
+        // Verify OFFSET doesn't appear when offset is 0 (default)
+        assert_query_does_not_contain(&sql, "OFFSET");
     }
 
     #[tokio::test]
@@ -952,7 +1339,7 @@ mod tests {
             LEFT JOIN (
                 SELECT
                     target_id,
-                    argMax(value, timestamp) as value
+                    toNullable(argMax(value, timestamp)) as value
                 FROM FloatMetricFeedback
                 WHERE metric_name = {p0:String}
                 GROUP BY target_id
@@ -965,7 +1352,7 @@ mod tests {
             LEFT JOIN (
                 SELECT
                     target_id,
-                    argMax(value, timestamp) as value
+                    toNullable(argMax(value, timestamp)) as value
                 FROM FloatMetricFeedback
                 WHERE metric_name = {p2:String}
                 GROUP BY target_id
@@ -976,232 +1363,43 @@ mod tests {
         assert_query_contains(&sql, "j0.value >");
     }
 
-    mod get_inference_bounds_tests {
+    mod list_inferences_before_after_pagination_tests {
         use super::*;
+        use crate::config::Config;
         use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
         use crate::db::clickhouse::{
             ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
         };
-        use crate::db::inferences::{GetInferenceBoundsParams, InferenceBounds, InferenceQueries};
+        use crate::db::inferences::{
+            InferenceOutputSource, InferenceQueries, ListInferencesParams, PaginationParams,
+        };
         use std::sync::Arc;
 
         #[tokio::test]
-        async fn test_get_inference_bounds_no_filters() {
+        async fn test_list_inferences_with_before() {
             let mut mock_clickhouse_client = MockClickHouseClient::new();
-            mock_clickhouse_client
-                .expect_run_query_synchronous()
-                .withf(|query, _| {
-                    assert_query_contains(query, "
-                    SELECT
-                        uint_to_uuid(MAX(id_uint)) AS latest_id,
-                        uint_to_uuid(MIN(id_uint)) AS earliest_id,
-                        toUInt64(COUNT()) AS count
-                    FROM InferenceById FINAL
-                    FORMAT JSONEachRow");
-                    true
-                })
-                .returning(|_, _| {
-                    Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"01234567-89ab-cdef-0123-456789abcdef","earliest_id":"fedcba98-7654-3210-fedc-ba9876543210","count":"42"}"#.to_string(),
-                        metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
-                            written_rows: 0,
-                        },
-                    })
-                });
-            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
 
-            let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: None,
-                    variant_name: None,
-                    episode_id: None,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result.latest_id,
-                Some(Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap())
-            );
-            assert_eq!(
-                result.earliest_id,
-                Some(Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap())
-            );
-            assert_eq!(result.count, 42);
-        }
-
-        #[tokio::test]
-        async fn test_get_inference_bounds_with_function_name() {
-            let mut mock_clickhouse_client = MockClickHouseClient::new();
-            mock_clickhouse_client
-                .expect_run_query_synchronous()
-                .withf(|query, params| {
-                    assert_query_contains(query, "WHERE function_name = {p0:String}");
-                    assert_eq!(params.get("p0"), Some(&"test_function"));
-                    true
-                })
-                .returning(|_, _| {
-                    Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"11111111-2222-3333-4444-555555555555","earliest_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":"10"}"#.to_string(),
-                        metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
-                            written_rows: 0,
-                        },
-                    })
-                });
-            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-            let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: Some("test_function".to_string()),
-                    variant_name: None,
-                    episode_id: None,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result.latest_id,
-                Some(Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap())
-            );
-            assert_eq!(result.count, 10);
-        }
-
-        #[tokio::test]
-        async fn test_get_inference_bounds_with_variant_name() {
-            let mut mock_clickhouse_client = MockClickHouseClient::new();
-            mock_clickhouse_client
-                .expect_run_query_synchronous()
-                .withf(|query, params| {
-                    assert_query_contains(query, "WHERE variant_name = {p0:String}");
-                    assert_eq!(params.get("p0"), Some(&"test_variant"));
-                    true
-                })
-                .returning(|_, _| {
-                    Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"22222222-3333-4444-5555-666666666666","earliest_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":"5"}"#.to_string(),
-                        metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
-                            written_rows: 0,
-                        },
-                    })
-                });
-            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-            let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: None,
-                    variant_name: Some("test_variant".to_string()),
-                    episode_id: None,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result.latest_id,
-                Some(Uuid::parse_str("22222222-3333-4444-5555-666666666666").unwrap())
-            );
-            assert_eq!(result.count, 5);
-        }
-
-        #[tokio::test]
-        async fn test_get_inference_bounds_with_episode_id() {
-            let episode_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
-            let mut mock_clickhouse_client = MockClickHouseClient::new();
             mock_clickhouse_client
                 .expect_run_query_synchronous()
                 .withf(move |query, params| {
-                    assert_query_contains(query, "WHERE episode_id = {p0:String}");
-                    assert_eq!(
-                        params.get("p0"),
-                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
+                    // Should include the before in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) < toUInt128(toUUID({p"),
+                        "Query should contain before condition"
                     );
+                    // Should not have OFFSET when using before/after pagination
+                    assert!(
+                        !query.contains("OFFSET"),
+                        "Query should not have OFFSET with before/after pagination"
+                    );
+                    // Verify the UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
                     true
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"33333333-4444-5555-6666-777777777777","earliest_id":"cccccccc-dddd-eeee-ffff-000000000000","count":"3"}"#.to_string(),
-                        metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
-                            written_rows: 0,
-                        },
-                    })
-                });
-            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-            let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: None,
-                    variant_name: None,
-                    episode_id: Some(episode_id),
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result.latest_id,
-                Some(Uuid::parse_str("33333333-4444-5555-6666-777777777777").unwrap())
-            );
-            assert_eq!(result.count, 3);
-        }
-
-        #[tokio::test]
-        async fn test_get_inference_bounds_with_multiple_filters() {
-            let episode_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
-            let mut mock_clickhouse_client = MockClickHouseClient::new();
-            mock_clickhouse_client
-                .expect_run_query_synchronous()
-                .withf(move |query, params| {
-                    assert_query_contains(query, "
-                    WHERE
-                        function_name = {p0:String}
-                        AND variant_name = {p1:String}
-                        AND episode_id = {p2:String}
-                    ");
-                    assert_eq!(params.get("p0"), Some(&"test_function"));
-                    assert_eq!(params.get("p1"), Some(&"test_variant"));
-                    assert_eq!(
-                        params.get("p2"),
-                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
-                    );
-                    true
-                })
-                .returning(|_, _| {
-                    Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"44444444-5555-6666-7777-888888888888","earliest_id":"dddddddd-eeee-ffff-0000-111111111111","count":"1"}"#.to_string(),
-                        metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
-                            written_rows: 0,
-                        },
-                    })
-                });
-            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-            let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: Some("test_function".to_string()),
-                    variant_name: Some("test_variant".to_string()),
-                    episode_id: Some(episode_id),
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(
-                result.latest_id,
-                Some(Uuid::parse_str("44444444-5555-6666-7777-888888888888").unwrap())
-            );
-            assert_eq!(result.count, 1);
-        }
-
-        #[tokio::test]
-        async fn test_get_inference_bounds_with_empty_response() {
-            let mut mock_clickhouse_client = MockClickHouseClient::new();
-            mock_clickhouse_client
-                .expect_run_query_synchronous()
-                .returning(|_, _| {
-                    Ok(ClickHouseResponse {
-                        response: String::new(), // Empty response
+                        response: String::new(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 0,
                             written_rows: 0,
@@ -1209,52 +1407,528 @@ mod tests {
                     })
                 });
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
 
             let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: None,
-                    variant_name: None,
-                    episode_id: None,
-                })
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: Some(PaginationParams::Before { id: before_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
                 .await
                 .unwrap();
 
-            assert_eq!(result, InferenceBounds::empty());
-            assert_eq!(result.latest_id, None);
-            assert_eq!(result.earliest_id, None);
-            assert_eq!(result.count, 0);
+            assert_eq!(result.len(), 0);
         }
 
         #[tokio::test]
-        async fn test_get_inference_bounds_with_zero_count() {
+        async fn test_list_inferences_with_after() {
             let mut mock_clickhouse_client = MockClickHouseClient::new();
+            let after_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
             mock_clickhouse_client
                 .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Should include the after in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) > toUInt128(toUUID({p"),
+                        "Query should contain after condition"
+                    );
+                    // Should not have OFFSET when using before/after pagination
+                    assert!(
+                        !query.contains("OFFSET"),
+                        "Query should not have OFFSET with before/after pagination"
+                    );
+                    // Verify the after UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
+                    true
+                })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":null,"earliest_id":null,"count":"0"}"#
-                            .to_string(),
+                        response: String::new(),
                         metadata: ClickHouseResponseMetadata {
-                            read_rows: 1,
+                            read_rows: 0,
                             written_rows: 0,
                         },
                     })
                 });
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
 
             let result = conn
-                .get_inference_bounds(GetInferenceBoundsParams {
-                    function_name: Some("nonexistent_function".to_string()),
-                    variant_name: None,
-                    episode_id: None,
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: Some(PaginationParams::After { id: after_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_before_without_function_name() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Should use UNION ALL query when function_name is not provided
+                    assert!(
+                        query.contains("UNION ALL"),
+                        "Query should use UNION ALL when function_name is not provided"
+                    );
+                    // Should still include the before in WHERE clause
+                    assert!(
+                        query.contains("toUInt128(i.id) < toUInt128(toUUID({p"),
+                        "Query should contain before condition"
+                    );
+                    // Verify the before UUID parameter is set
+                    assert!(params.values().any(|v| v.contains("01234567-89ab-cdef")));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = Config::default();
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: None, // No function_name to trigger UNION ALL
+                        pagination: Some(PaginationParams::Before { id: before_id }),
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_no_before_uses_offset() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    // Should include OFFSET when not using before/after pagination
+                    assert!(
+                        query.contains("OFFSET {p"),
+                        "Query should have OFFSET without before/after pagination"
+                    );
+                    // Should have offset parameter set to 20
+                    assert!(params.values().any(|v| *v == "20"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+            let config = get_e2e_config().await;
+
+            let result = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some("extract_entities"),
+                        pagination: None, // No before/after pagination
+                        output_source: InferenceOutputSource::Inference,
+                        limit: 10,
+                        offset: 20, // Should use offset
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_before_with_timestamp_ordering_succeeds() {
+            let config = get_e2e_config().await;
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            // Timestamp ordering should work with before/after pagination
+            let result = generate_list_inferences_sql(
+                &config,
+                &ListInferencesParams {
+                    function_name: Some("extract_entities"),
+                    pagination: Some(PaginationParams::Before { id: before_id }),
+                    output_source: InferenceOutputSource::Inference,
+                    limit: 10,
+                    offset: 0,
+                    order_by: Some(&[OrderBy {
+                        term: OrderByTerm::Timestamp,
+                        direction: OrderDirection::Desc,
+                    }]),
+                    ..Default::default()
+                },
+            );
+
+            assert!(
+                result.is_ok(),
+                "Timestamp ordering should work with before/after pagination"
+            );
+            let (sql, _) = result.unwrap();
+            // Should include timestamp ordering
+            assert!(
+                sql.contains("i.timestamp DESC"),
+                "SQL should include timestamp ordering"
+            );
+            // Should include id as tie-breaker
+            assert!(
+                sql.contains("toUInt128(i.id) DESC"),
+                "SQL should include id as tie-breaker"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_before_with_metric_ordering_fails() {
+            let config = get_e2e_config().await;
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            // Metric ordering should NOT work with before/after pagination
+            let result = generate_list_inferences_sql(
+                &config,
+                &ListInferencesParams {
+                    function_name: Some("extract_entities"),
+                    pagination: Some(PaginationParams::Before { id: before_id }),
+                    output_source: InferenceOutputSource::Inference,
+                    limit: 10,
+                    offset: 0,
+                    order_by: Some(&[OrderBy {
+                        term: OrderByTerm::Metric {
+                            name: "test_metric".to_string(),
+                        },
+                        direction: OrderDirection::Desc,
+                    }]),
+                    ..Default::default()
+                },
+            );
+
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(
+                err.to_string().contains(
+                    "only ordering by timestamp is supported with before/after pagination"
+                ),
+                "Error should mention metric ordering conflict with before/after pagination"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_before_with_search_relevance_fails() {
+            let config = get_e2e_config().await;
+            let before_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+
+            // Search relevance ordering should NOT work with before/after pagination
+            let result = generate_list_inferences_sql(
+                &config,
+                &ListInferencesParams {
+                    function_name: Some("extract_entities"),
+                    pagination: Some(PaginationParams::Before { id: before_id }),
+                    output_source: InferenceOutputSource::Inference,
+                    limit: 10,
+                    offset: 0,
+                    order_by: Some(&[OrderBy {
+                        term: OrderByTerm::SearchRelevance,
+                        direction: OrderDirection::Desc,
+                    }]),
+                    ..Default::default()
+                },
+            );
+
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(
+                err.to_string().contains(
+                    "only ordering by timestamp is supported with before/after pagination"
+                ),
+                "Error should mention search relevance ordering conflict with before/after pagination"
+            );
+        }
+    }
+
+    mod list_inference_metadata_tests {
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::query_builder::test_util::{
+            assert_query_contains, assert_query_does_not_contain,
+        };
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{
+            InferenceQueries, ListInferenceMetadataParams, PaginationParams,
+        };
+        use std::sync::Arc;
+        use uuid::Uuid;
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_no_pagination() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, _params| {
+                    assert_query_contains(query, "uint_to_uuid(id_uint) as id");
+                    assert_query_contains(query, "FROM InferenceById");
+                    assert_query_contains(query, "ORDER BY id_uint DESC");
+                    assert_query_does_not_contain(query, "WHERE");
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams::default())
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_before() {
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint < toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint DESC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    pagination: Some(PaginationParams::Before { id: cursor_id }),
+                    limit: 10,
+                    ..Default::default()
                 })
                 .await
                 .unwrap();
 
-            assert_eq!(result, InferenceBounds::empty());
-            assert_eq!(result.latest_id, None);
-            assert_eq!(result.earliest_id, None);
-            assert_eq!(result.count, 0);
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_after() {
+            let cursor_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "id_uint > toUInt128({cursor_id:UUID})");
+                    assert_query_contains(query, "ORDER BY id_uint ASC");
+                    assert!(params.get("cursor_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    pagination: Some(PaginationParams::After { id: cursor_id }),
+                    limit: 10,
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_function_name() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("function_name"), Some(&"test_function"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    function_name: Some("test_function".to_string()),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_variant_name() {
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("variant_name"), Some(&"test_variant"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    variant_name: Some("test_variant".to_string()),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_episode_id() {
+            let episode_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "WHERE");
+                    assert!(params.get("episode_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    episode_id: Some(episode_id),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_list_inference_metadata_with_all_filters() {
+            let episode_id = Uuid::now_v7();
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "WHERE");
+                    assert_eq!(params.get("function_name"), Some(&"test_function"));
+                    assert_eq!(params.get("variant_name"), Some(&"test_variant"));
+                    assert!(params.get("episode_id").is_some());
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .list_inference_metadata(&ListInferenceMetadataParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: Some("test_variant".to_string()),
+                    episode_id: Some(episode_id),
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+
+            assert!(result.is_empty());
         }
     }
 }

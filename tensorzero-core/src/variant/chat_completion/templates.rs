@@ -6,7 +6,7 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    config::{path::ResolvedTomlPathData, ErrorContext, PathWithContents, SchemaData},
+    config::{ErrorContext, PathWithContents, SchemaData, path::ResolvedTomlPathData},
     error::{Error, ErrorDetails},
     inference::types::Role,
     jsonschema_util::StaticJSONSchema,

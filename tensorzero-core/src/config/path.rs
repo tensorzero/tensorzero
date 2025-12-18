@@ -3,11 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use toml::{
+    Spanned, Table,
     de::{DeTable, DeValue},
     map::Entry,
-    Spanned, Table,
 };
 
 use crate::error::{Error, ErrorDetails};
@@ -17,7 +18,7 @@ use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 /// When we add support for config globbing, we'll require deserializing
 /// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ResolvedTomlPathData {
     __tensorzero_remapped_path: PathBuf,
@@ -808,7 +809,7 @@ pub(super) fn resolve_toml_relative_paths(
                                 error_path.join(".")
                             ),
                         }
-                        .into())
+                        .into());
                     }
                 }
             } else {

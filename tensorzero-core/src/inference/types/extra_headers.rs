@@ -1,20 +1,21 @@
 use super::{deserialize_delete, serialize_delete};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
     pub kind: ExtraHeaderKind,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ExtraHeaderKind {
@@ -305,10 +306,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + Always
 
         // Verify Always is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::Always { .. }))
+        );
     }
 
     #[test]
@@ -344,15 +347,19 @@ mod tests {
 
         #[expect(deprecated)]
         {
-            assert!(filtered
+            assert!(
+                filtered
+                    .data
+                    .iter()
+                    .any(|item| matches!(item, DynamicExtraHeader::Provider { .. }))
+            );
+        }
+        assert!(
+            filtered
                 .data
                 .iter()
-                .any(|item| matches!(item, DynamicExtraHeader::Provider { .. })));
-        }
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
+                .any(|item| matches!(item, DynamicExtraHeader::Always { .. }))
+        );
         assert!(filtered.data.iter().any(|item| match item {
             DynamicExtraHeader::Variant { variant_name, .. } => variant_name == "variant1",
             _ => false,
@@ -451,10 +458,12 @@ mod tests {
         assert_eq!(filtered.data.len(), 2); // variant1 + ModelProvider
 
         // Verify ModelProvider is included
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. })));
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. }))
+        );
     }
 
     #[test]

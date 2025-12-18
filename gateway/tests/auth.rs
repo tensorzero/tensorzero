@@ -1,33 +1,23 @@
-#![expect(clippy::print_stdout, clippy::expect_used)]
+#![expect(clippy::print_stdout)]
 use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
     },
-    endpoints::status::TENSORZERO_VERSION,
+    endpoints::status::{StatusResponse, TENSORZERO_VERSION},
 };
 use tokio::process::Command;
 use uuid::Uuid;
 
-use crate::common::start_gateway_on_random_port;
+use crate::common::{get_postgres_pool_for_testing, start_gateway_on_random_port};
 use secrecy::ExposeSecret;
 
 mod common;
-
-/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
-async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
-
-    sqlx::PgPool::connect(&postgres_url)
-        .await
-        .expect("Failed to connect to PostgreSQL")
-}
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
@@ -36,7 +26,7 @@ async fn test_tensorzero_auth_enabled() {
         "
     [gateway.observability]
     enabled = true
-    
+
     [gateway.auth]
     enabled = true
     [gateway.auth.cache]
@@ -188,7 +178,12 @@ async fn test_tensorzero_auth_enabled() {
     let status = inference_response.status();
     let text = inference_response.text().await.unwrap();
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(text, format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"));
+    assert_eq!(
+        text,
+        format!(
+            "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+        )
+    );
 }
 
 #[tokio::test]
@@ -212,6 +207,8 @@ async fn test_tensorzero_unauthenticated_routes() {
     let status = health_response.status();
     let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
+
+    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
     assert_eq!(
         text,
         "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
@@ -225,10 +222,16 @@ async fn test_tensorzero_unauthenticated_routes() {
 
     let status = status_response.status();
     let text = status_response.text().await.unwrap();
+    let parsed_status_response: StatusResponse = serde_json::from_str(&text).unwrap();
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(parsed_status_response.status, "ok", "Status should be ok");
     assert_eq!(
-        text,
-        format!("{{\"status\":\"ok\",\"version\":\"{TENSORZERO_VERSION}\"}}")
+        parsed_status_response.version, TENSORZERO_VERSION,
+        "Version should match $TENSORZERO_VERSION"
+    );
+    assert_ne!(
+        parsed_status_response.config_hash, "",
+        "There should be a config hash"
     );
 }
 
@@ -242,7 +245,7 @@ async fn test_tensorzero_missing_auth() {
     [gateway.auth.cache]
     enabled = false
     ",
-        None,
+        Some("gateway=debug,tensorzero_core=debug,warn"),
     )
     .await;
 
@@ -276,10 +279,12 @@ async fn test_tensorzero_missing_auth() {
         ("GET", "/v1/datasets/get_datapoints"),
     ];
 
+    let client = reqwest::Client::new();
+
     for (method, path) in auth_required_routes {
         // Authorization runs before we do any parsing of the request parameters/body,
         // so we don't need to provide a valid request here.
-        let response = reqwest::Client::new()
+        let response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -292,11 +297,11 @@ async fn test_tensorzero_missing_auth() {
         let text = response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header is required\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header is required\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_auth_response = reqwest::Client::new()
+        let bad_auth_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -310,11 +315,11 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_auth_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Authorization header must start with 'Bearer '\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header must start with 'Bearer '\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let bad_key_format_response = reqwest::Client::new()
+        let bad_key_format_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -328,11 +333,11 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_key_format_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
+            "{\"error\":\"TensorZero authentication error: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let missing_key_response = reqwest::Client::new()
+        let missing_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -349,11 +354,11 @@ async fn test_tensorzero_missing_auth() {
         let text = missing_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
-        let disabled_key_response = reqwest::Client::new()
+        let disabled_key_response = client
             .request(
                 Method::from_str(method).unwrap(),
                 format!("http://{}/{}", child_data.addr, path),
@@ -370,7 +375,9 @@ async fn test_tensorzero_missing_auth() {
         let text = disabled_key_response.text().await.unwrap();
         assert_eq!(
             text,
-            format!("{{\"error\":\"TensorZero authentication error: API key was disabled at: {disabled_at}\"}}"),
+            format!(
+                "{{\"error\":\"TensorZero authentication error: Error performing authentication: API key was disabled at: {disabled_at}\"}}"
+            ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
@@ -633,7 +640,7 @@ async fn test_auth_cache_requires_full_key_match() {
     );
     assert_eq!(
         text,
-        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+        "{\"error\":\"TensorZero authentication error: Error performing authentication: Provided API key does not exist in the database\"}"
     );
 
     // Verify the original valid key still works (cache should still be valid)
@@ -751,7 +758,7 @@ async fn test_rate_limit_auth_single_key() {
             r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 
@@ -885,7 +892,7 @@ async fn test_rate_limit_auth_each_key() {
         r#"
     [gateway.auth]
     enabled = true
-    
+
     [rate_limiting]
     enabled = true
 

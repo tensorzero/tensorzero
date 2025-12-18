@@ -4,21 +4,21 @@ use std::sync::Arc;
 use crate::clickhouse::get_clean_clickhouse;
 use serde_json::json;
 use tensorzero::ClientBuilder;
-use tensorzero::ClientInputMessage;
-use tensorzero::ClientInputMessageContent;
 use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
+use tensorzero::InputMessage;
+use tensorzero::InputMessageContent;
 use tensorzero::Role;
-use tensorzero::{ClientInferenceParams, ClientInput};
+use tensorzero::{ClientInferenceParams, Input};
 use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{Arguments, System, TextKind};
+use tensorzero_core::inference::types::{Arguments, System, Template, Text};
 use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
 
@@ -40,7 +40,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         )
         .await
         .unwrap()
-        .config,
+        .into_config_without_writing_for_tests(),
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
@@ -81,16 +81,16 @@ async fn test_get_howdy_report() {
     // Send a chat inference and comment feedback
     let params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(
                 json!({"assistant_name": "AskJeeves"})
                     .as_object()
                     .unwrap()
                     .clone(),
             ))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -112,16 +112,17 @@ async fn test_get_howdy_report() {
     // Send a json inference and boolean feedback
     let params = ClientInferenceParams {
         function_name: Some("json_success".to_string()),
-        input: ClientInput {
+        input: Input {
             system: Some(System::Template(Arguments(
                 json!({"assistant_name": "AskJeeves"})
                     .as_object()
                     .unwrap()
                     .clone(),
             ))),
-            messages: vec![ClientInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(
                         json!({
                             "country": "Japan",

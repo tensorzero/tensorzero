@@ -8,15 +8,14 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 use serde::Serialize;
-use serde_json::{json, to_value, Map, Value};
+use serde_json::{Map, Value, json, to_value};
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{
-        Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-        InferenceOutput,
+        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
-    config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
+    config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
     inference::types::{Arguments, ContentBlockChatOutput, Role, StoredInput, Template},
@@ -202,10 +201,10 @@ async fn analyze_inference(
     // Create ClientInferenceParams for the analyze function
     let params = ClientInferenceParams {
         function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
-        input: ClientInput {
-            messages: vec![ClientInputMessage {
+        input: Input {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Template(Template {
+                content: vec![InputMessageContent::Template(Template {
                     name: "user".to_string(),
                     arguments,
                 })],
@@ -263,14 +262,20 @@ async fn analyze_inference(
                 message:
                     "Expected at least one Text content block from analyze function, found none"
                         .to_string(),
-            }))
+            }));
         }
     };
+
+    tracing::debug!("Generated analysis: {}", analysis);
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
         Some(Inference {
-            input: eval_info.datapoint.input().clone(),
+            input: eval_info
+                .datapoint
+                .input()
+                .clone()
+                .into_stored_input_without_file_handling()?,
             output: serialize_inference_output(&eval_info.response)?,
         })
     } else {
@@ -401,9 +406,10 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use tensorzero_core::{
-        config::{path::ResolvedTomlPathData, SchemaData},
+        config::{SchemaData, path::ResolvedTomlPathData},
+        db::stored_datapoint::StoredChatInferenceDatapoint,
         endpoints::{
-            datasets::{Datapoint, StoredChatInferenceDatapoint},
+            datasets::Datapoint,
             inference::{ChatInferenceResponse, InferenceResponse},
         },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
@@ -555,11 +561,10 @@ mod tests {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
-        // Convert StoredDatapoint to Datapoint
-        let function_config = create_test_function_config();
-        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
+        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
 
         EvaluationInfo {
             datapoint,
@@ -627,10 +632,12 @@ mod tests {
 
         // Verify system template path and content
         let system_template = config.templates.inner.get("system").unwrap();
-        assert!(system_template
-            .path
-            .get_template_key()
-            .ends_with("system.minijinja"));
+        assert!(
+            system_template
+                .path
+                .get_template_key()
+                .ends_with("system.minijinja")
+        );
         let system_content = system_template.path.data();
         assert!(system_content.contains("You are an expert in diagnosing quality issues"));
         assert!(system_content.contains("## Context"));
@@ -642,10 +649,12 @@ mod tests {
 
         // Verify user template path and content
         let user_template = config.templates.inner.get("user").unwrap();
-        assert!(user_template
-            .path
-            .get_template_key()
-            .ends_with("user.minijinja"));
+        assert!(
+            user_template
+                .path
+                .get_template_key()
+                .ends_with("user.minijinja")
+        );
         let user_content = user_template.path.data();
         assert!(user_content.contains("<function_context>"));
         assert!(user_content.contains("<inference_context>"));
@@ -877,6 +886,7 @@ mod tests {
         // Create a static tool config
         let tool_config = Arc::new(StaticToolConfig {
             name: "test_tool".to_string(),
+            key: "test_tool".to_string(),
             description: "Test tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
                 "type": "object",

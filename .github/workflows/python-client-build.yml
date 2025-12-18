@@ -28,7 +28,9 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Install Rust toolchain
         run: |
@@ -96,7 +98,9 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
@@ -145,8 +149,9 @@ jobs:
           python-version: "3.10"
           architecture: ${{ matrix.platform.target }}
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
-        shell: bash
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
@@ -199,7 +204,9 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
 
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
@@ -235,7 +242,9 @@ jobs:
           name: wheels-sdist
           path: ./clients/python/dist
       - name: Install uv
-        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        with:
+          version: "0.6.17"
       - name: Check local sdist
         run: |
           ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz

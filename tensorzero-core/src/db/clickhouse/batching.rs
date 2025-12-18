@@ -10,8 +10,8 @@ use futures::{FutureExt, TryFutureExt};
 use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-use tokio::time::error::Elapsed;
 use tokio::time::Instant;
+use tokio::time::error::Elapsed;
 
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};

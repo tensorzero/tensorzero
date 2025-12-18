@@ -6,10 +6,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
 use super::TableBounds;
 use crate::serde_util::deserialize_u64;
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait FeedbackQueries {
     /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
     async fn get_feedback_by_variant(
@@ -83,6 +87,20 @@ pub trait FeedbackQueries {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
+
+    /// Query all metrics that have feedback for a function, optionally filtered by variant
+    async fn query_metrics_with_feedback(
+        &self,
+        function_name: &str,
+        inference_table: &str,
+        variant_name: Option<&str>,
+    ) -> Result<Vec<MetricWithFeedback>, Error>;
+
+    /// Query the latest feedback ID for each metric for a given target
+    async fn query_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<LatestFeedbackRow>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -196,20 +214,48 @@ pub enum FeedbackRow {
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FeedbackBounds {
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
     pub by_type: FeedbackBoundsByType,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FeedbackBoundsByType {
     pub boolean: TableBounds,
     pub float: TableBounds,
     pub comment: TableBounds,
     pub demonstration: TableBounds,
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct MetricWithFeedback {
+    pub function_name: String,
+    pub metric_name: String,
+    /// The type of metric (boolean, float, demonstration).
+    /// None if the metric is not in the current config (e.g., was deleted).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub metric_type: Option<MetricType>,
+    pub feedback_count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum MetricType {
+    Boolean,
+    Float,
+    Demonstration,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LatestFeedbackRow {
+    pub metric_name: String,
+    pub latest_id: String,
 }

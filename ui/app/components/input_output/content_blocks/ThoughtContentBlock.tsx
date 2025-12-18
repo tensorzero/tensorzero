@@ -1,7 +1,7 @@
 import { Lightbulb } from "lucide-react";
 import { type ReactNode } from "react";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
-import { CodeEditor } from "~/components/ui/code-editor";
+import { VirtualizedCodeEditor } from "~/components/ui/virtualized-code-editor";
 import { Input } from "~/components/ui/input";
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
@@ -77,7 +77,7 @@ export function ThoughtContentBlock({
         {showText && (
           <>
             <p className="text-fg-secondary font-medium">Text</p>
-            <CodeEditor
+            <VirtualizedCodeEditor
               value={block.text ?? ""}
               className="bg-bg-secondary"
               readOnly={!isEditing}
@@ -131,7 +131,7 @@ export function ThoughtContentBlock({
                 >
                   <div className="flex-1">
                     {summaryBlock.type === "summary_text" && (
-                      <CodeEditor
+                      <VirtualizedCodeEditor
                         value={summaryBlock.text}
                         className="bg-bg-tertiary"
                         readOnly={!isEditing}

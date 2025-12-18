@@ -33,6 +33,9 @@ export function getClickhouseClient(): ClickHouseClient {
       createClient({
         url: env.TENSORZERO_CLICKHOUSE_URL,
         request_timeout: 1000 * 60 * 5,
+        clickhouse_settings: {
+          join_algorithm: "auto",
+        },
       }),
       {
         get(target, prop, receiver) {
@@ -90,21 +93,6 @@ function getMethodError(originalError: unknown, methodName: string | symbol) {
   }
 
   return new ClickHouseClientError(errorMessage, { cause: originalError });
-}
-
-export async function checkClickHouseConnection(): Promise<boolean> {
-  try {
-    const result = await getClickhouseClient().ping();
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
-export function isClickHouseClientError(
-  error: unknown,
-): error is ClickHouseClientError {
-  return isErrorLike(error) && error.name === "ClickHouseClientError";
 }
 
 function isPromiseLike<T>(value: unknown): value is Promise<T> {

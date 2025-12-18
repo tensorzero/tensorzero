@@ -2,7 +2,7 @@
 name = "mock-inference-provider"
 version = "0.1.0"
 rust-version.workspace = true
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 
 [lints]

@@ -4,8 +4,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import type { ReactNode } from "react";
+import { Suspense, use, type ReactNode } from "react";
 import { cn } from "~/utils/common";
+import { Skeleton } from "~/components/ui/skeleton";
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -23,15 +24,26 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   </div>
 );
 
+type CountValue = number | bigint | Promise<number | bigint>;
+
 interface PageHeaderProps {
   label?: string;
   heading?: string;
   name?: string;
-  count?: number | bigint;
+  count?: CountValue;
   icon?: ReactNode;
   iconBg?: string;
   children?: ReactNode;
   tag?: ReactNode;
+}
+
+function CountDisplay({ count }: { count: CountValue }) {
+  const resolvedCount = count instanceof Promise ? use(count) : count;
+  return (
+    <h1 className="text-fg-muted text-2xl font-medium">
+      {resolvedCount.toLocaleString()}
+    </h1>
+  );
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
@@ -70,9 +82,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </span>
           )}
           {count !== undefined && (
-            <h1 className="text-fg-muted text-2xl font-medium">
-              {count.toLocaleString()}
-            </h1>
+            <Suspense fallback={<Skeleton className="h-8 w-24" />}>
+              <CountDisplay count={count} />
+            </Suspense>
           )}
 
           {tag}
@@ -85,14 +97,14 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   );
 };
 
-const SectionsGroup: React.FC<React.ComponentProps<"section">> = ({
+const SectionsGroup: React.FC<React.ComponentProps<"div">> = ({
   children,
   className,
   ...props
 }) => (
-  <section className={cn("flex flex-col gap-12", className)} {...props}>
+  <div className={cn("flex flex-col gap-12", className)} {...props}>
     {children}
-  </section>
+  </div>
 );
 
 const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
@@ -107,11 +119,20 @@ const SectionLayout: React.FC<React.ComponentProps<"section">> = ({
 
 interface SectionHeaderProps extends React.PropsWithChildren {
   heading: string;
-  count?: number;
+  count?: CountValue;
   badge?: {
     name: string;
     tooltip: string;
   };
+}
+
+function SectionCountDisplay({ count }: { count: CountValue }) {
+  const resolvedCount = count instanceof Promise ? use(count) : count;
+  return (
+    <span className="text-fg-muted text-xl font-medium">
+      {resolvedCount.toLocaleString()}
+    </span>
+  );
 }
 
 const SectionHeader: React.FC<SectionHeaderProps> = ({
@@ -124,9 +145,9 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
     {heading}
 
     {count !== undefined && (
-      <span className="text-fg-muted text-xl font-medium">
-        {count.toLocaleString()}
-      </span>
+      <Suspense fallback={<Skeleton className="h-6 w-12" />}>
+        <SectionCountDisplay count={count} />
+      </Suspense>
     )}
 
     {badge && (

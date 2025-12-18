@@ -17,13 +17,14 @@ We use retries on image building to help account for issues with dependencies.
 
 The goal in the near term is to replace our current GitHub actions workflows with Buildkite workflows for all nontrivial tests we run.
 The remaining tests to be ported over are:
- - Tests of our python client
- - Tests of various OpenAI clients
- - Replicated and cloud clickhouse testing (the latter is already on buildkite but doesn't fit the current pattern)
- - Batch tests
- - E2E tests that rebuild the model inference cache and make sure they can re-run without credentials.
- - Publish as public images on `tensorzero-internal/` on Docker Hub and make the images public so we don't need creds to pul.
- - Deduplicate the `build-*.sh` scripts.
+
+- Tests of our python client
+- Tests of various OpenAI clients
+- Replicated and cloud clickhouse testing (the latter is already on buildkite but doesn't fit the current pattern)
+- Batch tests
+- E2E tests that rebuild the model inference cache and make sure they can re-run without credentials.
+- Publish as public images on `tensorzero-internal/` on Docker Hub and make the images public so we don't need creds to pul.
+- Deduplicate the `build-*.sh` scripts.
 
 We'll also want to swap out the current GitHub actions workflows with BuildKite webhooks since these seem better integrated.
 Once we reach this point we could potentially rip the existing CI workflow almost entirely (probably can and should leave lints and stuff on GHA).
@@ -31,7 +32,6 @@ Once we reach this point we could potentially rip the existing CI workflow almos
 ## Running locally
 
 To run these tests locally, you can do something like `docker compose -f tensorzero-core/fixtures/docker-compose.live.yml build` and then `docker compose -f tensorzero-core/fixtures/docker-compose.live.yml run --rm live-tests`. This will be a bit slower than the native workflow (and takes ~15 minutes to build on a new MacBook Pro) but it is extremely useful to replicate CI test conditions on a local machine.
-
 
 ## BuildKite MCP
 

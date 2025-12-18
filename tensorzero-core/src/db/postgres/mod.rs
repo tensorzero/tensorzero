@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use futures::future::try_join;
 use futures::TryStreamExt;
+use futures::future::try_join;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
+use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -15,7 +15,9 @@ pub mod rate_limiting;
 
 fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    format!("docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations")
+    format!(
+        "docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations"
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -210,8 +212,12 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
         })
     })?;
+    manual_run_postgres_migrations_with_url(&postgres_url).await
+}
+
+pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
     let pool = PgPoolOptions::new()
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -225,7 +231,7 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
     })?;
 
     // Our 'tensorzero-auth' crate currently uses an alpha release of 'sqlx', so the `PgPool` type is different.
-    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(&postgres_url)
+    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -257,6 +263,6 @@ async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Err
     Ok(applied_migrations)
 }
 
-fn make_migrator() -> sqlx::migrate::Migrator {
+pub fn make_migrator() -> sqlx::migrate::Migrator {
     migrate!("src/db/postgres/migrations")
 }

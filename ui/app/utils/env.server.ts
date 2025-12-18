@@ -12,11 +12,10 @@ class EnvironmentVariableError extends Error {
   }
 }
 
+// Note: TENSORZERO_UI_LOG_LEVEL is handled in logger.ts to avoid circular dependencies.
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
   TENSORZERO_POSTGRES_URL: string | null;
-  TENSORZERO_UI_CONFIG_PATH: string | null;
-  TENSORZERO_UI_DEFAULT_CONFIG: boolean;
   TENSORZERO_UI_READ_ONLY: boolean;
   TENSORZERO_GATEWAY_URL: string;
   TENSORZERO_API_KEY: string | null;
@@ -27,7 +26,7 @@ interface Env {
 }
 
 let _env: Env | undefined;
-let hasLoggedEvaluationsPathDeprecation = false;
+let hasLoggedConfigPathDeprecation = false;
 
 /**
  * Use this function to retrieve the environment variables instead of accessing
@@ -40,28 +39,9 @@ export function getEnv(): Env {
     return _env;
   }
 
-  if (
-    process.env.TENSORZERO_EVALUATIONS_PATH &&
-    !hasLoggedEvaluationsPathDeprecation
-  ) {
-    logger.warn(
-      "Deprecation Warning: The TensorZero Evaluations binary is now built into the UI itself. The environment variable `TENSORZERO_EVALUATIONS_PATH` is no longer needed and will be ignored moving forward.",
-    );
-    hasLoggedEvaluationsPathDeprecation = true;
-  }
-
   const TENSORZERO_CLICKHOUSE_URL = getClickhouseUrl();
-  const TENSORZERO_UI_CONFIG_PATH =
-    process.env.TENSORZERO_UI_CONFIG_PATH || null;
-  const TENSORZERO_UI_DEFAULT_CONFIG =
-    (process.env.TENSORZERO_UI_DEFAULT_CONFIG || null) == "1";
-  if (!TENSORZERO_UI_CONFIG_PATH && !TENSORZERO_UI_DEFAULT_CONFIG) {
-    throw new EnvironmentVariableError(
-      "At least one of `TENSORZERO_UI_CONFIG_PATH` or `TENSORZERO_UI_DEFAULT_CONFIG` must be set.",
-    );
-  }
-
   const TENSORZERO_GATEWAY_URL = process.env.TENSORZERO_GATEWAY_URL;
+
   // This error is thrown on startup in tensorzero.server.ts
   if (!TENSORZERO_GATEWAY_URL) {
     throw new EnvironmentVariableError(
@@ -69,11 +49,21 @@ export function getEnv(): Env {
     );
   }
 
+  // Deprecated in 2025.12; can remove in 2026.02+.
+  if (
+    (process.env.TENSORZERO_UI_CONFIG_PATH ||
+      process.env.TENSORZERO_UI_DEFAULT_CONFIG) &&
+    !hasLoggedConfigPathDeprecation
+  ) {
+    logger.warn(
+      "Deprecation Warning: The TensorZero UI now reads the configuration from the gateway. The environment variables `TENSORZERO_UI_CONFIG_PATH` and `TENSORZERO_UI_DEFAULT_CONFIG` are deprecated and ignored. You no longer need to mount the configuration onto the UI container.",
+    );
+    hasLoggedConfigPathDeprecation = true;
+  }
+
   _env = {
     TENSORZERO_CLICKHOUSE_URL,
     TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL || null,
-    TENSORZERO_UI_CONFIG_PATH,
-    TENSORZERO_UI_DEFAULT_CONFIG,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
     TENSORZERO_GATEWAY_URL,
     FIREWORKS_ACCOUNT_ID: process.env.FIREWORKS_ACCOUNT_ID || null,

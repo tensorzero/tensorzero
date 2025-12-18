@@ -7,15 +7,16 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InferenceMetadata } from "~/types/tensorzero";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
+import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 
 export default function FunctionInferenceTable({
   inferences,
 }: {
-  inferences: InferenceByIdRow[];
+  inferences: InferenceMetadata[];
 }) {
   return (
     <Table>
@@ -56,7 +57,7 @@ export default function FunctionInferenceTable({
                 </VariantLink>
               </TableCell>
               <TableCell>
-                <TableItemTime timestamp={inference.timestamp} />
+                <TableItemTime timestamp={uuidv7ToTimestamp(inference.id)} />
               </TableCell>
             </TableRow>
           ))

@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::{file::mime_type_to_ext, Base64File};
+use super::{Base64File, file::mime_type_to_ext};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;

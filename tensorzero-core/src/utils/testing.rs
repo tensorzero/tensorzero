@@ -9,7 +9,7 @@ use std::{
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
-use tracing_subscriber::{fmt::MakeWriter, FmtSubscriber};
+use tracing_subscriber::{FmtSubscriber, fmt::MakeWriter};
 
 // This can be tweaked as needed if we want to capture more or less output
 // in tests that use `capture_logs`

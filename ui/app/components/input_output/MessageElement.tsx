@@ -6,13 +6,13 @@ import { DeleteButton } from "~/components/ui/DeleteButton";
 
 export function MessageElement({
   message,
-  key,
+  messageKey,
   isEditing,
   onChange,
   onDelete,
 }: {
   message: InputMessage;
-  key: string;
+  messageKey: string;
   isEditing?: boolean;
   onChange?: (updatedMessage: InputMessage) => void;
   onDelete?: () => void;
@@ -45,7 +45,7 @@ export function MessageElement({
   return (
     <MessageWrapper
       role={message.role}
-      key={key}
+      key={messageKey}
       actionBar={
         isEditing && <DeleteButton onDelete={onDelete} label="Delete message" />
       }
@@ -57,7 +57,7 @@ export function MessageElement({
       )}
       {message.content.map((block, contentBlockIndex) => (
         <ContentBlockElement
-          key={`${key}-${contentBlockIndex}`}
+          key={`${messageKey}-${contentBlockIndex}`}
           block={block}
           isEditing={isEditing}
           onChange={(updatedContentBlock) =>
@@ -127,10 +127,35 @@ function AddContentBlockButtons({
         text: "",
       },
     },
+    {
+      label: "File (URL)",
+      emptyBlock: {
+        type: "file" as const,
+        file_type: "url" as const,
+        url: "",
+        mime_type: null,
+      },
+    },
+    {
+      label: "File (Base64)",
+      emptyBlock: {
+        type: "file" as const,
+        file_type: "base64" as const,
+        mime_type: "",
+        data: "",
+      },
+    },
+    {
+      label: "Unknown",
+      emptyBlock: {
+        type: "unknown" as const,
+        data: {},
+      },
+    },
   ];
 
   return (
-    <div className="flex items-center gap-2 py-2">
+    <div className="flex flex-wrap items-center gap-2 py-2">
       {buttons.map((button) => (
         <AddButton
           key={button.label}
@@ -138,10 +163,6 @@ function AddContentBlockButtons({
           onAdd={() => onAdd(button.emptyBlock)}
         />
       ))}
-      {/* TODO: we need to support adding other kinds of content blocks */}
-      <span className="text-fg-muted text-xs">
-        Please use the API or SDK for other content block types.
-      </span>
     </div>
   );
 }

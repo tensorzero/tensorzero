@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use reqwest::Url;
 use tensorzero_core::{
     db::clickhouse::ClickHouseConnectionInfo,
-    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
+    endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, DatapointKind},
 };
 use uuid::Uuid;
 
@@ -36,7 +36,10 @@ pub async fn delete_datapoint(
             ("id", datapoint_id.to_string().as_str())
         ])).await.unwrap();
 
-    assert!(!datapoint.response.is_empty(), "Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}");
+    assert!(
+        !datapoint.response.is_empty(),
+        "Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}"
+    );
 
     let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint.response).unwrap();
 

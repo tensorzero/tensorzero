@@ -18,10 +18,10 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     // Open the launch evaluation modal
     await page.getByText("New Run").click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByText("Select an evaluation")).toBeVisible();
+    await expect(page.getByPlaceholder("Select evaluation")).toBeVisible();
 
     // Select evaluation
-    await page.getByText("Select an evaluation").click();
+    await page.getByPlaceholder("Select evaluation").click();
     const evaluationOption = page.getByRole("option", {
       name: "entity_extraction",
     });
@@ -33,17 +33,17 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     await page.getByText("Select a dataset").click();
 
     // Type to filter/search for our dataset
-    const datasetInput = page.getByPlaceholder("Find a dataset...");
+    const datasetInput = page.getByPlaceholder("Select a dataset");
     await datasetInput.fill(datasetName);
     const datasetOption = page.locator(`[data-dataset-name="${datasetName}"]`);
     await expect(datasetOption).toBeVisible();
 
     // Click on our dataset
     await datasetOption.click();
-    await expect(page.getByText("Select a variant")).toBeVisible();
+    await expect(page.getByPlaceholder("Select variant")).toBeVisible();
 
     // Select variant
-    await page.getByText("Select a variant").click();
+    await page.getByPlaceholder("Select variant").click();
     const variantOption = page.getByRole("option", {
       name: "gpt4o_mini_initial_prompt",
     });
@@ -61,7 +61,9 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     await launchButton.click();
 
     // Wait for the dialog to close after launching
-    await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(
+      page.getByRole("dialog", { name: "Launch Evaluation" }),
+    ).toBeHidden();
 
     // The evaluation will likely fail because the dataset has wrong function datapoints
     // But the form was submitted and saved to localStorage, which is what matters
@@ -98,16 +100,12 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     await expect(dialog).toBeVisible();
 
     // Verify the evaluation is still selected (from localStorage)
-    const evaluationCombobox = dialog
-      .getByRole("combobox")
-      .filter({ hasText: "entity_extraction" });
-    await expect(evaluationCombobox).toBeVisible();
+    const evaluationInput = dialog.getByPlaceholder("Select evaluation");
+    await expect(evaluationInput).toHaveValue("entity_extraction");
 
     // Verify the variant is still selected (from localStorage)
-    const variantCombobox = dialog
-      .getByRole("combobox")
-      .filter({ hasText: "gpt4o_mini_initial_prompt" });
-    await expect(variantCombobox).toBeVisible();
+    const variantInput = dialog.getByPlaceholder("Select variant");
+    await expect(variantInput).toHaveValue("gpt4o_mini_initial_prompt");
 
     // Verify the dataset field is cleared (not showing the deleted dataset)
     // The dataset selector should show placeholder text

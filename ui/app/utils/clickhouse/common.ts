@@ -101,14 +101,15 @@ export const thoughtContentSchema = z.object({
     .array(thoughtSummaryBlockSchema)
     .nullish()
     .transform((val) => val ?? undefined),
-  _internal_provider_type: z.string().optional(),
+  provider_type: z.string().optional(),
 });
 export type ZodThoughtContent = z.infer<typeof thoughtContentSchema>;
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
   data: ZodJsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_name: z.string().optional(),
+  provider_name: z.string().optional(),
 });
 export type ZodUnknown = z.infer<typeof unknownSchema>;
 
@@ -240,23 +241,6 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
 ]);
 export type ZodInputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
-export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
-  "type",
-  [
-    modelInferenceTextInputSchema,
-    toolCallContentSchema,
-    toolResultContentSchema,
-    imageContentSchema,
-    fileContentSchema,
-    rawTextInputSchema,
-    thoughtContentSchema,
-    unknownSchema,
-  ],
-);
-export type ZodModelInferenceInputMessageContent = z.infer<
-  typeof modelInferenceInputMessageContentSchema
->;
-
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayTextInputSchema,
   displayTemplateSchema,
@@ -281,16 +265,6 @@ export const inputMessageSchema = z
   })
   .strict();
 export type ZodInputMessage = z.infer<typeof inputMessageSchema>;
-
-export const modelInferenceInputMessageSchema = z
-  .object({
-    role: roleSchema,
-    content: z.array(modelInferenceInputMessageContentSchema),
-  })
-  .strict();
-export type ZodModelInferenceInputMessage = z.infer<
-  typeof modelInferenceInputMessageSchema
->;
 
 export const displayModelInferenceInputMessageContentSchema =
   z.discriminatedUnion("type", [
@@ -326,14 +300,6 @@ export const inputSchema = z
   .strict();
 export type ZodInput = z.infer<typeof inputSchema>;
 
-export const modelInferenceInputSchema = z
-  .object({
-    system: z.any().optional(), // Value type from Rust maps to any in TS
-    messages: z.array(modelInferenceInputMessageSchema).default([]),
-  })
-  .strict();
-export type ZodModelInferenceInput = z.infer<typeof modelInferenceInputSchema>;
-
 export const displayInputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
@@ -348,13 +314,6 @@ export const textContentSchema = z.object({
   text: z.string(),
 });
 export type ZodTextContent = z.infer<typeof textContentSchema>;
-
-export const contentBlockOutputSchema = z.discriminatedUnion("type", [
-  textContentSchema,
-  toolCallContentSchema,
-  thoughtContentSchema,
-  unknownSchema,
-]);
 
 export const jsonInferenceOutputSchema = z.object({
   // These fields are explicitly nullable, not undefined.
@@ -422,29 +381,6 @@ export function getInferenceTableName(
       return InferenceTableName.JSON;
   }
 }
-
-export const TableBoundsSchema = z.object({
-  first_id: z.string().uuid().nullable(), // UUIDv7 string
-  last_id: z.string().uuid().nullable(), // UUIDv7 string
-});
-export type ZodTableBounds = z.infer<typeof TableBoundsSchema>;
-
-export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
-  count: z.number(),
-});
-export type ZodTableBoundsWithCount = z.infer<
-  typeof TableBoundsWithCountSchema
->;
-
-export const FeedbackBoundsSchema = TableBoundsSchema.extend({
-  by_type: z.object({
-    boolean: TableBoundsSchema,
-    float: TableBoundsSchema,
-    demonstration: TableBoundsSchema,
-    comment: TableBoundsSchema,
-  }),
-});
-export type ZodFeedbackBounds = z.infer<typeof FeedbackBoundsSchema>;
 
 export const CountSchema = z.object({
   count: z.number(),

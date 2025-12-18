@@ -6,18 +6,18 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
+    Json,
     body::Body,
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Json,
 };
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
     config::Config,
     db::{
-        clickhouse::query_builder::{InferenceFilter, OrderBy},
         clickhouse::ClickHouseConnectionInfo,
+        clickhouse::query_builder::{InferenceFilter, OrderBy},
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
@@ -101,6 +101,7 @@ pub async fn launch_optimization_workflow(
                 output_source,
                 limit: limit.unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
                 offset: offset.unwrap_or(0),
+                pagination: None,
                 order_by: order_by.as_deref(),
                 search_query_experimental: None,
             },

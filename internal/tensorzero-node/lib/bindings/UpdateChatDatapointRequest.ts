@@ -7,12 +7,6 @@ import type { ToolChoice } from "./ToolChoice";
 
 /**
  * An update request for a chat datapoint.
- * For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
- * - If the field is omitted, it will be left unchanged.
- * - If the field is specified as `null`, it will be set to `null`.
- * - If the field has a value, it will be set to the provided value.
- *
- * In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
  */
 export type UpdateChatDatapointRequest = {
   /**
@@ -24,10 +18,10 @@ export type UpdateChatDatapointRequest = {
    */
   input?: Input;
   /**
-   * Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-   * it will overwrite the existing output.
+   * Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
+   * `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
    */
-  output?: Array<ContentBlockChatOutput>;
+  output?: Array<ContentBlockChatOutput> | null;
   /**
    * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.

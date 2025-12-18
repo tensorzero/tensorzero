@@ -1,7 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -436,12 +436,14 @@ NUMBER: /\d+(\.\d+)?/
     assert_eq!(format.get("type").unwrap().as_str().unwrap(), "grammar");
     let grammar = format.get("grammar").unwrap();
     assert_eq!(grammar.get("syntax").unwrap().as_str().unwrap(), "lark");
-    assert!(grammar
-        .get("definition")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .contains("start: expr"));
+    assert!(
+        grammar
+            .get("definition")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("start: expr")
+    );
 }
 
 /// Test that OpenAI accepts and uses a custom tool with Regex grammar format
@@ -904,12 +906,14 @@ NUMBER: /\d+(\.\d+)?/
     assert_eq!(format.get("type").unwrap().as_str().unwrap(), "grammar");
     let grammar = format.get("grammar").unwrap();
     assert_eq!(grammar.get("syntax").unwrap().as_str().unwrap(), "lark");
-    assert!(grammar
-        .get("definition")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .contains("start: expr"));
+    assert!(
+        grammar
+            .get("definition")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("start: expr")
+    );
 }
 
 /// Test that OpenAI Responses API accepts and uses a custom tool with Regex grammar format

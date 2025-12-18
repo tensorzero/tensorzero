@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::{cmp::Ordering, ops::Range};
-use toml::de::DeTable;
 use toml::Table;
+use toml::de::DeTable;
 
-use crate::config::path::{merge_tomls, resolve_toml_relative_paths};
 use crate::config::ConfigFileGlob;
+use crate::config::path::{merge_tomls, resolve_toml_relative_paths};
 use crate::error::{Error, ErrorDetails};
 
 /// Holds range information for a merged config file.
@@ -156,7 +156,7 @@ impl SpanMap {
 mod tests {
     use std::borrow::Cow;
 
-    use toml::{de::DeValue, Spanned};
+    use toml::{Spanned, de::DeValue};
 
     use super::*;
 

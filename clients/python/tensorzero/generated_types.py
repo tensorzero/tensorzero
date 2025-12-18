@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .unset_type import UNSET, UnsetType
+from .omit_type import OMIT, OmitType
 
 Model = Any
 
@@ -44,33 +44,6 @@ class ContentBlockChatOutputText:
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutputUnknown:
-    """
-    Defines the types of content block that can come from a `chat` function
-    """
-
-    data: Any
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-
-
-CreateDatapointsFromInferenceOutputSource = str
-
-
-@dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceIds:
-    """
-    Create datapoints from specific inference IDs.
-    """
-
-    inference_ids: list[str]
-    """
-    The inference IDs to create datapoints from.
-    """
-    type: Literal["inference_ids"] = "inference_ids"
-
-
-@dataclass(kw_only=True)
 class CreateDatapointsResponse:
     """
     Response from creating datapoints.
@@ -88,9 +61,12 @@ class DatapointMetadataUpdate:
     A request to update the metadata of a datapoint.
     """
 
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
 
 
@@ -116,6 +92,15 @@ class DeleteDatapointsResponse:
     """
     The number of deleted datapoints.
     """
+
+
+@dataclass(kw_only=True)
+class DemonstrationFeedbackFilter:
+    """
+    Filter by whether an inference has a demonstration.
+    """
+
+    has_demonstration: bool
 
 
 Detail = Literal["low", "high", "auto"]
@@ -270,11 +255,11 @@ ExtraBody = (
 
 
 @dataclass(kw_only=True)
-class ExtraBodyReplacementKind1:
+class ExtraBodyReplacementKindValue:
     value: Any
 
 
-ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
 
 
 @dataclass(kw_only=True)
@@ -439,7 +424,7 @@ class FloatMetricFilter:
 class GetDatapointsRequest:
     """
     Request to get specific datapoints by their IDs.
-    Used by the `POST /v1/datasets/get_datapoints` endpoint.
+    Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
     """
 
     ids: list[str]
@@ -464,6 +449,15 @@ class InferenceFilterBooleanMetric(BooleanMetricFilter):
     """
 
     type: Literal["boolean_metric"] = "boolean_metric"
+
+
+@dataclass(kw_only=True)
+class InferenceFilterDemonstrationFeedback(DemonstrationFeedbackFilter):
+    """
+    Filter by whether an inference has a demonstration.
+    """
+
+    type: Literal["demonstration_feedback"] = "demonstration_feedback"
 
 
 InferenceOutputSource = str
@@ -549,43 +543,19 @@ class InputMessageContentRawText:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentUnknown:
-    """
-    An unknown content block type, used to allow passing provider-specific
-    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    of TensorZero.
-    The `data` field holds the original content block from the provider,
-    without any validation or transformation by TensorZero.
-    """
-
-    data: Any
-    """
-    The underlying content block to be passed to the model provider.
-    """
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-    """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
-    """
-
-
-@dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
     """
     A request to update the output of a JSON datapoint.
-    We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
-    for users to run evals against them.
 
-    The possible values for `output` are:
-    - `None`: don't update `output`
-    - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
-    - `Some(String)`: set the output to the string (= JSON-serialized string)
+    We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
     """
 
     raw: str | None = None
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+
+    This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
+    invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
     """
 
 
@@ -602,6 +572,9 @@ class JsonInferenceOutput:
     """
 
 
+JsonMode = Literal["off", "on", "strict", "tool"]
+
+
 @dataclass(kw_only=True)
 class OpenAICustomToolFormatText:
     type: Literal["text"] = "text"
@@ -616,10 +589,7 @@ OrderDirection = Literal["ascending", "descending"]
 @dataclass(kw_only=True)
 class ProviderToolScopeModelProvider:
     model_name: str
-    model_provider_name: str
-
-
-ProviderToolScope = ProviderToolScopeModelProvider | None
+    provider_name: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -633,6 +603,9 @@ class RawText:
 
 
 Role = Literal["user", "assistant"]
+
+
+ServiceTier = Literal["auto", "default", "priority", "flex"]
 
 
 @dataclass(kw_only=True)
@@ -757,25 +730,6 @@ class StoredInputMessageContentFile:
     source_url: str | None = None
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentUnknown:
-    """
-    Struct that represents an unknown provider-specific content block.
-    We pass this along as-is without any validation or transformation.
-    """
-
-    data: Any
-    """
-    The underlying content block to be passed to the model provider.
-    """
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-    """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
-    """
-
-
 System = str | dict[str, Any]
 
 
@@ -894,6 +848,9 @@ class ToolResult:
     result: str
 
 
+UnfilteredInferenceExtraBody = list[ExtraBody]
+
+
 @dataclass(kw_only=True)
 class Unknown:
     """
@@ -905,10 +862,13 @@ class Unknown:
     """
     The underlying content block to be passed to the model provider.
     """
-    model_provider_name: str | None = None
+    model_name: str | None = None
     """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
     """
 
 
@@ -922,9 +882,12 @@ class UpdateDatapointMetadataRequest:
     """
     The ID of the datapoint to update. Required.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
 
 
@@ -980,12 +943,56 @@ class Base64File:
 
 
 @dataclass(kw_only=True)
+class ChatCompletionInferenceParams:
+    frequency_penalty: float | None = None
+    json_mode: JsonMode | None = None
+    max_tokens: int | None = None
+    presence_penalty: float | None = None
+    reasoning_effort: str | None = None
+    seed: int | None = None
+    service_tier: ServiceTier | None = None
+    stop_sequences: list[str] | None = None
+    temperature: float | None = None
+    thinking_budget_tokens: int | None = None
+    top_p: float | None = None
+    verbosity: str | None = None
+
+
+@dataclass(kw_only=True)
 class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
     """
     Defines the types of content block that can come from a `chat` function
     """
 
     type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class ContentBlockChatOutputUnknown(Unknown):
+    """
+    Defines the types of content block that can come from a `chat` function
+    """
+
+    type: Literal["unknown"] = "unknown"
+
+
+@dataclass(kw_only=True)
+class CreateDatapointsFromInferenceRequestParamsInferenceIds:
+    """
+    Create datapoints from specific inference IDs.
+    """
+
+    inference_ids: list[str]
+    """
+    The inference IDs to create datapoints from.
+    """
+    type: Literal["inference_ids"] = "inference_ids"
+    output_source: InferenceOutputSource | None = None
+    """
+    When creating the datapoint, this specifies the source of the output for the datapoint.
+    If not provided, by default we will use the original inference output as the datapoint's output
+    (equivalent to `inference`).
+    """
 
 
 @dataclass(kw_only=True)
@@ -1004,6 +1011,39 @@ class TimeDatapointFilter(TimeFilter):
     """
 
     type: Literal["time"] = "time"
+
+
+@dataclass(kw_only=True)
+class DatapointOrderByTimestamp:
+    """
+    Creation timestamp of the datapoint.
+    """
+
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["timestamp"] = "timestamp"
+
+
+@dataclass(kw_only=True)
+class DatapointOrderBySearchRelevance:
+    """
+    Relevance score of the search query in the input and output of the datapoint.
+    Requires a search query (experimental). If it's not provided, we return an error.
+
+    Current relevance metric is very rudimentary (just term frequency), but we plan
+    to improve it in the future.
+    """
+
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+DatapointOrderBy = DatapointOrderByTimestamp | DatapointOrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
@@ -1068,8 +1108,31 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
+class InferenceParams:
+    """
+    InferenceParams is the top-level struct for inference parameters.
+    We backfill these from the configs given in the variants used and ultimately write them to the database.
+    """
+
+    chat_completion: ChatCompletionInferenceParams
+
+
+@dataclass(kw_only=True)
 class InputMessageContentToolCall:
     type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class InputMessageContentUnknown(Unknown):
+    """
+    An unknown content block type, used to allow passing provider-specific
+    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
+    of TensorZero.
+    The `data` field holds the original content block from the provider,
+    without any validation or transformation by TensorZero.
+    """
+
+    type: Literal["unknown"] = "unknown"
 
 
 @dataclass(kw_only=True)
@@ -1174,10 +1237,7 @@ class OrderBySearchRelevance:
 OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
-@dataclass(kw_only=True)
-class ProviderTool:
-    tool: Any
-    scope: ProviderToolScope | None = None
+ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
@@ -1186,14 +1246,19 @@ class StoredInputMessageContentToolCall(ToolCall):
 
 
 @dataclass(kw_only=True)
+class StoredInputMessageContentUnknown(Unknown):
+    type: Literal["unknown"] = "unknown"
+
+
+@dataclass(kw_only=True)
 class Thought:
     """
     Struct that represents a model's reasoning
     """
 
-    field_internal_provider_type: str | None = None
+    provider_type: str | None = None
     """
-    When set, this 'Thought' block will only be used for providers
+    When set, this `Thought` block will only be used for providers
     matching this type (e.g. `anthropic`). Other providers will emit
     a warning and discard the block.
     """
@@ -1285,6 +1350,12 @@ OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGram
 
 
 @dataclass(kw_only=True)
+class ProviderTool:
+    tool: Any
+    scope: ProviderToolScope | None = None
+
+
+@dataclass(kw_only=True)
 class StoredInputMessageContentThought(Thought):
     type: Literal["thought"] = "thought"
 
@@ -1333,26 +1404,31 @@ class UpdateDynamicToolParamsRequest:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
     """
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    tool choice). If specified as a value, it will be set to the provided value.
     """
 
 
@@ -1397,8 +1473,8 @@ class DynamicToolParams:
 
     # Conversion from Storage Format
     Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
-    1. `dynamic_tools` → `additional_tools`
-    2. `allowed_tools` → `allowed_tools` (based on choice enum)
+    1. `dynamic_tools` -> `additional_tools`
+    2. `allowed_tools` -> `allowed_tools` (based on choice enum)
     3. Other fields copied directly
 
     Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
@@ -1477,11 +1553,36 @@ class StoredInputMessage:
 @dataclass(kw_only=True)
 class Input:
     """
-    A request is made that contains an Input
+    API representation of an input to a model.
     """
 
     messages: list[InputMessage] | None = field(default_factory=lambda: [])
+    """
+    Messages in the input.
+    """
     system: System | None = None
+    """
+    System prompt of the input.
+    """
+
+
+@dataclass(kw_only=True)
+class JsonInferenceDatapoint:
+    dataset_name: str
+    function_name: str
+    id: str
+    input: Input
+    is_deleted: bool
+    output_schema: Any
+    updated_at: str
+    auxiliary: str | None = None
+    episode_id: str | None = None
+    is_custom: bool | None = False
+    name: str | None = None
+    output: JsonInferenceOutput | None = None
+    source_inference_id: str | None = None
+    staled_at: str | None = None
+    tags: dict[str, Any] | None = None
 
 
 @dataclass(kw_only=True)
@@ -1504,25 +1605,23 @@ class StoredJsonInference:
     episode_id: str
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: JsonInferenceOutput
     output_schema: Any
     timestamp: str
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
+    processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)
 class UpdateChatDatapointRequestInternal:
     """
     An update request for a chat datapoint.
-    For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-    - If the field is omitted, it will be left unchanged.
-    - If the field is specified as `null`, it will be set to `null`.
-    - If the field has a value, it will be set to the provided value.
-
-    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
     """
 
     id: str
@@ -1536,11 +1635,12 @@ class UpdateChatDatapointRequestInternal:
     new tools or exclude removed tools.
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
-    allowed_tools: list[str] | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | OmitType = OMIT
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
     input: Input | None = None
     """
@@ -1551,19 +1651,26 @@ class UpdateChatDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
-    output: list[ContentBlockChatOutput] | None = None
+    output: list[ContentBlockChatOutput] | None | OmitType = OMIT
     """
-    Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    it will overwrite the existing output.
+    Chat datapoint output.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
+    Otherwise, it will overwrite the existing output (and can be an empty list).
     """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
+    parallel_tool_calls: bool | None | OmitType = OMIT
     """
     Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
     """
@@ -1572,13 +1679,17 @@ class UpdateChatDatapointRequestInternal:
     """
     tags: dict[str, Any] | None = None
     """
-    Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    it will be overwrite the existing tags.
+    Datapoint tags.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
+    Otherwise, it will overwrite the existing tags.
     """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
+    tool_choice: ToolChoice | None | OmitType = OMIT
     """
     User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    tool choice). If specified as a value, it will be set to the provided value.
     """
     tool_params: UpdateDynamicToolParamsRequest | None = None
     """
@@ -1600,12 +1711,6 @@ class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
 class UpdateJsonDatapointRequestInternal:
     """
     An update request for a JSON datapoint.
-    For any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-    - If the field is omitted, it will be left unchanged.
-    - If the field is specified as `null`, it will be set to `null`.
-    - If the field has a value, it will be set to the provided value.
-
-    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
     """
 
     id: str
@@ -1621,15 +1726,18 @@ class UpdateJsonDatapointRequestInternal:
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
     """
-    name: str | None | UnsetType = UNSET
+    name: str | None | OmitType = OMIT
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
-    output: JsonDatapointOutputUpdate | None | UnsetType = UNSET
+    output: JsonDatapointOutputUpdate | None | OmitType = OMIT
     """
-    JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
-    also be stored, because we allow invalid outputs in datapoints by design.
+    JSON datapoint output.
+    If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+    inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.
     """
     output_schema: Any | None = None
     """
@@ -1653,7 +1761,7 @@ class ChatInferenceDatapoint:
     dataset_name: str
     function_name: str
     id: str
-    input: StoredInput
+    input: Input
     is_deleted: bool
     updated_at: str
     additional_tools: list[Tool] | None = None
@@ -1780,8 +1888,6 @@ class CreateJsonDatapointRequest:
     output: JsonDatapointOutputUpdate | None = None
     """
     JSON datapoint output. Optional.
-    If provided, it will be validated against the output_schema. Invalid raw outputs will be stored as-is (not parsed), because we allow
-    invalid outputs in datapoints by design.
     """
     output_schema: Any | None = None
     """
@@ -1805,22 +1911,28 @@ class DatapointChat(ChatInferenceDatapoint):
 
 
 @dataclass(kw_only=True)
-class JsonInferenceDatapoint:
-    dataset_name: str
-    function_name: str
-    id: str
-    input: StoredInput
-    is_deleted: bool
-    output_schema: Any
-    updated_at: str
-    auxiliary: str | None = None
-    episode_id: str | None = None
-    is_custom: bool | None = False
-    name: str | None = None
-    output: JsonInferenceOutput | None = None
-    source_inference_id: str | None = None
-    staled_at: str | None = None
-    tags: dict[str, Any] | None = None
+class DatapointJson(JsonInferenceDatapoint):
+    """
+    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces.
+    """
+
+    type: Literal["json"] = "json"
+
+
+Datapoint = DatapointChat | DatapointJson
+
+
+@dataclass(kw_only=True)
+class GetDatapointsResponse:
+    """
+    Response containing the requested datapoints.
+    """
+
+    datapoints: list[Datapoint]
+    """
+    The retrieved datapoints.
+    """
 
 
 @dataclass(kw_only=True)
@@ -1832,6 +1944,7 @@ class StoredChatInference:
     episode_id: str
     function_name: str
     inference_id: str
+    inference_params: InferenceParams
     input: StoredInput
     output: list[ContentBlockChatOutput]
     timestamp: str
@@ -1847,11 +1960,13 @@ class StoredChatInference:
     If not provided, all static tools are allowed.
     """
     dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
     parallel_tool_calls: bool | None = None
     """
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
+    processing_time_ms: int | None = None
     provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
     Provider-specific tool configurations
@@ -1862,6 +1977,7 @@ class StoredChatInference:
     User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     Optional.
     """
+    ttft_ms: int | None = None
 
 
 @dataclass(kw_only=True)
@@ -1937,31 +2053,6 @@ class CreateDatapointsRequest:
 
 
 @dataclass(kw_only=True)
-class DatapointJson(JsonInferenceDatapoint):
-    """
-    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
-    This one should be used in all public interfaces.
-    """
-
-    type: Literal["json"] = "json"
-
-
-Datapoint = DatapointChat | DatapointJson
-
-
-@dataclass(kw_only=True)
-class GetDatapointsResponse:
-    """
-    Response containing the requested datapoints.
-    """
-
-    datapoints: list[Datapoint]
-    """
-    The retrieved datapoints.
-    """
-
-
-@dataclass(kw_only=True)
 class GetInferencesResponse:
     """
     Response containing the requested inferences.
@@ -1979,18 +2070,77 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     Create datapoints from an inference query.
     """
 
-    function_name: str
+    output_source: InferenceOutputSource
     """
-    The function name to filter inferences by.
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
     """
     type: Literal["inference_query"] = "inference_query"
+    after: str | None = None
+    """
+    Optional inference ID to paginate after (exclusive).
+    Returns inferences with IDs after this one (later in time).
+    Cannot be used together with `before` or `offset`.
+    """
+    before: str | None = None
+    """
+    Optional inference ID to paginate before (exclusive).
+    Returns inferences with IDs before this one (earlier in time).
+    Cannot be used together with `after` or `offset`.
+    """
+    episode_id: str | None = None
+    """
+    Optional episode ID to filter inferences by.
+    If provided, only inferences from this episode will be returned.
+    """
+    filter: InferenceFilter | None = None
+    """
+    **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    """
     filters: InferenceFilter | None = None
     """
-    Filters to apply when querying inferences, optional.
+    Optional filter to apply when querying inferences.
+    Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter inferences by.
+    If provided, only inferences from this function will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of inferences to return.
+    Defaults to 20.
+    """
+    offset: int | None = None
+    """
+    The number of inferences to skip before starting to return results.
+    Defaults to 0.
+    """
+    order_by: list[OrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the inferences' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
     variant_name: str | None = None
     """
-    Variant name to filter inferences by, optional.
+    Optional variant name to filter inferences by.
+    If provided, only inferences from this variant will be returned.
     """
 
 
@@ -2065,6 +2215,7 @@ class InferenceFilterNot:
 InferenceFilter = (
     InferenceFilterFloatMetric
     | InferenceFilterBooleanMetric
+    | InferenceFilterDemonstrationFeedback
     | InferenceFilterTag
     | InferenceFilterTime
     | InferenceFilterAnd
@@ -2100,10 +2251,30 @@ class ListDatapointsRequest:
     The number of datapoints to skip before starting to return results.
     Defaults to 0.
     """
+    order_by: list[DatapointOrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
+    """
     page_size: int | None = None
     """
     The maximum number of datapoints to return. Defaults to 20.
     Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the datapoints' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
 
 
@@ -2119,12 +2290,28 @@ class ListInferencesRequest:
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
     """
+    after: str | None = None
+    """
+    Optional inference ID to paginate after (exclusive).
+    Returns inferences with IDs after this one (later in time).
+    Cannot be used together with `before` or `offset`.
+    """
+    before: str | None = None
+    """
+    Optional inference ID to paginate before (exclusive).
+    Returns inferences with IDs before this one (earlier in time).
+    Cannot be used together with `after` or `offset`.
+    """
     episode_id: str | None = None
     """
     Optional episode ID to filter inferences by.
     If provided, only inferences from this episode will be returned.
     """
     filter: InferenceFilter | None = None
+    """
+    **Deprecated:** Use `filters` instead. This field will be removed in a future release.
+    """
+    filters: InferenceFilter | None = None
     """
     Optional filter to apply when querying inferences.
     Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).

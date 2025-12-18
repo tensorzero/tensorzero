@@ -1,113 +1,17 @@
-import { describe, expect, test, vi } from "vitest";
-import { pollForFeedbackItem, queryMetricsWithFeedback } from "./feedback";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-
-describe("queryMetricsWithFeedback", () => {
-  test("returns correct feedback counts for different metric types", async () => {
-    // Test json function with multiple metric types
-    const jsonResults = await queryMetricsWithFeedback({
-      function_name: "extract_entities",
-      inference_table: "JsonInference",
-    });
-
-    // Check boolean counts for JSON function
-    expect(jsonResults.metrics).toContainEqual({
-      function_name: "extract_entities",
-      metric_name: "exact_match",
-      metric_type: "boolean",
-      feedback_count: 99,
-    });
-
-    // Check demonstration counts for JSON function
-    expect(jsonResults.metrics).toContainEqual({
-      function_name: "extract_entities",
-      metric_name: "demonstration",
-      metric_type: "demonstration",
-      feedback_count: 100,
-    });
-
-    // Test chat function with float metrics
-    const chatResults = await queryMetricsWithFeedback({
-      function_name: "write_haiku",
-      inference_table: "ChatInference",
-    });
-
-    expect(chatResults.metrics).toContainEqual({
-      function_name: "write_haiku",
-      metric_name: "haiku_rating",
-      metric_type: "float",
-      feedback_count: 491,
-    });
-
-    // Check demonstration counts for chat function
-    expect(chatResults.metrics).toContainEqual({
-      function_name: "write_haiku",
-      metric_name: "demonstration",
-      metric_type: "demonstration",
-      feedback_count: 493,
-    });
-  });
-
-  // Tests error handling for nonexistent functions
-  test("returns empty array for nonexistent function", async () => {
-    const results = await queryMetricsWithFeedback({
-      function_name: "nonexistent_function",
-      inference_table: "ChatInference",
-    });
-
-    expect(results.metrics).toEqual([]);
-  });
-
-  // Tests handling of metrics at different levels (inference vs episode)
-  test("returns correct metrics for both inference and episode levels", async () => {
-    const results = await queryMetricsWithFeedback({
-      function_name: "write_haiku",
-      inference_table: "ChatInference",
-    });
-
-    // Check inference level metric
-    expect(results.metrics).toContainEqual({
-      function_name: "write_haiku",
-      metric_name: "haiku_rating",
-      metric_type: "float",
-      feedback_count: 491,
-    });
-
-    // Check episode level metric
-    expect(results.metrics).toContainEqual({
-      function_name: "write_haiku",
-      metric_name: "haiku_rating_episode",
-      metric_type: "float",
-      feedback_count: 85,
-    });
-  });
-
-  test("returns correct feedback counts for variant", async () => {
-    const results = await queryMetricsWithFeedback({
-      function_name: "write_haiku",
-      variant_name: "initial_prompt_gpt4o_mini",
-      inference_table: "ChatInference",
-    });
-
-    expect(results.metrics).toContainEqual({
-      function_name: "write_haiku",
-      metric_name: "haiku_rating",
-      metric_type: "float",
-      feedback_count: 491,
-    });
-  });
-});
+import { expect, test, vi } from "vitest";
+import { pollForFeedbackItem } from "./feedback";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 test("pollForFeedbackItem should find feedback when it exists", async () => {
   const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
   const limit = 10;
 
-  const dbClient = await getNativeDatabaseClient();
-  // Run the queryFeedbackByTargetId function to return feedback with the target ID
-  const originalQueryFeedback = await dbClient.queryFeedbackByTargetId({
-    target_id: targetId,
-    limit,
-  });
+  const tensorZeroClient = getTensorZeroClient();
+  // Run the getFeedbackByTargetId function to return feedback with the target ID
+  const originalQueryFeedback = await tensorZeroClient.getFeedbackByTargetId(
+    targetId,
+    { limit },
+  );
 
   // Ensure we have feedback to test with
   expect(originalQueryFeedback.length).toBeGreaterThan(0);

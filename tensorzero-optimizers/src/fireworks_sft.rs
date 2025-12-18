@@ -34,15 +34,17 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{FireworksKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
-        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
         OptimizationJobInfo, OptimizerOutput,
+        fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
-        fireworks::prepare_fireworks_messages,
-        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
+        fireworks::{
+            FireworksCredentials, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages,
+        },
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage},
+        openai::{
+            OpenAIMessagesConfig, OpenAIRequestMessage, tensorzero_to_openai_assistant_message,
+        },
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };
@@ -288,6 +290,7 @@ impl JobHandle for FireworksSFTJobHandle {
                             routing: vec![model_path.clone().into()],
                             providers: HashMap::from([(model_path.into(), model_provider)]),
                             timeouts: TimeoutsConfig::default(),
+                            skip_relay: None,
                         }),
                     })
                 }
@@ -513,7 +516,7 @@ fn convert_to_optimizer_status(
                 message: format!(
                     "JobStateCompleted should have been handled in poll. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
-            }))
+            }));
         }
     })
 }

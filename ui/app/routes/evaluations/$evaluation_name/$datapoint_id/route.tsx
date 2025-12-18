@@ -1,5 +1,4 @@
 import {
-  getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   pollForEvaluations,
@@ -24,7 +23,8 @@ import {
   useFetcher,
   type RouteHandle,
 } from "react-router";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -95,8 +95,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Validate datapoint exists using v1 API
-  const tensorZeroDatapoint =
-    await getTensorZeroClient().getDatapoint(datapoint_id);
+  const tensorZeroClient = getTensorZeroClient();
+  const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
   if (!tensorZeroDatapoint) {
     throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
       status: 404,
@@ -104,10 +104,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Define all promises
-  const selectedEvaluationRunInfosPromise = getEvaluationRunInfos(
-    selectedRunIds,
-    function_name,
-  );
+  const selectedEvaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selectedRunIds, function_name)
+    .then((response) => response.run_infos);
   const allowedEvaluationRunInfosPromise = getEvaluationRunInfosForDatapoint(
     datapoint_id,
     function_name,
@@ -572,7 +571,11 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              <Output output={result.output} />
+              {Array.isArray(result.output) ? (
+                <ChatOutputElement output={result.output} />
+              ) : (
+                <JsonOutputElement output={result.output} />
+              )}
             </section>
 
             {result.id !== "Reference" &&

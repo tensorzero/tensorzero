@@ -1,6 +1,6 @@
 use super::{check_column_exists, check_table_exists};
-use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::uuid::get_workflow_evaluation_cutoff_uuid;
 use async_trait::async_trait;

@@ -11,4 +11,4 @@ To regenerate, run:
 """
 
 from __future__ import annotations
-from .unset_type import UNSET, UnsetType
+from .omit_type import OMIT, OmitType

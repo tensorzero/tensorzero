@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "datamodel-code-generator[http]==0.35.0",
+# ]
+# ///
 """
 Generate Python dataclasses from JSON schemas derived from Rust types.
 
@@ -28,7 +33,7 @@ It also sets up customizations to make them work well together:
 2.  When merging the schema files, some references are recursive (e.g. `InferenceFilter`) that point to the root schema of these
     types, so we need to rewrite the `$ref`s to point to the schema definition itself instead of the root schema (which becomes
     `Any` after python dataclass generation).
-3.  We generate a custom header file for the generated types to include the `UNSET` sentinel value.
+3.  We generate a custom header file for the generated types to include the `OMIT` sentinel value.
 
 
 To run this script: run `pnpm generate-python-schemas` from the root of the repository.
@@ -182,6 +187,9 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 # Generate Literal["a", "b", "c"] for unit enum values
                 "--enum-field-as-literal",
                 "all",
+                # Do not prefix fields with anything, even if they start with an underscore
+                "--special-field-name-prefix",
+                "",
                 # Do not generate __future__ imports; they are useless
                 # and conflict with custom file headers
                 "--disable-future-imports",

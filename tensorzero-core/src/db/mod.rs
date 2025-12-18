@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::rate_limiting::ActiveRateLimitKey;
@@ -12,9 +16,14 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
 pub mod datasets;
+pub mod evaluation_queries;
 pub mod feedback;
+pub mod inference_stats;
 pub mod inferences;
+pub mod model_inferences;
 pub mod postgres;
+pub mod stored_datapoint;
+pub mod workflow_evaluation_queries;
 
 #[async_trait]
 pub trait ClickHouseConnection:
@@ -31,7 +40,10 @@ pub trait HealthCheckable {
 }
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait SelectQueries {
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
     async fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
@@ -42,8 +54,6 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
-
-    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 
     async fn query_episode_table(
         &self,
@@ -168,12 +178,12 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct TableBounds {
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
 }
 
@@ -189,4 +199,13 @@ pub trait ExperimentationQueries {
         function_name: &str,
         candidate_variant_name: &str,
     ) -> Result<String, Error>;
+}
+
+#[async_trait]
+#[cfg_attr(test, automock)]
+pub trait ConfigQueries {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error>;
 }

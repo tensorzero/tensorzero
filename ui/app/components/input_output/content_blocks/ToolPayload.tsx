@@ -1,4 +1,5 @@
-import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
+import { useFormattedJson } from "~/components/ui/code-editor";
+import { VirtualizedCodeEditor } from "~/components/ui/virtualized-code-editor";
 import { Input } from "~/components/ui/input";
 
 interface ToolPayloadProps {
@@ -58,7 +59,7 @@ export function ToolPayload({
       )}
 
       <p className="text-fg-secondary font-medium">{payloadLabel}</p>
-      <CodeEditor
+      <VirtualizedCodeEditor
         allowedLanguages={enforceJson ? ["json"] : undefined}
         value={formattedPayload}
         className="bg-bg-secondary"

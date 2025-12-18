@@ -12,7 +12,7 @@ use crate::{
     endpoints::openai_compatible::types::chat_completions::JsonSchemaInfo,
     error::Error,
     model::CredentialLocationWithFallback,
-    providers::openai::{grader::OpenAIGrader, OpenAICredentials},
+    providers::openai::{OpenAICredentials, grader::OpenAIGrader},
 };
 
 #[cfg(feature = "pyo3")]

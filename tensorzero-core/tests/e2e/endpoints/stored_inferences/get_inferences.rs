@@ -1,7 +1,11 @@
 /// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
 use reqwest::Client;
-use serde_json::{json, Value};
-use tensorzero::InferenceOutputSource;
+use serde_json::{Value, json};
+use tensorzero::{
+    ChatCompletionInferenceParams, GetInferencesResponse, InferenceOutputSource, InferenceParams,
+    InferenceResponse, StoredInference,
+};
+use tensorzero_core::inference::types::extra_body::DynamicExtraBody;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -35,7 +39,7 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 async fn get_inferences_by_ids(
     ids: Vec<Uuid>,
     output_source: InferenceOutputSource,
-) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+) -> Result<Vec<StoredInference>, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let id_strings: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
 
@@ -55,13 +59,8 @@ async fn get_inferences_by_ids(
         resp.text().await
     );
 
-    let resp_json: Value = resp.json().await?;
-    let inferences = resp_json["inferences"]
-        .as_array()
-        .expect("Expected 'inferences' array in response")
-        .clone();
-
-    Ok(inferences)
+    let resp_json: GetInferencesResponse = resp.json().await?;
+    Ok(resp_json.inferences)
 }
 
 // Tests for list_inferences endpoint
@@ -310,11 +309,49 @@ async fn test_list_or_filter_mixed_metrics() {
     }
 }
 
+/// Tests that NOT filter correctly inverts the child filter.
+/// NOT (exact_match = true OR exact_match = false) should return rows WITHOUT the metric.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_not_filter() {
-    let request = json!({
+    // Get total count
+    let request_total = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
+        "limit": 1000
+    });
+    let total_count = list_inferences(request_total).await.unwrap().len();
+
+    // Get count with exact_match = true
+    let request_true = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": true
+        }
+    });
+    let true_count = list_inferences(request_true).await.unwrap().len();
+
+    // Get count with exact_match = false
+    let request_false = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": false
+        }
+    });
+    let false_count = list_inferences(request_false).await.unwrap().len();
+
+    // Get NOT (true OR false) - should return rows WITHOUT the metric
+    let request_not = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 1000,
         "filter": {
             "type": "not",
             "child": {
@@ -334,9 +371,22 @@ async fn test_list_not_filter() {
             }
         }
     });
+    let not_count = list_inferences(request_not).await.unwrap().len();
 
-    let res = list_inferences(request).await.unwrap();
-    assert_eq!(res.len(), 0);
+    // Verify: rows with metric (true + false) + rows without metric (NOT result) = total
+    let rows_with_metric = true_count + false_count;
+    assert_eq!(
+        rows_with_metric + not_count,
+        total_count,
+        "NOT filter should return exactly the rows without the metric. \
+         true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
+    );
+
+    // Also verify NOT returned something (there are rows without the metric)
+    assert!(
+        not_count > 0,
+        "Expected some rows without the exact_match metric"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -478,10 +528,11 @@ pub async fn test_get_by_ids_json_only() {
     assert_eq!(res.len(), 3);
 
     for inference in &res {
-        assert_eq!(inference["type"], "json");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "extract_entities");
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected Json inference");
+        };
+        assert!(ids.contains(&json_inference.inference_id));
+        assert_eq!(json_inference.function_name, "extract_entities");
     }
 }
 
@@ -512,10 +563,11 @@ pub async fn test_get_by_ids_chat_only() {
     assert_eq!(res.len(), 2);
 
     for inference in &res {
-        assert_eq!(inference["type"], "chat");
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-        assert_eq!(inference["function_name"], "write_haiku");
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected Chat inference");
+        };
+        assert!(ids.contains(&chat_inference.inference_id));
+        assert_eq!(chat_inference.function_name, "write_haiku");
     }
 }
 
@@ -571,19 +623,17 @@ pub async fn test_get_by_ids_mixed_types() {
     let mut chat_count = 0;
 
     for inference in &res {
-        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
-        assert!(ids.contains(&inference_id));
-
-        match inference["type"].as_str().unwrap() {
-            "json" => {
-                assert_eq!(inference["function_name"], "extract_entities");
+        match inference {
+            StoredInference::Json(json_inference) => {
+                assert!(ids.contains(&json_inference.inference_id));
+                assert_eq!(json_inference.function_name, "extract_entities");
                 json_count += 1;
             }
-            "chat" => {
-                assert_eq!(inference["function_name"], "write_haiku");
+            StoredInference::Chat(chat_inference) => {
+                assert!(ids.contains(&chat_inference.inference_id));
+                assert_eq!(chat_inference.function_name, "write_haiku");
                 chat_count += 1;
             }
-            other => panic!("Unexpected inference type: {other}"),
         }
     }
 
@@ -622,9 +672,10 @@ pub async fn test_get_by_ids_duplicate_ids() {
 
     // Should still only get back 1 inference (deduplicated by ClickHouse)
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0]["type"], "json");
-    let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
-    assert_eq!(returned_id, id);
+    let StoredInference::Json(json_inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
+    assert_eq!(json_inference.inference_id, id);
 }
 
 // Tests for search_query_experimental
@@ -786,4 +837,572 @@ async fn test_search_query_order_by_search_relevance() {
             prev_relevance = Some(relevance);
         }
     }
+}
+
+// Tests for cursor-based pagination
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_with_before_cursor() {
+    // First, get some inferences without cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected some inferences");
+
+    // Get the ID of the third inference to use as cursor
+    let cursor_id = initial_res[2]["inference_id"].as_str().unwrap();
+
+    // Now request inferences before this cursor
+    // Note: cannot use order_by with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    // Verify we got results
+    assert!(
+        !cursor_res.is_empty(),
+        "Expected results with before cursor"
+    );
+
+    // Verify all returned inferences have IDs less than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id < cursor_uuid,
+            "Inference ID should be less than cursor ID"
+        );
+    }
+
+    // Verify results are still in descending timestamp order
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_with_after_cursor() {
+    // First, get some inferences without cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 10,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert_eq!(initial_res.len(), 10, "Expected 10 write_haiku inferences");
+
+    // Get the ID of the (0-indexed) 4th inference to use as cursor, so we return the 5th-9th inferences.
+    let cursor_id = initial_res[4]["inference_id"].as_str().unwrap();
+
+    // Now request inferences after this cursor
+    // Note: cannot use order_by with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "after": cursor_id,
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    assert!(!cursor_res.is_empty(), "Expected results with after cursor");
+
+    // Verify all returned inferences have IDs greater than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id > cursor_uuid,
+            "Inference ID should be greater than cursor ID"
+        );
+    }
+
+    // Verify results are still in descending timestamp order
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_pagination_prevents_offset() {
+    let http_client = Client::new();
+
+    // First, get an inference ID to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 1,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Try to use both cursor and offset - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "offset": 10, // This should cause an error
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with both cursor and offset should fail"
+    );
+
+    let error_body = resp.text().await.unwrap();
+    assert!(
+        error_body.contains("Cannot use 'offset' with cursor pagination"),
+        "Error message should mention cursor/offset conflict"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_mutually_exclusive() {
+    let http_client = Client::new();
+
+    // First, get inference IDs to use as cursors
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 2,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(
+        initial_res.len() >= 2,
+        "Expected at least two inferences for test"
+    );
+    let cursor_id_1 = initial_res[0]["inference_id"].as_str().unwrap();
+    let cursor_id_2 = initial_res[1]["inference_id"].as_str().unwrap();
+
+    // Try to use both before and after - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id_1,
+        "after": cursor_id_2, // This should cause an error
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with both before and after should fail"
+    );
+
+    let error_body = resp.text().await.unwrap();
+    assert!(
+        error_body.contains("Cannot specify both 'before' and 'after'"),
+        "Error message should mention before/after conflict"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_filters() {
+    // Test that cursor pagination works with filters
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 3,
+        "filter": {
+            "type": "tag",
+            "key": "tensorzero::dataset_name",
+            "value": "foo",
+            "comparison_operator": "="
+        },
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+
+    // Get the ID of the first inference to use as cursor
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Request inferences before this cursor with the same filter
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 3,
+        "before": cursor_id,
+        "filter": {
+            "type": "tag",
+            "key": "tensorzero::dataset_name",
+            "value": "foo",
+            "comparison_operator": "="
+        },
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    assert!(
+        !cursor_res.is_empty(),
+        "Expected results with before cursor and filter"
+    );
+
+    // Verify all returned inferences have IDs less than the cursor
+    let cursor_uuid = Uuid::parse_str(cursor_id).unwrap();
+    for inference in &cursor_res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(
+            inference_id < cursor_uuid,
+            "Inference ID should be less than cursor ID"
+        );
+        // Verify the filter is still applied
+        assert_eq!(inference["function_name"], "write_haiku");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_timestamp_ordering_succeeds() {
+    // First, get some inferences to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[2]["inference_id"].as_str().unwrap();
+
+    // Timestamp ordering should work with cursor pagination
+    let cursor_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "order_by": [
+            {
+                "by": "timestamp",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let cursor_res = list_inferences(cursor_request).await.unwrap();
+
+    // Should get results successfully
+    assert!(
+        !cursor_res.is_empty(),
+        "Should get results with timestamp ordering and cursor"
+    );
+
+    // Verify results are ordered by timestamp descending
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &cursor_res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp <= *prev,
+                "Timestamps should be in descending order"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
+    let http_client = Client::new();
+
+    // First, get an inference ID to use as cursor
+    let initial_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 1,
+    });
+
+    let initial_res = list_inferences(initial_request).await.unwrap();
+    assert!(!initial_res.is_empty(), "Expected at least one inference");
+    let cursor_id = initial_res[0]["inference_id"].as_str().unwrap();
+
+    // Try to use cursor with metric ordering - should fail
+    let invalid_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "before": cursor_id,
+        "order_by": [
+            {
+                "by": "metric",
+                "name": "test_metric",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&invalid_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should return an error status
+    assert!(
+        !resp.status().is_success(),
+        "Request with cursor and metric ordering should fail"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
+    let http_client = Client::new();
+
+    // Create an inference with a nontrivial extra_body and inference params
+    let extra_body_value = json!([
+        {"pointer": "/test_field", "value": "test_value"},
+        {"pointer": "/nested/field", "value": {"key": "nested_value"}}
+    ]);
+
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: Some(42),
+            ..Default::default()
+        },
+    };
+
+    let inference_payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value,
+        "params": params
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}",
+        inference_response.status()
+    );
+
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    let StoredInference::Chat(inference) = &res[0] else {
+        panic!("Expected Chat inference");
+    };
+
+    // Assert the extra_body is correctly returned
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
+
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/test_field");
+            assert_eq!(*value, json!("test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Check the second extra_body entry (nested value)
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/nested/field");
+            assert_eq!(*value, json!({"key": "nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Assert the inference_params are correctly returned
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.7));
+    assert_eq!(chat_completion_params.max_tokens, Some(100));
+    assert_eq!(chat_completion_params.seed, Some(42));
+
+    // Assert processing_time_ms is present (should be non-null for a completed inference)
+    assert!(
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_json_function_with_inference_params() {
+    let http_client = Client::new();
+
+    // Create a JSON inference with extra_body and inference params
+    let extra_body_value = json!([
+        {"pointer": "/json_test_field", "value": "json_test_value"},
+        {"pointer": "/json_nested/field", "value": {"key": "json_nested_value"}}
+    ]);
+
+    let params = InferenceParams {
+        chat_completion: ChatCompletionInferenceParams {
+            temperature: Some(0.5),
+            max_tokens: Some(200),
+            top_p: Some(0.9),
+            ..Default::default()
+        },
+    };
+
+    let inference_payload = json!({
+        "function_name": "json_success",
+        "variant_name": "test",
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]}]
+        },
+        "stream": false,
+        "extra_body": extra_body_value,
+        "params": params
+    });
+
+    // Make the inference request
+    let inference_response = http_client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        inference_response.status().is_success(),
+        "Inference request failed: status={:?}",
+        inference_response.status()
+    );
+
+    let inference_response: InferenceResponse = inference_response.json().await.unwrap();
+    let inference_id = inference_response.inference_id();
+
+    // Query the inference back
+    let res = get_inferences_by_ids(vec![inference_id], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
+
+    assert_eq!(res.len(), 1);
+
+    let StoredInference::Json(inference) = &res[0] else {
+        panic!("Expected Json inference");
+    };
+
+    // Assert the extra_body is correctly returned
+    let extra_body = inference.extra_body.as_slice();
+    assert_eq!(extra_body.len(), 2);
+
+    // Check the first extra_body entry (Always variant with pointer and value)
+    match &extra_body[0] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_test_field");
+            assert_eq!(*value, json!("json_test_value"));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Check the second extra_body entry (nested value)
+    match &extra_body[1] {
+        DynamicExtraBody::Always { pointer, value } => {
+            assert_eq!(pointer, "/json_nested/field");
+            assert_eq!(*value, json!({"key": "json_nested_value"}));
+        }
+        other => panic!("Expected Always variant, got {other:?}"),
+    }
+
+    // Assert the inference_params are correctly returned
+    let chat_completion_params = &inference.inference_params.chat_completion;
+    assert_eq!(chat_completion_params.temperature, Some(0.5));
+    assert_eq!(chat_completion_params.max_tokens, Some(200));
+    assert_eq!(chat_completion_params.top_p, Some(0.9));
+
+    // Assert processing_time_ms is present
+    assert!(
+        inference.processing_time_ms.is_some(),
+        "processing_time_ms should be present for a completed inference"
+    );
 }

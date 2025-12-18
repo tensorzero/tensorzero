@@ -21,10 +21,7 @@ This makes it easier to manage and maintain your configuration.
 For example, you can create separate TOML files for different projects, environments, and so on.
 You can also move deprecated entries like functions to a separate file.
 
-You can instruct TensorZero to load multiple configuration files by specifying a glob pattern that matches all the relevant TOML files:
-
-- **TensorZero Gateway:** Set the CLI flag `--config-path path/to/**/*.toml`.
-- **TensorZero UI:** Set the environment variable `TENSORZERO_UI_CONFIG_PATH=path/to/**/*.toml`.
+You can instruct TensorZero Gateway to load multiple configuration files by specifying a glob pattern that matches all the relevant TOML files by setting the CLI flag `--config-path path/to/**/*.toml`.
 
 Under the hood, TensorZero will concatenate the configuration files, with special handling for paths.
 For example, you can declare a model in one file and use it in a variant declared in another file.

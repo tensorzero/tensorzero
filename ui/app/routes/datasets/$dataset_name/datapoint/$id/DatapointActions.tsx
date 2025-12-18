@@ -4,7 +4,9 @@ import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { SaveButton } from "~/components/utils/SaveButton";
 import { CancelButton } from "~/components/utils/CancelButton";
+import { CloneDatapointButton } from "~/components/datapoint/CloneDatapointButton";
 import { useReadOnly } from "~/context/read-only";
+import type { Datapoint } from "~/types/tensorzero";
 
 interface DatapointActionsProps {
   variants: string[];
@@ -15,10 +17,12 @@ interface DatapointActionsProps {
   toggleEditing: () => void;
   onSave: () => void;
   canSave: boolean;
+  isSaving: boolean;
   isEditing: boolean;
   onReset: () => void;
   showTryWithButton: boolean;
   isStale: boolean;
+  datapoint: Datapoint;
 }
 
 export function DatapointActions({
@@ -30,10 +34,12 @@ export function DatapointActions({
   toggleEditing,
   onSave,
   canSave,
+  isSaving,
   isEditing,
   onReset,
   showTryWithButton,
   isStale,
+  datapoint,
 }: DatapointActionsProps) {
   const isReadOnly = useReadOnly();
   const handleCancel = () => {
@@ -49,10 +55,15 @@ export function DatapointActions({
           isLoading={variantInferenceIsLoading}
         />
       )}
+      {!isEditing && <CloneDatapointButton datapoint={datapoint} />}
       {isEditing ? (
         <>
-          <CancelButton onClick={handleCancel} />
-          <SaveButton disabled={!canSave || isReadOnly} onClick={onSave} />
+          <CancelButton onClick={handleCancel} disabled={isSaving} />
+          <SaveButton
+            disabled={!canSave || isReadOnly}
+            isLoading={isSaving}
+            onClick={onSave}
+          />
         </>
       ) : (
         <EditButton

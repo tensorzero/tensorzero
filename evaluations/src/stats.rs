@@ -9,7 +9,7 @@ use tensorzero_core::{endpoints::datasets::Datapoint, evaluations::EvaluatorConf
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::{evaluators, OutputFormat};
+use crate::{OutputFormat, evaluators};
 
 pub struct EvaluationStats {
     pub output_format: OutputFormat,
@@ -338,7 +338,7 @@ impl PerEvaluatorStats {
 
 #[cfg(test)]
 mod tests {
-    use super::{wilson_confint, PerEvaluatorStats};
+    use super::{PerEvaluatorStats, wilson_confint};
 
     #[test]
     fn test_wilson_confint_all_zeros() {

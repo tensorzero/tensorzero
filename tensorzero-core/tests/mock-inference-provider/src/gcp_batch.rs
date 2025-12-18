@@ -1,7 +1,7 @@
-use axum::{extract::Path, http::StatusCode, Json};
+use axum::{Json, extract::Path, http::StatusCode};
 use bytes::Bytes;
-use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::ObjectStore;
+use object_store::gcp::GoogleCloudStorageBuilder;
 use serde::Deserialize;
 use serde_json::json;
 use std::{
@@ -282,9 +282,10 @@ fn generate_batch_output(input_content: &[u8]) -> String {
 /// Detect the type of response needed and generate GCP Vertex parts
 fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_json::Value> {
     use crate::batch_response_generator::{
+        ToolCallSpec,
         gcp::{generate_function_call_parts, generate_json_parts, generate_text_parts},
         generate_json_object_from_schema, generate_simple_text_from_request, generate_tool_args,
-        generate_tool_result_summary, ToolCallSpec,
+        generate_tool_result_summary,
     };
 
     if let Some(summary) = generate_tool_result_summary(request) {
@@ -292,93 +293,91 @@ fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_js
     }
 
     // Check for JSON mode (generationConfig.responseMimeType)
-    if let Some(gen_config) = request.get("generationConfig") {
-        if let Some(mime_type) = gen_config.get("responseMimeType").and_then(|v| v.as_str()) {
-            if mime_type == "application/json" {
-                let schema = gen_config.get("responseSchema");
-                let json_obj = generate_json_object_from_schema(schema);
-                return generate_json_parts(&json_obj);
-            }
-        }
+    if let Some(gen_config) = request.get("generationConfig")
+        && let Some(mime_type) = gen_config.get("responseMimeType").and_then(|v| v.as_str())
+        && mime_type == "application/json"
+    {
+        let schema = gen_config.get("responseSchema");
+        let json_obj = generate_json_object_from_schema(schema);
+        return generate_json_parts(&json_obj);
     }
 
     // Check for tool/function use
-    if let Some(tools) = request.get("tools").and_then(|v| v.as_array()) {
-        if !tools.is_empty() {
-            // Check toolConfig.functionCallingConfig.mode
-            let mode = request
-                .get("toolConfig")
-                .and_then(|tc| tc.get("functionCallingConfig"))
-                .and_then(|fcc| fcc.get("mode"))
-                .and_then(|m| m.as_str())
-                .unwrap_or("auto");
+    if let Some(tools) = request.get("tools").and_then(|v| v.as_array())
+        && !tools.is_empty()
+    {
+        // Check toolConfig.functionCallingConfig.mode
+        let mode = request
+            .get("toolConfig")
+            .and_then(|tc| tc.get("functionCallingConfig"))
+            .and_then(|fcc| fcc.get("mode"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("auto");
 
-            match mode {
-                "none" => {
-                    // No function calls allowed
-                    return generate_text_parts(&generate_simple_text_from_request(request));
-                }
-                "any" => {
-                    // Must use a function
+        match mode {
+            "none" => {
+                // No function calls allowed
+                return generate_text_parts(&generate_simple_text_from_request(request));
+            }
+            "any" => {
+                // Must use a function
+                let tool_name = extract_first_tool_name(tools);
+                let args = generate_tool_args(&tool_name);
+                return generate_function_call_parts(&[ToolCallSpec {
+                    name: tool_name,
+                    args,
+                }]);
+            }
+            _ => {
+                // Use heuristics to decide
+                if should_use_functions_gcp(request, tools) {
+                    // Check for allowed function names (specific tools)
+                    if let Some(allowed_names) = request
+                        .get("toolConfig")
+                        .and_then(|tc| tc.get("functionCallingConfig"))
+                        .and_then(|fcc| fcc.get("allowedFunctionNames"))
+                        .and_then(|afn| afn.as_array())
+                        && !allowed_names.is_empty()
+                    {
+                        // Use the first allowed tool
+                        let tool_name = allowed_names[0].as_str().unwrap_or("unknown");
+                        let args = generate_tool_args(tool_name);
+                        return generate_function_call_parts(&[ToolCallSpec {
+                            name: tool_name.to_string(),
+                            args,
+                        }]);
+                    }
+
+                    // Check if multiple tools available (parallel calls)
+                    if tools.len() > 1 {
+                        let tool_specs: Vec<ToolCallSpec> = tools
+                            .iter()
+                            .take(2)
+                            .filter_map(|t| {
+                                t.get("functionDeclarations")
+                                    .and_then(|fd| fd.as_array())
+                                    .and_then(|arr| arr.first())
+                                    .and_then(|decl| decl.get("name"))
+                                    .and_then(|n| n.as_str())
+                            })
+                            .map(|name| ToolCallSpec {
+                                name: name.to_string(),
+                                args: generate_tool_args(name),
+                            })
+                            .collect();
+
+                        if !tool_specs.is_empty() {
+                            return generate_function_call_parts(&tool_specs);
+                        }
+                    }
+
+                    // Single tool call
                     let tool_name = extract_first_tool_name(tools);
                     let args = generate_tool_args(&tool_name);
                     return generate_function_call_parts(&[ToolCallSpec {
                         name: tool_name,
                         args,
                     }]);
-                }
-                _ => {
-                    // Use heuristics to decide
-                    if should_use_functions_gcp(request, tools) {
-                        // Check for allowed function names (specific tools)
-                        if let Some(allowed_names) = request
-                            .get("toolConfig")
-                            .and_then(|tc| tc.get("functionCallingConfig"))
-                            .and_then(|fcc| fcc.get("allowedFunctionNames"))
-                            .and_then(|afn| afn.as_array())
-                        {
-                            if !allowed_names.is_empty() {
-                                // Use the first allowed tool
-                                let tool_name = allowed_names[0].as_str().unwrap_or("unknown");
-                                let args = generate_tool_args(tool_name);
-                                return generate_function_call_parts(&[ToolCallSpec {
-                                    name: tool_name.to_string(),
-                                    args,
-                                }]);
-                            }
-                        }
-
-                        // Check if multiple tools available (parallel calls)
-                        if tools.len() > 1 {
-                            let tool_specs: Vec<ToolCallSpec> = tools
-                                .iter()
-                                .take(2)
-                                .filter_map(|t| {
-                                    t.get("functionDeclarations")
-                                        .and_then(|fd| fd.as_array())
-                                        .and_then(|arr| arr.first())
-                                        .and_then(|decl| decl.get("name"))
-                                        .and_then(|n| n.as_str())
-                                })
-                                .map(|name| ToolCallSpec {
-                                    name: name.to_string(),
-                                    args: generate_tool_args(name),
-                                })
-                                .collect();
-
-                            if !tool_specs.is_empty() {
-                                return generate_function_call_parts(&tool_specs);
-                            }
-                        }
-
-                        // Single tool call
-                        let tool_name = extract_first_tool_name(tools);
-                        let args = generate_tool_args(&tool_name);
-                        return generate_function_call_parts(&[ToolCallSpec {
-                            name: tool_name,
-                            args,
-                        }]);
-                    }
                 }
             }
         }
@@ -404,12 +403,11 @@ fn extract_first_tool_name(tools: &[serde_json::Value]) -> String {
 /// Heuristic to determine if functions should be used in AUTO mode
 fn should_use_functions_gcp(request: &serde_json::Value, tools: &[serde_json::Value]) -> bool {
     // Check if this is an inference params test (should NOT use tools)
-    if let Some(labels) = request.get("labels") {
-        if let Some(test_type) = labels.get("test_type").and_then(|t| t.as_str()) {
-            if test_type == "batch_inference_params" {
-                return false; // Don't use tools for params tests
-            }
-        }
+    if let Some(labels) = request.get("labels")
+        && let Some(test_type) = labels.get("test_type").and_then(|t| t.as_str())
+        && test_type == "batch_inference_params"
+    {
+        return false; // Don't use tools for params tests
     }
 
     // Get the last user message from contents
