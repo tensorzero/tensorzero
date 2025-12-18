@@ -18,7 +18,7 @@ import {
 import { useSearchParams, useNavigate, useFetcher } from "react-router";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
-import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRun } from "~/types/tensorzero";
 import WorkflowEvaluationRunBadge from "./WorkflowEvaluationRunBadge";
 
 interface WorkflowEvalRunSelectorProps {

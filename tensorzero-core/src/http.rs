@@ -13,12 +13,16 @@ use std::{
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use futures::Stream;
-use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use eventsource_stream::Eventsource;
+use futures::{Stream, StreamExt};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
-use reqwest::{Body, Response};
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{
+    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
+};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -294,26 +298,19 @@ pub struct TensorzeroRequestBuilder<'a> {
     ticket: LimitedClientTicket<'a>,
 }
 
-/// A wrapper type around `reqwest_eventsource::EventSource`.
+/// A wrapper type around an event source stream.
 /// Like `TensorzeroRequestBuilder`, this type holds on to a `LimitedClientTicket`,
 /// so that we can drop it when the stream is dropped (and hold on to it while
 /// we're still polling messages from the stream).
 #[pin_project]
 pub struct TensorZeroEventSource {
-    // We forward to this `EventSource` in our `Stream` impl
     #[pin]
-    source: EventSource,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
     // We deliberately hold this span open,
     // even across await points, as we want to track the total duration
     tensorzero_external_span: Span,
-}
-
-impl TensorZeroEventSource {
-    pub fn close(&mut self) {
-        self.source.close();
-    }
 }
 
 impl Stream for TensorZeroEventSource {
@@ -322,10 +319,8 @@ impl Stream for TensorZeroEventSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let _guard = this.span.enter();
-        // Just forward to the underlying `EventSource`, without doing anything else.
-        // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
-        // until the stream is dropped.
-        this.source.poll_next(cx)
+        // Just forward to the underlying `stream`, without doing anything else.
+        this.stream.poll_next(cx)
     }
 }
 
@@ -524,8 +519,9 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
     pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
         self = self.with_otlp_headers();
+        let event_source = self.builder.eventsource()?;
         Ok(TensorZeroEventSource {
-            source: self.builder.eventsource()?,
+            stream: Box::pin(event_source),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
             tensorzero_external_span: tracing::debug_span!(
@@ -533,6 +529,42 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
             ),
         })
+    }
+
+    pub async fn eventsource_with_headers(
+        mut self,
+    ) -> Result<
+        (TensorZeroEventSource, http::HeaderMap),
+        (ReqwestEventSourceError, Option<http::HeaderMap>),
+    > {
+        self = self.with_otlp_headers();
+        let ticket = self.ticket.into_owned();
+        let builder = self.builder.header(ACCEPT, "text/event-stream");
+        let response = builder
+            .send()
+            .instrument(tensorzero_h2_workaround_span())
+            .await
+            .map_err(|e| (ReqwestEventSourceError::Transport(e), None))?;
+
+        let headers = response.headers().clone();
+        let response =
+            validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
+        let stream = response.bytes_stream().eventsource().map(|event| {
+            event
+                .map(Event::Message)
+                .map_err(ReqwestEventSourceError::from)
+        });
+        // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
+        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+
+        Ok((
+            TensorZeroEventSource {
+                stream: Box::pin(stream),
+                ticket,
+                span: tensorzero_h2_workaround_span(),
+            },
+            headers,
+        ))
     }
 
     // This method preserves our ticket (by storing it in the `TensorzeroResponseWrapper`),
@@ -672,6 +704,40 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
             message: format!("Failed to build HTTP client: {e}"),
         })
     })
+}
+
+#[expect(clippy::result_large_err)]
+fn validate_event_stream_response(response: Response) -> Result<Response, ReqwestEventSourceError> {
+    match response.status() {
+        StatusCode::OK => {}
+        status => {
+            return Err(ReqwestEventSourceError::InvalidStatusCode(status, response));
+        }
+    }
+    let content_type = if let Some(content_type) = response.headers().get(&CONTENT_TYPE) {
+        content_type
+    } else {
+        return Err(ReqwestEventSourceError::InvalidContentType(
+            HeaderValue::from_static(""),
+            response,
+        ));
+    };
+    // Check if the media type (ignoring parameters like charset) is text/event-stream
+    if content_type
+        .to_str()
+        .map(|value| {
+            let media_type = value.split(';').next().unwrap_or("").trim();
+            media_type.eq_ignore_ascii_case("text/event-stream")
+        })
+        .unwrap_or(false)
+    {
+        Ok(response)
+    } else {
+        Err(ReqwestEventSourceError::InvalidContentType(
+            content_type.clone(),
+            response,
+        ))
+    }
 }
 
 #[cfg(test)]

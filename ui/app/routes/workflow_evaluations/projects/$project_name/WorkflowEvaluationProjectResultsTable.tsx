@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRun } from "~/types/tensorzero";
 
 import { useConfig } from "~/context/config";
 import {

@@ -98,3 +98,14 @@ pub struct WorkflowEvaluationRunWithEpisodeCount {
 pub struct CountWorkflowEvaluationRunsResponse {
     pub count: u32,
 }
+
+// =============================================================================
+// Get Workflow Evaluation Runs
+// =============================================================================
+
+/// Response containing a list of workflow evaluation runs by IDs.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetWorkflowEvaluationRunsResponse {
+    pub runs: Vec<WorkflowEvaluationRun>,
+}

@@ -14,6 +14,7 @@ import {
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
+  CountFeedbackByTargetIdResponse,
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
@@ -29,11 +30,13 @@ import type {
   GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
+  GetWorkflowEvaluationRunsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -1119,6 +1122,33 @@ export class TensorZeroClient {
   }
 
   /**
+   * Gets workflow evaluation runs by their IDs.
+   * @param runIds - Array of run IDs to fetch
+   * @param projectName - Optional project name to filter by
+   * @returns A promise that resolves with the workflow evaluation runs response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRuns(
+    runIds: string[],
+    projectName?: string,
+  ): Promise<GetWorkflowEvaluationRunsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_ids", runIds.join(","));
+    if (projectName) {
+      searchParams.append("project_name", projectName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/get-runs?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunsResponse;
+  }
+
+  /**
    * Lists inference metadata with optional cursor-based pagination and filtering.
    * @param params - Optional pagination and filter parameters
    * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
@@ -1290,6 +1320,24 @@ export class TensorZeroClient {
   }
 
   /**
+   * Queries feedback bounds for a given target ID.
+   * @param targetId - The target ID (inference_id or episode_id) to query feedback bounds for
+   * @returns A promise that resolves with the feedback bounds across all feedback types
+   * @throws Error if the request fails
+   */
+  async getFeedbackBoundsByTargetId(
+    targetId: string,
+  ): Promise<GetFeedbackBoundsResponse> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/bounds`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetFeedbackBoundsResponse;
+  }
+
+  /**
    * Queries the latest feedback ID for each metric for a given target.
    * @param targetId - The target ID (inference_id or episode_id) to query feedback for
    * @returns A promise that resolves with a mapping of metric names to their latest feedback IDs
@@ -1311,6 +1359,23 @@ export class TensorZeroClient {
         (entry): entry is [string, string] => entry[1] !== undefined,
       ),
     );
+  }
+
+  /**
+   * Queries the count of feedback for a given target ID.
+   * @param targetId - The target ID (inference_id or episode_id) to count feedback for
+   * @returns A promise that resolves with the feedback count
+   * @throws Error if the request fails
+   */
+  async countFeedbackByTargetId(targetId: string): Promise<number> {
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/count`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as CountFeedbackByTargetIdResponse;
+    return Number(body.count);
   }
 
   /**

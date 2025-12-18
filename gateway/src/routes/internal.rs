@@ -38,8 +38,16 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::get_feedback_by_target_id_handler),
         )
         .route(
+            "/internal/feedback/{target_id}/bounds",
+            get(endpoints::feedback::internal::get_feedback_bounds_by_target_id_handler),
+        )
+        .route(
             "/internal/feedback/{target_id}/latest-id-by-metric",
             get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/count",
+            get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
         )
         .route(
             "/internal/model_inferences/{inference_id}",
@@ -130,6 +138,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/workflow-evaluations/list-runs",
             get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/get-runs",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_runs_handler),
         )
         .route(
             "/internal/workflow-evaluations/runs/count",
