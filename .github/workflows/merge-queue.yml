@@ -57,6 +57,8 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG: sha-${{ github.sha }}
 
 jobs:
   live-tests:
