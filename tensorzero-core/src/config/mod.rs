@@ -92,7 +92,7 @@ pub fn skip_credential_validation() -> bool {
 }
 
 /// Runs the provider future with credential validation disabled
-/// This is safe to repeatedly nest (e.g. `with_skip_credential_validation(async move { with_skip_credential_validation(f).await })`)`,
+/// This is safe to repeatedly nest (e.g. `with_skip_credential_validation(async move { with_skip_credential_validation(f).await })`),
 /// the original credential validation behavior will be restored after the outermost future completes
 pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T {
     SKIP_CREDENTIAL_VALIDATION.scope((), f).await
@@ -998,7 +998,7 @@ async fn process_config_input(
 }
 
 /// In e2e test mode, we skip credential validation by default.
-/// This can be overridden by setting the `TENSORZERO_E2E_CREDENTIAL_VALIDATION` environment variable to `0`.
+/// This can be overridden by setting the `TENSORZERO_E2E_CREDENTIAL_VALIDATION` environment variable to `1`.
 /// Outside of e2e test mode, we leave the behavior unchanged (other parts of the codebase might still
 /// skip credential validation, e.g. when running in relay mode).
 pub fn e2e_skip_credential_validation() -> bool {
