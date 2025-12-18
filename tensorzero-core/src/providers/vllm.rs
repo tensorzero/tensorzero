@@ -220,6 +220,7 @@ impl InferenceProvider for VLLMProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -270,6 +271,7 @@ impl InferenceProvider for VLLMProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
             &raw_request,
         )
         .peekable();

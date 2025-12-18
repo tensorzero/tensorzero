@@ -10,7 +10,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
-use std::borrow::Cow;
+use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
@@ -64,8 +64,9 @@ use crate::tool::{
 };
 
 use crate::providers::helpers::{
-    convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource,
+    InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource_with_headers,
+    inject_extra_request_data_and_send_with_headers,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -359,6 +360,7 @@ impl WrappedProvider for OpenAIProvider {
             PROVIDER_TYPE.to_string(),
             event_source,
             start_time,
+            None,
             raw_request,
         )
     }
@@ -392,7 +394,11 @@ impl InferenceProvider for OpenAIProvider {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
-        let (res, raw_request) = inject_extra_request_data_and_send(
+        let InjectedResponse {
+            response: res,
+            raw_request,
+            headers,
+        } = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
             &request.request.extra_body,
             &request.request.extra_headers,
@@ -401,9 +407,16 @@ impl InferenceProvider for OpenAIProvider {
             request_body,
             request_builder,
         )
-        .await?;
+        .await
+        .map_err(|(e, headers)| {
+            let request_id = headers.as_ref().and_then(extract_request_id);
+            with_request_id(e, request_id.as_deref())
+        })?;
 
-        if res.status().is_success() {
+        let status = res.status();
+        let request_id = extract_request_id(&headers);
+
+        if status.is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -468,22 +481,33 @@ impl InferenceProvider for OpenAIProvider {
                     .try_into()?)
                 }
             }
+            .inspect(|response: &ProviderInferenceResponse| {
+                if response.output.is_empty() {
+                    tracing::warn!(
+                        provider = %PROVIDER_TYPE,
+                        request_id = request_id.as_deref(),
+                        "OpenAI non-streaming response returned no content blocks"
+                    );
+                }
+            })
         } else {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing error response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
             Err(handle_openai_error(
-                &raw_request.clone(),
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!(
-                            "Error parsing error response: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        raw_request: Some(raw_request),
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
+                &raw_request,
+                status,
+                &raw_response,
                 PROVIDER_TYPE,
+                request_id.as_deref(),
             ))
         }
     }
@@ -537,7 +561,11 @@ impl InferenceProvider for OpenAIProvider {
                     request_builder = request_builder.bearer_auth(api_key.expose_secret());
                 }
 
-                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                let InjectedResponse {
+                    response: event_source,
+                    raw_request,
+                    headers,
+                } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
                     &request.extra_body,
                     &request.extra_headers,
@@ -546,8 +574,13 @@ impl InferenceProvider for OpenAIProvider {
                     request_body,
                     request_builder,
                 )
-                .await?;
+                .await
+                .map_err(|(e, headers)| {
+                    let request_id = headers.as_ref().and_then(extract_request_id);
+                    with_request_id(e, request_id.as_deref())
+                })?;
 
+                let request_id = extract_request_id(&headers);
                 let stream = stream_openai_responses(
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
@@ -555,6 +588,7 @@ impl InferenceProvider for OpenAIProvider {
                     model_provider.discard_unknown_chunks,
                     model_name,
                     provider_name,
+                    request_id,
                     &raw_request,
                 )
                 .peekable();
@@ -581,7 +615,11 @@ impl InferenceProvider for OpenAIProvider {
                     request_builder = request_builder.bearer_auth(api_key.expose_secret());
                 }
 
-                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                let InjectedResponse {
+                    response: event_source,
+                    raw_request,
+                    headers,
+                } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
                     &request.extra_body,
                     &request.extra_headers,
@@ -590,12 +628,18 @@ impl InferenceProvider for OpenAIProvider {
                     request_body,
                     request_builder,
                 )
-                .await?;
+                .await
+                .map_err(|(e, headers)| {
+                    let request_id = headers.as_ref().and_then(extract_request_id);
+                    with_request_id(e, request_id.as_deref())
+                })?;
 
+                let request_id = extract_request_id(&headers);
                 let stream = stream_openai(
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
+                    request_id,
                     &raw_request,
                 )
                 .peekable();
@@ -948,6 +992,7 @@ impl EmbeddingProvider for OpenAIProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -957,21 +1002,32 @@ pub fn stream_openai(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    request_id: Option<String>,
     raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let raw_request = raw_request.to_string();
+    let mut saw_content_block = false;
+    let mut encountered_error = false;
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let request_id_for_error = match &e {
+                        TensorZeroEventError::TensorZero(_) => request_id.clone(),
+                        TensorZeroEventError::EventSource(inner) => {
+                            request_id.clone().or_else(|| request_id_from_event_source_error(inner))
+                        }
+                    };
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
-                            yield Err(e);
+                            encountered_error = true;
+                            yield Err(with_request_id(e, request_id_for_error.as_deref()));
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
+                            encountered_error = true;
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -982,23 +1038,37 @@ pub fn stream_openai(
                             break;
                         }
                         let data: Result<OpenAIChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!(
-                                    "Error parsing chunk. Error: {e}",
-                                ),
-                                raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
-                                provider_type: provider_type.clone(),
-                            }));
+                            serde_json::from_str(&message.data).map_err(|e| {
+                                let error_message = match &request_id {
+                                    Some(id) => format!("Error parsing chunk. Error: {e} [request_id: {id}]"),
+                                    None => format!("Error parsing chunk. Error: {e}"),
+                                };
+                                Error::new(ErrorDetails::InferenceServer {
+                                    message: error_message,
+                                    raw_request: Some(raw_request.clone()),
+                                    raw_response: Some(message.data.clone()),
+                                    provider_type: provider_type.clone(),
+                                })
+                            });
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
+                        if stream_message.as_ref().is_ok_and(|chunk| !chunk.content.is_empty()) {
+                            saw_content_block = true;
+                        }
                         yield stream_message;
                     }
                 },
             }
+        }
+        if !saw_content_block && !encountered_error {
+            tracing::warn!(
+                provider = %provider_type,
+                request_id = request_id.as_deref(),
+                "OpenAI streaming response returned no content blocks"
+            );
         }
     })
 }
@@ -1053,6 +1123,7 @@ impl OpenAIProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ));
         }
 
@@ -1123,26 +1194,97 @@ fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
+fn extract_request_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    headers
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned)
+}
+
+pub(super) fn request_id_from_event_source_error(
+    error: &reqwest_eventsource::Error,
+) -> Option<String> {
+    match error {
+        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
+        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+            extract_request_id(resp.headers())
+        }
+        _ => None,
+    }
+}
+
+/// Append a request_id to an error's message.
+/// Handles FatalStreamError, InferenceClient, and InferenceServer errors.
+/// Other error types are returned unchanged.
+pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
+    let Some(request_id) = request_id else {
+        return error;
+    };
+    match error.get_details() {
+        ErrorDetails::FatalStreamError {
+            message,
+            provider_type,
+            raw_request,
+            raw_response,
+        } => Error::new(ErrorDetails::FatalStreamError {
+            message: format!("{message} [request_id: {request_id}]"),
+            provider_type: provider_type.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        }),
+        ErrorDetails::InferenceClient {
+            status_code,
+            message,
+            raw_request,
+            raw_response,
+            provider_type,
+        } => Error::new(ErrorDetails::InferenceClient {
+            status_code: *status_code,
+            message: format!("{message} [request_id: {request_id}]"),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+            provider_type: provider_type.clone(),
+        }),
+        ErrorDetails::InferenceServer {
+            message,
+            raw_request,
+            raw_response,
+            provider_type,
+        } => Error::new(ErrorDetails::InferenceServer {
+            message: format!("{message} [request_id: {request_id}]"),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+            provider_type: provider_type.clone(),
+        }),
+        _ => error,
+    }
+}
+
 pub(super) fn handle_openai_error(
     raw_request: &str,
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
+    request_id: Option<&str>,
 ) -> Error {
+    let message = match request_id {
+        Some(id) => format!("{response_body} [request_id: {id}]"),
+        None => response_body.to_string(),
+    };
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
         | StatusCode::FORBIDDEN
         | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
             status_code: Some(response_code),
-            message: response_body.to_string(),
+            message,
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
-            message: response_body.to_string(),
+            message,
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
@@ -2998,12 +3140,13 @@ mod tests {
     fn test_handle_openai_error() {
         use reqwest::StatusCode;
 
-        // Test unauthorized error
+        // Test unauthorized error without request_id
         let unauthorized = handle_openai_error(
             "Request Body",
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
+            None,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3022,12 +3165,26 @@ mod tests {
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
         }
 
+        // Test unauthorized error with request_id
+        let unauthorized_with_id = handle_openai_error(
+            "Request Body",
+            StatusCode::UNAUTHORIZED,
+            "Unauthorized access",
+            PROVIDER_TYPE,
+            Some("req_abc123"),
+        );
+        let details = unauthorized_with_id.get_details();
+        if let ErrorDetails::InferenceClient { message, .. } = details {
+            assert_eq!(message, "Unauthorized access [request_id: req_abc123]");
+        }
+
         // Test forbidden error
         let forbidden = handle_openai_error(
             "Request Body",
             StatusCode::FORBIDDEN,
             "Forbidden access",
             PROVIDER_TYPE,
+            None,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3052,6 +3209,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
+            None,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3076,6 +3234,7 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
+            None,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -5337,6 +5496,77 @@ mod tests {
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 0);
             }
             _ => panic!("Expected AllowedTools variant with empty list"),
+        }
+    }
+
+    #[test]
+    fn test_with_request_id() {
+        // Test with FatalStreamError
+        let error = Error::new(ErrorDetails::FatalStreamError {
+            message: "Stream error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_123"));
+        if let ErrorDetails::FatalStreamError { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Stream error [request_id: req_123]");
+        } else {
+            panic!("Expected FatalStreamError");
+        }
+
+        // Test with InferenceClient
+        let error = Error::new(ErrorDetails::InferenceClient {
+            status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+            message: "Bad request".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_456"));
+        if let ErrorDetails::InferenceClient { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Bad request [request_id: req_456]");
+        } else {
+            panic!("Expected InferenceClient");
+        }
+
+        // Test with InferenceServer
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "Server error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_with_id = with_request_id(error, Some("req_789"));
+        if let ErrorDetails::InferenceServer { message, .. } = error_with_id.get_details() {
+            assert_eq!(message, "Server error [request_id: req_789]");
+        } else {
+            panic!("Expected InferenceServer");
+        }
+
+        // Test with None request_id - should return error unchanged
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "Server error".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+        let error_unchanged = with_request_id(error, None);
+        if let ErrorDetails::InferenceServer { message, .. } = error_unchanged.get_details() {
+            assert_eq!(message, "Server error");
+        } else {
+            panic!("Expected InferenceServer");
+        }
+
+        // Test with unsupported error type - should return unchanged
+        let error = Error::new(ErrorDetails::InvalidRequest {
+            message: "Invalid".to_string(),
+        });
+        let error_unchanged = with_request_id(error, Some("req_abc"));
+        if let ErrorDetails::InvalidRequest { message, .. } = error_unchanged.get_details() {
+            assert_eq!(message, "Invalid"); // unchanged
+        } else {
+            panic!("Expected InvalidRequest");
         }
     }
 }

@@ -390,7 +390,7 @@ fn stream_tgi(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                         }
                     }
                 }
