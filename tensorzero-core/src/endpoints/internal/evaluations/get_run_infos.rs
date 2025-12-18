@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
+use crate::function::{FunctionConfigType, get_function};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation run infos by IDs.
@@ -105,10 +106,15 @@ pub async fn get_evaluation_run_infos_for_datapoint_handler(
     Path(datapoint_id): Path<Uuid>,
     Query(params): Query<GetEvaluationRunInfosForDatapointParams>,
 ) -> Result<Json<GetEvaluationRunInfosResponse>, Error> {
+    // Look up the function config to determine the function type
+    let function_config = get_function(&app_state.config.functions, &params.function_name)?;
+    let function_type = function_config.config_type();
+
     let response = get_evaluation_run_infos_for_datapoint(
         &app_state.clickhouse_connection_info,
         &datapoint_id,
         &params.function_name,
+        function_type,
     )
     .await?;
 
@@ -120,9 +126,10 @@ pub async fn get_evaluation_run_infos_for_datapoint(
     clickhouse: &impl EvaluationQueries,
     datapoint_id: &Uuid,
     function_name: &str,
+    function_type: FunctionConfigType,
 ) -> Result<GetEvaluationRunInfosResponse, Error> {
     let run_infos_database = clickhouse
-        .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name)
+        .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name, function_type)
         .await?;
 
     let run_infos = run_infos_database
@@ -239,9 +246,13 @@ mod tests {
         let mut mock_clickhouse = MockEvaluationQueries::new();
         mock_clickhouse
             .expect_get_evaluation_run_infos_for_datapoint()
-            .withf(move |dp_id, fn_name| *dp_id == datapoint_id && fn_name == "test_function")
+            .withf(move |dp_id, fn_name, fn_type| {
+                *dp_id == datapoint_id
+                    && fn_name == "test_function"
+                    && *fn_type == FunctionConfigType::Chat
+            })
             .times(1)
-            .returning(move |_, _| {
+            .returning(move |_, _, _| {
                 Box::pin(async move {
                     Ok(vec![
                         EvaluationRunInfoByIdRow {
@@ -262,6 +273,7 @@ mod tests {
             &mock_clickhouse,
             &datapoint_id,
             "test_function",
+            FunctionConfigType::Chat,
         )
         .await
         .unwrap();
@@ -281,12 +293,16 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_run_infos_for_datapoint()
             .times(1)
-            .returning(|_, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _| Box::pin(async move { Ok(vec![]) }));
 
-        let result =
-            get_evaluation_run_infos_for_datapoint(&mock_clickhouse, &datapoint_id, "nonexistent")
-                .await
-                .unwrap();
+        let result = get_evaluation_run_infos_for_datapoint(
+            &mock_clickhouse,
+            &datapoint_id,
+            "nonexistent",
+            FunctionConfigType::Json,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.run_infos.len(), 0);
     }
@@ -300,9 +316,13 @@ mod tests {
         let mut mock_clickhouse = MockEvaluationQueries::new();
         mock_clickhouse
             .expect_get_evaluation_run_infos_for_datapoint()
-            .withf(move |dp_id, fn_name| *dp_id == datapoint_id && fn_name == "my_function")
+            .withf(move |dp_id, fn_name, fn_type| {
+                *dp_id == datapoint_id
+                    && fn_name == "my_function"
+                    && *fn_type == FunctionConfigType::Chat
+            })
             .times(1)
-            .returning(move |_, _| {
+            .returning(move |_, _, _| {
                 Box::pin(async move {
                     Ok(vec![EvaluationRunInfoByIdRow {
                         evaluation_run_id: eval_run_id,
@@ -312,10 +332,14 @@ mod tests {
                 })
             });
 
-        let result =
-            get_evaluation_run_infos_for_datapoint(&mock_clickhouse, &datapoint_id, "my_function")
-                .await
-                .unwrap();
+        let result = get_evaluation_run_infos_for_datapoint(
+            &mock_clickhouse,
+            &datapoint_id,
+            "my_function",
+            FunctionConfigType::Chat,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.run_infos.len(), 1);
         assert_eq!(result.run_infos[0].evaluation_run_id, eval_run_id);

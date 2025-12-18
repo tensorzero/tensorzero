@@ -242,7 +242,8 @@ async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
 async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
     let http_client = Client::new();
 
-    // Use a valid datapoint ID but with wrong function name
+    // Use a valid datapoint ID but with wrong function name - this will return an error since
+    // the function doesn't exist in the config
     let datapoint_id = "0196368e-0b64-7321-ab5b-c32eefbf3e9f";
 
     let url = get_gateway_endpoint(&format!(
@@ -252,17 +253,10 @@ async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
         + "?function_name=nonexistent_function";
 
     let resp = http_client.get(&url).send().await.unwrap();
+    // Now this returns an error because the function doesn't exist in the config
     assert!(
-        resp.status().is_success(),
-        "get_evaluation_run_infos_for_datapoint wrong function request failed: status={:?}",
+        resp.status().is_client_error(),
+        "get_evaluation_run_infos_for_datapoint wrong function request should fail: status={:?}",
         resp.status()
-    );
-
-    let response: GetEvaluationRunInfosResponse = resp.json().await.unwrap();
-
-    assert_eq!(
-        response.run_infos.len(),
-        0,
-        "Expected 0 evaluation run infos for wrong function"
     );
 }

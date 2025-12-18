@@ -2,6 +2,7 @@
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationQueries;
+use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
 
 // ============================================================================
@@ -126,7 +127,11 @@ async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
     let datapoint_id = Uuid::parse_str("0196368e-0b64-7321-ab5b-c32eefbf3e9f").expect("Valid UUID");
 
     let run_infos = clickhouse
-        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "extract_entities")
+        .get_evaluation_run_infos_for_datapoint(
+            &datapoint_id,
+            "extract_entities",
+            FunctionConfigType::Json,
+        )
         .await
         .unwrap();
 
@@ -147,7 +152,11 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
     let datapoint_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").expect("Valid UUID");
 
     let run_infos = clickhouse
-        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "write_haiku")
+        .get_evaluation_run_infos_for_datapoint(
+            &datapoint_id,
+            "write_haiku",
+            FunctionConfigType::Chat,
+        )
         .await
         .unwrap();
 
@@ -168,7 +177,11 @@ async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
         Uuid::parse_str("00000000-0000-0000-0000-000000000000").expect("Valid UUID");
 
     let run_infos = clickhouse
-        .get_evaluation_run_infos_for_datapoint(&nonexistent_id, "extract_entities")
+        .get_evaluation_run_infos_for_datapoint(
+            &nonexistent_id,
+            "extract_entities",
+            FunctionConfigType::Json,
+        )
         .await
         .unwrap();
 
@@ -188,7 +201,11 @@ async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
     let datapoint_id = Uuid::parse_str("0196368e-0b64-7321-ab5b-c32eefbf3e9f").expect("Valid UUID");
 
     let run_infos = clickhouse
-        .get_evaluation_run_infos_for_datapoint(&datapoint_id, "nonexistent_function")
+        .get_evaluation_run_infos_for_datapoint(
+            &datapoint_id,
+            "nonexistent_function",
+            FunctionConfigType::Json,
+        )
         .await
         .unwrap();
 

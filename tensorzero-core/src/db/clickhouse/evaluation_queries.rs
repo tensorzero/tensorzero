@@ -11,6 +11,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::error::Error;
+use crate::function::FunctionConfigType;
 
 // Private helper for constructing the subquery for datapoint IDs
 fn get_evaluation_result_datapoint_id_subquery(
@@ -241,34 +242,33 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         &self,
         datapoint_id: &uuid::Uuid,
         function_name: &str,
+        function_type: FunctionConfigType,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
-        let sql_query = r"
+        let inference_table_name = function_type.table_name();
+
+        let sql_query = format!(
+            r"
             WITH datapoint_inference_ids AS (
                 SELECT inference_id
                 FROM TagInference FINAL
                 WHERE key = 'tensorzero::datapoint_id'
-                AND value = {datapoint_id:String}
-                AND function_name = {function_name:String}
+                AND value = {{datapoint_id:String}}
             )
             SELECT
-                any(run_tag.value) as evaluation_run_id,
-                any(run_tag.variant_name) as variant_name,
+                any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                any(variant_name) as variant_name,
                 formatDateTime(
-                    max(UUIDv7ToDateTime(run_tag.inference_id)),
+                    max(UUIDv7ToDateTime(id)),
                     '%Y-%m-%dT%H:%i:%SZ'
                 ) as most_recent_inference_date
-            FROM TagInference AS run_tag FINAL
-            WHERE
-                run_tag.key = 'tensorzero::evaluation_run_id'
-                AND run_tag.inference_id IN (SELECT inference_id FROM datapoint_inference_ids)
-                AND run_tag.function_name = {function_name:String}
+            FROM {inference_table_name}
+            WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+            AND function_name = {{function_name:String}}
             GROUP BY
-                run_tag.value
-            ORDER BY
-                toUInt128(toUUID(evaluation_run_id)) DESC
+                tags['tensorzero::evaluation_run_id']
             FORMAT JSONEachRow
         "
-        .to_string();
+        );
 
         let datapoint_id_str = datapoint_id.to_string();
         let function_name_str = function_name.to_string();
@@ -294,6 +294,7 @@ mod tests {
         },
         evaluation_queries::EvaluationQueries,
     };
+    use crate::function::FunctionConfigType;
 
     use uuid::Uuid;
 
@@ -787,7 +788,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_evaluation_run_infos_for_datapoint() {
+    async fn test_get_evaluation_run_infos_for_datapoint_chat() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
 
         mock_clickhouse_client
@@ -800,24 +801,19 @@ mod tests {
                         FROM TagInference FINAL
                         WHERE key = 'tensorzero::datapoint_id'
                         AND value = {datapoint_id:String}
-                        AND function_name = {function_name:String}
                     )
                     SELECT
-                        any(run_tag.value) as evaluation_run_id,
-                        any(run_tag.variant_name) as variant_name,
+                        any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                        any(variant_name) as variant_name,
                         formatDateTime(
-                            max(UUIDv7ToDateTime(run_tag.inference_id)),
+                            max(UUIDv7ToDateTime(id)),
                             '%Y-%m-%dT%H:%i:%SZ'
                         ) as most_recent_inference_date
-                    FROM TagInference AS run_tag FINAL
-                    WHERE
-                        run_tag.key = 'tensorzero::evaluation_run_id'
-                        AND run_tag.inference_id IN (SELECT inference_id FROM datapoint_inference_ids)
-                        AND run_tag.function_name = {function_name:String}
+                    FROM ChatInference
+                    WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+                    AND function_name = {function_name:String}
                     GROUP BY
-                        run_tag.value
-                    ORDER BY
-                        toUInt128(toUUID(evaluation_run_id)) DESC
+                        tags['tensorzero::evaluation_run_id']
                     FORMAT JSONEachRow",
                 );
                 assert_eq!(
@@ -842,6 +838,71 @@ mod tests {
             .get_evaluation_run_infos_for_datapoint(
                 &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
                 "test_func",
+                FunctionConfigType::Chat,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].variant_name, "test_variant");
+        assert_eq!(
+            result[0].evaluation_run_id,
+            Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_run_infos_for_datapoint_json() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(
+                    query,
+                    "WITH datapoint_inference_ids AS (
+                        SELECT inference_id
+                        FROM TagInference FINAL
+                        WHERE key = 'tensorzero::datapoint_id'
+                        AND value = {datapoint_id:String}
+                    )
+                    SELECT
+                        any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
+                        any(variant_name) as variant_name,
+                        formatDateTime(
+                            max(UUIDv7ToDateTime(id)),
+                            '%Y-%m-%dT%H:%i:%SZ'
+                        ) as most_recent_inference_date
+                    FROM JsonInference
+                    WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+                    AND function_name = {function_name:String}
+                    GROUP BY
+                        tags['tensorzero::evaluation_run_id']
+                    FORMAT JSONEachRow",
+                );
+                assert_eq!(
+                    params.get("datapoint_id"),
+                    Some(&"0196ee9c-d808-74f3-8000-02ec7409b95d")
+                );
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_run_infos_for_datapoint(
+                &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                "test_func",
+                FunctionConfigType::Json,
             )
             .await
             .unwrap();
@@ -876,6 +937,7 @@ mod tests {
             .get_evaluation_run_infos_for_datapoint(
                 &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
                 "test_func",
+                FunctionConfigType::Chat,
             )
             .await
             .unwrap();
@@ -906,6 +968,7 @@ mod tests {
             .get_evaluation_run_infos_for_datapoint(
                 &Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
                 "nonexistent_func",
+                FunctionConfigType::Json,
             )
             .await
             .unwrap();
