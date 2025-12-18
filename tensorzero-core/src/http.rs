@@ -1,4 +1,5 @@
 use chrono::Duration;
+use http_body::{Frame, SizeHint};
 use once_cell::sync::OnceCell;
 use opentelemetry_http::HeaderInjector;
 use std::{
@@ -13,7 +14,7 @@ use tracing::Span;
 use tracing_futures::Instrument;
 
 use futures::Stream;
-use http::{HeaderMap, HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use pin_project::pin_project;
 use reqwest::{Body, Response};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
@@ -328,6 +329,94 @@ impl Stream for TensorZeroEventSource {
     }
 }
 
+/// A wrapper type around `reqwest::Response`
+/// We use this to extend the lifetime of a `Span`,
+/// and drop it when the response is fully consumed
+/// (e.g. after `text`) is called.
+///
+// At the moment, we don't actually store a Span - this will
+// be added in a future PR
+pub struct TensorzeroResponseWrapper {
+    /// IMPORTANT - do *not* directly expose this field.
+    /// Instead, add accessor methods to `TensorzeroResponseWrapper`,
+    /// so that the caller is forced to hold on to the entire `TensorzeroResponseWrapper`
+    /// until it gets 'consumed' (e.g. calling `text`)
+    response: Response,
+    /// We hold onto a ticket, since holding a `Response` still uses a logical HTTP connection
+    /// (since the body will not be read until `text` is called)
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[pin_project]
+/// A wrapper over a `reqwest::Body` that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the body is fully consumed
+/// (since the underlying HTTP connection is still in use as long as we're reading data from the body)
+pub struct TensorzeroBodyWrapper {
+    #[pin]
+    body: reqwest::Body,
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[deny(clippy::missing_trait_methods)]
+impl http_body::Body for TensorzeroBodyWrapper {
+    type Data = <reqwest::Body as http_body::Body>::Data;
+    type Error = <reqwest::Body as http_body::Body>::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        self.project().body.poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.body.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.body.size_hint()
+    }
+}
+
+impl TensorzeroResponseWrapper {
+    pub fn status(&self) -> StatusCode {
+        self.response.status()
+    }
+
+    pub fn headers(&self) -> &HeaderMap {
+        self.response.headers()
+    }
+
+    pub fn error_for_status_ref(&self) -> Result<&Self, reqwest::Error> {
+        self.response.error_for_status_ref()?;
+        Ok(self)
+    }
+
+    // These methods consume the `TensorzeroResponseWrapper`,
+    // and drop the ticket. They do *not* give the caller ownership of `self.response`
+    pub async fn text(self) -> Result<String, reqwest::Error> {
+        self.response.text().await
+    }
+
+    pub async fn json<T: DeserializeOwned>(self) -> Result<T, reqwest::Error> {
+        self.response.json().await
+    }
+
+    pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
+        self.response.bytes().await
+    }
+
+    /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.
+    /// preserving our `LimitedClientTicket` until the body is fully consumed
+    pub fn into_http_response(self) -> http::Response<TensorzeroBodyWrapper> {
+        let resp: http::Response<reqwest::Body> = self.response.into();
+        resp.map(|body| TensorzeroBodyWrapper {
+            body,
+            ticket: self.ticket,
+        })
+    }
+}
+
 // Workaround for https://github.com/hyperium/h2/issues/763
 // The 'h2' crate creates a long-lived span for outgoing HTTP connections.
 // Due to connection pooling, these spans can live for a long time -
@@ -446,15 +535,20 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         })
     }
 
-    // This method takes an owned `self`, so we'll drop `self.ticket` when this method
-    // returns (after we've gotten a response)
+    // This method preserves our ticket (by storing it in the `TensorzeroResponseWrapper`),
+    // since holding a `Reponse` still requires an active connection (since the
+    // body will not be read until `text()` is called)
     #[tracing::instrument(skip_all, fields({ TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true))]
-    pub async fn send(mut self) -> Result<Response, reqwest::Error> {
+    pub async fn send(mut self) -> Result<TensorzeroResponseWrapper, reqwest::Error> {
         self = self.with_otlp_headers();
-        self.builder
-            .send()
-            .instrument(tensorzero_h2_workaround_span())
-            .await
+        Ok(TensorzeroResponseWrapper {
+            response: self
+                .builder
+                .send()
+                .instrument(tensorzero_h2_workaround_span())
+                .await?,
+            ticket: self.ticket.into_owned(),
+        })
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
@@ -656,6 +750,18 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), 200);
 
+        // We should still have a request in-flight while we're holding the `Response`'
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            1
+        );
+
+        // Drop the response, and verify that the counter is now zero (and that no other clients were used)
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             if i == 0 {
                 assert_eq!(
@@ -753,6 +859,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             assert_eq!(
                 client_cell.get().is_some(),
