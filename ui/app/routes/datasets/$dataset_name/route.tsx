@@ -1,8 +1,6 @@
 import type { Route } from "./+types/route";
-import DatasetRowTable from "./DatasetRowTable";
+import DatasetRowTable, { type DatasetRowsData } from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import { useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
 import {
   PageHeader,
@@ -26,10 +24,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const limit = Number(url.searchParams.get("limit")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
   const rowsAddedParam = url.searchParams.get("rowsAdded");
-  const rowsSkippedParam = url.searchParams.get("rowsSkipped");
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
-  const rowsSkipped =
-    rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
   const function_name = url.searchParams.get("function_name") || undefined;
   const search_query = url.searchParams.get("search_query") || undefined;
   const filterParam = url.searchParams.get("filter");
@@ -46,34 +41,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [datasetMetadata, getDatapointsResponse] = await Promise.all([
-    getTensorZeroClient().listDatasets({}),
-    getTensorZeroClient().listDatapoints(dataset_name, {
+  // Promise for count (streams to PageHeader)
+  const countPromise = getTensorZeroClient()
+    .listDatasets({})
+    .then((response) => {
+      const info = response.datasets.find(
+        (d) => d.dataset_name === dataset_name,
+      );
+      if (!info) {
+        throw Error("Dataset not found");
+      }
+      return info.datapoint_count;
+    });
+
+  // Promise for table data (streams to DatasetRowTable)
+  const dataPromise: Promise<DatasetRowsData> = (async () => {
+    const response = await getTensorZeroClient().listDatapoints(dataset_name, {
       limit: limit + 1, // Request one extra to check if there are more
       offset,
       function_name,
       search_query_experimental:
         search_query && search_query.length > 0 ? search_query : undefined,
       filter,
-    }),
-  ]);
-  const count_info = datasetMetadata.datasets.find(
-    (dataset) => dataset.dataset_name === dataset_name,
-  );
-  if (!count_info) {
-    throw data("Dataset not found", { status: 404 });
-  }
-  const allRows = getDatapointsResponse.datapoints;
-  const hasMore = allRows.length > limit;
-  const rows = hasMore ? allRows.slice(0, limit) : allRows;
+    });
+    const allRows = response.datapoints;
+    const hasMore = allRows.length > limit;
+    const rows = hasMore ? allRows.slice(0, limit) : allRows;
+    return { rows, hasMore };
+  })();
+
   return {
-    rows,
-    hasMore,
-    count_info,
+    dataset_name,
+    countPromise,
+    dataPromise,
     limit,
     offset,
     rowsAdded,
-    rowsSkipped,
     function_name,
     search_query,
     filter,
@@ -138,13 +141,12 @@ export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
   const {
-    rows,
-    hasMore,
-    count_info,
+    dataset_name,
+    countPromise,
+    dataPromise,
     limit,
     offset,
     rowsAdded,
-    rowsSkipped,
     function_name,
     search_query,
     filter,
@@ -152,20 +154,18 @@ export default function DatasetDetailPage({
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
   const fetcher = useFetcher();
-  const navigate = useNavigate();
 
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
     if (rowsAdded !== null) {
       const { dismiss } = toast.success({
         title: "Dataset Updated",
-        description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
+        description: `Added ${rowsAdded} rows to the dataset.`,
       });
       return () => dismiss({ immediate: true });
     }
     return;
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
   const handleDelete = () => {
@@ -173,24 +173,10 @@ export default function DatasetDetailPage({
     formData.append("action", "delete");
     fetcher.submit(formData, { method: "post" });
   };
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
 
   return (
     <PageLayout>
-      <PageHeader
-        heading={`Dataset`}
-        name={count_info.dataset_name}
-        count={count_info.datapoint_count}
-      >
+      <PageHeader heading={`Dataset`} name={dataset_name} count={countPromise}>
         <div className="flex justify-start">
           <DeleteButton
             onClick={handleDelete}
@@ -201,19 +187,15 @@ export default function DatasetDetailPage({
       </PageHeader>
 
       <SectionLayout>
-        <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
+        <DatasetRowSearchBar dataset_name={dataset_name} />
         <DatasetRowTable
-          rows={rows}
-          dataset_name={count_info.dataset_name}
+          data={dataPromise}
+          dataset_name={dataset_name}
+          limit={limit}
+          offset={offset}
           function_name={function_name}
           search_query={search_query}
           filter={filter}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset === 0}
-          disableNext={!hasMore}
         />
       </SectionLayout>
     </PageLayout>

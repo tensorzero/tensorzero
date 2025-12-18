@@ -45,8 +45,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams,
+    DatasetQueries, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::stored_datapoint::{
@@ -54,13 +53,13 @@ pub use tensorzero_core::db::stored_datapoint::{
 };
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
-    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
-    DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
-    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
-    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
-    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
+    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
+    GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
+    UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -70,6 +69,9 @@ pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
     InferenceResponseChunk, InferenceStream,
+};
+pub use tensorzero_core::endpoints::internal::action::{
+    ActionInput, ActionInputInfo, ActionResponse,
 };
 pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
@@ -104,6 +106,7 @@ pub use tensorzero_optimizers::endpoints::{
 };
 
 // Keep git module for Git-related extension traits
+#[cfg(feature = "git")]
 mod git;
 
 #[cfg(feature = "e2e_tests")]
@@ -113,6 +116,7 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
+#[cfg(feature = "git")]
 use crate::git::GitInfo;
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
@@ -354,7 +358,6 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
     // ================================================================
@@ -462,6 +465,28 @@ pub trait ClientExt {
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
     // ================================================================
+    // Action operations
+    // ================================================================
+
+    /// Executes an action (inference or feedback) using a historical config snapshot.
+    ///
+    /// This allows replaying actions with the exact configuration that was used
+    /// at the time the snapshot was created.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The action parameters including the snapshot hash and action type.
+    ///
+    /// # Returns
+    ///
+    /// An `ActionResponse` containing either an inference or feedback response.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError>;
+
+    // ================================================================
     // Config access
     // ================================================================
     fn config(&self) -> Option<&Config>;
@@ -545,6 +570,36 @@ impl ClientExt for Client {
         }
     }
 
+    async fn action(&self, params: ActionInputInfo) -> Result<ActionResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/action").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/action endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::internal::action::action(
+                        &gateway.handle.app_state,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
     /// Gets the config from the embedded gateway
     /// Returns None for HTTP gateway mode
     fn config(&self) -> Option<&Config> {
@@ -596,6 +651,7 @@ impl ClientExt for Client {
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
         // Apply the git information to the tags so it gets stored for our workflow evaluation run
+        #[cfg(feature = "git")]
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
@@ -1043,12 +1099,8 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
-        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError> {
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
+        let request = CreateDatapointsFromInferenceRequest { params };
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/from_inferences")).map_err(|e| TensorZeroError::Other {

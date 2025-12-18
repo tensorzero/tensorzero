@@ -51,3 +51,53 @@ pub struct EvaluationRunInfo {
     pub variant_name: String,
     pub last_inference_timestamp: DateTime<Utc>,
 }
+
+// =============================================================================
+// Count Datapoints for Evaluation
+// =============================================================================
+
+/// Query parameters for counting datapoints across evaluation runs.
+#[derive(Debug, Deserialize)]
+pub struct CountDatapointsParams {
+    pub function_name: String,
+    /// Comma-separated list of evaluation run IDs
+    pub evaluation_run_ids: String,
+}
+
+/// Response containing the count of unique datapoints.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct DatapointStatsResponse {
+    pub count: u64,
+}
+
+// =============================================================================
+// Search Evaluation Runs
+// =============================================================================
+
+/// Query parameters for searching evaluation runs.
+#[derive(Debug, Deserialize)]
+pub struct SearchEvaluationRunsParams {
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub query: String,
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+    #[serde(default)]
+    pub offset: u32,
+}
+
+/// Response containing search results for evaluation runs.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SearchEvaluationRunsResponse {
+    pub results: Vec<SearchEvaluationRunResult>,
+}
+
+/// A single search result for an evaluation run.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct SearchEvaluationRunResult {
+    pub evaluation_run_id: Uuid,
+    pub variant_name: String,
+}

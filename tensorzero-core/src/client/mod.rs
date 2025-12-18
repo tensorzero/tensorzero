@@ -6,6 +6,7 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
+use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -83,8 +84,8 @@ pub struct HTTPGateway {
 impl HTTPGateway {
     pub async fn check_http_response(
         &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response, TensorZeroError> {
+        resp: Result<TensorzeroResponseWrapper, reqwest::Error>,
+    ) -> Result<TensorzeroResponseWrapper, TensorZeroError> {
         let resp = resp.map_err(|e| {
             if e.is_timeout() {
                 TensorZeroError::RequestTimeout
@@ -327,6 +328,7 @@ pub enum TensorZeroError {
         source: TensorZeroInternalError,
     },
     RequestTimeout,
+    #[cfg(feature = "git")]
     Git {
         #[source]
         source: git2::Error,
@@ -349,6 +351,7 @@ impl Display for TensorZeroError {
             }
             TensorZeroError::Other { source } => write!(f, "{source}"),
             TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
+            #[cfg(feature = "git")]
             TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
         }
     }

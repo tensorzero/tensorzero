@@ -1,21 +1,20 @@
-use pin_project::pinned_drop;
-
 pub type DoneCallback = Box<dyn FnOnce(BytesMut) + Send + Sync>;
 
 /// A helper type that runs a callback once the whole body has been received.
 /// Unlike `Collected`, this clones the frames we receive from the underlying body,
 /// while still forwarding them to the caller. This allows it to be used with streaming bodies
 /// without causing the entire stream to block.
-#[pin_project::pin_project(PinnedDrop)]
+#[pin_project::pin_project]
 pub struct StreamingBodyCollector<T> {
     #[pin]
     body: T,
     buffer: BytesMut,
-    done_callback: Option<DoneCallback>,
+    done_callback: Mutex<Option<DoneCallback>>,
 }
 
 use std::{
     pin::Pin,
+    sync::Mutex,
     task::{Context, Poll, ready},
 };
 
@@ -27,7 +26,19 @@ impl<T> StreamingBodyCollector<T> {
         Self {
             body,
             buffer: BytesMut::new(),
-            done_callback: Some(cb),
+            done_callback: Mutex::new(Some(cb)),
+        }
+    }
+
+    fn run_done_callback(&self) {
+        let callback = {
+            self.done_callback
+                .lock()
+                .expect("done_callback mutex poisoned")
+                .take()
+        };
+        if let Some(cb) = callback {
+            cb(self.buffer.clone());
         }
     }
 }
@@ -48,11 +59,6 @@ where
         let frame = ready!(frame);
         match &frame {
             Some(Ok(frame)) => {
-                assert!(
-                    !this.done_callback.is_none(),
-                    "poll_frame got frame after done_callback was called"
-                );
-
                 if let Some(data) = frame.data_ref() {
                     this.buffer.extend(data);
                 } else {
@@ -60,16 +66,11 @@ where
                     panic!("Unexpected frame: {frame:?}");
                 }
                 if self.body.is_end_stream() {
-                    let this = self.project();
-                    if let Some(cb) = this.done_callback.take() {
-                        cb(this.buffer.clone());
-                    }
+                    self.run_done_callback();
                 }
             }
             None => {
-                if let Some(cb) = this.done_callback.take() {
-                    cb(self.buffer.clone());
-                }
+                self.run_done_callback();
             }
             _ => {}
         }
@@ -77,20 +78,15 @@ where
     }
 
     fn is_end_stream(&self) -> bool {
-        self.body.is_end_stream()
+        // 'poll_frame' might not be called again if this returns 'true', so run our callback now
+        let ended = self.body.is_end_stream();
+        if ended {
+            self.run_done_callback();
+        }
+        ended
     }
 
     fn size_hint(&self) -> SizeHint {
         self.body.size_hint()
-    }
-}
-
-#[pinned_drop]
-impl<T> PinnedDrop for StreamingBodyCollector<T> {
-    fn drop(self: Pin<&mut Self>) {
-        let this = self.project();
-        if let Some(cb) = this.done_callback.take() {
-            cb(this.buffer.clone());
-        }
     }
 }

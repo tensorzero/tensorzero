@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob, unwritten::UnwrittenConfig};
+use crate::config::{Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
@@ -134,6 +134,8 @@ pub struct AppStateData {
     pub deferred_tasks: TaskTracker,
     /// Optional cache for TensorZero API key authentication
     pub auth_cache: Option<Cache<String, AuthResult>>,
+    /// Optional cache for historical config snapshots loaded from ClickHouse
+    pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -217,6 +219,7 @@ impl GatewayHandle {
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
+                config_snapshot_cache: None,
                 _private: (),
             },
             cancel_token,
@@ -262,6 +265,15 @@ impl GatewayHandle {
                 .await?;
         }
         let auth_cache = create_auth_cache_from_config(&config);
+
+        // Create config snapshot cache with TTL of 5 minutes and max 100 entries
+        let config_snapshot_cache = Some(
+            Cache::builder()
+                .time_to_live(Duration::from_secs(300))
+                .max_capacity(10)
+                .build(),
+        );
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -270,12 +282,37 @@ impl GatewayHandle {
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
+                config_snapshot_cache,
                 _private: (),
             },
             cancel_token,
             drop_wrapper,
             _private: (),
         })
+    }
+}
+
+impl AppStateData {
+    /// Create an AppStateData for use with a historical config snapshot.
+    /// This version does not include auth_cache or config_snapshot_cache
+    /// since those are specific to the live gateway.
+    pub fn new_for_snapshot(
+        config: Arc<Config>,
+        http_client: TensorzeroHttpClient,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        deferred_tasks: TaskTracker,
+    ) -> Self {
+        Self {
+            config,
+            http_client,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            deferred_tasks,
+            auth_cache: None,
+            config_snapshot_cache: None,
+            _private: (),
+        }
     }
 }
 

@@ -75,4 +75,7 @@ pub trait InferenceStatsQueries {
         &self,
         params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
     ) -> Result<u64, Error>;
+
+    /// Counts the number of inferences for an episode.
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error>;
 }

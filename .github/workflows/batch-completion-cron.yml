@@ -219,7 +219,7 @@ jobs:
                   Request(
                       custom_id='my-first-request',
                       params=MessageCreateParamsNonStreaming(
-                          model='claude-3-7-sonnet-20250219',
+                          model='claude-sonnet-4-5-20250929',
                           max_tokens=1024,
                           messages=[{
                               'role': 'user',

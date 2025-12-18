@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use futures::future::try_join_all;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -190,7 +191,7 @@ impl DiclConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
@@ -858,7 +859,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode().cloned(),
+            self.json_mode().copied(),
             extra_body,
             extra_headers,
         )

@@ -6,10 +6,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
 use super::TableBounds;
 use crate::serde_util::deserialize_u64;
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait FeedbackQueries {
     /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
     async fn get_feedback_by_variant(
@@ -91,6 +95,12 @@ pub trait FeedbackQueries {
         inference_table: &str,
         variant_name: Option<&str>,
     ) -> Result<Vec<MetricWithFeedback>, Error>;
+
+    /// Query the latest feedback ID for each metric for a given target
+    async fn query_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<LatestFeedbackRow>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -227,7 +237,11 @@ pub struct FeedbackBoundsByType {
 pub struct MetricWithFeedback {
     pub function_name: String,
     pub metric_name: String,
-    pub metric_type: MetricType,
+    /// The type of metric (boolean, float, demonstration).
+    /// None if the metric is not in the current config (e.g., was deleted).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub metric_type: Option<MetricType>,
     pub feedback_count: u32,
 }
 
@@ -238,4 +252,10 @@ pub enum MetricType {
     Boolean,
     Float,
     Demonstration,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LatestFeedbackRow {
+    pub metric_name: String,
+    pub latest_id: String,
 }
