@@ -7,7 +7,7 @@ import {
 import Chip from "~/components/ui/Chip";
 import { Calendar } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
-import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRunWithEpisodeCount } from "~/types/tensorzero";
 import KVChip from "~/components/ui/KVChip";
 import { CommitHash } from "~/components/ui/CommitHash";
 import {
@@ -31,7 +31,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 };
 
 interface BasicInfoProps {
-  workflowEvaluationRun: WorkflowEvaluationRun;
+  workflowEvaluationRun: WorkflowEvaluationRunWithEpisodeCount;
   count: number;
 }
 
@@ -89,8 +89,9 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Variant Pins</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <div className="flex flex-wrap gap-1">
-            {Object.entries(workflowEvaluationRun.variant_pins).map(
-              ([k, v]) => (
+            {Object.entries(workflowEvaluationRun.variant_pins)
+              .filter((entry): entry is [string, string] => entry[1] != null)
+              .map(([k, v]) => (
                 <KVChip
                   key={k}
                   k={k}
@@ -98,8 +99,7 @@ export default function BasicInfo({
                   k_href={toFunctionUrl(k)}
                   v_href={toVariantUrl(k, v)}
                 />
-              ),
-            )}
+              ))}
           </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
@@ -108,7 +108,11 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Git Commit</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <CommitHash tags={workflowEvaluationRun.tags} />
+            <CommitHash
+              tags={
+                workflowEvaluationRun.tags as unknown as Record<string, string>
+              }
+            />
           </BasicInfoItemContent>
         </BasicInfoItem>
       )}
@@ -118,9 +122,11 @@ export default function BasicInfo({
           <BasicInfoItemTitle>Tags</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <div className="flex flex-wrap gap-1">
-              {filteredTags.map(([k, v]) => (
-                <KVChip key={k} k={k} v={v} />
-              ))}
+              {filteredTags
+                .filter((entry): entry is [string, string] => entry[1] != null)
+                .map(([k, v]) => (
+                  <KVChip key={k} k={k} v={v} />
+                ))}
             </div>
           </BasicInfoItemContent>
         </BasicInfoItem>

@@ -256,6 +256,7 @@ impl InferenceProvider for TogetherProvider {
                 status,
                 &raw_response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -714,8 +715,6 @@ fn stream_together(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

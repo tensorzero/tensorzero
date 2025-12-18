@@ -2,7 +2,6 @@ import { createRequire } from "module";
 import type {
   CacheEnabledMode,
   ClientInferenceParams,
-  DatasetQueryParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -12,9 +11,6 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  FeedbackBounds,
-  QueryFeedbackBoundsByTargetIdParams,
-  CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
   GetCumulativeFeedbackTimeseriesParams,
@@ -222,17 +218,6 @@ export class DatabaseClient {
     return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
   }
 
-  async queryFeedbackBoundsByTargetId(
-    params: QueryFeedbackBoundsByTargetIdParams,
-  ): Promise<FeedbackBounds> {
-    const paramsString = safeStringify(params);
-    const boundsString =
-      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
-        paramsString,
-      );
-    return JSON.parse(boundsString) as FeedbackBounds;
-  }
-
   async getCumulativeFeedbackTimeseries(
     params: GetCumulativeFeedbackTimeseriesParams,
   ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
@@ -244,33 +229,6 @@ export class DatabaseClient {
     return JSON.parse(
       feedbackTimeseriesString,
     ) as CumulativeFeedbackTimeSeriesPoint[];
-  }
-
-  async countFeedbackByTargetId(
-    params: CountFeedbackByTargetIdParams,
-  ): Promise<number> {
-    const paramsString = safeStringify(params);
-    const countString =
-      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
-    return JSON.parse(countString) as number;
-  }
-
-  async countRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.countRowsForDataset(paramsString);
-    return result;
-  }
-
-  async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
-    return result;
-  }
-
-  async countDatasets(): Promise<number> {
-    return this.nativeDatabaseClient.countDatasets();
   }
 
   async getFeedbackByVariant(

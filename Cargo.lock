@@ -278,6 +278,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "autopilot-client"
+version = "2025.12.4"
+dependencies = [
+ "chrono",
+ "futures",
+ "reqwest",
+ "reqwest-eventsource",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tensorzero-core",
+ "thiserror 2.0.17",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "av-scenechange"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1751,6 +1768,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
+name = "durable"
+version = "0.1.0"
+source = "git+https://github.com/tensorzero/durable?rev=a0df128dd225e4729433230880f6111a946ba4fe#a0df128dd225e4729433230880f6111a946ba4fe"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "chrono",
+ "futures",
+ "hostname",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "sqlx 0.9.0-alpha.1",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1892,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1994,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2240,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "axum",
  "clap",
@@ -2582,6 +2620,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "hostname"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-link",
 ]
 
 [[package]]
@@ -3446,7 +3495,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "minijinja",
  "serde",
@@ -4632,7 +4681,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5639,6 +5688,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
+ "uuid",
  "webpki-roots 0.26.11",
 ]
 
@@ -5802,6 +5852,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.17",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -5878,6 +5929,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.17",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -5930,6 +5982,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -6161,7 +6214,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "axum",
  "chrono",
@@ -6181,7 +6234,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6202,6 +6255,7 @@ dependencies = [
  "clap",
  "clarabel",
  "derive_builder 0.20.2",
+ "durable",
  "enum-map",
  "eventsource-stream",
  "futures",
@@ -6294,7 +6348,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "evaluations",
  "napi",
@@ -6313,7 +6367,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "async-trait",
  "axum",
@@ -6346,7 +6400,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.12.3"
+version = "2025.12.4"
 dependencies = [
  "evaluations",
  "futures",
@@ -6364,7 +6418,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2025.12.3"
+version = "2025.12.4"
 
 [[package]]
 name = "termcolor"

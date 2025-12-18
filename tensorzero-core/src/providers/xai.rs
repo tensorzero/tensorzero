@@ -230,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                 status,
                 &response,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -281,6 +282,7 @@ impl InferenceProvider for XAIProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            None,
             &raw_request,
         )
         .peekable();
