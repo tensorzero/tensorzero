@@ -181,6 +181,8 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
+    /// No output - used when creating datapoints without output.
+    None,
     /// The inference output is the original output from the inference.
     #[default]
     Inference,
@@ -193,6 +195,7 @@ impl TryFrom<&str> for InferenceOutputSource {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
+            "none" => Ok(InferenceOutputSource::None),
             "inference" => Ok(InferenceOutputSource::Inference),
             "demonstration" => Ok(InferenceOutputSource::Demonstration),
             _ => Err(Error::new(ErrorDetails::InvalidInferenceOutputSource {
@@ -290,6 +293,22 @@ pub struct ListInferenceMetadataParams {
     pub episode_id: Option<Uuid>,
 }
 
+/// Parameters for a CountInferences query.
+/// Similar to ListInferencesParams but without pagination fields since we only need a count.
+#[derive(Debug, Clone, Default)]
+pub struct CountInferencesParams<'a> {
+    /// Function name to query. If provided, only inferences from this function will be counted.
+    pub function_name: Option<&'a str>,
+    /// Variant name to query.
+    pub variant_name: Option<&'a str>,
+    /// Episode ID to query.
+    pub episode_id: Option<&'a Uuid>,
+    /// Filters to apply to the query.
+    pub filters: Option<&'a InferenceFilter>,
+    /// Experimental: search query to filter inferences by.
+    pub search_query_experimental: Option<&'a str>,
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -305,4 +324,11 @@ pub trait InferenceQueries {
         &self,
         params: &ListInferenceMetadataParams,
     ) -> Result<Vec<InferenceMetadata>, Error>;
+
+    /// Count inferences matching the given parameters.
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &CountInferencesParams<'_>,
+    ) -> Result<u64, Error>;
 }

@@ -31,21 +31,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   const episode_id = url.searchParams.get("episode_id") || undefined;
   const search_query = url.searchParams.get("search_query") || undefined;
 
-  // Parse JSON filter if present
-  const filterParam = url.searchParams.get("filter");
-  let filter: InferenceFilter | undefined;
-  if (filterParam) {
+  // Parse JSON filters if present
+  const filtersParam = url.searchParams.get("filters");
+  let filters: InferenceFilter | undefined;
+  if (filtersParam) {
     try {
-      filter = JSON.parse(filterParam) as InferenceFilter;
+      filters = JSON.parse(filtersParam) as InferenceFilter;
     } catch {
-      // Invalid JSON - ignore filter
-      filter = undefined;
+      // Invalid JSON - ignore filters
+      filters = undefined;
     }
   }
 
   // Only need the slow path for search queries and advanced filters
   // The fast listInferenceMetadata endpoint now supports function_name, variant_name, and episode_id
-  const needsFullInferences = search_query || filter;
+  const needsFullInferences = search_query || filters;
 
   // Create promise for total count - will be streamed to the component
   const totalInferencesPromise = countInferencesByFunction().then(
@@ -85,7 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       function_name,
       variant_name,
       episode_id,
-      filter,
+      filters,
       search_query,
     });
 
@@ -115,7 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   };
 }
 
@@ -128,7 +128,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   } = loaderData;
 
   return (
@@ -143,7 +143,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           variant_name={variant_name}
           episode_id={episode_id}
           search_query={search_query}
-          filter={filter}
+          filters={filters}
         />
       </SectionLayout>
     </PageLayout>

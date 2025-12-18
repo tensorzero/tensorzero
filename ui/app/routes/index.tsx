@@ -22,7 +22,6 @@ import {
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import type { Route } from "./+types/index";
-import { countWorkflowEvaluationRuns } from "~/utils/clickhouse/workflow_evaluations.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
@@ -106,7 +105,8 @@ export async function loader() {
   const episodesPromise = httpClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = httpClient.listDatasets({});
   const numEvaluationRunsPromise = httpClient.countEvaluationRuns();
-  const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
+  const numWorkflowEvaluationRunsPromise =
+    httpClient.countWorkflowEvaluationRuns();
   const numWorkflowEvaluationRunProjectsPromise =
     httpClient.countWorkflowEvaluationProjects();
   const configPromise = getConfig();

@@ -24,43 +24,6 @@ import {
   ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
 
-export async function getEvaluationRunInfos(
-  evaluation_run_ids: string[],
-  function_name: string,
-): Promise<EvaluationRunInfo[]> {
-  const query = `
-    SELECT
-      any(run_tag.value) as evaluation_run_id,
-      any(run_tag.variant_name) as variant_name,
-      formatDateTime(
-        max(UUIDv7ToDateTime(inference_id)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) as most_recent_inference_date
-    FROM
-      TagInference AS run_tag FINAL
-    WHERE
-      run_tag.key = 'tensorzero::evaluation_run_id'
-      AND run_tag.value IN ({evaluation_run_ids:Array(String)})
-      AND run_tag.function_name = {function_name:String}
-    GROUP BY
-      run_tag.value
-    ORDER BY
-      toUInt128(toUUID(evaluation_run_id)) DESC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-      function_name: function_name,
-    },
-  });
-
-  const rows = await result.json<EvaluationRunInfo[]>();
-  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
-}
-
 export async function getEvaluationRunInfosForDatapoint(
   datapoint_id: string,
   function_name: string,

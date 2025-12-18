@@ -15,9 +15,10 @@ export default [
       "routes/api/curated_inferences/count.route.ts",
     ),
 
+    route("inferences/count", "routes/api/inferences/count.route.ts"),
+
     ...prefix("datasets", [
       route("counts", "routes/api/datasets/counts.route.ts"),
-      route("count_inserts", "routes/api/datasets/count_inserts.route.ts"),
     ]),
 
     route(
