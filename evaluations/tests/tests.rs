@@ -3174,14 +3174,14 @@ mod topk_tests {
     /// Test that top-k evaluation identifies the correct winner (TopKFound).
     ///
     /// Setup:
-    /// - 3 variants: "echo" (uses echo model), "empty1" and "empty2" (use empty model)
+    /// - 3 variants: "echo" (uses echo model), "empty" and "empty2" (use empty model)
     /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (1 if output matches reference)
     /// - Datapoints have reference output equal to input text
     /// - Scoring: AverageEvaluatorScore averages all evaluator scores
     ///
     /// Expected scores:
     /// - echo: (0 + 1 + 1) / 3 = 2/3 (exact_match=1 because echo returns input)
-    /// - empty1/empty2: (0 + 1 + 0) / 3 = 1/3 (exact_match=0 because empty returns "")
+    /// - empty/empty2: (0 + 1 + 0) / 3 = 1/3 (exact_match=0 because empty returns "")
     ///
     /// The test verifies that "echo" is identified as the top-1 variant.
     #[tokio::test(flavor = "multi_thread")]
@@ -3222,7 +3222,7 @@ mod topk_tests {
         // Use echo (score 2/3) and two empty variants (score 1/3 each)
         let variant_names = vec![
             "echo".to_string(),
-            "empty1".to_string(),
+            "empty".to_string(),
             "empty2".to_string(),
         ];
 
@@ -3392,9 +3392,9 @@ mod topk_tests {
             "Echo should be Included (winner)"
         );
         assert_eq!(
-            output.variant_status.get("empty1"),
+            output.variant_status.get("empty"),
             Some(&VariantStatus::Exclude),
-            "Empty1 should be Excluded (loser)"
+            "empty should be Excluded (loser)"
         );
         assert_eq!(
             output.variant_status.get("empty2"),
@@ -3407,10 +3407,10 @@ mod topk_tests {
             .variant_performance
             .get("echo")
             .expect("Echo performance not found");
-        let empty1_cs = output
+        let empty_cs = output
             .variant_performance
-            .get("empty1")
-            .expect("Empty1 performance not found");
+            .get("empty")
+            .expect("empty performance not found");
         let empty2_cs = output
             .variant_performance
             .get("empty2")
@@ -3444,35 +3444,35 @@ mod topk_tests {
             echo_cs.variance_regularized
         );
 
-        // 3.2. Empty1 variant confidence sequence
-        assert_eq!(empty1_cs.count, 25, "empty1 count");
+        // 3.2. empty variant confidence sequence
+        assert_eq!(empty_cs.count, 25, "empty count");
         assert!(
-            (empty1_cs.mean_est - 0.333000000000000).abs() < 1e-10,
-            "empty1 mean_est {} != 0.333",
-            empty1_cs.mean_est
+            (empty_cs.mean_est - 0.333000000000000).abs() < 1e-10,
+            "empty mean_est {} != 0.333",
+            empty_cs.mean_est
         );
         assert!(
-            (empty1_cs.cs_lower - 0.252000000000000).abs() < 1e-10,
-            "empty1 cs_lower {} != 0.252",
-            empty1_cs.cs_lower
+            (empty_cs.cs_lower - 0.252000000000000).abs() < 1e-10,
+            "empty cs_lower {} != 0.252",
+            empty_cs.cs_lower
         );
         assert!(
-            (empty1_cs.cs_upper - 0.495000000000000).abs() < 1e-10,
-            "empty1 cs_upper {} != 0.495",
-            empty1_cs.cs_upper
+            (empty_cs.cs_upper - 0.495000000000000).abs() < 1e-10,
+            "empty cs_upper {} != 0.495",
+            empty_cs.cs_upper
         );
         assert!(
-            (empty1_cs.mean_regularized - 0.339743589743590).abs() < 1e-10,
-            "empty1 mean_regularized {} != 0.339743589743590",
-            empty1_cs.mean_regularized
+            (empty_cs.mean_regularized - 0.339743589743590).abs() < 1e-10,
+            "empty mean_regularized {} != 0.339743589743590",
+            empty_cs.mean_regularized
         );
         assert!(
-            (empty1_cs.variance_regularized - 0.010264105441808).abs() < 1e-10,
-            "empty1 variance_regularized {} != 0.010264105441808",
-            empty1_cs.variance_regularized
+            (empty_cs.variance_regularized - 0.010264105441808).abs() < 1e-10,
+            "empty variance_regularized {} != 0.010264105441808",
+            empty_cs.variance_regularized
         );
 
-        // 3.3. Empty2 variant confidence sequence (should be identical to empty1)
+        // 3.3. Empty2 variant confidence sequence (should be identical to empty)
         assert_eq!(empty2_cs.count, 25, "empty2 count");
         assert!(
             (empty2_cs.mean_est - 0.333000000000000).abs() < 1e-10,
@@ -3506,10 +3506,10 @@ mod topk_tests {
             .variant_failures
             .get("echo")
             .expect("Echo failures not found");
-        let empty1_failures = output
+        let empty_failures = output
             .variant_failures
-            .get("empty1")
-            .expect("Empty1 failures not found");
+            .get("empty")
+            .expect("empty failures not found");
         let empty2_failures = output
             .variant_failures
             .get("empty2")
@@ -3543,32 +3543,32 @@ mod topk_tests {
             echo_failures.variance_regularized
         );
 
-        // 4.2. Empty1 variant failures (should be identical to echo)
-        assert_eq!(empty1_failures.count, 25, "empty1 failures count");
+        // 4.2. empty variant failures (should be identical to echo)
+        assert_eq!(empty_failures.count, 25, "empty failures count");
         assert!(
-            (empty1_failures.mean_est - 0.0).abs() < 1e-10,
-            "empty1 failures mean_est {} != 0.0",
-            empty1_failures.mean_est
+            (empty_failures.mean_est - 0.0).abs() < 1e-10,
+            "empty failures mean_est {} != 0.0",
+            empty_failures.mean_est
         );
         assert!(
-            (empty1_failures.cs_lower - 0.0).abs() < 1e-10,
-            "empty1 failures cs_lower {} != 0.0",
-            empty1_failures.cs_lower
+            (empty_failures.cs_lower - 0.0).abs() < 1e-10,
+            "empty failures cs_lower {} != 0.0",
+            empty_failures.cs_lower
         );
         assert!(
-            (empty1_failures.cs_upper - 0.242).abs() < 1e-10,
-            "empty1 failures cs_upper {} != 0.242",
-            empty1_failures.cs_upper
+            (empty_failures.cs_upper - 0.242).abs() < 1e-10,
+            "empty failures cs_upper {} != 0.242",
+            empty_failures.cs_upper
         );
         assert!(
-            (empty1_failures.mean_regularized - 0.019230769230769).abs() < 1e-10,
-            "empty1 failures mean_regularized {} != 0.019230769230769",
-            empty1_failures.mean_regularized
+            (empty_failures.mean_regularized - 0.019230769230769).abs() < 1e-10,
+            "empty failures mean_regularized {} != 0.019230769230769",
+            empty_failures.mean_regularized
         );
         assert!(
-            (empty1_failures.variance_regularized - 0.015453872053191).abs() < 1e-10,
-            "empty1 failures variance_regularized {} != 0.015453872053191",
-            empty1_failures.variance_regularized
+            (empty_failures.variance_regularized - 0.015453872053191).abs() < 1e-10,
+            "empty failures variance_regularized {} != 0.015453872053191",
+            empty_failures.variance_regularized
         );
 
         // 4.3. Empty2 variant failures (should be identical to echo)
@@ -3706,9 +3706,19 @@ mod topk_tests {
         );
     }
 
-    /// Test that top-k evaluation stops with DatasetExhausted when there aren't enough datapoints.
-    /// We create a small dataset and set max_datapoints to a small value to ensure exhaustion.
-    /// Uses deterministic dummy providers and evaluators.
+    /// Test that top-k evaluation stops with DatasetExhausted when variants can't be separated.
+    ///
+    /// Setup:
+    /// - 2 variants: "empty" and "empty2" (both use empty model, return "")
+    /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (0 for both since "" != input)
+    /// - Scoring: AverageEvaluatorScore averages all evaluator scores
+    ///
+    /// Expected scores:
+    /// - empty: (0 + 1 + 0) / 3 = 1/3
+    /// - empty2: (0 + 1 + 0) / 3 = 1/3
+    ///
+    /// Since both variants have identical scores, their confidence intervals will overlap
+    /// indefinitely and the dataset will be exhausted before a winner can be identified.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_dataset_exhaustion() {
         // Setup
@@ -3718,19 +3728,20 @@ mod topk_tests {
         let pg_pool = get_postgres_pool().await;
         ensure_queue_exists(&pg_pool).await;
 
-        // Create a unique dataset with very few datapoints
+        // Create a unique dataset
         let dataset_name = format!("topk_test_exhaustion_{}", Uuid::now_v7());
 
-        // Write deterministic test datapoints for test_evaluation (uses dummy providers)
-        write_basic_test_datapoints(&dataset_name, 10).await;
+        // Write 25 datapoints - same as test_topk_topk_found
+        write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_millis(500)).await;
 
-        // Get the evaluation config for test_evaluation
+        // Get the evaluation config for test_topk_evaluation
+        // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
         let evaluation_config = config
             .evaluations
-            .get("test_evaluation")
-            .expect("test_evaluation not found in config")
+            .get("test_topk_evaluation")
+            .expect("test_topk_evaluation not found in config")
             .clone();
 
         // Build the function configs table
@@ -3741,8 +3752,9 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use two variants with deterministic dummy providers
-        let variant_names = vec!["test".to_string(), "test2".to_string()];
+        // Use two empty variants that have identical scores (1/3 each)
+        // Since they're identical, confidence intervals will never separate
+        let variant_names = vec!["empty".to_string(), "empty2".to_string()];
 
         let clients = Arc::new(Clients {
             tensorzero_client,
@@ -3753,28 +3765,28 @@ mod topk_tests {
             clients,
             evaluation_config: evaluation_config.clone(),
             function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(FirstBooleanScore),
+            scoring_fn: Arc::new(AverageEvaluatorScore),
         };
 
         let durable_client = create_client(pg_pool.clone(), state)
             .await
             .expect("Failed to create durable client");
 
-        // Set max_datapoints very low (3) so the dataset will be exhausted before
-        // we can confidently identify a winner
+        // With 25 datapoints and 2 identical variants, the dataset will be exhausted
+        // before we can identify a winner (confidence intervals will always overlap)
         let params = TopKTaskParams {
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
             k_min: 1,
             k_max: 1,
-            epsilon: Some(0.0), // Strict epsilon makes it harder to find a winner
-            max_datapoints: Some(3),
-            batch_size: Some(3),
+            epsilon: None, // No epsilon relaxation - require strict separation
+            max_datapoints: Some(25),
+            batch_size: Some(25), // Process all at once for speed
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
-            concurrency: 2,
-            inference_cache: CacheEnabledMode::On,
+            concurrency: 1,                         // Sequential for determinism
+            inference_cache: CacheEnabledMode::Off, // No caching for clean test
         };
 
         let spawn_result = durable_client
@@ -3842,14 +3854,10 @@ mod topk_tests {
 
         worker.shutdown().await;
 
-        // Verify we got DatasetExhausted or TopKFound (either is acceptable with small data)
+        // Verify we got DatasetExhausted
         match &output.stopping_reason {
             GlobalStoppingReason::DatasetExhausted => {
                 println!("Dataset exhausted as expected");
-            }
-            GlobalStoppingReason::TopKFound { k, top_variants } => {
-                // This is also acceptable if we happened to find a clear winner
-                println!("Found top-{k} with {top_variants:?} (acceptable outcome)");
             }
             other => {
                 panic!("Unexpected stopping reason: {other:?}");
@@ -3858,8 +3866,8 @@ mod topk_tests {
 
         // Should have processed exactly max_datapoints
         assert_eq!(
-            output.num_datapoints_processed, 3,
-            "Should have processed exactly 3 datapoints"
+            output.num_datapoints_processed, 25,
+            "Should have processed exactly 25 datapoints"
         );
     }
 
