@@ -977,17 +977,7 @@ model = "test_model_{random_id}"
 /// Test that tags are merged when writing the same config snapshot twice.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_write_config_snapshot_tag_merging() {
-    // Get a clean ClickHouse instance with automatic cleanup
     let clickhouse = get_clickhouse().await;
-
-    // Run migrations
-    migration_manager::run(RunMigrationManagerArgs {
-        clickhouse: &clickhouse,
-        is_manual_run: true,
-        disable_automatic_migrations: false,
-    })
-    .await
-    .unwrap();
 
     let random_id = Uuid::now_v7();
 
