@@ -216,21 +216,8 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
 }
 
 pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
-    let pool = PgPoolOptions::new()
-        .connect(postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-    make_migrator().run(&pool).await.map_err(|e| {
-        Error::new(ErrorDetails::PostgresMigration {
-            message: e.to_string(),
-        })
-    })?;
-
-    // Our 'tensorzero-auth' crate currently uses an alpha release of 'sqlx', so the `PgPool` type is different.
+    // Our 'tensorzero-auth' and 'durable' crates currently use an alpha release of 'sqlx',
+    // so the `PgPool` type is different from the one used by tensorzero-core.
     let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(postgres_url)
         .await
         .map_err(|err| {
@@ -238,6 +225,8 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
                 message: err.to_string(),
             })
         })?;
+
+    // Run tensorzero-auth migrations
     tensorzero_auth::postgres::make_migrator()
         .run(&sqlx_alpha_pool)
         .await
@@ -247,13 +236,15 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
             })
         })?;
 
-    // Run durable migrations using the same pool as the tensorzero_auth migrations
+    // Run durable migrations to create the durable schema,
+    // which is required by some tensorzero-core migrations.
     durable::MIGRATOR.run(&sqlx_alpha_pool).await.map_err(|e| {
         Error::new(ErrorDetails::PostgresMigration {
             message: format!("Failed to run durable migrations: {e}"),
         })
     })?;
 
+    // Run tensorzero-core migrations
     let pool = PgPoolOptions::new()
         .connect(postgres_url)
         .await
