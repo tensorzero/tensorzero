@@ -3257,7 +3257,7 @@ mod topk_tests {
             batch_size: Some(25), // Process all at once for speed
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
-            concurrency: 1,                         // Sequential for determinism
+            concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
         };
 
@@ -3785,7 +3785,7 @@ mod topk_tests {
             batch_size: Some(25), // Process all at once for speed
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
-            concurrency: 1,                         // Sequential for determinism
+            concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
         };
 
