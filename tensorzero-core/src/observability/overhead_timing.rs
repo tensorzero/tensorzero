@@ -69,7 +69,7 @@
 //! However, the time between Candidate 2 finishing
 //! and the judge starting *is* counted as overhead, since no external HTTP requests were active during that time.
 //!
-//! The metric calculations is controlled entirely through `tracing` span attributes.
+//! The metric calculation is controlled entirely through `tracing` span attributes.
 //!
 use std::time::{Duration, Instant};
 
