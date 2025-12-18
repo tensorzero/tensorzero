@@ -582,14 +582,15 @@ impl InferenceProvider for OpenAIProvider {
                 )
                 .await
                 .map_err(|(e, headers)| {
-                    if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
+                    let request_id = headers.as_ref().and_then(extract_request_id);
+                    if let Some(ref request_id) = request_id {
                         tracing::warn!(
                             provider = %PROVIDER_TYPE,
                             request_id = %request_id,
                             "OpenAI Responses streaming request failed"
                         );
                     }
-                    e
+                    with_request_id(e, request_id.as_deref())
                 })?;
 
                 let request_id = extract_request_id(&headers);
@@ -642,14 +643,15 @@ impl InferenceProvider for OpenAIProvider {
                 )
                 .await
                 .map_err(|(e, headers)| {
-                    if let Some(request_id) = headers.as_ref().and_then(extract_request_id) {
+                    let request_id = headers.as_ref().and_then(extract_request_id);
+                    if let Some(ref request_id) = request_id {
                         tracing::warn!(
                             provider = %PROVIDER_TYPE,
                             request_id = %request_id,
                             "OpenAI streaming request failed"
                         );
                     }
-                    e
+                    with_request_id(e, request_id.as_deref())
                 })?;
 
                 let request_id = extract_request_id(&headers);
@@ -1235,6 +1237,28 @@ pub(super) fn request_id_from_event_source_error(
             extract_request_id(resp.headers())
         }
         _ => None,
+    }
+}
+
+/// Append a request_id to a FatalStreamError's message.
+/// If the error is not a FatalStreamError, it is returned unchanged.
+fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
+    let Some(request_id) = request_id else {
+        return error;
+    };
+    match error.get_details() {
+        ErrorDetails::FatalStreamError {
+            message,
+            provider_type,
+            raw_request,
+            raw_response,
+        } => Error::new(ErrorDetails::FatalStreamError {
+            message: format!("{message} [request_id: {request_id}]"),
+            provider_type: provider_type.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        }),
+        _ => error,
     }
 }
 
