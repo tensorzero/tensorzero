@@ -552,7 +552,7 @@ jobs:
         run: cargo build --workspace --verbose
 
       - name: Validate config
-        run: cargo run-e2e -- --validate-and-exit
+        run: cargo run-e2e --validate-and-exit
 
   rust-test:
     permissions:

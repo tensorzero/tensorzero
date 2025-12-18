@@ -222,6 +222,11 @@ async fn main() -> Result<(), ExitCode> {
     }
     let base_path = base_path.trim_end_matches("/");
 
+    if args.early_exit_commands.validate_and_exit {
+        tracing::info!("Config file is valid. Exiting.");
+        return Ok(());
+    }
+
     let (router, in_flight_requests_counter) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
@@ -310,11 +315,6 @@ async fn main() -> Result<(), ExitCode> {
     }
 
     let shutdown_signal = shutdown_signal().shared();
-
-    if args.early_exit_commands.validate_and_exit {
-        tracing::info!("Config file is valid. Exiting.");
-        return Ok(());
-    }
 
     let server_fut = axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal.clone())
