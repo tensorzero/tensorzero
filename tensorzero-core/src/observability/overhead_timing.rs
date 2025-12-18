@@ -196,7 +196,12 @@ where
                 .iter()
                 .map(|i| *i.end() - *i.start())
                 .sum();
-            let overhead = elapsed - excluded_time;
+            let overhead = elapsed.checked_sub(excluded_time).unwrap_or_else(|| {
+                error_within_tracing(
+                    "Excluded time exceeded elapsed span duration; clamping overhead to zero",
+                );
+                Duration::ZERO
+            });
 
             metrics::histogram!("tensorzero_overhead", &[("kind", overhead_data.kind)])
                 .record(overhead.as_millis() as f64);
