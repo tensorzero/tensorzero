@@ -3201,7 +3201,7 @@ mod topk_tests {
         // Based on simulation, exactly 25 datapoints needed for top-1 identification
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_secs(2)).await;
 
         // Get the evaluation config for test_topk_evaluation
         // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
@@ -3254,7 +3254,7 @@ mod topk_tests {
             k_max: 1,
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
-            batch_size: Some(25), // Process all at once for speed
+            batch_size: Some(5),
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
             concurrency: 10,
@@ -3307,7 +3307,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_secs(2)).await;
         }
 
         // Get the task result
@@ -3730,7 +3730,7 @@ mod topk_tests {
         // Write 25 datapoints - same as test_topk_topk_found
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_secs(2)).await;
 
         // Get the evaluation config for test_topk_evaluation
         // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
@@ -3785,7 +3785,7 @@ mod topk_tests {
             k_max: 3,
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
-            batch_size: Some(25), // Process all at once for speed
+            batch_size: Some(5),
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
             concurrency: 10,
@@ -3837,7 +3837,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_secs(2)).await;
         }
 
         let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
@@ -3899,9 +3899,10 @@ mod topk_tests {
         let dataset_name = format!("topk_test_eval_fail_{}", Uuid::now_v7());
 
         // Write deterministic test datapoints for test_evaluation (has dummy providers and error evaluator)
-        write_basic_test_datapoints(&dataset_name, 10).await;
+        // Write 25 datapoints to ensure enough are available even if ClickHouse is slow
+        write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_secs(2)).await;
 
         // Get the evaluation config for test_evaluation which has an "error" evaluator
         let evaluation_config = config
@@ -3947,7 +3948,7 @@ mod topk_tests {
             k_min: 1,
             k_max: 1,
             epsilon: None,
-            max_datapoints: Some(10),
+            max_datapoints: Some(25),
             batch_size: Some(1), // Process one datapoint at a time
             variant_failure_threshold: None,
             evaluator_failure_threshold: Some(0.05), // 5% failure rate threshold
@@ -4000,7 +4001,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_secs(2)).await;
         }
 
         let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
@@ -4032,6 +4033,26 @@ mod topk_tests {
                 );
             }
             other => {
+                // Print diagnostic info before panicking
+                println!("=== DIAGNOSTIC INFO (evaluator_failure_threshold) ===");
+                println!(
+                    "num_datapoints_processed: {}",
+                    output.num_datapoints_processed
+                );
+                println!("evaluator_failures:");
+                for (name, cs) in &output.evaluator_failures {
+                    println!(
+                        "  {name}: count={}, cs_lower={:.4}, cs_upper={:.4}",
+                        cs.count, cs.cs_lower, cs.cs_upper
+                    );
+                }
+                println!("variant_failures:");
+                for (name, cs) in &output.variant_failures {
+                    println!(
+                        "  {name}: count={}, cs_lower={:.4}, cs_upper={:.4}",
+                        cs.count, cs.cs_lower, cs.cs_upper
+                    );
+                }
                 panic!("Unexpected stopping reason: {other:?}");
             }
         }
@@ -4078,7 +4099,18 @@ mod topk_tests {
 
     /// Test that top-k evaluation handles variant failures correctly.
     /// When too many variants fail, the task should stop with TooManyVariantsFailed.
-    /// Uses deterministic dummy providers and evaluators.
+    ///
+    /// Setup:
+    /// - 3 variants: "test" (working), "error" (always fails), "error2" (always fails)
+    /// - k_min=2, so we need at least 2 active (non-failed) variants
+    /// - The error variants use models starting with "error" which the dummy provider fails
+    /// - Threshold: 0.05 (5%)
+    /// - Each datapoint produces 1 observation per variant
+    ///
+    /// Expected:
+    /// - After 2 datapoints (2 obs): cs_lower = 0.034 < 0.05 (continue)
+    /// - After 3 datapoints (3 obs): cs_lower = 0.171 > 0.05 (error and error2 are Failed)
+    /// - num_failed=2 > num_variants - k_min = 3-2=1, so TooManyVariantsFailed triggers
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_variant_failure_threshold() {
         // Setup
@@ -4091,16 +4123,17 @@ mod topk_tests {
         // Create a unique dataset
         let dataset_name = format!("topk_test_variant_fail_{}", Uuid::now_v7());
 
-        // Write deterministic test datapoints for test_evaluation (has dummy providers and error variant)
-        write_basic_test_datapoints(&dataset_name, 10).await;
+        // Write deterministic test datapoints
+        // Write 25 datapoints to ensure enough are available even if ClickHouse is slow
+        write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
-        // Get the test_evaluation config which uses basic_test function
+        // Get the test_topk_evaluation config (uses basic_test function)
         let evaluation_config = config
             .evaluations
-            .get("test_evaluation")
-            .expect("test_evaluation not found in config")
+            .get("test_topk_evaluation")
+            .expect("test_topk_evaluation not found in config")
             .clone();
 
         let EvaluationConfig::Inference(_inference_config) = &*evaluation_config;
@@ -4110,9 +4143,14 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use "test" (working) and "error" (always fails) variants
-        // With k_min=1 and 2 variants, if 1 variant fails we'll have too many failures
-        let variant_names = vec!["test".to_string(), "error".to_string()];
+        // Use 3 variants: 1 working, 2 failing
+        // - "test": uses dummy model, always succeeds
+        // - "error", "error2": use error models, always fail (model_name starts with "error")
+        let variant_names = vec![
+            "test".to_string(),
+            "error".to_string(),
+            "error2".to_string(),
+        ];
 
         let clients = Arc::new(Clients {
             tensorzero_client,
@@ -4123,27 +4161,30 @@ mod topk_tests {
             clients,
             evaluation_config: evaluation_config.clone(),
             function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(FirstBooleanScore),
+            scoring_fn: Arc::new(AverageEvaluatorScore),
         };
 
         let durable_client = create_client(pg_pool.clone(), state)
             .await
             .expect("Failed to create durable client");
 
-        // Set a low variant failure threshold so the "error" variant will be marked as Failed
+        // Set variant failure threshold to 0.05
+        // After 3 datapoints (3 observations per variant), error variants have cs_lower = 0.171 > 0.05
+        // With k_min=2, we need 2 active variants. When 2 fail, we only have 1 active,
+        // so num_failed=2 > num_variants - k_min = 3-2=1, triggering TooManyVariantsFailed
         let params = TopKTaskParams {
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
-            k_min: 1,
-            k_max: 1,
-            epsilon: Some(0.1),
-            max_datapoints: Some(10),
-            batch_size: Some(5),
-            variant_failure_threshold: Some(0.3), // Low threshold to catch the error variant
+            k_min: 2,
+            k_max: 2,
+            epsilon: None,
+            max_datapoints: Some(25),
+            batch_size: Some(1), // Process one datapoint at a time
+            variant_failure_threshold: Some(0.05), // 5% failure rate threshold
             evaluator_failure_threshold: None,
-            concurrency: 2,
-            inference_cache: CacheEnabledMode::Off, // Don't cache error responses
+            concurrency: 10,
+            inference_cache: CacheEnabledMode::Off,
         };
 
         let spawn_result = durable_client
@@ -4191,7 +4232,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_secs(2)).await;
         }
 
         let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
@@ -4211,46 +4252,87 @@ mod topk_tests {
 
         worker.shutdown().await;
 
-        // Verify we processed some datapoints
-        assert!(
-            output.num_datapoints_processed > 0,
-            "Should have processed at least one datapoint"
-        );
-
-        // Check that the error variant is marked as Failed
-        let error_status = output.variant_status.get("error");
-        println!("Error variant status: {error_status:?}");
-
-        // We expect either:
-        // - TooManyVariantsFailed (if error variant failed and that's too many)
-        // - TopKFound with "test" as winner (if we identified the winner before too many failures)
-        // - DatasetExhausted (if we ran out of data)
+        // 1. Verify stopping reason is TooManyVariantsFailed
         match &output.stopping_reason {
             GlobalStoppingReason::TooManyVariantsFailed { num_failed } => {
                 println!("Too many variants failed: {num_failed} failed");
-                assert!(*num_failed >= 1, "At least one variant should have failed");
-                // The error variant should be marked as Failed
-                assert_eq!(
-                    output.variant_status.get("error"),
-                    Some(&VariantStatus::Failed),
-                    "error variant should be marked as Failed"
-                );
+                assert_eq!(*num_failed, 2, "Exactly 2 variants should have failed");
             }
-            GlobalStoppingReason::TopKFound { k, top_variants } => {
-                println!("Found top-{k} with {top_variants:?}");
-                // The working variant should be the winner
-                assert!(
-                    top_variants.contains(&"test".to_string()),
-                    "test variant should be in top variants"
-                );
-            }
-            GlobalStoppingReason::DatasetExhausted => {
-                println!("Dataset exhausted");
-            }
-            GlobalStoppingReason::EvaluatorsFailed { evaluator_names } => {
-                // This is also acceptable if evaluators failed
-                println!("Evaluators failed: {evaluator_names:?}");
+            other => {
+                panic!("Unexpected stopping reason: {other:?}");
             }
         }
+
+        // 2. Verify number of datapoints processed
+        assert_eq!(
+            output.num_datapoints_processed, 3,
+            "Should process exactly 3 datapoints before variant failure threshold exceeded"
+        );
+
+        // 3. Verify variant statuses
+        assert_eq!(
+            output.variant_status.get("test"),
+            Some(&VariantStatus::Active),
+            "test variant should be Active"
+        );
+        assert_eq!(
+            output.variant_status.get("error"),
+            Some(&VariantStatus::Failed),
+            "error variant should be Failed"
+        );
+        assert_eq!(
+            output.variant_status.get("error2"),
+            Some(&VariantStatus::Failed),
+            "error2 variant should be Failed"
+        );
+
+        // 4. Verify error variant failures confidence sequence
+        let error_failures = output
+            .variant_failures
+            .get("error")
+            .expect("error failures not found");
+
+        assert_eq!(error_failures.count, 3, "error failures count");
+        assert!(
+            (error_failures.mean_est - 1.0).abs() < 1e-10,
+            "error failures mean_est {} != 1.0",
+            error_failures.mean_est
+        );
+        assert!(
+            (error_failures.cs_lower - 0.171).abs() < 1e-10,
+            "error failures cs_lower {} != 0.171",
+            error_failures.cs_lower
+        );
+
+        // 5. Verify error2 variant failures confidence sequence (should be identical to error)
+        let error2_failures = output
+            .variant_failures
+            .get("error2")
+            .expect("error2 failures not found");
+
+        assert_eq!(error2_failures.count, 3, "error2 failures count");
+        assert!(
+            (error2_failures.mean_est - 1.0).abs() < 1e-10,
+            "error2 failures mean_est {} != 1.0",
+            error2_failures.mean_est
+        );
+        assert!(
+            (error2_failures.cs_lower - 0.171).abs() < 1e-10,
+            "error2 failures cs_lower {} != 0.171",
+            error2_failures.cs_lower
+        );
+
+        // 6. Verify test variant has 0 failures
+        let test_failures = output
+            .variant_failures
+            .get("test")
+            .expect("test failures not found");
+
+        assert_eq!(test_failures.count, 3, "test failures count");
+        assert!(
+            (test_failures.mean_est - 0.0).abs() < 1e-10,
+            "test failures mean_est {} != 0.0",
+            test_failures.mean_est
+        );
     }
 }

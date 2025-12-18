@@ -39,6 +39,11 @@ type = "chat_completion"
 model = "error"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.basic_test.variants.error2]
+type = "chat_completion"
+model = "error"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.basic_test.variants.slow]
 type = "chat_completion"
 model = "slow"
