@@ -15,7 +15,10 @@ use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
-use tower_http::{decompression::RequestDecompressionLayer, metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter}};
+use tower_http::{
+    decompression::RequestDecompressionLayer,
+    metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter},
+};
 use crate::routes::build_api_routes;
 
 /// Builds the final Axum router for the gateway,
