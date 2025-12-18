@@ -3713,16 +3713,8 @@ mod topk_tests {
     ///   - test/test2 use dummy model returning a fixed string
     ///   - empty1/empty2 use empty model returning ""
     /// - Evaluators: "zero" (always 0), "one" (always 1), "exact_match" (0 for all since output != input)
-    /// - Scoring: AverageEvaluatorScore averages all evaluator scores
     ///
-    /// Expected scores (all identical):
-    /// - test: (0 + 1 + 0) / 3 = 1/3
-    /// - test2: (0 + 1 + 0) / 3 = 1/3
-    /// - empty1: (0 + 1 + 0) / 3 = 1/3
-    /// - empty2: (0 + 1 + 0) / 3 = 1/3
-    ///
-    /// Since all variants have identical scores, their confidence intervals will overlap
-    /// indefinitely and the dataset will be exhausted before top-k can be identified.
+    /// Since all variants have identical scores, they will never be distinguishable.
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_dataset_exhaustion() {
         // Setup
@@ -3883,8 +3875,17 @@ mod topk_tests {
     }
 
     /// Test that top-k evaluation stops with EvaluatorsFailed when evaluators exceed failure threshold.
-    /// This test uses the "error" evaluator in test_evaluation which always fails.
-    /// Uses deterministic dummy providers and evaluators.
+    ///
+    /// Setup:
+    /// - 2 variants: "test", "test2" (both use dummy model)
+    /// - Evaluators: happy_bool, sad_bool, zero, one, error, exact_match
+    /// - The "error" evaluator always fails (failure rate = 1.0)
+    /// - Failure threshold: 0.05 (5%)
+    /// - Each datapoint produces 2 observations per evaluator (one per variant)
+    ///
+    /// Expected behavior:
+    /// - After 1 datapoint (2 observations): cs_lower = 0.034 < 0.05 (continue)
+    /// - After 2 datapoints (4 observations): cs_lower = 0.248 > 0.05 (stop)
     #[tokio::test(flavor = "multi_thread")]
     async fn test_topk_evaluator_failure_threshold() {
         // Setup
@@ -3900,7 +3901,7 @@ mod topk_tests {
         // Write deterministic test datapoints for test_evaluation (has dummy providers and error evaluator)
         write_basic_test_datapoints(&dataset_name, 10).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_millis(500)).await;
 
         // Get the evaluation config for test_evaluation which has an "error" evaluator
         let evaluation_config = config
@@ -3916,8 +3917,8 @@ mod topk_tests {
             .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
             .collect();
 
-        // Use two dummy variants for basic_test function so there's actual competition
-        // (with only 1 variant, top-k is trivially found before evaluator failure triggers)
+        // Use two dummy variants for basic_test function
+        // Each datapoint produces 2 observations per evaluator
         let variant_names = vec!["test".to_string(), "test2".to_string()];
 
         let clients = Arc::new(Clients {
@@ -3936,21 +3937,22 @@ mod topk_tests {
             .await
             .expect("Failed to create durable client");
 
-        // Set a low evaluator failure threshold so we'll hit it quickly
-        // The "error" evaluator in test_evaluation always fails
+        // Set evaluator failure threshold to 0.05
+        // The "error" evaluator always fails (100% failure rate)
+        // After 2 datapoints (4 observations), cs_lower = 0.248 > 0.05, so we stop
         let params = TopKTaskParams {
             evaluation_name: "test_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
             variant_names,
             k_min: 1,
             k_max: 1,
-            epsilon: Some(0.1),
+            epsilon: None,
             max_datapoints: Some(10),
-            batch_size: Some(5),
+            batch_size: Some(1), // Process one datapoint at a time
             variant_failure_threshold: None,
             evaluator_failure_threshold: Some(0.05), // 5% failure rate threshold
-            concurrency: 2,
-            inference_cache: CacheEnabledMode::On,
+            concurrency: 10,
+            inference_cache: CacheEnabledMode::Off,
         };
 
         let spawn_result = durable_client
@@ -4018,14 +4020,9 @@ mod topk_tests {
 
         worker.shutdown().await;
 
-        // Verify that we processed some datapoints
-        assert!(
-            output.num_datapoints_processed > 0,
-            "Should have processed at least one datapoint"
-        );
+        // === Assertions ===
 
-        // We expect either EvaluatorsFailed (if error evaluator hit threshold)
-        // or DatasetExhausted/TopKFound (if not enough errors to trigger threshold)
+        // 1. Verify stopping reason is EvaluatorsFailed with "error" evaluator
         match &output.stopping_reason {
             GlobalStoppingReason::EvaluatorsFailed { evaluator_names } => {
                 println!("Evaluators failed as expected: {evaluator_names:?}");
@@ -4034,18 +4031,49 @@ mod topk_tests {
                     "error evaluator should be in the failed list"
                 );
             }
-            // GlobalStoppingReason::DatasetExhausted => {
-            //     // Also acceptable - we may not have hit the threshold
-            //     println!("Dataset exhausted (threshold may not have been reached)");
-            // }
-            // GlobalStoppingReason::TopKFound { k, top_variants } => {
-            //     // Also acceptable
-            //     println!("Found top-{k} with {top_variants:?}");
-            // }
             other => {
                 panic!("Unexpected stopping reason: {other:?}");
             }
         }
+
+        // 2. Verify number of datapoints processed
+        assert_eq!(
+            output.num_datapoints_processed, 2,
+            "Should process exactly 2 datapoints before evaluator failure threshold exceeded"
+        );
+
+        // 3. Verify error evaluator failures confidence sequence
+        let error_failures = output
+            .evaluator_failures
+            .get("error")
+            .expect("error failures not found");
+
+        assert_eq!(error_failures.count, 4, "error failures count");
+        assert!(
+            (error_failures.mean_est - 1.0).abs() < 1e-10,
+            "error failures mean_est {} != 1.0",
+            error_failures.mean_est
+        );
+        assert!(
+            (error_failures.cs_lower - 0.248).abs() < 1e-10,
+            "error failures cs_lower {} != 0.248",
+            error_failures.cs_lower
+        );
+        assert!(
+            (error_failures.cs_upper - 1.0).abs() < 1e-10,
+            "error failures cs_upper {} != 1.0",
+            error_failures.cs_upper
+        );
+        assert!(
+            (error_failures.mean_regularized - 0.9).abs() < 1e-10,
+            "error failures mean_regularized {} != 0.9",
+            error_failures.mean_regularized
+        );
+        assert!(
+            (error_failures.variance_regularized - 0.073180555555556).abs() < 1e-10,
+            "error failures variance_regularized {} != 0.073180555555556",
+            error_failures.variance_regularized
+        );
     }
 
     /// Test that top-k evaluation handles variant failures correctly.
