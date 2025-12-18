@@ -82,13 +82,20 @@ tokio::task_local! {
     ///
     /// Since this needs to be accessed from a `Deserialize` impl, it needs to
     /// be stored in a `static`, since we cannot pass in extra parameters when calling `Deserialize::deserialize`
-    pub(crate) static SKIP_CREDENTIAL_VALIDATION: ();
+    static SKIP_CREDENTIAL_VALIDATION: ();
 }
 
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
+}
+
+/// Runs the provider future with credential validation disabled
+/// This is safe to repeatedly nest (e.g. `with_skip_credential_validation(async move { with_skip_credential_validation(f).await })`)`,
+/// the original credential validation behavior will be restored after the outermost future completes
+pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T {
+    SKIP_CREDENTIAL_VALIDATION.scope((), f).await
 }
 
 // Note - the `Default` impl only exists for convenience in tests
@@ -990,6 +997,15 @@ async fn process_config_input(
     }
 }
 
+/// In e2e test mode, we skip credential validation by default.
+/// This can be overridden by setting the `TENSORZERO_E2E_CREDENTIAL_VALIDATION` environment variable to `0`.
+/// Outside of e2e test mode, we leave the behavior unchanged (other parts of the codebase might still
+/// skip credential validation, e.g. when running in relay mode).
+pub fn e2e_skip_credential_validation() -> bool {
+    cfg!(any(test, feature = "e2e_tests"))
+        && !std::env::var("TENSORZERO_E2E_CREDENTIAL_VALIDATION").is_ok_and(|x| x == "1")
+}
+
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
@@ -1042,14 +1058,13 @@ impl Config {
         runtime_overlay: RuntimeOverlay,
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
-        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
-            Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
-                (),
-                Self::load_from_toml(ConfigInput::Snapshot {
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            Box::pin(with_skip_credential_validation(Self::load_from_toml(
+                ConfigInput::Snapshot {
                     snapshot: Box::new(snapshot),
                     runtime_overlay: Box::new(runtime_overlay),
-                }),
-            ))
+                },
+            )))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
@@ -1072,11 +1087,10 @@ impl Config {
         allow_empty_glob: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
-        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
-            Box::pin(SKIP_CREDENTIAL_VALIDATION.scope(
-                (),
-                Self::load_from_toml(ConfigInput::Fresh(globbed_config.table)),
-            ))
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            Box::pin(with_skip_credential_validation(Self::load_from_toml(
+                ConfigInput::Fresh(globbed_config.table),
+            )))
             .await?
         } else {
             Box::pin(Self::load_from_toml(ConfigInput::Fresh(
@@ -1165,6 +1179,7 @@ impl Config {
         } = process_config_input(input, &mut templates).await?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
+        let relay_mode = gateway_config.relay.is_some();
 
         let tools = tools
             .into_iter()
@@ -1180,6 +1195,7 @@ impl Config {
                     &provider_types,
                     &provider_type_default_credentials,
                     http_client.clone(),
+                    relay_mode,
                 )
                 .await
                 .map(|c| (name, c))

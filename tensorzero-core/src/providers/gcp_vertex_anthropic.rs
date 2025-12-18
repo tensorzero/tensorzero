@@ -12,7 +12,7 @@ use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::cache::ModelProviderRequest;
-use crate::config::skip_credential_validation;
+use crate::config::{e2e_skip_credential_validation, skip_credential_validation};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
@@ -72,8 +72,7 @@ fn handle_gcp_error(
     e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
     if skip_credential_validation() {
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
+        if e2e_skip_credential_validation() {
             tracing::warn!(
                 "Failed to get GCP SDK credentials for a model provider of type `{provider_type}`, so the associated tests will likely fail: {e}",
             );
