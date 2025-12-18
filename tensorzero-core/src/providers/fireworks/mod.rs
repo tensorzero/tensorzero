@@ -261,6 +261,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -709,8 +710,6 @@ fn stream_fireworks(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

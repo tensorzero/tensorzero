@@ -30,7 +30,7 @@ export async function listInferencesWithPagination(params: {
   function_name?: string;
   variant_name?: string;
   episode_id?: string;
-  filter?: InferenceFilter;
+  filters?: InferenceFilter;
   search_query?: string;
 }): Promise<ListInferencesResult> {
   const {
@@ -40,7 +40,7 @@ export async function listInferencesWithPagination(params: {
     function_name,
     variant_name,
     episode_id,
-    filter,
+    filters,
     search_query,
   } = params;
 
@@ -60,7 +60,7 @@ export async function listInferencesWithPagination(params: {
       function_name,
       variant_name,
       episode_id,
-      filter,
+      filters,
       search_query_experimental: search_query,
     });
 

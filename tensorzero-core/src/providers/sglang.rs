@@ -230,6 +230,7 @@ impl InferenceProvider for SGLangProvider {
                     })
                 })?,
                 PROVIDER_TYPE,
+                None,
             ))
         }
     }
@@ -416,8 +417,6 @@ fn stream_sglang(
                 },
             }
         }
-
-        event_source.close();
     })
 }
 

@@ -1,4 +1,5 @@
 use chrono::Duration;
+use http_body::{Frame, SizeHint};
 use once_cell::sync::OnceCell;
 use opentelemetry_http::HeaderInjector;
 use std::{
@@ -12,12 +13,16 @@ use std::{
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use futures::Stream;
+use eventsource_stream::Eventsource;
+use futures::{Stream, StreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
-use reqwest::{Body, Response};
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::{
+    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
+};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -286,23 +291,16 @@ pub struct TensorzeroRequestBuilder<'a> {
     ticket: LimitedClientTicket<'a>,
 }
 
-/// A wrapper type around `reqwest_eventsource::EventSource`.
+/// A wrapper type around an event source stream.
 /// Like `TensorzeroRequestBuilder`, this type holds on to a `LimitedClientTicket`,
 /// so that we can drop it when the stream is dropped (and hold on to it while
 /// we're still polling messages from the stream).
 #[pin_project]
 pub struct TensorZeroEventSource {
-    // We forward to this `EventSource` in our `Stream` impl
     #[pin]
-    source: EventSource,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
-}
-
-impl TensorZeroEventSource {
-    pub fn close(&mut self) {
-        self.source.close();
-    }
 }
 
 impl Stream for TensorZeroEventSource {
@@ -311,10 +309,96 @@ impl Stream for TensorZeroEventSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let _guard = this.span.enter();
-        // Just forward to the underlying `EventSource`, without doing anything else.
-        // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
-        // until the stream is dropped.
-        this.source.poll_next(cx)
+        // Just forward to the underlying `stream`, without doing anything else.
+        this.stream.poll_next(cx)
+    }
+}
+
+/// A wrapper type around `reqwest::Response`
+/// We use this to extend the lifetime of a `Span`,
+/// and drop it when the response is fully consumed
+/// (e.g. after `text`) is called.
+///
+// At the moment, we don't actually store a Span - this will
+// be added in a future PR
+pub struct TensorzeroResponseWrapper {
+    /// IMPORTANT - do *not* directly expose this field.
+    /// Instead, add accessor methods to `TensorzeroResponseWrapper`,
+    /// so that the caller is forced to hold on to the entire `TensorzeroResponseWrapper`
+    /// until it gets 'consumed' (e.g. calling `text`)
+    response: Response,
+    /// We hold onto a ticket, since holding a `Response` still uses a logical HTTP connection
+    /// (since the body will not be read until `text` is called)
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[pin_project]
+/// A wrapper over a `reqwest::Body` that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the body is fully consumed
+/// (since the underlying HTTP connection is still in use as long as we're reading data from the body)
+pub struct TensorzeroBodyWrapper {
+    #[pin]
+    body: reqwest::Body,
+    ticket: LimitedClientTicket<'static>,
+}
+
+#[deny(clippy::missing_trait_methods)]
+impl http_body::Body for TensorzeroBodyWrapper {
+    type Data = <reqwest::Body as http_body::Body>::Data;
+    type Error = <reqwest::Body as http_body::Body>::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        self.project().body.poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.body.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.body.size_hint()
+    }
+}
+
+impl TensorzeroResponseWrapper {
+    pub fn status(&self) -> StatusCode {
+        self.response.status()
+    }
+
+    pub fn headers(&self) -> &HeaderMap {
+        self.response.headers()
+    }
+
+    pub fn error_for_status_ref(&self) -> Result<&Self, reqwest::Error> {
+        self.response.error_for_status_ref()?;
+        Ok(self)
+    }
+
+    // These methods consume the `TensorzeroResponseWrapper`,
+    // and drop the ticket. They do *not* give the caller ownership of `self.response`
+    pub async fn text(self) -> Result<String, reqwest::Error> {
+        self.response.text().await
+    }
+
+    pub async fn json<T: DeserializeOwned>(self) -> Result<T, reqwest::Error> {
+        self.response.json().await
+    }
+
+    pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
+        self.response.bytes().await
+    }
+
+    /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.
+    /// preserving our `LimitedClientTicket` until the body is fully consumed
+    pub fn into_http_response(self) -> http::Response<TensorzeroBodyWrapper> {
+        let resp: http::Response<reqwest::Body> = self.response.into();
+        resp.map(|body| TensorzeroBodyWrapper {
+            body,
+            ticket: self.ticket,
+        })
     }
 }
 
@@ -425,21 +509,63 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
     pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
         self = self.with_otlp_headers();
+        let event_source = self.builder.eventsource()?;
         Ok(TensorZeroEventSource {
-            source: self.builder.eventsource()?,
+            stream: Box::pin(event_source),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
         })
     }
 
-    // This method takes an owned `self`, so we'll drop `self.ticket` when this method
-    // returns (after we've gotten a response)
-    pub async fn send(mut self) -> Result<Response, reqwest::Error> {
+    pub async fn eventsource_with_headers(
+        mut self,
+    ) -> Result<
+        (TensorZeroEventSource, http::HeaderMap),
+        (ReqwestEventSourceError, Option<http::HeaderMap>),
+    > {
         self = self.with_otlp_headers();
-        self.builder
+        let ticket = self.ticket.into_owned();
+        let builder = self.builder.header(ACCEPT, "text/event-stream");
+        let response = builder
             .send()
             .instrument(tensorzero_h2_workaround_span())
             .await
+            .map_err(|e| (ReqwestEventSourceError::Transport(e), None))?;
+
+        let headers = response.headers().clone();
+        let response =
+            validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
+        let stream = response.bytes_stream().eventsource().map(|event| {
+            event
+                .map(Event::Message)
+                .map_err(ReqwestEventSourceError::from)
+        });
+        // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
+        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+
+        Ok((
+            TensorZeroEventSource {
+                stream: Box::pin(stream),
+                ticket,
+                span: tensorzero_h2_workaround_span(),
+            },
+            headers,
+        ))
+    }
+
+    // This method preserves our ticket (by storing it in the `TensorzeroResponseWrapper`),
+    // since holding a `Reponse` still requires an active connection (since the
+    // body will not be read until `text()` is called)
+    pub async fn send(mut self) -> Result<TensorzeroResponseWrapper, reqwest::Error> {
+        self = self.with_otlp_headers();
+        Ok(TensorzeroResponseWrapper {
+            response: self
+                .builder
+                .send()
+                .instrument(tensorzero_h2_workaround_span())
+                .await?,
+            ticket: self.ticket.into_owned(),
+        })
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
@@ -557,6 +683,40 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
     })
 }
 
+#[expect(clippy::result_large_err)]
+fn validate_event_stream_response(response: Response) -> Result<Response, ReqwestEventSourceError> {
+    match response.status() {
+        StatusCode::OK => {}
+        status => {
+            return Err(ReqwestEventSourceError::InvalidStatusCode(status, response));
+        }
+    }
+    let content_type = if let Some(content_type) = response.headers().get(&CONTENT_TYPE) {
+        content_type
+    } else {
+        return Err(ReqwestEventSourceError::InvalidContentType(
+            HeaderValue::from_static(""),
+            response,
+        ));
+    };
+    // Check if the media type (ignoring parameters like charset) is text/event-stream
+    if content_type
+        .to_str()
+        .map(|value| {
+            let media_type = value.split(';').next().unwrap_or("").trim();
+            media_type.eq_ignore_ascii_case("text/event-stream")
+        })
+        .unwrap_or(false)
+    {
+        Ok(response)
+    } else {
+        Err(ReqwestEventSourceError::InvalidContentType(
+            content_type.clone(),
+            response,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -633,6 +793,18 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), 200);
 
+        // We should still have a request in-flight while we're holding the `Response`'
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            1
+        );
+
+        // Drop the response, and verify that the counter is now zero (and that no other clients were used)
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             if i == 0 {
                 assert_eq!(
@@ -730,6 +902,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+        drop(response);
         for (i, client_cell) in client.clients.iter().enumerate() {
             assert_eq!(
                 client_cell.get().is_some(),

@@ -8,127 +8,12 @@ import {
 } from "./helpers";
 import {
   workflowEvaluationRunEpisodeWithFeedbackSchema,
-  workflowEvaluationRunSchema,
   workflowEvaluationRunStatisticsByMetricNameSchema,
   groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
-  type WorkflowEvaluationRun,
   type WorkflowEvaluationRunEpisodeWithFeedback,
   type WorkflowEvaluationRunStatisticsByMetricName,
   type GroupedWorkflowEvaluationRunEpisodeWithFeedback,
-  type WorkflowEvaluationRunWithEpisodeCount,
-  workflowEvaluationRunWithEpisodeCountSchema,
 } from "./workflow_evaluations";
-
-export async function getWorkflowEvaluationRuns(
-  limit: number,
-  offset: number,
-  run_id?: string,
-  project_name?: string,
-): Promise<WorkflowEvaluationRunWithEpisodeCount[]> {
-  const query = `
-    WITH FilteredDynamicEvaluationRuns AS (
-      SELECT
-          run_display_name as name,
-          uint_to_uuid(run_id_uint) as id,
-          run_id_uint,
-          variant_pins,
-          tags,
-          project_name,
-          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
-      FROM DynamicEvaluationRun
-      ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
-      ${project_name ? `WHERE project_name = {project_name:String}` : ""}
-      ORDER BY run_id_uint DESC
-      LIMIT {limit:UInt64}
-      OFFSET {offset:UInt64}
-    ),
-    DynamicEvaluationRunsEpisodeCounts AS (
-      SELECT
-        run_id_uint,
-        toUInt32(count()) as num_episodes
-      FROM DynamicEvaluationRunEpisodeByRunId
-      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
-      GROUP BY run_id_uint
-    )
-    SELECT
-      name,
-      id,
-      variant_pins,
-      tags,
-      project_name,
-      COALESCE(num_episodes, 0) AS num_episodes,
-      timestamp
-    FROM FilteredDynamicEvaluationRuns
-    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
-    ORDER BY run_id_uint DESC
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      limit,
-      offset,
-      run_id,
-      project_name,
-    },
-  });
-  const rows = await result.json<WorkflowEvaluationRunWithEpisodeCount[]>();
-  return rows.map((row) =>
-    workflowEvaluationRunWithEpisodeCountSchema.parse(row),
-  );
-}
-
-export async function getWorkflowEvaluationRunsByIds(
-  run_ids: string[], // one or more UUIDv7 strings
-  project_name?: string, // optional extra filter
-): Promise<WorkflowEvaluationRun[]> {
-  if (run_ids.length === 0) return []; // nothing to fetch
-
-  const query = `
-    SELECT
-      run_display_name AS name,
-      uint_to_uuid(run_id_uint) AS id,
-      variant_pins,
-      tags,
-      project_name,
-      formatDateTime(
-        UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) AS timestamp
-    FROM DynamicEvaluationRun
-    WHERE run_id_uint IN (
-      /* turn the parameter array of UUID strings into a real table
-         expression of UInt128 values so the IN predicate is valid */
-      SELECT arrayJoin(
-        arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)})
-      )
-    )
-    ${project_name ? "AND project_name = {project_name:String}" : ""}
-    ORDER BY run_id_uint DESC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { run_ids, project_name },
-  });
-
-  const rows = await result.json<WorkflowEvaluationRun[]>();
-  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
-}
-
-export async function countWorkflowEvaluationRuns(): Promise<number> {
-  const query = `
-    SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await result.json<{ count: number }[]>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
 
 /**
  * Returns information about the episodes that were used in a workflow evaluation run,
@@ -313,71 +198,6 @@ export async function countWorkflowEvaluationRunEpisodes(
   });
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
-}
-
-export async function countWorkflowEvaluationProjects(): Promise<number> {
-  const query = `
-  SELECT toUInt32(countDistinct(project_name)) AS count
-  FROM DynamicEvaluationRunByProjectName
-  WHERE project_name IS NOT NULL
-`;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await result.json<{ count: number }[]>();
-  const parsedRows = rows.map((row) => CountSchema.parse(row));
-  return parsedRows[0].count;
-}
-
-export async function searchWorkflowEvaluationRuns(
-  limit: number,
-  offset: number,
-  project_name?: string,
-  search_query?: string,
-): Promise<WorkflowEvaluationRun[]> {
-  // 1) Build an array of individual predicates
-  const predicates: string[] = [];
-
-  if (project_name) {
-    predicates.push(`project_name = {project_name:String}`);
-  }
-
-  if (search_query) {
-    predicates.push(`(
-      positionCaseInsensitive(run_display_name, {search_query:String}) > 0
-      OR positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {search_query:String}) > 0
-    )`);
-  }
-
-  // 2) If we have any predicates, join them with " AND " and prefix with WHERE
-  const whereClause = predicates.length
-    ? `WHERE ${predicates.join(" AND ")}`
-    : "";
-
-  // 3) Plug the one WHERE (or nothing) into your template
-  const query = `
-    SELECT
-      run_display_name as name,
-      uint_to_uuid(run_id_uint) as id,
-      variant_pins,
-      tags,
-      project_name,
-      formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') as timestamp
-    FROM DynamicEvaluationRun
-    ${whereClause}
-    ORDER BY updated_at DESC
-    LIMIT {limit:UInt64}
-    OFFSET {offset:UInt64}
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { project_name, search_query, limit, offset },
-  });
-  const rows = await result.json<WorkflowEvaluationRun[]>();
-  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
 }
 
 /**

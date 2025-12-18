@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -9,7 +8,6 @@ use mockall::automock;
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::db::stored_datapoint::StoredDatapoint;
-use crate::endpoints::datasets::DatapointKind;
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::error::Error;
 
@@ -33,22 +31,6 @@ pub enum DatasetOutputSource {
     Inference,
     // When generating a dataset, include any linked demonstration as output.
     Demonstration,
-}
-
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct DatasetQueryParams {
-    pub inference_type: DatapointKind,
-    pub function_name: Option<String>,
-    pub dataset_name: Option<String>,
-    pub variant_name: Option<String>,
-    pub extra_where: Option<Vec<String>>,
-    pub extra_params: Option<HashMap<String, String>>,
-    // TODO: consider supporting compound filters (e.g. AND/OR)
-    pub metric_filter: Option<MetricFilter>,
-    pub output_source: DatasetOutputSource,
-    pub limit: Option<u32>,
-    pub offset: Option<u32>,
 }
 
 /// Parameters to query for dataset metadata (by aggregating over the datapoint tables).
@@ -124,21 +106,11 @@ pub struct GetDatapointsParams {
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait DatasetQueries {
-    /// Counts rows for a dataset based on query parameters
-    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
-
-    /// Inserts rows into a dataset table by selecting from the inference tables
-    /// Returns the number of rows inserted
-    async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
-
     /// Gets dataset metadata (name, count, last updated)
     async fn get_dataset_metadata(
         &self,
         params: &GetDatasetMetadataParams,
     ) -> Result<Vec<DatasetMetadata>, Error>;
-
-    /// Gets the count of unique dataset names
-    async fn count_datasets(&self) -> Result<u32, Error>;
 
     /// Inserts a batch of datapoints into the database
     /// Internally separates chat and JSON datapoints and writes them to the appropriate tables

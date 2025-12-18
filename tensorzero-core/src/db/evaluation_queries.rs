@@ -21,6 +21,22 @@ pub struct EvaluationRunInfoRow {
     pub last_inference_timestamp: DateTime<Utc>,
 }
 
+/// Database struct for deserializing evaluation run search results from ClickHouse.
+#[derive(Debug, Deserialize)]
+pub struct EvaluationRunSearchResult {
+    pub evaluation_run_id: Uuid,
+    pub variant_name: String,
+}
+
+/// Database struct for deserializing evaluation run info by IDs from ClickHouse.
+/// This is a simpler struct than `EvaluationRunInfoRow` - used when querying by specific run IDs.
+#[derive(Debug, Deserialize)]
+pub struct EvaluationRunInfoByIdRow {
+    pub evaluation_run_id: Uuid,
+    pub variant_name: String,
+    pub most_recent_inference_date: DateTime<Utc>,
+}
+
 /// Trait for evaluation-related queries.
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -41,4 +57,21 @@ pub trait EvaluationQueries {
         function_name: &str,
         evaluation_run_ids: &[Uuid],
     ) -> Result<u64, Error>;
+
+    /// Searches evaluation runs by ID or variant name.
+    async fn search_evaluation_runs(
+        &self,
+        evaluation_name: &str,
+        function_name: &str,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunSearchResult>, Error>;
+
+    /// Gets evaluation run info for specific evaluation run IDs and function name.
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
 }

@@ -1,7 +1,5 @@
 use serde::Deserialize;
-use tensorzero::{
-    ClickHouseConnection, DatasetQueryParams, TimeWindow, setup_clickhouse_without_config,
-};
+use tensorzero::{ClickHouseConnection, TimeWindow, setup_clickhouse_without_config};
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -33,59 +31,6 @@ impl DatabaseClient {
                 time_window,
                 max_periods
             }
-        )
-    }
-
-    #[napi]
-    pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
-    }
-
-    #[napi]
-    pub async fn insert_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, insert_rows_for_dataset, params, DatasetQueryParams)
-    }
-
-    #[napi]
-    pub async fn query_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            query_feedback_by_target_id,
-            params,
-            QueryFeedbackByTargetIdParams {
-                target_id,
-                before,
-                after,
-                limit
-            }
-        )
-    }
-
-    #[napi]
-    pub async fn query_feedback_bounds_by_target_id(
-        &self,
-        params: String,
-    ) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            query_feedback_bounds_by_target_id,
-            params,
-            QueryFeedbackBoundsByTargetIdParams { target_id }
-        )
-    }
-
-    #[napi]
-    pub async fn count_datasets(&self) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_datasets)
-    }
-
-    #[napi]
-    pub async fn count_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            count_feedback_by_target_id,
-            params,
-            CountFeedbackByTargetIdParams { target_id }
         )
     }
 
@@ -138,32 +83,11 @@ struct GetCumulativeFeedbackTimeseriesParams {
 
 #[derive(Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-struct QueryFeedbackByTargetIdParams {
-    target_id: Uuid,
-    before: Option<Uuid>,
-    after: Option<Uuid>,
-    limit: Option<u32>,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
 struct QueryDemonstrationFeedbackByInferenceIdParams {
     inference_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
     limit: Option<u32>,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-struct QueryFeedbackBoundsByTargetIdParams {
-    target_id: Uuid,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-struct CountFeedbackByTargetIdParams {
-    target_id: Uuid,
 }
 
 #[derive(Deserialize, ts_rs::TS)]

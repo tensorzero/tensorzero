@@ -5,7 +5,6 @@ import { WorkflowEvalRunSelector } from "~/routes/workflow_evaluations/projects/
 import {
   countWorkflowEvaluationRunEpisodesByTaskName,
   getWorkflowEvaluationRunEpisodesByTaskName,
-  getWorkflowEvaluationRunsByIds,
   getWorkflowEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/workflow_evaluations.server";
 import type { WorkflowEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/workflow_evaluations";
@@ -13,6 +12,7 @@ import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
 import { useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -41,7 +41,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
 
     // Create promise for fetching run info
-    const runInfosPromise = getWorkflowEvaluationRunsByIds(runIds, projectName);
+    const runInfosPromise = getTensorZeroClient()
+      .getWorkflowEvaluationRuns(runIds, projectName)
+      .then((response) => response.runs);
 
     const episodeInfoPromise = getWorkflowEvaluationRunEpisodesByTaskName(
       runIds,

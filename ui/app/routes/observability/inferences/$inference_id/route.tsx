@@ -66,8 +66,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
-    : dbClient.queryFeedbackByTargetId({
-        target_id: inference_id,
+    : tensorZeroClient.getFeedbackByTargetId(inference_id, {
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
         limit,
@@ -95,7 +94,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
     // Query these after polling completes to avoid race condition with materialized views
     [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
-      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
   } else {
@@ -111,7 +110,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       inferencesPromise,
       modelInferencesPromise,
       demonstrationFeedbackPromise,
-      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       feedbackDataPromise,
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);

@@ -214,7 +214,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -264,7 +264,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -481,7 +481,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -617,7 +617,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "24.11.0"
+          node-version: "24.12.0"
 
       - name: Install pnpm
         run: |
@@ -1118,7 +1118,7 @@ jobs:
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   run-merge-queue-checks:
-    needs: [build-gateway-e2e-container, build-mock-inference-container]
+    needs: [build-gateway-container, build-gateway-e2e-container, build-mock-inference-container]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository

@@ -360,7 +360,7 @@ fn stream_google_ai_studio_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
