@@ -126,9 +126,9 @@ fn mock_success(
     });
 
     BatchItemResult::Success(Box::new(DatapointVariantResult {
-        datapoint,
+        datapoint: Arc::new(datapoint),
         variant: Arc::new(EvaluationVariant::Name(variant_name.to_string())),
-        inference_response,
+        inference_response: Arc::new(inference_response),
         evaluation_result: eval_results,
     }))
 }
