@@ -23,7 +23,9 @@ use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
-use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
+use common::{
+    get_config, get_tensorzero_client, write_basic_test_datapoints, write_chat_fixture_to_dataset,
+};
 use evaluations::{
     Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
     EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
@@ -3149,18 +3151,11 @@ mod topk_tests {
         let pg_pool = get_postgres_pool().await;
         ensure_queue_exists(&pg_pool).await;
 
-        // Create a unique dataset for this test using basic_test fixtures
+        // Create a unique dataset for this test with programmatically generated datapoints
         let dataset_name = format!("topk_test_basic_{}", Uuid::now_v7());
 
-        // Use basic_test fixture for test_evaluation (uses dummy providers)
-        write_chat_fixture_to_dataset(
-            &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )),
-            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
-        )
-        .await;
+        // Write deterministic test datapoints for test_evaluation (uses dummy providers)
+        write_basic_test_datapoints(&dataset_name, 10).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
@@ -3337,15 +3332,8 @@ mod topk_tests {
         // Create a unique dataset with very few datapoints
         let dataset_name = format!("topk_test_exhaustion_{}", Uuid::now_v7());
 
-        // Use basic_test fixture for test_evaluation (uses dummy providers)
-        write_chat_fixture_to_dataset(
-            &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )),
-            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
-        )
-        .await;
+        // Write deterministic test datapoints for test_evaluation (uses dummy providers)
+        write_basic_test_datapoints(&dataset_name, 10).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
@@ -3501,15 +3489,8 @@ mod topk_tests {
         // Create a unique dataset
         let dataset_name = format!("topk_test_eval_fail_{}", Uuid::now_v7());
 
-        // Use basic_test fixture for test_evaluation (has dummy providers and error evaluator)
-        write_chat_fixture_to_dataset(
-            &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )),
-            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
-        )
-        .await;
+        // Write deterministic test datapoints for test_evaluation (has dummy providers and error evaluator)
+        write_basic_test_datapoints(&dataset_name, 10).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 
@@ -3674,15 +3655,8 @@ mod topk_tests {
         // Create a unique dataset
         let dataset_name = format!("topk_test_variant_fail_{}", Uuid::now_v7());
 
-        // Use basic_test fixture for test_evaluation (has dummy providers and error variant)
-        write_chat_fixture_to_dataset(
-            &PathBuf::from(&format!(
-                "{}/../tensorzero-core/fixtures/datasets/basic_test_datapoint_fixture.jsonl",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )),
-            &HashMap::from([("topk-basic-test".to_string(), dataset_name.clone())]),
-        )
-        .await;
+        // Write deterministic test datapoints for test_evaluation (has dummy providers and error variant)
+        write_basic_test_datapoints(&dataset_name, 10).await;
         clickhouse_flush_async_insert(&clickhouse).await;
         sleep(Duration::from_secs(2)).await;
 

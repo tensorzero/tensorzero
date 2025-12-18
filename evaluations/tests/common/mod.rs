@@ -1,6 +1,7 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 use std::{collections::HashMap, path::Path, sync::Arc};
 
+use serde_json::Map;
 use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::{
@@ -10,6 +11,8 @@ use tensorzero_core::db::clickhouse::{
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::inference::types::stored_input::{StoredInput, StoredInputMessage};
+use tensorzero_core::inference::types::{Arguments, Role, StoredInputMessageContent, System, Text};
 use uuid::Uuid;
 
 // Re-export test helpers from tensorzero-core
@@ -83,4 +86,66 @@ pub async fn get_tensorzero_client() -> Client {
 /// Loads the E2E test configuration wrapped in Arc for use in tests.
 pub async fn get_config() -> Arc<Config> {
     Arc::new(tensorzero_core::test_helpers::get_e2e_config().await)
+}
+
+/// Creates deterministic test datapoints for the `basic_test` function and writes them to ClickHouse.
+/// This is used for top-k tests to avoid dependency on fixture files.
+///
+/// # Arguments
+/// * `dataset_name` - The name of the dataset to write to
+/// * `count` - The number of datapoints to create
+pub async fn write_basic_test_datapoints(dataset_name: &str, count: usize) {
+    let messages = [
+        "Hello",
+        "How are you?",
+        "Tell me a joke",
+        "What is the weather?",
+        "Good morning",
+        "Goodbye",
+        "Help me",
+        "Thanks",
+        "What can you do?",
+        "Test message",
+    ];
+
+    let datapoints: Vec<StoredChatInferenceDatapoint> = (0..count)
+        .map(|i| {
+            let message_text = messages[i % messages.len()];
+            StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.to_string(),
+                function_name: "basic_test".to_string(),
+                id: Uuid::now_v7(),
+                episode_id: None,
+                input: StoredInput {
+                    system: Some(System::Template(Arguments(Map::from_iter([(
+                        "assistant_name".to_string(),
+                        serde_json::json!("TestBot"),
+                    )])))),
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: message_text.to_string(),
+                        })],
+                    }],
+                },
+                output: None,
+                tool_params: None,
+                tags: None,
+                is_custom: false,
+                source_inference_id: None,
+                staled_at: None,
+                name: None,
+                snapshot_hash: None,
+                is_deleted: false,
+                auxiliary: String::new(),
+                updated_at: String::new(),
+            }
+        })
+        .collect();
+
+    let clickhouse = get_clickhouse().await;
+    clickhouse
+        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
+        .await
+        .unwrap();
 }
