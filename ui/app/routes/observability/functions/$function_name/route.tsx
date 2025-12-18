@@ -13,7 +13,6 @@ import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
-import { getVariantPerformances } from "~/utils/clickhouse/function";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -78,14 +77,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
-      ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity,
-        })
-      : undefined;
+      ? tensorZeroClient
+          .getVariantPerformances(function_name, metric_name, time_granularity)
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
   const variantThroughputPromise = tensorZeroClient
     .getFunctionThroughputByVariant(
       function_name,

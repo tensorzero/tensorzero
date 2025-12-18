@@ -72,6 +72,8 @@ import type {
   GetEpisodeInferenceCountResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  VariantPerformancesResponse,
+  InferenceStatsByVariant,
 } from "~/types/tensorzero";
 
 /**
@@ -855,6 +857,22 @@ export class TensorZeroClient {
   }
 
   /**
+   * Fetches the variants used for a function.
+   * @param functionName - The name of the function to get variants for
+   * @returns A promise that resolves with the variants used for the function
+   * @throws Error if the request fails
+   */
+  async getUsedVariants(functionName: string): Promise<string[]> {
+    const response = await this.getInferenceStats(functionName, {
+      groupBy: "variant",
+    });
+
+    return (response.stats_by_variant ?? []).map(
+      (v: InferenceStatsByVariant) => v.variant_name,
+    );
+  }
+
+  /**
    * Fetches feedback statistics for a function and metric.
    * @param functionName - The name of the function to get stats for
    * @param metricName - The name of the metric to get stats for (or "demonstration")
@@ -933,6 +951,38 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as MetricsWithFeedbackResponse;
+  }
+
+  /**
+   * Fetches variant performance statistics for a function and metric.
+   * @param functionName - The name of the function to get performance stats for
+   * @param metricName - The name of the metric to compute performance for
+   * @param timeWindow - Time granularity for grouping performance data
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with variant performance statistics
+   * @throws Error if the request fails
+   */
+  async getVariantPerformances(
+    functionName: string,
+    metricName: string,
+    timeWindow: TimeWindow,
+    variantName?: string,
+  ): Promise<VariantPerformancesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("metric_name", metricName);
+    searchParams.append("time_window", timeWindow);
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant-performances?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as VariantPerformancesResponse;
   }
 
   /**
