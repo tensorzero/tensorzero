@@ -552,7 +552,9 @@ jobs:
         run: cargo build --workspace --verbose
 
       - name: Validate config
-        run: cargo run-e2e --validate-and-exit
+        run: |
+          unset TENSORZERO_CLICKHOUSE_URL
+          cargo run-e2e --validate-and-exit
 
   rust-test:
     permissions:
