@@ -1035,7 +1035,7 @@ impl TrackAndStopState {
                 let nursery_variants: Vec<String> = variant_counts
                     .iter()
                     .filter(|&(_, &count)| count < min_samples_per_variant)
-                    .map(|(key, _)| key.to_string())
+                    .map(|(key, _)| (*key).to_owned())
                     .collect();
                 let bandit_feedback: Vec<FeedbackByVariant> = variant_performances
                     .into_iter()
