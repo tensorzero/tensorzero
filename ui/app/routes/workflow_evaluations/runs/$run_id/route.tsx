@@ -12,7 +12,6 @@ import {
 } from "~/components/layout/PageLayout";
 import {
   getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
-  getWorkflowEvaluationRunStatisticsByMetricName,
   countWorkflowEvaluationRunEpisodes,
 } from "~/utils/clickhouse/workflow_evaluations.server";
 import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
@@ -38,13 +37,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     workflowEvaluationRunsResponse,
     workflowEvaluationRunEpisodes,
     count,
-    statistics,
+    statisticsResponse,
   ] = await Promise.all([
     tensorZeroClient.listWorkflowEvaluationRuns(5, 0, run_id),
     getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(limit, offset, run_id),
     countWorkflowEvaluationRunEpisodes(run_id),
-    getWorkflowEvaluationRunStatisticsByMetricName(run_id),
+    tensorZeroClient.getWorkflowEvaluationRunStatistics(run_id),
   ]);
+  const statistics = statisticsResponse.statistics;
   const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   if (workflowEvaluationRuns.length != 1) {
     throw new Error(
