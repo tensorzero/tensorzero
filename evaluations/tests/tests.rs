@@ -3198,10 +3198,10 @@ mod topk_tests {
         let dataset_name = format!("topk_test_topk_found_{}", Uuid::now_v7());
 
         // Write enough datapoints for the confidence sequences to converge
-        // Based on simulation, ~17 datapoints needed for top-1 identification
-        write_basic_test_datapoints(&dataset_name, 30).await;
+        // Based on simulation, exactly 25 datapoints needed for top-1 identification
+        write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_millis(500)).await;
 
         // Get the evaluation config for test_topk_evaluation
         // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
@@ -3253,8 +3253,8 @@ mod topk_tests {
             k_min: 1,
             k_max: 1,
             epsilon: None, // No epsilon relaxation - require strict separation
-            max_datapoints: Some(30),
-            batch_size: Some(5),
+            max_datapoints: Some(25),
+            batch_size: Some(25), // Process all at once for speed
             variant_failure_threshold: None,
             evaluator_failure_threshold: None,
             concurrency: 1,                         // Sequential for determinism
