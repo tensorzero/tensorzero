@@ -20,8 +20,8 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { Suspense, use, useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import {
@@ -32,25 +32,182 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { VariantSelector } from "~/components/function/variant/VariantSelector";
 import { useAllFunctionConfigs } from "~/context/config";
 import InferenceFilterBuilder from "~/components/querybuilder/InferenceFilterBuilder";
+import { Skeleton } from "~/components/ui/skeleton";
+import PageButtons from "~/components/utils/PageButtons";
 
-export default function InferencesTable({
-  inferences,
+export type InferencesData = {
+  inferences: InferenceMetadata[];
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+// Skeleton rows for loading state - co-located with real rows
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 10 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <Skeleton className="h-5 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-5 w-24" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-5 w-32" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-5 w-28" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-5 w-36" />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// Resolves promise and renders table rows
+function TableBodyContent({ data }: { data: Promise<InferencesData> }) {
+  const { inferences } = use(data);
+
+  if (inferences.length === 0) {
+    return <TableEmptyState message="No inferences found" />;
+  }
+
+  return (
+    <>
+      {inferences.map((inference) => (
+        <TableRow key={inference.id} id={inference.id}>
+          <TableCell>
+            <TableItemShortUuid
+              id={inference.id}
+              link={toInferenceUrl(inference.id)}
+            />
+          </TableCell>
+          <TableCell>
+            <TableItemShortUuid
+              id={inference.episode_id}
+              link={toEpisodeUrl(inference.episode_id)}
+            />
+          </TableCell>
+          <TableCell>
+            <TableItemFunction
+              functionName={inference.function_name}
+              functionType={inference.function_type}
+              link={toFunctionUrl(inference.function_name)}
+            />
+          </TableCell>
+          <TableCell>
+            <VariantLink
+              variantName={inference.variant_name}
+              functionName={inference.function_name}
+            >
+              <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                {inference.variant_name}
+              </code>
+            </VariantLink>
+          </TableCell>
+          <TableCell>
+            <TableItemTime
+              timestamp={uuidv7ToTimestamp(inference.id).toISOString()}
+            />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+function PaginationContent({
+  data,
+  limit,
   function_name,
   variant_name,
   episode_id,
   search_query,
-  filter,
+  filters,
 }: {
-  inferences: InferenceMetadata[];
-  function_name: string | undefined;
-  variant_name: string | undefined;
-  episode_id: string | undefined;
-  search_query: string | undefined;
-  filter: InferenceFilter | undefined;
+  data: Promise<InferencesData>;
+  limit: number;
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+  search_query?: string;
+  filters?: InferenceFilter;
+}) {
+  const { inferences, hasNextPage, hasPreviousPage } = use(data);
+  const navigate = useNavigate();
+
+  const topInference = inferences.at(0);
+  const bottomInference = inferences.at(inferences.length - 1);
+
+  const buildSearchParams = () => {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    if (function_name) params.set("function_name", function_name);
+    if (variant_name) params.set("variant_name", variant_name);
+    if (episode_id) params.set("episode_id", episode_id);
+    if (search_query) params.set("search_query", search_query);
+    if (filters) params.set("filters", JSON.stringify(filters));
+    return params;
+  };
+
+  const handleNextPage = () => {
+    if (bottomInference) {
+      const params = buildSearchParams();
+      params.set("before", bottomInference.id);
+      navigate(`?${params.toString()}`, {
+        preventScrollReset: true,
+      });
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (topInference) {
+      const params = buildSearchParams();
+      params.set("after", topInference.id);
+      navigate(`?${params.toString()}`, {
+        preventScrollReset: true,
+      });
+    }
+  };
+
+  return (
+    <PageButtons
+      onPreviousPage={handlePreviousPage}
+      onNextPage={handleNextPage}
+      disablePrevious={!hasPreviousPage}
+      disableNext={!hasNextPage}
+    />
+  );
+}
+
+export default function InferencesTable({
+  data,
+  limit,
+  function_name,
+  variant_name,
+  episode_id,
+  search_query,
+  filters,
+}: {
+  data: Promise<InferencesData>;
+  limit: number;
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+  search_query?: string;
+  filters?: InferenceFilter;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const functions = useAllFunctionConfigs();
 
   const [filterOpen, setFilterOpen] = useState(false);
@@ -68,7 +225,7 @@ export default function InferencesTable({
   );
   const [filterAdvanced, setFilterAdvanced] = useState<
     InferenceFilter | undefined
-  >(filter);
+  >(filters);
 
   // Form for the filter sheet (needed for FormLabel in InferenceFilterBuilder)
   const filterForm = useForm();
@@ -80,7 +237,7 @@ export default function InferencesTable({
       setFilterVariantName(variant_name ?? "");
       setFilterEpisodeId(episode_id ?? "");
       setFilterSearchQuery(search_query ?? "");
-      setFilterAdvanced(filter);
+      setFilterAdvanced(filters);
     }
   }, [
     filterOpen,
@@ -88,7 +245,7 @@ export default function InferencesTable({
     variant_name,
     episode_id,
     search_query,
-    filter,
+    filters,
   ]);
 
   const handleFilterSubmit = () => {
@@ -111,7 +268,7 @@ export default function InferencesTable({
     }
 
     if (filterAdvanced) {
-      searchParams.set("filter", JSON.stringify(filterAdvanced));
+      searchParams.set("filters", JSON.stringify(filterAdvanced));
     }
 
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
@@ -135,7 +292,7 @@ export default function InferencesTable({
   };
 
   const hasActiveFilters =
-    function_name || variant_name || episode_id || search_query || filter;
+    function_name || variant_name || episode_id || search_query || filters;
 
   return (
     <div>
@@ -161,51 +318,33 @@ export default function InferencesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {inferences.length === 0 ? (
-            <TableEmptyState message="No inferences found" />
-          ) : (
-            inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
-                <TableCell>
-                  <TableItemShortUuid
-                    id={inference.id}
-                    link={toInferenceUrl(inference.id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TableItemShortUuid
-                    id={inference.episode_id}
-                    link={toEpisodeUrl(inference.episode_id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TableItemFunction
-                    functionName={inference.function_name}
-                    functionType={inference.function_type}
-                    link={toFunctionUrl(inference.function_name)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <VariantLink
-                    variantName={inference.variant_name}
-                    functionName={inference.function_name}
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {inference.variant_name}
-                    </code>
-                  </VariantLink>
-                </TableCell>
-                <TableCell>
-                  <TableItemTime
-                    timestamp={uuidv7ToTimestamp(inference.id).toISOString()}
-                  />
-                </TableCell>
-                <TableCell />
-              </TableRow>
-            ))
-          )}
+          <Suspense key={location.key} fallback={<SkeletonRows />}>
+            <TableBodyContent data={data} />
+          </Suspense>
         </TableBody>
       </Table>
+
+      <Suspense
+        key={location.key}
+        fallback={
+          <PageButtons
+            onPreviousPage={() => {}}
+            onNextPage={() => {}}
+            disablePrevious
+            disableNext
+          />
+        }
+      >
+        <PaginationContent
+          data={data}
+          limit={limit}
+          function_name={function_name}
+          variant_name={variant_name}
+          episode_id={episode_id}
+          search_query={search_query}
+          filters={filters}
+        />
+      </Suspense>
 
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
         <SheetContent
@@ -243,16 +382,15 @@ export default function InferencesTable({
               <div>
                 <label className="text-sm font-medium">Variant</label>
                 <div className="mt-1 flex items-center gap-2">
-                  <Input
-                    value={filterVariantName}
-                    onChange={(e) => setFilterVariantName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleFilterSubmit();
+                  <div className="flex-1">
+                    <VariantSelector
+                      functionName={filterFunctionName}
+                      value={filterVariantName}
+                      onChange={(value) =>
+                        setFilterVariantName(value === "__all__" ? "" : value)
                       }
-                    }}
-                    placeholder="Enter variant name"
-                  />
+                    />
+                  </div>
                   {filterVariantName && (
                     <Button
                       variant="outline"
@@ -265,9 +403,15 @@ export default function InferencesTable({
               </div>
 
               <div>
-                <label className="text-sm font-medium">Episode ID</label>
+                <label
+                  htmlFor="episode-id-filter"
+                  className="text-sm font-medium"
+                >
+                  Episode ID
+                </label>
                 <div className="mt-1 flex items-center gap-2">
                   <Input
+                    id="episode-id-filter"
                     value={filterEpisodeId}
                     onChange={(e) => setFilterEpisodeId(e.target.value)}
                     onKeyDown={(e) => {
@@ -275,7 +419,7 @@ export default function InferencesTable({
                         handleFilterSubmit();
                       }
                     }}
-                    placeholder="Enter episode ID"
+                    placeholder="00000000-0000-0000-0000-000000000000"
                   />
                   {filterEpisodeId && (
                     <Button
@@ -290,13 +434,19 @@ export default function InferencesTable({
 
               <div>
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium">Search Query</label>
+                  <label
+                    htmlFor="search-query-filter"
+                    className="text-sm font-medium"
+                  >
+                    Search Query
+                  </label>
                   <Badge variant="outline" className="text-xs">
                     Experimental
                   </Badge>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <Input
+                    id="search-query-filter"
                     value={filterSearchQuery}
                     onChange={(e) => setFilterSearchQuery(e.target.value)}
                     onKeyDown={(e) => {

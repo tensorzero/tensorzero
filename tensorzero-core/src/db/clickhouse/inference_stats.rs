@@ -226,6 +226,25 @@ impl InferenceStatsQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &query_params).await?;
         parse_count(&response.response)
     }
+
+    async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
+        let mut query_params_owned = HashMap::new();
+        query_params_owned.insert("episode_id".to_string(), episode_id.to_string());
+
+        let query = "SELECT COUNT() AS count
+             FROM InferenceByEpisodeId FINAL
+             WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))
+             FORMAT JSONEachRow"
+            .to_string();
+
+        let query_params: HashMap<&str, &str> = query_params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
 }
 
 #[cfg(test)]
@@ -785,5 +804,41 @@ mod tests {
 
         let result = conn.count_inferences_with_feedback(params).await.unwrap();
         assert_eq!(result, 4);
+    }
+
+    #[tokio::test]
+    async fn test_count_inferences_for_episode_query() {
+        let episode_id = uuid::Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(
+                    query,
+                    "SELECT COUNT() AS count
+                     FROM InferenceByEpisodeId FINAL
+                     WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))
+                     FORMAT JSONEachRow",
+                );
+                assert_eq!(
+                    parameters.get("episode_id"),
+                    Some(&episode_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":30}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let count = conn.count_inferences_for_episode(episode_id).await.unwrap();
+        assert_eq!(count, 30);
     }
 }

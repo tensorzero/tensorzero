@@ -22,6 +22,7 @@ import {
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
 import type { InferenceStatsByVariant } from "~/types/tensorzero";
+import { Input } from "~/components/ui/input";
 
 type VariantCountsWithMetadata = InferenceStatsByVariant & {
   type: string;
@@ -89,10 +90,10 @@ export default function FunctionVariantTable({
       <div className="mb-4">
         <div className="relative">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <input
+          <Input
             type="text"
             placeholder="Search variants..."
-            value={globalFilter ?? ""}
+            value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
           />

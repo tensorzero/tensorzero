@@ -3,8 +3,6 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationStatistics,
   getEvaluationResults,
-  getEvaluationRunInfos,
-  countDatapointsForEvaluation,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
@@ -26,7 +24,10 @@ import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
-import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import {
+  addEvaluationHumanFeedback,
+  getTensorZeroClient,
+} from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
@@ -74,11 +75,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
 
+  const tensorZeroClient = getTensorZeroClient();
+
   // Set up all promises to run concurrently
-  const evaluationRunInfosPromise = getEvaluationRunInfos(
-    selected_evaluation_run_ids_array,
-    function_name,
-  );
+  const evaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
+    .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
   let resultsPromise;
@@ -122,9 +124,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let total_datapoints_promise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    total_datapoints_promise = countDatapointsForEvaluation(
+    total_datapoints_promise = tensorZeroClient.countDatapointsForEvaluation(
       function_name,
-      function_type,
       selected_evaluation_run_ids_array,
     );
   } else {

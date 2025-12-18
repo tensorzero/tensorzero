@@ -1,144 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
-  countDatapointsForEvaluation,
-  getEvaluationRunInfos,
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
   getEvaluationResults,
-  searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
-
-describe("getEvaluationRunInfos", () => {
-  test("should return correct run infos for specific evaluation run ids", async () => {
-    const evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const evaluation_run_id2 = "0196368e-53a8-7e82-a88d-db7086926d81";
-
-    const runInfos = await getEvaluationRunInfos(
-      [evaluation_run_id1, evaluation_run_id2],
-      "extract_entities",
-    );
-    expect(runInfos).toMatchObject([
-      {
-        evaluation_run_id: evaluation_run_id1,
-        most_recent_inference_date: "2025-04-14T23:07:50Z",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: evaluation_run_id2,
-        most_recent_inference_date: "2025-04-14T23:06:59Z",
-        variant_name: "gpt4o_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return empty array when no matching run ids are found", async () => {
-    const runInfos = await getEvaluationRunInfos(
-      ["non-existent-id"],
-      "extract_entities",
-    );
-    expect(runInfos).toEqual([]);
-  });
-
-  test("should handle a single run id correctly", async () => {
-    const evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const runInfos = await getEvaluationRunInfos(
-      [evaluation_run_id],
-      "extract_entities",
-    );
-    expect(runInfos).toMatchObject([
-      {
-        evaluation_run_id,
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-});
-
-describe("searchEvaluationRuns", () => {
-  test("should return matching run ids when searching by evaluation_run_id prefix", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "46ff24",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196368f-19bd-7082-a677-1c0bf346ff24",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return matching run ids when searching by variant_name for models", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "gpt4o",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196374c-2b06-7f50-b187-80c15cec5a1f",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196368f-19bd-7082-a677-1c0bf346ff24",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
-        variant_name: "gpt4o_initial_prompt",
-      },
-      {
-        evaluation_run_id: "0196367b-c0bb-7f90-b651-f90eb9fba8f3",
-        variant_name: "gpt4o_mini_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return matching run ids when searching by partial variant_name", async () => {
-    const runIds = await searchEvaluationRuns(
-      "haiku",
-      "write_haiku",
-      "initial",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "01963690-dff2-7cd3-b724-62fb705772a1",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-      {
-        evaluation_run_id: "0196367a-702c-75f3-b676-d6ffcc7370a1",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-    ]);
-  });
-
-  test("should handle case-insensitive search", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "llama",
-    );
-    expect(runIds).toMatchObject([
-      {
-        evaluation_run_id: "0196367b-1739-7483-b3f4-f3b0a4bda063",
-        variant_name: "llama_8b_initial_prompt",
-      },
-    ]);
-  });
-
-  test("should return empty array when no matches found", async () => {
-    const runIds = await searchEvaluationRuns(
-      "entity_extraction",
-      "extract_entities",
-      "nonexistent",
-    );
-    expect(runIds).toEqual([]);
-  });
-});
 
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {
@@ -386,27 +254,6 @@ describe("getEvaluationStatistics", () => {
     // Wilson CI for n=42, p≈0.524
     expect(statistics[3].ci_lower).toBeCloseTo(0.377222, 5);
     expect(statistics[3].ci_upper).toBeCloseTo(0.666406, 5);
-  });
-});
-
-describe("countDatapointsForEvaluation", () => {
-  test("should return correct number of datapoints for haiku evaluation", async () => {
-    const datapoints = await countDatapointsForEvaluation(
-      "write_haiku",
-      "chat",
-      ["01963690-dff2-7cd3-b724-62fb705772a1"],
-    );
-    // This should not include data that is after the evaluation run
-    expect(datapoints).toBe(77);
-  });
-
-  test("should return correct number of datapoints for entity_extraction evaluation", async () => {
-    const datapoints = await countDatapointsForEvaluation(
-      "extract_entities",
-      "json",
-      ["0196368f-19bd-7082-a677-1c0bf346ff24"],
-    );
-    expect(datapoints).toBe(41);
   });
 });
 

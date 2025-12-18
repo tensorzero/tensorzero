@@ -166,7 +166,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         let mut raw = None;
         let mut thought = None;
-        for content in chunk.content.into_iter() {
+        for content in chunk.content {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
                     raw = Some(tool_call.raw_arguments.to_owned());

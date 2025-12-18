@@ -1,7 +1,4 @@
-import {
-  pollForFeedbackItem,
-  queryLatestFeedbackIdByMetric,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
@@ -69,8 +66,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
-    : dbClient.queryFeedbackByTargetId({
-        target_id: inference_id,
+    : tensorZeroClient.getFeedbackByTargetId(inference_id, {
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
         limit,
@@ -99,7 +95,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Query these after polling completes to avoid race condition with materialized views
     [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
       dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
-      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
   } else {
     // Normal case: execute all queries in parallel
@@ -116,7 +112,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       demonstrationFeedbackPromise,
       dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
       feedbackDataPromise,
-      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
   }
 

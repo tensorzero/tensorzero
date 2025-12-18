@@ -6,6 +6,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::time::timeout;
@@ -87,7 +88,7 @@ impl MixtureOfNConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct UninitializedMixtureOfNConfig {
@@ -110,7 +111,7 @@ pub struct FuserConfig {
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct UninitializedFuserConfig {
@@ -918,7 +919,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode().cloned(),
+            self.inner.json_mode().copied(),
             extra_body,
             extra_headers,
         )?;

@@ -50,13 +50,9 @@ services:
 
   ui:
     image: tensorzero/ui
-    volumes:
-      - ./config:/app/config:ro # You can mount the entire configuration directory...
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_UI_CONFIG_PATH: /app/config/**/*.toml # ... and provide a glob pattern for them.
     ports:
       - "4000:4000"
     depends_on:

@@ -1,7 +1,6 @@
-import { searchWorkflowEvaluationRuns } from "~/utils/clickhouse/workflow_evaluations.server";
-import { workflowEvaluationRunSchema } from "~/utils/clickhouse/workflow_evaluations";
 import type { Route } from "./+types/route";
 import { abortableTimeout } from "~/utils/common";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -11,9 +10,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const query = url.searchParams.get("q") || "";
 
-  const runs = await searchWorkflowEvaluationRuns(100, 0, projectName, query);
-  const parsedRuns = runs.map((run) => workflowEvaluationRunSchema.parse(run));
-  return new Response(JSON.stringify(parsedRuns), {
+  const tensorZeroClient = getTensorZeroClient();
+  const response = await tensorZeroClient.searchWorkflowEvaluationRuns(
+    100,
+    0,
+    projectName,
+    query,
+  );
+  return new Response(JSON.stringify(response.runs), {
     headers: {
       "Content-Type": "application/json",
     },

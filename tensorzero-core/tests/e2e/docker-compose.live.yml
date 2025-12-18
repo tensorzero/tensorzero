@@ -154,6 +154,8 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
       - TENSORZERO_SKIP_LARGE_FIXTURES=1
     depends_on:
       gateway:

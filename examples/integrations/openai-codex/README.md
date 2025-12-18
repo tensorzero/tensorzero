@@ -30,7 +30,7 @@ Why?
 ### Prerequisites
 
 1. Install Docker.
-2. Install Node 24.11.0.
+2. Install Node 24.12.0.
 3. Generate credentials for the providers you want to use (e.g. `ANTHROPIC_API_KEY`).
 
 ### Setup
@@ -41,7 +41,7 @@ Why?
 4. Add the TensorZero Gateway to your Codex configuration (`~/.config/config.yaml` or `~/.codex/config.json`):
 
    ```yaml
-   model: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
+   model: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
    provider: tensorzero
    providers:
      tensorzero:
@@ -53,7 +53,7 @@ Why?
 
    ```json
    {
-     "model": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219",
+     "model": "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929",
      "provider": "tensorzero",
      "providers": {
        "tensorzero": {
@@ -71,7 +71,7 @@ Why?
    # or set the environment variable in your shell and just run `codex`
    ```
 
-You can replace `tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.
+You can replace `tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929` with any other model supported by TensorZero, e.g. `tensorzero::model_name::mistral::open-mistral-nemo-2407`.
 
 You can also define custom TensorZero functions in the `config/tensorzero.toml` file, and use them with Codex as `tensorzero::function_name::your_function_name`.
 This will enable you to use advanced inference features, collect data for fine-tuning and other optimization recipes, and more.

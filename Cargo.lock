@@ -185,6 +185,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "asn1-rs"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56624a96882bb8c26d61312ae18cb45868e5a9992ea73c58e45c3101e56a1e60"
+dependencies = [
+ "asn1-rs-derive",
+ "asn1-rs-impl",
+ "displaydoc",
+ "nom 7.1.3",
+ "num-traits",
+ "rusticata-macros",
+ "thiserror 2.0.17",
+ "time",
+]
+
+[[package]]
+name = "asn1-rs-derive"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3109e49b1e4909e9db6515a30c633684d68cdeaa252f215214cb4fa1a5bfee2c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
+ "synstructure",
+]
+
+[[package]]
+name = "asn1-rs-impl"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -237,6 +276,23 @@ name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
+
+[[package]]
+name = "autopilot-client"
+version = "2025.12.3"
+dependencies = [
+ "chrono",
+ "futures",
+ "reqwest",
+ "reqwest-eventsource",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tensorzero-core",
+ "thiserror 2.0.17",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "av-scenechange"
@@ -1065,9 +1121,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.46"
+version = "1.2.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97463e1064cb1b1c1384ad0a0b9c8abd0988e2a91f52606c80ef14aadb63e36"
+checksum = "90583009037521a116abf44494efecd645ba48b6622457080f080b85544e2215"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1585,6 +1641,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "der-parser"
+version = "10.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07da5016415d5a3c4dd39b11ed26f915f52fc4e0dc197d87908bc916e51bc1a6"
+dependencies = [
+ "asn1-rs",
+ "displaydoc",
+ "nom 7.1.3",
+ "num-bigint",
+ "num-traits",
+ "rusticata-macros",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1839,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1941,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2187,7 +2257,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "axum",
  "clap",
@@ -3381,9 +3451,9 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "2.13.0"
+version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0adbe6e92a6ce0fd6c4aac593fdfd3e3950b0f61b1a63aa9731eb6fd85776fa3"
+checksum = "12ea9ac0a51fb5112607099560fdf0f90366ab088a2a9e6e8ae176794e9806aa"
 dependencies = [
  "memo-map",
  "self_cell",
@@ -3393,7 +3463,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "minijinja",
  "serde",
@@ -3795,6 +3865,15 @@ dependencies = [
  "walkdir",
  "wasm-bindgen-futures",
  "web-time 1.1.0",
+]
+
+[[package]]
+name = "oid-registry"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f40cff3dde1b6087cc5d5f5d4d65712f34016a03ed60e9c08dcc392736b5b7"
+dependencies = [
+ "asn1-rs",
 ]
 
 [[package]]
@@ -4207,9 +4286,11 @@ name = "provider-proxy"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "axum",
  "bytes",
  "clap",
+ "futures-util",
  "hex",
  "http 1.4.0",
  "http-body-util",
@@ -4221,6 +4302,7 @@ dependencies = [
  "rand 0.9.2",
  "rcgen",
  "reqwest",
+ "reqwest-eventsource",
  "rustls",
  "serde",
  "serde_json",
@@ -4567,7 +4649,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4661,14 +4743,15 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.14.5"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fae430c6b28f1ad601274e78b7dffa0546de0b73b4cd32f46723c0c2a16f7a5"
+checksum = "3ec0a99f2de91c3cddc84b37e7db80e4d96b743e05607f647eb236fc0455907f"
 dependencies = [
  "pem",
  "ring",
  "rustls-pki-types",
  "time",
+ "x509-parser",
  "yasna",
 ]
 
@@ -4762,9 +4845,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.25"
+version = "0.12.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6eff9328d40131d43bd911d42d79eb6a47312002a4daefc9e37f17e74a7701a"
+checksum = "3b4c14b2d9afca6a60277086b0cc6a6ae0b568f6f7916c943a8cdc79f8be240f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -4949,6 +5032,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "rusticata-macros"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faf0c4a6ece9950b9abdb62b1cfcf2a68b3b67a10ba445b3bb85be2a293d0632"
+dependencies = [
+ "nom 7.1.3",
 ]
 
 [[package]]
@@ -6086,7 +6178,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "axum",
  "chrono",
@@ -6106,7 +6198,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6219,7 +6311,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "evaluations",
  "napi",
@@ -6238,7 +6330,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -6271,7 +6363,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.12.2"
+version = "2025.12.3"
 dependencies = [
  "evaluations",
  "futures",
@@ -6289,7 +6381,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2025.12.2"
+version = "2025.12.3"
 
 [[package]]
 name = "termcolor"
@@ -6791,9 +6883,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.25.10"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+checksum = "974d205cc395652cfa8b37daa053fe56eebd429acf8dc055503fee648dae981e"
 dependencies = [
  "cc",
  "regex",
@@ -7643,6 +7735,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3e137310115a65136898d2079f003ce33331a6c4b0d51f1531d1be082b6425"
+dependencies = [
+ "asn1-rs",
+ "data-encoding",
+ "der-parser",
+ "lazy_static",
+ "nom 7.1.3",
+ "oid-registry",
+ "ring",
+ "rusticata-macros",
+ "thiserror 2.0.17",
+ "time",
 ]
 
 [[package]]
