@@ -3500,8 +3500,8 @@ mod topk_tests {
             empty2_cs.variance_regularized
         );
 
-        // 4. Check variant failures confidence sequences. There shouldn't be any inference failures.
-        // All variants should have identical failure statistics (all 0s = no failures).
+        // 4. Check variant failures confidence sequences. There shouldn't be any inference failures,
+        // so all variants should have identical failure statistics.
         let echo_failures = output
             .variant_failures
             .get("echo")
@@ -3599,20 +3599,105 @@ mod topk_tests {
             empty2_failures.variance_regularized
         );
 
-        // 5. Check evaluator failures confidence sequences. The dummy::error LLM judge always
-        // fails, so 1/3 of evaluations should have failed.
-        for (name, cs) in &output.evaluator_failures {
-            assert_eq!(
-                cs.count, 75,
-                "Evaluator {name} should have processed 25 datapoints"
-            );
-            // Failure rate should be 0 (or very low)
-            assert!(
-                cs.mean_est < 0.01,
-                "Evaluator {name} should have ~0% failure rate, got {:.4}",
-                cs.mean_est
-            );
-        }
+        // 5. Check evaluator failures confidence sequences.
+        // test_topk_evaluation uses zero, one, and exact_match evaluators - none of which fail.
+        // Each evaluator processes 25 datapoints * 3 variants = 75 observations, all with 0 failures.
+        let zero_failures = output
+            .evaluator_failures
+            .get("zero")
+            .expect("Zero failures not found");
+        let one_failures = output
+            .evaluator_failures
+            .get("one")
+            .expect("One failures not found");
+        let exact_match_failures = output
+            .evaluator_failures
+            .get("exact_match")
+            .expect("Exact_match failures not found");
+
+        // 5.1. Zero evaluator failures
+        assert_eq!(zero_failures.count, 75, "zero failures count");
+        assert!(
+            (zero_failures.mean_est - 0.0).abs() < 1e-10,
+            "zero failures mean_est {} != 0.0",
+            zero_failures.mean_est
+        );
+        assert!(
+            (zero_failures.cs_lower - 0.0).abs() < 1e-10,
+            "zero failures cs_lower {} != 0.0",
+            zero_failures.cs_lower
+        );
+        assert!(
+            (zero_failures.cs_upper - 0.092).abs() < 1e-10,
+            "zero failures cs_upper {} != 0.092",
+            zero_failures.cs_upper
+        );
+        assert!(
+            (zero_failures.mean_regularized - 0.006578947368421).abs() < 1e-10,
+            "zero failures mean_regularized {} != 0.006578947368421",
+            zero_failures.mean_regularized
+        );
+        assert!(
+            (zero_failures.variance_regularized - 0.005367968281414).abs() < 1e-10,
+            "zero failures variance_regularized {} != 0.005367968281414",
+            zero_failures.variance_regularized
+        );
+
+        // 5.2. One evaluator failures (should be identical to zero)
+        assert_eq!(one_failures.count, 75, "one failures count");
+        assert!(
+            (one_failures.mean_est - 0.0).abs() < 1e-10,
+            "one failures mean_est {} != 0.0",
+            one_failures.mean_est
+        );
+        assert!(
+            (one_failures.cs_lower - 0.0).abs() < 1e-10,
+            "one failures cs_lower {} != 0.0",
+            one_failures.cs_lower
+        );
+        assert!(
+            (one_failures.cs_upper - 0.092).abs() < 1e-10,
+            "one failures cs_upper {} != 0.092",
+            one_failures.cs_upper
+        );
+        assert!(
+            (one_failures.mean_regularized - 0.006578947368421).abs() < 1e-10,
+            "one failures mean_regularized {} != 0.006578947368421",
+            one_failures.mean_regularized
+        );
+        assert!(
+            (one_failures.variance_regularized - 0.005367968281414).abs() < 1e-10,
+            "one failures variance_regularized {} != 0.005367968281414",
+            one_failures.variance_regularized
+        );
+
+        // 5.3. Exact_match evaluator failures (should be identical to zero and one)
+        assert_eq!(exact_match_failures.count, 75, "exact_match failures count");
+        assert!(
+            (exact_match_failures.mean_est - 0.0).abs() < 1e-10,
+            "exact_match failures mean_est {} != 0.0",
+            exact_match_failures.mean_est
+        );
+        assert!(
+            (exact_match_failures.cs_lower - 0.0).abs() < 1e-10,
+            "exact_match failures cs_lower {} != 0.0",
+            exact_match_failures.cs_lower
+        );
+        assert!(
+            (exact_match_failures.cs_upper - 0.092).abs() < 1e-10,
+            "exact_match failures cs_upper {} != 0.092",
+            exact_match_failures.cs_upper
+        );
+        assert!(
+            (exact_match_failures.mean_regularized - 0.006578947368421).abs() < 1e-10,
+            "exact_match failures mean_regularized {} != 0.006578947368421",
+            exact_match_failures.mean_regularized
+        );
+        assert!(
+            (exact_match_failures.variance_regularized - 0.005367968281414).abs() < 1e-10,
+            "exact_match failures variance_regularized {} != 0.005367968281414",
+            exact_match_failures.variance_regularized
+        );
 
         // 6. Check number of datapoints processed
         assert_eq!(
