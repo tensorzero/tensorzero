@@ -3174,7 +3174,7 @@ mod topk_tests {
     /// Test that top-k evaluation runs successfully with the test_evaluation evaluation.
     /// This test uses deterministic dummy providers and evaluators for reliable results.
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_topk_basic_run() {
+    async fn test_topk_topk_found() {
         // Setup
         let config = get_config().await;
         let clickhouse = get_clickhouse().await;
