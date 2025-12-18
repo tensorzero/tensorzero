@@ -551,7 +551,18 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Text(_))),
+        "Missing text block in output: {output:#?}"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+        "Missing thought block in output: {output:#?}"
+    );
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
         &clickhouse,
