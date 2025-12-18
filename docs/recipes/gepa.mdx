@@ -297,9 +297,9 @@ stored_inferences = t0.experimental_list_inferences(
 Or, you can just use the examples satisfying a metric filter:
 
 ```python
-from tensorzero import FloatMetricFilter
+from tensorzero import InferenceFilterFloatMetric
 
-metric_filter = FloatMetricFilter(
+metric_filter = InferenceFilterFloatMetric(
     metric_name="jaccard_similarity",
     value=0.8,
     comparison_operator=">=",

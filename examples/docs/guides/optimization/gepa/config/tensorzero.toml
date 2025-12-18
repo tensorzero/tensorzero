@@ -1,0 +1,72 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 EVALUATIONS                                │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.extract_entities_eval]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement]
+type = "llm_judge"
+output_type = "float"
+include = { reference_output = true }
+optimize = "max"
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Prioritizes correctness, schema compliance, completeness, and clarity."
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.extract_entities_eval.evaluators.judge_verbatim]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+description = "Evaluate if the extracted named entities appear exactly as written in the source document, preserving original spelling, capitalization, and formatting. Scores: True (verbatim), False (altered)."
+
+[evaluations.extract_entities_eval.evaluators.judge_verbatim.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_verbatim/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.extract_entities_eval.evaluators.judge_repetition]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+description = "Evaluate if named entities are extracted exactly once, without exact or subset duplicates. Scores: True (repetition found), False (no repetition)."
+
+[evaluations.extract_entities_eval.evaluators.judge_repetition.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_repetition/system_instructions.txt"
+json_mode = "strict"

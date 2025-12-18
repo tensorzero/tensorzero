@@ -1118,7 +1118,12 @@ jobs:
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   run-merge-queue-checks:
-    needs: [build-gateway-container, build-gateway-e2e-container, build-mock-inference-container]
+    needs:
+      [
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-mock-inference-container,
+      ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
