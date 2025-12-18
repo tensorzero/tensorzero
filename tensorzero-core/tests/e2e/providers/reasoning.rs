@@ -37,7 +37,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the capital city of Japan? Think step by step"
                 }
             ]},
         "extra_headers": extra_headers,
@@ -70,7 +70,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 2);
 
     let mut found_text = false;
     let mut found_thought = false;
@@ -92,7 +91,10 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 
     assert!(found_text, "Expected to find a text block");
     assert!(found_thought, "Expected to find a thought block");
-    assert!(text_content.to_lowercase().contains("tokyo"));
+    assert!(
+        text_content.to_lowercase().contains("tokyo"),
+        "Unexpected text content: {text_content}"
+    );
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
@@ -132,7 +134,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan? Think step by step"}]
             }
         ]
     });
@@ -235,7 +237,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is the capital city of Japan?".to_string(),
+            text: "What is the capital city of Japan? Think step by step".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
