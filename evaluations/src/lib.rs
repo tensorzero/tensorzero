@@ -486,8 +486,8 @@ pub async fn run_evaluation_core_streaming(
                     }
 
                     Some(EvaluationUpdate::Success(EvaluationInfo::new(
-                        success.datapoint,
-                        success.inference_response,
+                        (*success.datapoint).clone(),
+                        (*success.inference_response).clone(),
                         success.evaluation_result,
                     )))
                 }
@@ -717,11 +717,11 @@ pub struct ProcessBatchParams {
 /// Result of processing a single (datapoint, variant) pair.
 pub struct DatapointVariantResult {
     /// The datapoint that was evaluated
-    pub datapoint: Datapoint,
+    pub datapoint: Arc<Datapoint>,
     /// The variant that was used
     pub variant: Arc<EvaluationVariant>,
     /// The inference response
-    pub inference_response: InferenceResponse,
+    pub inference_response: Arc<InferenceResponse>,
     /// Results from all evaluators (evaluator_name -> result)
     pub evaluation_result: evaluators::EvaluationResult,
 }
@@ -873,11 +873,9 @@ pub fn process_batch(
                 );
 
                 Ok(DatapointVariantResult {
-                    datapoint: Arc::into_inner(datapoint)
-                        .ok_or_else(|| anyhow!("Failed to unwrap datapoint Arc"))?,
-                    variant: variant.clone(),
-                    inference_response: Arc::into_inner(inference_response)
-                        .ok_or_else(|| anyhow!("Failed to unwrap inference_response Arc"))?,
+                    datapoint,
+                    variant,
+                    inference_response,
                     evaluation_result,
                 })
             });
