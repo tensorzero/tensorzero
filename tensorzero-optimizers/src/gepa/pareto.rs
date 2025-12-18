@@ -1071,7 +1071,7 @@ mod tests {
                     }
                     _ => panic!("Invalid optimize direction: {optimize}"),
                 };
-                ((*name).to_string(), evaluator_config)
+                ((*name).to_owned(), evaluator_config)
             })
             .collect()
     }
@@ -1132,7 +1132,7 @@ mod tests {
             .iter()
             .map(|(name, mean, stderr, count)| {
                 (
-                    (*name).to_string(),
+                    (*name).to_owned(),
                     EvaluatorStats {
                         mean: *mean,
                         stderr: *stderr,
