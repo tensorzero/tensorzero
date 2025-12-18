@@ -3402,7 +3402,7 @@ mod topk_tests {
             "Empty2 should be Excluded (loser)"
         );
 
-        // 3. Check that echo's lower bound > empty variants' upper bounds
+        // 3. Check variant performance confidence sequences
         let echo_cs = output
             .variant_performance
             .get("echo")
@@ -3416,30 +3416,7 @@ mod topk_tests {
             .get("empty2")
             .expect("Empty2 performance not found");
 
-        assert!(
-            echo_cs.cs_lower > empty1_cs.cs_upper,
-            "Echo lower bound ({:.4}) should be > empty1 upper bound ({:.4})",
-            echo_cs.cs_lower,
-            empty1_cs.cs_upper
-        );
-        assert!(
-            echo_cs.cs_lower > empty2_cs.cs_upper,
-            "Echo lower bound ({:.4}) should be > empty2 upper bound ({:.4})",
-            echo_cs.cs_lower,
-            empty2_cs.cs_upper
-        );
-
-        // 4. Expected values computed by calculate_topk_expected_values.py
-        // These are the exact values the Rust implementation should produce
-        // Top-1 found at datapoint 25
-
-        // Number of datapoints processed when top-1 was found
-        assert_eq!(
-            output.num_datapoints_processed, 25,
-            "Should process exactly 25 datapoints before finding top-1"
-        );
-
-        // Echo variant confidence sequence
+        // 3.1. Echo variant confidence sequence
         assert_eq!(echo_cs.count, 25, "echo count");
         assert!(
             (echo_cs.mean_est - 0.666000000000000).abs() < 1e-10,
@@ -3467,7 +3444,7 @@ mod topk_tests {
             echo_cs.variance_regularized
         );
 
-        // Empty1 variant confidence sequence
+        // 3.2. Empty1 variant confidence sequence
         assert_eq!(empty1_cs.count, 25, "empty1 count");
         assert!(
             (empty1_cs.mean_est - 0.333000000000000).abs() < 1e-10,
@@ -3495,7 +3472,7 @@ mod topk_tests {
             empty1_cs.variance_regularized
         );
 
-        // Empty2 variant confidence sequence (should be identical to empty1)
+        // 3.3. Empty2 variant confidence sequence (should be identical to empty1)
         assert_eq!(empty2_cs.count, 25, "empty2 count");
         assert!(
             (empty2_cs.mean_est - 0.333000000000000).abs() < 1e-10,
@@ -3512,8 +3489,118 @@ mod topk_tests {
             "empty2 cs_upper {} != 0.495",
             empty2_cs.cs_upper
         );
+        assert!(
+            (empty2_cs.mean_regularized - 0.339743589743590).abs() < 1e-10,
+            "empty2 mean_regularized {} != 0.339743589743590",
+            empty2_cs.mean_regularized
+        );
+        assert!(
+            (empty2_cs.variance_regularized - 0.010264105441808).abs() < 1e-10,
+            "empty2 variance_regularized {} != 0.010264105441808",
+            empty2_cs.variance_regularized
+        );
 
-        // 5. Check evaluator failures are empty (no errors in test_topk_evaluation)
+        // 4. Check variant failures confidence sequences. There shouldn't be any inference failures.
+        // All variants should have identical failure statistics (all 0s = no failures).
+        let echo_failures = output
+            .variant_failures
+            .get("echo")
+            .expect("Echo failures not found");
+        let empty1_failures = output
+            .variant_failures
+            .get("empty1")
+            .expect("Empty1 failures not found");
+        let empty2_failures = output
+            .variant_failures
+            .get("empty2")
+            .expect("Empty2 failures not found");
+
+        // 4.1. Echo variant failures
+        assert_eq!(echo_failures.count, 25, "echo failures count");
+        assert!(
+            (echo_failures.mean_est - 0.0).abs() < 1e-10,
+            "echo failures mean_est {} != 0.0",
+            echo_failures.mean_est
+        );
+        assert!(
+            (echo_failures.cs_lower - 0.0).abs() < 1e-10,
+            "echo failures cs_lower {} != 0.0",
+            echo_failures.cs_lower
+        );
+        assert!(
+            (echo_failures.cs_upper - 0.242).abs() < 1e-10,
+            "echo failures cs_upper {} != 0.242",
+            echo_failures.cs_upper
+        );
+        assert!(
+            (echo_failures.mean_regularized - 0.019230769230769).abs() < 1e-10,
+            "echo failures mean_regularized {} != 0.019230769230769",
+            echo_failures.mean_regularized
+        );
+        assert!(
+            (echo_failures.variance_regularized - 0.015453872053191).abs() < 1e-10,
+            "echo failures variance_regularized {} != 0.015453872053191",
+            echo_failures.variance_regularized
+        );
+
+        // 4.2. Empty1 variant failures (should be identical to echo)
+        assert_eq!(empty1_failures.count, 25, "empty1 failures count");
+        assert!(
+            (empty1_failures.mean_est - 0.0).abs() < 1e-10,
+            "empty1 failures mean_est {} != 0.0",
+            empty1_failures.mean_est
+        );
+        assert!(
+            (empty1_failures.cs_lower - 0.0).abs() < 1e-10,
+            "empty1 failures cs_lower {} != 0.0",
+            empty1_failures.cs_lower
+        );
+        assert!(
+            (empty1_failures.cs_upper - 0.242).abs() < 1e-10,
+            "empty1 failures cs_upper {} != 0.242",
+            empty1_failures.cs_upper
+        );
+        assert!(
+            (empty1_failures.mean_regularized - 0.019230769230769).abs() < 1e-10,
+            "empty1 failures mean_regularized {} != 0.019230769230769",
+            empty1_failures.mean_regularized
+        );
+        assert!(
+            (empty1_failures.variance_regularized - 0.015453872053191).abs() < 1e-10,
+            "empty1 failures variance_regularized {} != 0.015453872053191",
+            empty1_failures.variance_regularized
+        );
+
+        // 4.3. Empty2 variant failures (should be identical to echo)
+        assert_eq!(empty2_failures.count, 25, "empty2 failures count");
+        assert!(
+            (empty2_failures.mean_est - 0.0).abs() < 1e-10,
+            "empty2 failures mean_est {} != 0.0",
+            empty2_failures.mean_est
+        );
+        assert!(
+            (empty2_failures.cs_lower - 0.0).abs() < 1e-10,
+            "empty2 failures cs_lower {} != 0.0",
+            empty2_failures.cs_lower
+        );
+        assert!(
+            (empty2_failures.cs_upper - 0.242).abs() < 1e-10,
+            "empty2 failures cs_upper {} != 0.242",
+            empty2_failures.cs_upper
+        );
+        assert!(
+            (empty2_failures.mean_regularized - 0.019230769230769).abs() < 1e-10,
+            "empty2 failures mean_regularized {} != 0.019230769230769",
+            empty2_failures.mean_regularized
+        );
+        assert!(
+            (empty2_failures.variance_regularized - 0.015453872053191).abs() < 1e-10,
+            "empty2 failures variance_regularized {} != 0.015453872053191",
+            empty2_failures.variance_regularized
+        );
+
+        // 5. Check evaluator failures confidence sequences. The dummy::error LLM judge always
+        // fails, so 1/3 of evaluations should have failed.
         for (name, cs) in &output.evaluator_failures {
             assert_eq!(
                 cs.count, 75,
@@ -3527,18 +3614,11 @@ mod topk_tests {
             );
         }
 
-        // 6. Check variant failures are empty (no inference errors)
-        for (name, cs) in &output.variant_failures {
-            assert_eq!(
-                cs.count, 25,
-                "Variant {name} failures should have processed 25 datapoints"
-            );
-            assert!(
-                cs.mean_est < 0.01,
-                "Variant {name} should have ~0% failure rate, got {:.4}",
-                cs.mean_est
-            );
-        }
+        // 6. Check number of datapoints processed
+        assert_eq!(
+            output.num_datapoints_processed, 25,
+            "Should process exactly 25 datapoints before finding top-1"
+        );
     }
 
     /// Test that top-k evaluation stops with DatasetExhausted when there aren't enough datapoints.
