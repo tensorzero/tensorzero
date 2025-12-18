@@ -102,9 +102,9 @@ pub async fn start_gateway_on_random_port(
         .parse::<u16>()
         .unwrap();
 
-    // Bind to 0.0.0.0 so the gateway can listen on all interfaces, but tests should
-    // connect via loopback. On Windows, connecting to 0.0.0.0 fails with AddrNotAvailable.
-    // Let's add conditional logic to handle that.
+    // The gateway is configured above to bind to 0.0.0.0:0 so it can listen on all interfaces,
+    // but tests must choose an appropriate address to connect to. On Windows, connecting to
+    // 0.0.0.0 fails with AddrNotAvailable, so use loopback there and 0.0.0.0 elsewhere.
     ChildData {
         addr: format!(
             "{}:{port}",
