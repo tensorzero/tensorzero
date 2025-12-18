@@ -2,10 +2,12 @@
 
 use reqwest::Client;
 use tensorzero_core::endpoints::workflow_evaluations::internal::{
-    CountWorkflowEvaluationRunEpisodesByTaskNameResponse, CountWorkflowEvaluationRunsResponse,
+    CountWorkflowEvaluationRunEpisodesByTaskNameResponse,
+    CountWorkflowEvaluationRunEpisodesResponse, CountWorkflowEvaluationRunsResponse,
     GetWorkflowEvaluationProjectCountResponse, GetWorkflowEvaluationProjectsResponse,
-    GetWorkflowEvaluationRunsResponse, ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
-    ListWorkflowEvaluationRunsResponse, SearchWorkflowEvaluationRunsResponse,
+    GetWorkflowEvaluationRunEpisodesWithFeedbackResponse, GetWorkflowEvaluationRunsResponse,
+    ListWorkflowEvaluationRunEpisodesByTaskNameResponse, ListWorkflowEvaluationRunsResponse,
+    SearchWorkflowEvaluationRunsResponse,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -599,5 +601,163 @@ async fn test_count_matches_list_length_endpoint() {
         "Count ({}) should match number of groups ({})",
         count_response.count,
         list_response.episodes.len()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_workflow_evaluation_run_episodes_endpoint() {
+    let http_client = Client::new();
+    // Use a known run ID from the fixture data
+    let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
+    let url = get_gateway_endpoint(&format!(
+        "/internal/workflow-evaluations/run-episodes?run_id={run_id}"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_workflow_evaluation_run_episodes request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetWorkflowEvaluationRunEpisodesWithFeedbackResponse = resp.json().await.unwrap();
+
+    // Should return episodes for the run
+    assert!(
+        !response.episodes.is_empty(),
+        "Expected at least one episode for the run"
+    );
+
+    // Check that the first episode has the expected fields
+    let first_episode = &response.episodes[0];
+    assert!(
+        !first_episode.episode_id.is_nil(),
+        "Episode ID should not be nil"
+    );
+    assert_eq!(
+        first_episode.run_id.to_string(),
+        run_id,
+        "Expected episode to belong to the specified run"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_workflow_evaluation_run_episodes_with_pagination() {
+    let http_client = Client::new();
+    let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
+    let url = get_gateway_endpoint(&format!(
+        "/internal/workflow-evaluations/run-episodes?run_id={run_id}&limit=1&offset=0"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_workflow_evaluation_run_episodes request with pagination failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetWorkflowEvaluationRunEpisodesWithFeedbackResponse = resp.json().await.unwrap();
+
+    // With limit=1, we should get at most 1 episode
+    assert!(
+        response.episodes.len() <= 1,
+        "Expected at most 1 episode with limit=1, got {}",
+        response.episodes.len()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_workflow_evaluation_run_episodes_beyond_offset() {
+    let http_client = Client::new();
+    let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
+    let url = get_gateway_endpoint(&format!(
+        "/internal/workflow-evaluations/run-episodes?run_id={run_id}&limit=10&offset=10000"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_workflow_evaluation_run_episodes request with large offset failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetWorkflowEvaluationRunEpisodesWithFeedbackResponse = resp.json().await.unwrap();
+
+    // Should return empty list when offset is beyond data
+    assert_eq!(
+        response.episodes.len(),
+        0,
+        "Expected 0 episodes with large offset, got {}",
+        response.episodes.len()
+    );
+}
+
+// =====================================================================
+// Count Workflow Evaluation Run Episodes Endpoint Tests
+// =====================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_workflow_evaluation_run_episodes_endpoint() {
+    let http_client = Client::new();
+    let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
+    let url = get_gateway_endpoint(&format!(
+        "/internal/workflow-evaluations/run-episodes/count?run_id={run_id}"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "count_workflow_evaluation_run_episodes request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: CountWorkflowEvaluationRunEpisodesResponse = resp.json().await.unwrap();
+
+    // The fixture data should have episodes for this run
+    assert!(
+        response.count > 0,
+        "Expected episode count > 0 for this run, got {}",
+        response.count
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
+    let http_client = Client::new();
+    // Use a valid but non-existent UUIDv7
+    let run_id = "01942e26-4693-7e80-8591-47b98e25d999";
+    let url = get_gateway_endpoint(&format!(
+        "/internal/workflow-evaluations/run-episodes/count?run_id={run_id}"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "count_workflow_evaluation_run_episodes request for non-existent run failed: status={:?}",
+        resp.status()
+    );
+
+    let response: CountWorkflowEvaluationRunEpisodesResponse = resp.json().await.unwrap();
+
+    // Should return 0 for non-existent run
+    assert_eq!(
+        response.count, 0,
+        "Expected 0 episodes for non-existent run, got {}",
+        response.count
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_workflow_evaluation_run_episodes_missing_run_id() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/workflow-evaluations/run-episodes/count");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    // Should fail with 400 Bad Request when run_id is missing
+    assert_eq!(
+        resp.status().as_u16(),
+        400,
+        "Expected 400 status for missing run_id, got {:?}",
+        resp.status()
     );
 }

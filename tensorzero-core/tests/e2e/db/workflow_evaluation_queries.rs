@@ -730,3 +730,132 @@ async fn test_count_matches_list_length() {
         unique_groups.len()
     );
 }
+
+/// Test getting workflow evaluation run episodes with feedback.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run ID from the fixture data
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 0)
+        .await
+        .unwrap();
+
+    // Should return episodes (fixture has at least 2)
+    assert!(
+        result.len() >= 2,
+        "Expected at least 2 episodes, got {}",
+        result.len()
+    );
+
+    // Verify all episodes belong to the specified run
+    for episode in &result {
+        assert_eq!(
+            episode.run_id, run_id,
+            "Expected all episodes to belong to run {run_id}"
+        );
+    }
+
+    // The first episode in the fixture has feedback for elapsed_ms and solved
+    let first_episode = &result[0];
+    assert!(
+        !first_episode.episode_id.is_nil(),
+        "Episode ID should not be nil"
+    );
+    // Feedback metric names should be sorted alphabetically
+    for i in 1..first_episode.feedback_metric_names.len() {
+        assert!(
+            first_episode.feedback_metric_names[i - 1] <= first_episode.feedback_metric_names[i],
+            "Feedback metric names should be sorted alphabetically"
+        );
+    }
+}
+
+/// Test getting workflow evaluation run episodes with pagination limit.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_limit() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    // With limit=1, should get at most 1 episode
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 1, 0)
+        .await
+        .unwrap();
+
+    // Should return at most 1 episode with limit=1
+    assert!(
+        result.len() <= 1,
+        "Expected at most 1 episode with limit=1, got {}",
+        result.len()
+    );
+}
+
+/// Test getting workflow evaluation run episodes with offset beyond data.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 1000)
+        .await
+        .unwrap();
+
+    // Should return empty when offset is beyond data
+    assert_eq!(
+        result.len(),
+        0,
+        "Expected 0 episodes with offset beyond data, got {}",
+        result.len()
+    );
+}
+
+// =====================================================================
+// Count Workflow Evaluation Run Episodes Tests
+// =====================================================================
+
+/// Test counting workflow evaluation run episodes with fixture data.
+/// This mirrors the TypeScript test for countWorkflowEvaluationRunEpisodes.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes(run_id)
+        .await
+        .unwrap();
+
+    // The fixture data has exactly 100 episodes for this run
+    assert_eq!(
+        count, 100,
+        "Expected 100 episodes for this run, got {}",
+        count
+    );
+}
+
+/// Test counting workflow evaluation run episodes for non-existent run.
+#[tokio::test]
+async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
+    let clickhouse = get_clickhouse().await;
+
+    let non_existent_run_id = uuid::Uuid::now_v7();
+
+    let count = clickhouse
+        .count_workflow_evaluation_run_episodes(non_existent_run_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        count, 0,
+        "Expected 0 episodes for non-existent run, got {}",
+        count
+    );
+}
