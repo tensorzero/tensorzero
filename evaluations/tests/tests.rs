@@ -3276,8 +3276,6 @@ mod topk_tests {
             .map(|v| serde_json::from_value(v).expect("Failed to deserialize output"))
             .expect("No task output found");
 
-        println!("Top-k output: {output:?}");
-
         // Shutdown worker
         worker.shutdown().await;
 
@@ -3294,10 +3292,6 @@ mod topk_tests {
                 assert_eq!(*k, 1, "Should have found top-1");
                 assert_eq!(top_variants.len(), 1, "Should have exactly one top variant");
                 println!("Top variant: {top_variants:?}");
-            }
-            GlobalStoppingReason::DatasetExhausted => {
-                // This is also acceptable if we couldn't determine a winner
-                println!("Dataset exhausted without finding clear winner");
             }
             other => {
                 panic!("Unexpected stopping reason: {other:?}");

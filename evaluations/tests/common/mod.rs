@@ -12,7 +12,9 @@ use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::inference::types::stored_input::{StoredInput, StoredInputMessage};
-use tensorzero_core::inference::types::{Arguments, Role, StoredInputMessageContent, System, Text};
+use tensorzero_core::inference::types::{
+    Arguments, ContentBlockChatOutput, Role, StoredInputMessageContent, System, Text,
+};
 use uuid::Uuid;
 
 // Re-export test helpers from tensorzero-core
@@ -128,7 +130,10 @@ pub async fn write_basic_test_datapoints(dataset_name: &str, count: usize) {
                         })],
                     }],
                 },
-                output: None,
+                // Reference output equals input text - used with echo/empty models for exact_match testing
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: message_text.to_string(),
+                })]),
                 tool_params: None,
                 tags: None,
                 is_custom: false,

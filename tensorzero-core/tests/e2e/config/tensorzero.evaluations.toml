@@ -62,6 +62,11 @@ active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
+# Exact match evaluator: 1.0 if output matches reference, 0.0 otherwise
+# Used with echo/empty variants to produce different scores per variant
+[evaluations.test_evaluation.evaluators.exact_match]
+type = "exact_match"
+
 [evaluations.json_evaluation]
 type = "inference"
 function_name = "json_success"
