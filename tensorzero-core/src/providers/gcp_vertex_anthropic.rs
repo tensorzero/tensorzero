@@ -66,8 +66,6 @@ pub struct GCPVertexAnthropicProvider {
 }
 
 fn handle_gcp_error(
-    // This is only used in test mode
-    #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
     provider_type: ProviderType,
     e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
