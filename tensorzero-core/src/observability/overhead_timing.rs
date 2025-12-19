@@ -225,9 +225,9 @@ where
                         return;
                     }
                 }
-                error_within_tracing(
-                    format!("Failed to find parent for external span {id:?}").as_str(),
-                );
+                // We might create 'external' spans outside of an overhead-tracked span
+                // (e.g. when using TensorzeroHttpClient in a background task), so don't error if
+                // we didn't find a parent span with `OverheadSpanData`
             } else {
                 error_within_tracing(
                     format!("Failed to find span scope for external span {id:?}").as_str(),

@@ -71,7 +71,7 @@ pub async fn install_capturing_otel_exporter() -> CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
     let handle =
-        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()))
+        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()), true)
             .await
             .unwrap();
     handle.delayed_otel.unwrap().enable_otel().unwrap();
@@ -585,9 +585,12 @@ fn check_spans(
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
     if model_inference_error {
-        assert_eq!(model_provider_span.status, Status::Error {
-            description: "".into()
-        });
+        assert_eq!(
+            model_provider_span.status,
+            Status::Error {
+                description: "".into()
+            }
+        );
     } else {
         assert_eq!(model_provider_span.status, Status::Ok);
     }
