@@ -21,7 +21,7 @@ WORKDIR /app
 COPY . .
 
 # Build and archive tests instead of copying entire target directory
-RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst --offline
+RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst
 
 # ========== test-env ==========
 
