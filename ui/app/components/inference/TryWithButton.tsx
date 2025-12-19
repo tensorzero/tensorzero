@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useHydrated } from "~/hooks/use-hydrated";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -27,8 +26,7 @@ export function TryWithButton({
 }: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isReadOnly = useReadOnly();
-  const isHydrated = useHydrated();
-  const isDisabled = isLoading || isReadOnly || !isHydrated;
+  const isDisabled = isLoading || isReadOnly;
 
   return (
     <ReadOnlyGuard asChild>
@@ -49,7 +47,6 @@ export function TryWithButton({
                 setIsOpen(false);
               }}
               className="font-mono text-sm"
-              disabled={isDisabled}
             >
               {option}
             </DropdownMenuItem>
