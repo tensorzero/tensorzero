@@ -38,7 +38,7 @@ VAL_FRACTION = 0.2
 MAX_SAMPLES = 100_000
 
 # The name of the model to fine-tune (supported models: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini-supervised-tuning)
-MODEL_NAME = "gemini-2.0-flash-lite-001"
+MODEL_NAME = "gemini-2.5-flash-lite"
 
 # %%
 import os

@@ -381,7 +381,7 @@ weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body]
@@ -390,7 +390,7 @@ weight = 0
 candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body.evaluator]
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
@@ -436,7 +436,7 @@ weight = 1
 candidates = ["variant0", "variant1", "variant2"]
 
 [functions.best_of_n_json.variants.best_of_n_variant.evaluator]
-model = "gemini-2.0-flash-001"
+model = "gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 

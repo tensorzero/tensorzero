@@ -27,7 +27,7 @@ async fn test_clickhouse_query_model_usage_monthly() {
     // Test specific data points from May 2025
     let may_gemini = model_usage.iter().find(|u| {
         u.period_start.format("%Y-%m-%d").to_string() == "2025-05-01"
-            && u.model_name == "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+            && u.model_name == "google_ai_studio_gemini::gemini-2.5-flash"
     });
     assert!(
         may_gemini.is_some(),
@@ -403,7 +403,7 @@ async fn test_clickhouse_model_latency_cumulative() {
 
     let gemini_latency = model_latency_data
         .iter()
-        .find(|l| l.model_name == "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17");
+        .find(|l| l.model_name == "google_ai_studio_gemini::gemini-2.5-flash");
     assert!(
         gemini_latency.is_some(),
         "Should have cumulative latency data for gemini"

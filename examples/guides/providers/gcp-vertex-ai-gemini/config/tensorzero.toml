@@ -1,9 +1,9 @@
-[models.gemini_2_0_flash]
+[models.gemini_2_5_flash]
 routing = ["gcp_vertex_gemini"]
 
-[models.gemini_2_0_flash.providers.gcp_vertex_gemini]
+[models.gemini_2_5_flash.providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.0-flash"
+model_id = "gemini-2.5-flash"
 location = "us-central1"
 project_id = "your-project-id"  # change this
 
@@ -12,4 +12,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_2_0_flash"
+model = "gemini_2_5_flash"

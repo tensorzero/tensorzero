@@ -1,13 +1,13 @@
-[models.gemini_2_0_flash_lite]
+[models.gemini_2_5_flash_lite]
 routing = ["google_ai_studio_gemini"]
 
-[models.gemini_2_0_flash_lite.providers.google_ai_studio_gemini]
+[models.gemini_2_5_flash_lite.providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.0-flash-lite"
+model_name = "gemini-2.5-flash-lite"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_2_0_flash_lite"
+model = "gemini_2_5_flash_lite"

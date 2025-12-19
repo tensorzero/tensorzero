@@ -223,12 +223,12 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
-[models."gemini-2.0-flash-001"]
+[models."gemini-2.5-flash"]
 routing = ["gcp_vertex_gemini"]
 
-[models."gemini-2.0-flash-001".providers.gcp_vertex_gemini]
+[models."gemini-2.5-flash".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.0-flash-001"
+model_id = "gemini-2.5-flash"
 location = "us-central1"
 project_id = "tensorzero-public"
 credential_location = "sdk"
@@ -248,12 +248,12 @@ extra_body = [
     { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
 ]
 
-[models."gemini-2.0-flash-lite"]
+[models."gemini-2.5-flash-lite"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-2.0-flash-lite".providers.google_ai_studio_gemini]
+[models."gemini-2.5-flash-lite".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.0-flash-lite"
+model_name = "gemini-2.5-flash-lite"
 
 [models."gemini-2.0-flash-lite-tuned"]
 routing = ["gcp_vertex_gemini"]
@@ -273,12 +273,12 @@ location = "us-central1"
 project_id = "tensorzero-public"
 model_id = "945488740422254592"
 
-[models."gemini-2.0-flash-lite-dynamic"]
+[models."gemini-2.5-flash-lite-dynamic"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-2.0-flash-lite-dynamic".providers.google_ai_studio_gemini]
+[models."gemini-2.5-flash-lite-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.0-flash-lite"
+model_name = "gemini-2.5-flash-lite"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
 [models."gemini-2.5-pro"]

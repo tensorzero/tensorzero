@@ -27,7 +27,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -43,14 +43,14 @@ async fn get_providers() -> E2ETestProviders {
     let image_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google_ai_studio".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b-extra-body".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -58,7 +58,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b-extra-headers".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -67,7 +67,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "google-ai-studio-gemini-flash-8b-dynamic".to_string(),
-            model_name: "gemini-2.0-flash-lite-dynamic".into(),
+            model_name: "gemini-2.5-flash-lite-dynamic".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: credentials.clone(),
         },
@@ -83,7 +83,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -92,14 +92,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "google-ai-studio-gemini-flash-8b-implicit".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -120,7 +120,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "google-ai-studio-gemini-flash-8b-strict".to_string(),
-            model_name: "gemini-2.0-flash-lite".into(),
+            model_name: "gemini-2.5-flash-lite".into(),
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
@@ -129,7 +129,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google_ai_studio_gemini_flash_8b_json_mode_off".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -137,7 +137,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b-shorthand".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -145,7 +145,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
-        model_name: "gemini-2.0-flash-lite".into(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -153,7 +153,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "google-ai-studio-gemini-flash-8b-shorthand".to_string(),
-        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        model_name: "google_ai_studio_gemini::gemini-2.5-flash-lite".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -162,7 +162,7 @@ async fn get_providers() -> E2ETestProviders {
         provider_type: "google_ai_studio_gemini".to_string(),
         model_info: HashMap::from([(
             "model_name".to_string(),
-            "gemini-2.0-flash-lite".to_string(),
+            "gemini-2.5-flash-lite".to_string(),
         )]),
         use_modal_headers: false,
     }];
