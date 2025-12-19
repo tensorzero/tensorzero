@@ -20,9 +20,6 @@ WORKDIR /app
 # Copy the entire project
 COPY . .
 
-# Fetch all dependencies first (including dev-dependencies needed by trybuild)
-RUN cargo fetch --locked
-
 # Build and archive tests instead of copying entire target directory
 RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst --offline
 
