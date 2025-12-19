@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
   getEvaluationResults,
@@ -354,37 +353,5 @@ describe("getEvaluationsForDatapoint", () => {
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
     expect(second_evaluation.metric_value).toBeDefined();
-  });
-});
-
-describe("getEvaluationRunInfosForDatapoint", () => {
-  test("should return correct evaluation run info for ragged json datapoint", async () => {
-    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "0196368e-0b64-7321-ab5b-c32eefbf3e9f",
-      "extract_entities",
-    );
-    // Check that the evaluation run ids are correct
-    const expected1 = {
-      evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
-      most_recent_inference_date: "2025-04-14T23:06:59Z",
-      variant_name: "gpt4o_initial_prompt",
-    };
-    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
-    expect(evaluationRunInfos).toEqual([expected1]);
-  });
-
-  test("should return correct evaluation run info for ragged haiku datapoint", async () => {
-    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "0196374a-d03f-7420-9da5-1561cba71ddb",
-      "write_haiku",
-    );
-
-    const expected = {
-      evaluation_run_id: "0196374b-04a3-7013-9049-e59ed5fe3f74",
-      variant_name: "better_prompt_haiku_3_5",
-      most_recent_inference_date: "2025-04-15T02:33:05Z",
-    };
-    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
-    expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));
   });
 });
