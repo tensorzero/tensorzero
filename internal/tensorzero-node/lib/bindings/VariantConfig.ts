@@ -5,6 +5,9 @@ import type { ChatCompletionConfig } from "./ChatCompletionConfig";
 import type { DiclConfig } from "./DiclConfig";
 import type { MixtureOfNConfig } from "./MixtureOfNConfig";
 
+/**
+ * NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
+ */
 export type VariantConfig =
   | ({ type: "chat_completion" } & ChatCompletionConfig)
   | ({ type: "best_of_n_sampling" } & BestOfNSamplingConfig)

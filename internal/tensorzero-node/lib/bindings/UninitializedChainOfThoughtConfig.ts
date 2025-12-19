@@ -6,6 +6,10 @@ import type { ServiceTier } from "./ServiceTier";
 import type { UninitializedChatTemplates } from "./UninitializedChatTemplates";
 import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
 
+/**
+ * DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
+ * Use `chat_completion` with reasoning instead.
+ */
 export type UninitializedChainOfThoughtConfig = {
   weight: number | null;
   model: string;
