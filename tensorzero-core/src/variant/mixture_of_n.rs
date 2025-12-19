@@ -85,7 +85,7 @@ impl MixtureOfNConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -1930,7 +1930,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(reloaded.weight(), Some(0.7));
-        // timeout_s is deprecated and no longer accessible from initialized config
         assert_eq!(
             reloaded.candidates(),
             &vec!["a".to_string(), "b".to_string()]

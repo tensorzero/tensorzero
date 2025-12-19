@@ -81,7 +81,7 @@ impl BestOfNSamplingConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
@@ -1811,7 +1811,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(reloaded.weight(), Some(0.7));
-        // timeout_s is deprecated and no longer accessible from initialized config
         assert_eq!(
             reloaded.candidates(),
             &vec!["a".to_string(), "b".to_string()]
