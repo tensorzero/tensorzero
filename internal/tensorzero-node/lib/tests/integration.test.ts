@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TensorZeroClient, DatabaseClient } from "../index.js";
+import { TensorZeroClient } from "../index.js";
 
 async function buildClient() {
   if (!process.env.TENSORZERO_GATEWAY_URL) {
@@ -37,33 +37,5 @@ describe("TensorZeroClient Integration Tests", () => {
       await client.staleDataset("nonexistentdataset");
     expect(staleDatasetResponse).toBeDefined();
     expect(staleDatasetResponse.num_staled_datapoints).toBe(0);
-  });
-});
-
-describe("DatabaseClient", () => {
-  it("should be able to import DatabaseClient", () => {
-    expect(DatabaseClient).toBeDefined();
-    expect(typeof DatabaseClient).toBe("function");
-  });
-
-  it("should have getFeedbackByVariant method", async () => {
-    // Note: This test verifies the method exists and has correct signature
-    // Full integration testing would require a running ClickHouse instance
-    expect(typeof DatabaseClient.fromClickhouseUrl).toBe("function");
-  });
-
-  it("should validate getFeedbackByVariant parameter types", async () => {
-    // This test documents the expected parameter structure
-    const expectedParams = {
-      metric_name: "test_metric",
-      function_name: "test_function",
-      variant_names: ["variant_a", "variant_b"],
-    };
-
-    // Verify the structure is what we expect
-    expect(expectedParams).toHaveProperty("metric_name");
-    expect(expectedParams).toHaveProperty("function_name");
-    expect(expectedParams).toHaveProperty("variant_names");
-    expect(Array.isArray(expectedParams.variant_names)).toBe(true);
   });
 });
