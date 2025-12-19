@@ -1,4 +1,5 @@
-import type { MetricConfig, TimeWindow } from "~/types/tensorzero";
+import type { TimeWindow } from "~/types/tensorzero";
+import { useConfig } from "~/context/config";
 import {
   Area,
   CartesianGrid,
@@ -39,7 +40,6 @@ export function FeedbackMeansTimeseries({
   variantNames,
   timeGranularity,
   metricName,
-  metric,
   time_granularity,
   onTimeGranularityChange,
   chartConfig,
@@ -49,11 +49,12 @@ export function FeedbackMeansTimeseries({
   variantNames: string[];
   timeGranularity: TimeWindow;
   metricName: string;
-  metric?: MetricConfig;
   time_granularity: TimeWindow;
   onTimeGranularityChange: (value: TimeWindow) => void;
   chartConfig: Record<string, { label: string; color: string }>;
 }) {
+  const config = useConfig();
+  const metric = metricName ? config.metrics[metricName] : undefined;
   // Add numeric timestamps for x-axis (Recharts requires numbers for linear scale)
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
