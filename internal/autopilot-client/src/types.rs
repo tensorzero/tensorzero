@@ -86,8 +86,8 @@ pub enum ToolCallDecisionSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallApproval {
-    source: ToolCallDecisionSource,
-    tool_call_event_id: Uuid,
+    pub source: ToolCallDecisionSource,
+    pub tool_call_event_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
