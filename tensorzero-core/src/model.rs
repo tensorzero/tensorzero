@@ -728,6 +728,7 @@ async fn wrap_provider_stream(
     let otlp_config = clients.otlp_config.clone();
     let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
+    let span_clone = span.clone();
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
@@ -769,7 +770,7 @@ async fn wrap_provider_stream(
         // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
         let total_usage = total_usage.unwrap_or_default();
 
-        otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
             let usage = match (total_usage.total_tokens(), errored) {
@@ -793,7 +794,7 @@ async fn wrap_provider_stream(
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
-        }.instrument(span));
+        }.instrument(span_clone.clone()));
 
 
         if write_to_cache && !errored {
@@ -806,7 +807,7 @@ async fn wrap_provider_stream(
                 tool_config
             );
         }
-    };
+    }.instrument(span);
     // We unconditionally create a stream, and forward items into it from a separate task
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.

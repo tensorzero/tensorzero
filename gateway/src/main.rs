@@ -60,7 +60,7 @@ async fn main() -> Result<(), ExitCode> {
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
-    let delayed_log_config = observability::setup_observability(args.log_format)
+    let delayed_log_config = observability::setup_observability(args.log_format, true)
         .await
         .log_err_pretty("Failed to set up logs")?;
 
