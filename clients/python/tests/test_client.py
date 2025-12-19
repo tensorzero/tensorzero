@@ -3215,40 +3215,6 @@ async def test_async_multi_turn_parallel_tool_use(
     assert "30" in assistant_message
 
 
-def test_text_arguments_deprecation_1170_warning(
-    sync_client: TensorZeroGateway,
-):
-    """Test that using Text with dictionary for text parameter works but emits DeprecationWarning for #1170."""
-
-    with pytest.warns(
-        DeprecationWarning,
-        match=r"Please use `ContentBlock\(type=\"text\", arguments=...\)` when providing arguments for a prompt template/schema. In a future release, `Text\(type=\"text\", text=...\)` will require a string literal.",
-    ):
-        response = sync_client.inference(
-            function_name="json_success",
-            input={
-                "system": {"assistant_name": "Alfred Pennyworth"},
-                "messages": [
-                    {
-                        "role": "user",
-                        # Intentionally ignore the type error to check the deprecation warning
-                        "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
-                        ],
-                    }
-                ],
-            },
-        )
-
-    assert isinstance(response, JsonInferenceResponse)
-    assert response.variant_name == "test"
-    assert response.output.raw == '{"answer":"Hello"}'
-    assert response.output.parsed == {"answer": "Hello"}
-    assert response.usage.input_tokens == 10
-    assert response.usage.output_tokens == 1
-    assert response.finish_reason == FinishReason.STOP
-
-
 def test_content_block_text_init_validation():
     """Test Text initialization validation for text and arguments parameters."""
 

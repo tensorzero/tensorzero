@@ -175,10 +175,10 @@ pub async fn run_llm_judge_evaluator(
 ///  - input_format: Serialized or Messages.
 ///
 /// If we are using the serialized format, we serialize the input and include it the generated and reference outputs in a
-/// TextKind::Arguments block that should get templated into the first user message by the LLM Judge.
+/// InputMessageContent::Template block that should get templated into the first user message by the LLM Judge.
 ///
 /// If we are using the messages format, we first convert the original system message to a user message by serializing it,
-/// append all the other messages as is, and finally append the generated and reference outputs in a TextKind::Text block that we format here.
+/// append all the other messages as is, and finally append the generated and reference outputs in a InputMessageContent::Text block that we format here.
 /// Since we don't want to use a template on the gateway side, we must format this here.
 fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
@@ -200,7 +200,7 @@ fn prepare_llm_judge_input(
         Err(_e) => return Ok(None),
     };
     match &llm_judge_config.input_format {
-        // Here, we serialize the input and include it in the first user message as a TextKind::Arguments block
+        // Here, we serialize the input and include it in the first user message as an InputMessageContent::Template block
         // alongside the generated output and optionally the reference output.
         LLMJudgeInputFormat::Serialized => {
             let serialized_input = prepare_serialized_input(input)?;

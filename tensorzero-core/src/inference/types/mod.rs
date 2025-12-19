@@ -677,12 +677,13 @@ impl LazyResolvedInputMessageContent {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct InputMessage {
     pub role: Role,
+    #[serde(deserialize_with = "input_message::deserialize_input_message_content")]
     pub content: Vec<InputMessageContent>,
 }
 
@@ -756,48 +757,6 @@ pub enum InputMessageContent {
     /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
     Unknown(Unknown),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(untagged, deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
-pub enum TextKind {
-    Text { text: String },
-    Arguments { arguments: Arguments },
-}
-
-impl<'de> Deserialize<'de> for TextKind {
-    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
-        let object: Map<String, Value> = Map::deserialize(de)?;
-        // Expect exactly one key
-        if object.keys().len() != 1 {
-            return Err(serde::de::Error::custom(format!(
-                "Expected exactly one other key in text content, found {} other keys",
-                object.keys().len()
-            )));
-        }
-        let (key, value) = object.into_iter().next().ok_or_else(|| {
-            serde::de::Error::custom(
-                "Internal error: Failed to get key/value after checking length",
-            )
-        })?;
-        match key.as_str() {
-            "text" => Ok(TextKind::Text {
-                text: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `text`: {e}"))
-                })?,
-            }),
-            "arguments" => Ok(TextKind::Arguments {
-                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `arguments`: {e}"))
-                })?),
-            }),
-            _ => Err(serde::de::Error::custom(format!(
-                "Unknown key `{key}` in text content"
-            ))),
-        }
-    }
 }
 
 /// InputMessages are validated against the input schema of the Function
