@@ -498,12 +498,20 @@ pub fn check_topk(
 // ============================================================================
 
 /// Parameters for updating variant statuses during top-k evaluation.
+///
+/// If `variant_failure_threshold` is set and a variant's failure rate CS lower bound
+/// exceeds it, the variant is marked as Failed. Failed variants are not candidates
+/// for the returned top-k set. Additionally, early exclusion decisions (marking
+/// variants as Exclude) are made relative to the current set of active variants.
+/// If variants fail after others have been excluded, the evaluation may end with fewer
+/// than k_min identified variants, since excluded variants are not reconsidered.
 /// TODO: remove #[cfg(test)] once other functions that use this are implemented
 #[cfg(test)]
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
     epsilon: f64,
+    /// Threshold for variant failure rate.
     variant_failure_threshold: Option<f64>,
 }
 
