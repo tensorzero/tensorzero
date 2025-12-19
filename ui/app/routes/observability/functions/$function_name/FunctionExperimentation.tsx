@@ -8,6 +8,7 @@ import {
 } from "~/components/experimentation/PieChart";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { memo } from "react";
+import { useConfig } from "~/context/config";
 import { FeedbackCountsTimeseries } from "~/components/function/variant/FeedbackCountsTimeseries";
 import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackMeansTimeseries";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
@@ -32,6 +33,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     "cumulative_feedback_time_granularity",
     "week",
   );
+  const config = useConfig();
 
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
@@ -63,11 +65,12 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     ? transformFeedbackTimeseries(feedbackTimeseries!, timeGranularity)
     : { countsData: [], meansData: [], variantNames: [] };
 
-  // Extract metric name for track_and_stop experimentation
+  // Extract metric name and config for track_and_stop experimentation
   const metricName =
     functionConfig.experimentation.type === "track_and_stop"
       ? functionConfig.experimentation.metric
       : "";
+  const metric = metricName ? config.metrics[metricName] : undefined;
 
   // Create a centralized chart config to ensure consistent colors across all panels
   // Use union of variant names from current weights and historical feedback data
@@ -116,6 +119,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
               variantNames={variantNames}
               timeGranularity={timeGranularity}
               metricName={metricName}
+              metric={metric}
               time_granularity={timeGranularity}
               onTimeGranularityChange={onTimeGranularityChange}
               chartConfig={chartConfig}

@@ -1,4 +1,4 @@
-import type { TimeWindow } from "~/types/tensorzero";
+import type { MetricConfig, TimeWindow } from "~/types/tensorzero";
 import {
   Area,
   CartesianGrid,
@@ -39,6 +39,7 @@ export function FeedbackMeansTimeseries({
   variantNames,
   timeGranularity,
   metricName,
+  metric,
   time_granularity,
   onTimeGranularityChange,
   chartConfig,
@@ -48,6 +49,7 @@ export function FeedbackMeansTimeseries({
   variantNames: string[];
   timeGranularity: TimeWindow;
   metricName: string;
+  metric?: MetricConfig;
   time_granularity: TimeWindow;
   onTimeGranularityChange: (value: TimeWindow) => void;
   chartConfig: Record<string, { label: string; color: string }>;
@@ -141,6 +143,10 @@ export function FeedbackMeansTimeseries({
   const formatTooltipLabel = (value: number) =>
     formatTooltipTimestamp(new Date(value), timeGranularity);
 
+  // Compute Y-axis domain based on metric type
+  const yAxisDomain: [number, number] | undefined =
+    metric?.type === "boolean" ? [0, 1] : undefined;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
@@ -181,6 +187,7 @@ export function FeedbackMeansTimeseries({
               tickLine={false}
               tickMargin={10}
               axisLine={true}
+              domain={yAxisDomain}
               label={{
                 value: "Estimated Performance",
                 angle: -90,
