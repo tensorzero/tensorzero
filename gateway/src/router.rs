@@ -3,6 +3,7 @@
 //! This module builds the final Axum router with all layers (auth, tracing, metrics)
 //! and defines authentication and version header middlewares.
 
+use crate::routes::build_api_routes;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Request},
@@ -19,7 +20,6 @@ use tower_http::{
     decompression::RequestDecompressionLayer,
     metrics::{InFlightRequestsLayer, in_flight_requests::InFlightRequestsCounter},
 };
-use crate::routes::build_api_routes;
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.

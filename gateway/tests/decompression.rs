@@ -31,11 +31,7 @@ fn brotli_compress(input: &[u8]) -> Vec<u8> {
     out
 }
 
-async fn run_compression_test(
-    compress: fn(&[u8]) -> Vec<u8>,
-    encoding: &str,
-    message: &str,
-) {
+async fn run_compression_test(compress: fn(&[u8]) -> Vec<u8>, encoding: &str, message: &str) {
     let gateway = start_gateway_on_random_port("", None).await;
 
     let body = json!({
