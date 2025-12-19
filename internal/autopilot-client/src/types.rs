@@ -67,6 +67,18 @@ pub enum EventPayload {
     Other,
 }
 
+impl EventPayload {
+    /// Returns true if this payload type can be written by API clients.
+    /// System-generated types (StatusUpdate, ToolCall) return false.
+    pub fn is_client_writable(&self) -> bool {
+        matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
+            || matches!(
+                self,
+                EventPayload::ToolCallApproval(_) | EventPayload::ToolResult { .. }
+            )
+    }
+}
+
 /// A status update within a session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
