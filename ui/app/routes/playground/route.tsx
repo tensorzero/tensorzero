@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { EvaluationCombobox } from "~/components/evaluation/EvaluationCombobox";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import {
   useFunctionConfig,
@@ -51,6 +52,7 @@ import {
 } from "@tanstack/react-query";
 import { toDatapointUrl } from "~/utils/urls";
 import clsx from "clsx";
+import { getFeatureFlags } from "~/utils/feature_flags";
 
 const DEFAULT_LIMIT = 5;
 
@@ -97,10 +99,12 @@ export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
   const currentSearchParams = new URLSearchParams(currentUrl.searchParams);
   const nextSearchParams = new URLSearchParams(nextUrl.searchParams);
 
-  // Remove variants from comparison since we want to skip revalidation if only
-  // the variants changed
+  // Remove variants and evaluation from comparison since we want to skip
+  // revalidation if only these changed (they don't require new datapoints)
   currentSearchParams.delete("variants");
   nextSearchParams.delete("variants");
+  currentSearchParams.delete("evaluation");
+  nextSearchParams.delete("evaluation");
 
   // Then manually compare the remaining search params and revalidate if
   // anything else changed
@@ -250,6 +254,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   const [currentSearchParams, setSearchParams] = useSearchParams();
   const [editingVariant, setEditingVariant] =
     useState<PlaygroundVariantInfo | null>(null);
+  const { PLAYGROUND_EVALS } = getFeatureFlags();
+  const selectedEvaluation = PLAYGROUND_EVALS
+    ? currentSearchParams.get("evaluation")
+    : null;
   const { variants, searchParams } = useMemo(() => {
     if (navigation.state !== "loading") {
       return {
@@ -328,12 +336,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
         <FunctionSelector
           selected={functionName}
           onSelect={(value) =>
-            // If the function is changed, we should reset all selectors since
-            // the variant is no longer valid and the dataset may not be.
+            // If the function changes, reset dependent selectors: variants and
+            // evaluations are function-specific, and the dataset may not have
+            // datapoints for the new function.
             updateSearchParams({
               functionName: value,
               variants: null,
               datasetName: null,
+              evaluation: null,
             })
           }
           functions={useAllFunctionConfigs()}
@@ -361,6 +371,20 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           disabled={!functionName || !datasetName}
         />
       </div>
+      {PLAYGROUND_EVALS && (
+        <div className="flex max-w-180 flex-col gap-2">
+          <Label>Evaluation</Label>
+          <EvaluationCombobox
+            selected={selectedEvaluation}
+            onSelect={(value) =>
+              updateSearchParams({ evaluation: value ?? null })
+            }
+            evaluations={config.evaluations}
+            functionName={functionName}
+            disabled={!functionName || !datasetName || variants.length === 0}
+          />
+        </div>
+      )}
       {datapoints &&
         datapoints.length > 0 &&
         datasetName &&
@@ -496,6 +520,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   functionName={functionName}
                                   functionConfig={functionConfig}
                                   toolsConfig={config.tools}
+                                  selectedEvaluation={selectedEvaluation}
                                 />
                               </div>
                             );

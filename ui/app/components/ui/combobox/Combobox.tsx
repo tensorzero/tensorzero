@@ -10,7 +10,6 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import clsx from "clsx";
 import { useCallback, useMemo } from "react";
 import type { IconProps } from "~/components/icons/Icons";
 import { ComboboxInput } from "./ComboboxInput";
@@ -26,8 +25,12 @@ type ComboboxProps = {
   placeholder: string;
   emptyMessage: string;
   disabled?: boolean;
-  monospace?: boolean;
   name?: string;
+  /** Show clear button and call onClear when clicked */
+  clearable?: boolean;
+  onClear?: () => void;
+  /** Render annotation after item text (in dropdown and input) */
+  getItemAnnotation?: (item: string) => React.ReactNode;
 };
 
 export function Combobox({
@@ -38,8 +41,10 @@ export function Combobox({
   placeholder,
   emptyMessage,
   disabled = false,
-  monospace = false,
   name,
+  clearable = false,
+  onClear,
+  getItemAnnotation,
 }: ComboboxProps) {
   const {
     open,
@@ -67,6 +72,10 @@ export function Combobox({
     [onSelect, closeDropdown],
   );
 
+  const handleClear = useCallback(() => {
+    onClear?.();
+  }, [onClear]);
+
   return (
     <div className="w-full">
       {name && <input type="hidden" name={name} value={selected ?? ""} />}
@@ -80,9 +89,10 @@ export function Combobox({
             onBlur={handleBlur}
             placeholder={placeholder}
             disabled={disabled}
-            monospace={monospace}
-            open={open}
             icon={Icon}
+            clearable={clearable && !!selected}
+            onClear={handleClear}
+            annotation={selected ? getItemAnnotation?.(selected) : undefined}
           />
         </PopoverAnchor>
         <PopoverContent
@@ -107,10 +117,13 @@ export function Combobox({
                       className="flex items-center gap-2"
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span
-                        className={clsx("truncate", monospace && "font-mono")}
-                      >
-                        {item}
+                      <span className="flex min-w-0 items-baseline">
+                        <span className="truncate font-mono">{item}</span>
+                        {getItemAnnotation && (
+                          <span className="ml-1.5 shrink-0">
+                            {getItemAnnotation(item)}
+                          </span>
+                        )}
                       </span>
                     </CommandItem>
                   ))}

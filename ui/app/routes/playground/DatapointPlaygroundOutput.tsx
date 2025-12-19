@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Button } from "~/components/ui/button";
@@ -18,16 +18,34 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "~/components/ui/tooltip";
+import { MetricBadge } from "~/components/metric/MetricBadge";
+import { AnimatedEllipsis } from "~/components/ui/AnimatedEllipsis";
+import { usePlaygroundEvaluation } from "./use-playground-evaluation";
 
-const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
+type DatapointPlaygroundOutputProps = ClientInferenceInputArgs & {
+  selectedEvaluation: string | null;
+};
+
+const DatapointPlaygroundOutput = memo<DatapointPlaygroundOutputProps>(
   function DatapointPlaygroundOutput(props) {
+    const { selectedEvaluation, datapoint, variant } = props;
+
     const query = useQuery({
       queryKey: getClientInferenceQueryKey(props),
       queryFn: getClientInferenceQueryFunction(props),
       // Only re-fetch when the user explicitly requests it
       refetchOnMount: false,
+      refetchOnWindowFocus: false,
       refetchInterval: false,
       retry: false,
+    });
+
+    const evalState = usePlaygroundEvaluation({
+      selectedEvaluation,
+      datapointId: datapoint.id,
+      variant,
+      isInferenceReady: query.isSuccess,
+      isInferenceRefetching: query.isRefetching,
     });
 
     const loadingIndicator = (
@@ -122,6 +140,42 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
             <JsonOutputElement output={query.data.output} maxHeight={480} />
           )}
         </div>
+        {evalState.status !== "idle" && selectedEvaluation && (
+          <div className="mt-2">
+            {evalState.status === "loading" && (
+              <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>
+                  Evaluating
+                  <AnimatedEllipsis />
+                </span>
+              </div>
+            )}
+            {evalState.status === "error" && (
+              <div className="flex items-center gap-1.5 text-xs text-red-600">
+                <AlertCircle className="h-3 w-3" />
+                <span>{evalState.error || "Evaluation failed"}</span>
+              </div>
+            )}
+            {evalState.status === "success" &&
+              evalState.result?.evaluations && (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(evalState.result.evaluations)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([evaluatorName, value]) => (
+                      <MetricBadge
+                        key={evaluatorName}
+                        label={evaluatorName}
+                        value={value}
+                        error={Boolean(
+                          evalState.result?.evaluatorErrors?.[evaluatorName],
+                        )}
+                      />
+                    ))}
+                </div>
+              )}
+          </div>
+        )}
       </div>
     );
   },
@@ -131,6 +185,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       prevProps.datapoint.id === nextProps.datapoint.id &&
       prevProps.variant.name === nextProps.variant.name &&
       prevProps.functionName === nextProps.functionName &&
+      prevProps.selectedEvaluation === nextProps.selectedEvaluation &&
       JSON.stringify(prevProps.input) === JSON.stringify(nextProps.input)
     );
   },

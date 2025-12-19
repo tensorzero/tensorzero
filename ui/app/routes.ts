@@ -52,6 +52,8 @@ export default [
     ),
 
     route("feedback", "routes/api/feedback/route.ts"),
+
+    route("playground/evaluate", "routes/api/playground/evaluate.ts"),
   ]),
 
   // Datasets

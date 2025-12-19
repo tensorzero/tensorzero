@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { Input } from "~/components/ui/input";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import clsx from "clsx";
 import type { IconProps } from "~/components/icons/Icons";
 
@@ -14,9 +14,10 @@ type ComboboxInputProps = {
   onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
   placeholder: string;
   disabled?: boolean;
-  monospace?: boolean;
-  open: boolean;
   icon: IconComponent;
+  clearable?: boolean;
+  onClear?: () => void;
+  annotation?: React.ReactNode;
 };
 
 export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
@@ -29,9 +30,10 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       onBlur,
       placeholder,
       disabled = false,
-      monospace = false,
-      open,
       icon: Icon,
+      clearable = false,
+      onClear,
+      annotation,
     },
     ref,
   ) {
@@ -53,12 +55,40 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           onBlur={onBlur}
           placeholder={placeholder}
           disabled={disabled}
-          className={clsx("cursor-text pr-8 pl-9", monospace && "font-mono")}
+          className={clsx(
+            "cursor-text pl-9 font-mono",
+            clearable ? "pr-14" : "pr-8",
+          )}
         />
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-          <ChevronDown
-            className={clsx("text-fg-tertiary h-4 w-4", open && "-rotate-180")}
-          />
+        {/* Annotation overlay */}
+        {annotation && value && (
+          <div
+            className={clsx(
+              "pointer-events-none absolute inset-y-0 left-9 flex items-center",
+              "translate-x-px -translate-y-px", // align with menu item annotations
+            )}
+          >
+            <span className="invisible font-mono text-base md:text-sm">
+              {value}
+            </span>
+            <span className="ml-1.5">{annotation}</span>
+          </div>
+        )}
+        <div className="absolute inset-y-0 right-3 flex items-center gap-1.5">
+          {clearable && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear?.();
+              }}
+              className="text-fg-tertiary hover:text-fg-primary cursor-pointer rounded p-0.5"
+              aria-label="Clear selection"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <ChevronDown className="text-fg-tertiary h-4 w-4" />
         </div>
       </div>
     );

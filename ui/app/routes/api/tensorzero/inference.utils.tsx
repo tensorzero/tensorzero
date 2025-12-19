@@ -455,7 +455,7 @@ function convertTemplatesToRecord(
   return result;
 }
 
-function variantInfoToUninitializedVariantInfo(
+export function variantInfoToUninitializedVariantInfo(
   variantInfo: VariantInfo,
 ): UninitializedVariantInfo {
   const baseUninitialized = {
