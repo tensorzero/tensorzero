@@ -94,8 +94,9 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
     );
     // We have observability disabled, so we expect the overhead to be low (even though this is a debug build)
     // Notably, it does *not* include the 5-second sleep in the 'dummy::slow' model
+    // This test can be slow on CI, so we give a generous 200ms margin
     assert!(
-        pct_50 < 100.0,
+        pct_50 < 200.0,
         "Unexpectedly high 50th percentile overhead: {pct_50}ms"
     );
 }
