@@ -124,7 +124,7 @@ jobs:
             echo "ERROR: Gateway logs are empty"
             exit 1
           fi
-          ! grep -i "please file a bug report" <<< "$LOGS"
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
@@ -418,7 +418,7 @@ jobs:
 
       - name: Check e2e logs for impossible error messages
         run: |
-          ! grep -i "please file a bug report" e2e_logs.txt
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
