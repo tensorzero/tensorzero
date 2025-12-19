@@ -38,6 +38,7 @@ import type {
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunsResponse,
+  GetWorkflowEvaluationRunStatisticsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -1174,6 +1175,33 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetWorkflowEvaluationRunsResponse;
+  }
+
+  /**
+   * Fetches statistics for a workflow evaluation run, grouped by metric name.
+   * @param runId - The ID of the workflow evaluation run
+   * @param metricName - Optional metric name to filter by
+   * @returns A promise that resolves with the workflow evaluation run statistics response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRunStatistics(
+    runId: string,
+    metricName?: string,
+  ): Promise<GetWorkflowEvaluationRunStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    if (metricName) {
+      searchParams.append("metric_name", metricName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-statistics?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunStatisticsResponse;
   }
 
   /**

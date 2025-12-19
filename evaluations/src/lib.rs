@@ -11,9 +11,10 @@ use helpers::get_cache_options;
 pub use cli::{Args, OutputFormat};
 pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
-    PerEvaluatorStats, mean, std_deviation,
+    PerEvaluatorStats,
 };
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+pub use tensorzero_core::statistics_util::{mean, std_deviation};
 pub use types::*;
 
 use tensorzero_core::cache::CacheEnabledMode;

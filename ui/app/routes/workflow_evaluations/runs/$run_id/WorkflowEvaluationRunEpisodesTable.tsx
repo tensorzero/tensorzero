@@ -8,10 +8,8 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { toEpisodeUrl } from "~/utils/urls";
-import type {
-  WorkflowEvaluationRunEpisodeWithFeedback,
-  WorkflowEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRunEpisodeWithFeedback } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
@@ -30,7 +28,7 @@ export default function WorkflowEvaluationRunEpisodesTable({
   statistics,
 }: {
   episodes: WorkflowEvaluationRunEpisodeWithFeedback[];
-  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
+  statistics: WorkflowEvaluationRunStatistics[];
 }) {
   // Extract all unique metric names from all episodes
   const allMetricNames = new Set<string>();
@@ -179,7 +177,7 @@ function MetricHeader({
   statistics,
 }: {
   metricName: string;
-  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
+  statistics: WorkflowEvaluationRunStatistics[];
 }) {
   const metricStats = statistics.find(
     (stat) => stat.metric_name === metricName,
