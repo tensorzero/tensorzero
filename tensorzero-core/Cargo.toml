@@ -134,7 +134,7 @@ tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true, optional = true }
 schemars = { workspace = true, features = ["uuid1"] }
 opentelemetry-http = "0.31.0"
-durable.workspace = true
+# durable.workspace = true
 regex = { workspace = true }
 
 [dev-dependencies]

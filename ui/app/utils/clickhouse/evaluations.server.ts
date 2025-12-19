@@ -10,10 +10,8 @@ import {
   wilsonConfidenceIntervalUpper,
 } from "./helpers";
 import {
-  EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
-  type EvaluationRunInfo,
   type EvaluationStatistics,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
@@ -23,48 +21,6 @@ import {
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
-
-export async function getEvaluationRunInfosForDatapoint(
-  datapoint_id: string,
-  function_name: string,
-): Promise<EvaluationRunInfo[]> {
-  const config = await getConfig();
-  const functionConfig = await getFunctionConfig(function_name, config);
-  const function_type = functionConfig?.type;
-  if (!function_type) {
-    throw new Error(`Function ${function_name} not found in config`);
-  }
-  const inference_table_name =
-    function_type === "chat" ? "ChatInference" : "JsonInference";
-
-  const query = `
-    WITH datapoint_inference_ids AS (
-      SELECT inference_id FROM TagInference FINAL WHERE key = 'tensorzero::datapoint_id' AND value = {datapoint_id:String}
-    )
-    SELECT any(tags['tensorzero::evaluation_run_id']) as evaluation_run_id,
-           any(variant_name) as variant_name,
-           formatDateTime(
-             max(UUIDv7ToDateTime(id)),
-             '%Y-%m-%dT%H:%i:%SZ'
-           ) as most_recent_inference_date
-    FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
-      AND function_name = {function_name:String}
-    GROUP BY
-      tags['tensorzero::evaluation_run_id']
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      datapoint_id: datapoint_id,
-      function_name: function_name,
-      inference_table_name: inference_table_name,
-    },
-  });
-  const rows = await result.json<EvaluationRunInfo[]>();
-  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
-}
 
 async function parseEvaluationResult(
   result: EvaluationResult,

@@ -30,10 +30,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
-import {
-  getNativeDatabaseClient,
-  getNativeTensorZeroClient,
-} from "~/utils/tensorzero/native_client.server";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
 
@@ -41,7 +38,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
-  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -109,14 +105,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
       : null;
   const feedbackTimeseriesPromise = feedbackParams
-    ? (async () => {
-        return dbClient.getCumulativeFeedbackTimeseries({
-          function_name,
-          ...feedbackParams,
-          time_window: feedback_time_granularity as TimeWindow,
-          max_periods: 10,
-        });
-      })()
+    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        ...feedbackParams,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      })
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway

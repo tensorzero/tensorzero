@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
 use mockall::automock;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::Error;
@@ -41,6 +41,29 @@ pub struct WorkflowEvaluationRunWithEpisodeCountRow {
     pub project_name: Option<String>,
     pub num_episodes: u32,
     pub timestamp: DateTime<Utc>,
+}
+
+/// Internal database struct for deserializing raw statistics from ClickHouse.
+/// This is used before computing confidence intervals in Rust.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowEvaluationRunStatisticsRaw {
+    pub metric_name: String,
+    pub count: u32,
+    pub avg_metric: f64,
+    pub stdev: Option<f64>,
+    /// Whether this metric is a boolean metric (for Wilson CI) or float metric (for Wald CI)
+    pub is_boolean: bool,
+}
+
+/// Database struct for workflow evaluation run statistics by metric name.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkflowEvaluationRunStatisticsRow {
+    pub metric_name: String,
+    pub count: u32,
+    pub avg_metric: f64,
+    pub stdev: Option<f64>,
+    pub ci_lower: Option<f64>,
+    pub ci_upper: Option<f64>,
 }
 
 /// Trait for workflow evaluation-related queries.
@@ -86,4 +109,12 @@ pub trait WorkflowEvaluationQueries {
         run_ids: &[Uuid],
         project_name: Option<&str>,
     ) -> Result<Vec<WorkflowEvaluationRunRow>, Error>;
+
+    /// Gets statistics for workflow evaluation run feedback grouped by metric name.
+    /// Returns aggregated statistics (count, mean, stdev, confidence intervals) for each metric.
+    async fn get_workflow_evaluation_run_statistics(
+        &self,
+        run_id: Uuid,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error>;
 }

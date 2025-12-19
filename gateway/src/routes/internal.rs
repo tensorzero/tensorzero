@@ -50,6 +50,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
         )
         .route(
+            "/internal/feedback/timeseries",
+            get(endpoints::feedback::internal::get_cumulative_feedback_timeseries_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/throughput-by-variant",
             get(endpoints::internal::inference_stats::get_function_throughput_by_variant_handler),
         )
@@ -128,6 +132,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/run-infos",
             get(endpoints::internal::evaluations::get_evaluation_run_infos_handler),
         )
+        .route(
+            "/internal/evaluations/datapoints/{datapoint_id}/run-infos",
+            get(endpoints::internal::evaluations::get_evaluation_run_infos_for_datapoint_handler),
+        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow-evaluations/projects",
@@ -154,6 +162,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/workflow-evaluations/runs/search",
             get(endpoints::workflow_evaluations::internal::search_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/run-statistics",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_statistics_handler),
         )
         .route(
             "/internal/models/usage",

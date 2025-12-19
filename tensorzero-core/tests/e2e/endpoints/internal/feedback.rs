@@ -4,8 +4,8 @@ use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::endpoints::feedback::internal::{
-    CountFeedbackByTargetIdResponse, GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse,
-    LatestFeedbackIdByMetricResponse,
+    CountFeedbackByTargetIdResponse, GetCumulativeFeedbackTimeseriesResponse,
+    GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
 };
 use uuid::Uuid;
 
@@ -478,5 +478,162 @@ async fn test_count_feedback_by_target_id_invalid_uuid() {
         resp.status(),
         reqwest::StatusCode::BAD_REQUEST,
         "Expected 400 for invalid UUID"
+    );
+}
+
+// ==================== Get Cumulative Feedback Timeseries Tests ====================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_with_data() {
+    let http_client = Client::new();
+
+    // Create an inference to generate feedback data
+    let inference_id = create_inference(&http_client, "basic_test").await;
+
+    // Submit feedback for task_success metric
+    submit_inference_feedback(&http_client, inference_id, "task_success", json!(true)).await;
+
+    // Wait for ClickHouse to process
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    // Query cumulative feedback timeseries
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window=hour&max_periods=24",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "get_cumulative_feedback_timeseries request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetCumulativeFeedbackTimeseriesResponse = resp.json().await.unwrap();
+
+    // The response should be valid (could be empty if no data or have entries)
+    // We're mainly verifying the endpoint works correctly
+    let _ = response.timeseries;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
+    let http_client = Client::new();
+
+    // Query cumulative feedback timeseries with variant_names filter
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window=day&max_periods=7&variant_names=test",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "get_cumulative_feedback_timeseries request failed with variant filter: status={:?}",
+        resp.status()
+    );
+
+    let _response: GetCumulativeFeedbackTimeseriesResponse = resp.json().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
+    let http_client = Client::new();
+
+    // Test different time windows (excluding cumulative which is not supported)
+    for time_window in &["minute", "hour", "day", "week", "month"] {
+        let url = get_gateway_endpoint(&format!(
+            "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window={time_window}&max_periods=5",
+        ));
+        let resp = http_client.get(url).send().await.unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "get_cumulative_feedback_timeseries request failed for time_window={}: status={:?}",
+            time_window,
+            resp.status()
+        );
+
+        let _response: GetCumulativeFeedbackTimeseriesResponse = resp.json().await.unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_cumulative_window_returns_error() {
+    let http_client = Client::new();
+
+    // Cumulative time window is not supported for feedback timeseries
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window=cumulative&max_periods=5",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 for cumulative time_window"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_missing_params() {
+    let http_client = Client::new();
+
+    // Missing function_name
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?metric_name=task_success&time_window=hour&max_periods=24",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 when function_name is missing"
+    );
+
+    // Missing metric_name
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&time_window=hour&max_periods=24",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 when metric_name is missing"
+    );
+
+    // Missing time_window
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&max_periods=24",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 when time_window is missing"
+    );
+
+    // Missing max_periods
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window=hour",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 when max_periods is missing"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_cumulative_feedback_timeseries_invalid_time_window() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint(
+        "/internal/feedback/timeseries?function_name=basic_test&metric_name=task_success&time_window=invalid&max_periods=24",
+    );
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 for invalid time_window"
     );
 }
