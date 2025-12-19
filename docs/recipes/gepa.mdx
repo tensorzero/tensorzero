@@ -215,6 +215,53 @@ for variant_name, variant_config in variant_configs.items():
         print(template["path"]["__data"])
 ```
 
+**Example Output**
+```text
+You are an assistant that is performing a named entity recognition (NER) task.
+Your job is to extract named entities from a given text.
+
+## Entity Categories
+
+Extract entities in these four categories:
+- **person**: Names of people (e.g., "John Smith", "Dr. Maria Rodriguez")
+- **organization**: Names of companies, institutions, agencies, or groups (e.g., "United Nations", "Microsoft", "Department of Justice")
+- **location**: Names of geographical locations including countries, cities, regions, landmarks (e.g., "China", "New York", "Mount Everest")
+- **miscellaneous**: Other named entities that don't fit the above categories, such as:
+  - Specific events (e.g., "Olympic Games", "World Cup", "Canadian Open")
+  - Products or brands (e.g., "iPhone", "Windows 10")
+  - Nationalities or languages when used as proper nouns (e.g., "French", "English")
+  - Artworks, awards, or other uniquely identifiable entities
+
+## Critical Instructions
+
+**What to Extract:**
+- Only extract proper nouns and named entities - specific names that identify unique people, places, organizations, or other entities
+- Extract entities exactly as they appear in the source text, preserving original spelling, capitalization, and formatting
+- Each entity should appear only once in the output - avoid duplicates or subset duplicates
+
+**What NOT to Extract:**
+- Common nouns or generic terms (e.g., "talks", "meeting", "statement")
+- Generic references without specific names (e.g., "the media", "the government" without a specific government name)
+- Numbers or codes that are not part of a named entity (e.g., "7-5", "123")
+- Section headers or labels that are not entity names (e.g., "Income Statement Data")
+
+**When No Entities Exist:**
+- If the text contains no named entities, return empty arrays for all categories
+- Do not force extraction or hallucinate entities when none are present
+
+## Output Format
+
+Return the entities in the following JSON format:
+
+{
+    "person": ["person1", "person2", ...],
+    "organization": ["organization1", "organization2", ...],
+    "location": ["location1", "location2", ...],
+    "miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+```
+
+Finally, add the new variant to your application config:
 ```toml
 [functions.extract_entities.variants.gepa_optimized]
 type = "chat_completion"
@@ -230,6 +277,8 @@ That's it! You are now ready to deploy your GEPA optimized LLM application!
 GEPA returns a set of Pareto optimal variants based on the evaluation you defined. You can roll out your new variants responsibly using [TensorZero Adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
 
 </Tip>
+
+A [complete example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/gepa/) of this workflow is available on GitHub.
 
 ## GEPAConfig
 
