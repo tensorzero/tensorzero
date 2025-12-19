@@ -783,7 +783,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-examples-docs-guides-optimization-run-adaptive-ab-tests"
+name = "tensorzero-examples-docs-guides-optimization-gepa"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
