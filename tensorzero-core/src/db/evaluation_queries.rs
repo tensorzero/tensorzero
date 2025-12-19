@@ -9,6 +9,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::error::Error;
+use crate::function::FunctionConfigType;
 
 /// Database struct for deserializing evaluation run info from ClickHouse.
 #[derive(Debug, Deserialize)]
@@ -73,5 +74,13 @@ pub trait EvaluationQueries {
         &self,
         evaluation_run_ids: &[Uuid],
         function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets evaluation run info for inferences associated with a specific datapoint.
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &Uuid,
+        function_name: &str,
+        function_type: FunctionConfigType,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
 }

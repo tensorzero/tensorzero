@@ -38,6 +38,7 @@ import type {
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunsResponse,
+  GetWorkflowEvaluationRunStatisticsResponse,
   InferenceWithFeedbackStatsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -1177,6 +1178,33 @@ export class TensorZeroClient {
   }
 
   /**
+   * Fetches statistics for a workflow evaluation run, grouped by metric name.
+   * @param runId - The ID of the workflow evaluation run
+   * @param metricName - Optional metric name to filter by
+   * @returns A promise that resolves with the workflow evaluation run statistics response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRunStatistics(
+    runId: string,
+    metricName?: string,
+  ): Promise<GetWorkflowEvaluationRunStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    if (metricName) {
+      searchParams.append("metric_name", metricName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-statistics?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunStatisticsResponse;
+  }
+
+  /**
    * Lists inference metadata with optional cursor-based pagination and filtering.
    * @param params - Optional pagination and filter parameters
    * @param params.before - Cursor to fetch records before this ID (mutually exclusive with after)
@@ -1422,6 +1450,30 @@ export class TensorZeroClient {
     searchParams.append("function_name", functionName);
     const queryString = searchParams.toString();
     const endpoint = `/internal/evaluations/run-infos?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunInfosResponse;
+  }
+
+  /**
+   * Gets evaluation run infos for a specific datapoint.
+   * @param datapointId - The UUID of the datapoint to query
+   * @param functionName - The name of the function being evaluated
+   * @returns A promise that resolves with information about evaluation runs that include this datapoint
+   * @throws Error if the request fails
+   */
+  async getEvaluationRunInfosForDatapoint(
+    datapointId: string,
+    functionName: string,
+  ): Promise<GetEvaluationRunInfosResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run-infos?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
