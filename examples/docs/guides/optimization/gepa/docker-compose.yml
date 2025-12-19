@@ -23,22 +23,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_DB: tensorzero
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: pg_isready -U postgres
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
   gateway:
     image: tensorzero/gateway
     volumes:
@@ -46,7 +30,6 @@ services:
     command: --config-file /app/config/tensorzero.toml
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
@@ -60,14 +43,13 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
 
   ui:
     image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:
       - "4000:4000"
@@ -76,9 +58,6 @@ services:
         condition: service_healthy
       gateway:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
 
 volumes:
-  postgres-data:
   clickhouse-data:

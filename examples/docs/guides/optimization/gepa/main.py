@@ -22,7 +22,7 @@ MUTATION_MODEL = "anthropic::claude-sonnet-4-5"
 INITIAL_VARIANTS = ["baseline"]
 
 # Number of evolution iterations (each iteration evaluates, analyzes, and mutates variants)
-MAX_ITERATIONS = 10
+MAX_ITERATIONS = 5
 
 NUM_SAMPLES = 500
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
