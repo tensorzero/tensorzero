@@ -670,6 +670,85 @@ async fn test_auth_cache_requires_full_key_match() {
 }
 
 #[tokio::test]
+async fn test_disable_api_key_cli() {
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let api_key = stdout.trim();
+    let parsed_key = TensorZeroApiKey::parse(api_key).unwrap();
+    // we assume the key is correctly parsed; creation behavior is covered by create_api_key_cli()
+
+    let disable_output = Command::new(common::gateway_path())
+        .args(["--disable-api-key", parsed_key.public_id.as_str()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        disable_output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify the key DOES NOT work for authentication
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    ",
+        None,
+    )
+    .await;
+
+    let inference_response = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(http::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = inference_response.status();
+    assert_ne!(
+        status,
+        StatusCode::OK,
+        "Disabled API key should not work for authentication",
+    );
+
+    assert!(
+        inference_response
+            .text()
+            .await
+            .unwrap()
+            .contains("API key was disabled at")
+    );
+}
+
+#[tokio::test]
 async fn test_create_api_key_cli() {
     // This test verifies that the --create-api-key CLI command works correctly
     let output = Command::new(common::gateway_path())
