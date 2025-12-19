@@ -59,7 +59,9 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
     let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
-    tensorzero_auth::postgres::disable_key(public_id, &pool).await?;
+    let disabled_time = tensorzero_auth::postgres::disable_key(public_id, &pool).await?;
+
+    tracing::info!("Deleted API key {public_id} at {disabled_time}");
 
     Ok(())
 }
