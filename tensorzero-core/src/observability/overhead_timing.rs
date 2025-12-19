@@ -135,11 +135,19 @@ pub trait OverheadSpanExt {
     /// during inference.
     /// Any key/value pairs in `extra_labels` will be added to the `tensorzero_overhead` histogram metric.
     /// NOTE: This method will print an error if called on a span that does not have the `tensorzero.overhead.kind` attribute applied.
-    fn set_latency_and_record(&self, elapsed: Duration, extra_labels: Option<&[(String, String)]>);
+    fn set_latency_and_record(
+        &self,
+        elapsed: Duration,
+        extra_labels: Option<&[(&'static str, String)]>,
+    );
 }
 
 impl OverheadSpanExt for Span {
-    fn set_latency_and_record(&self, elapsed: Duration, extra_labels: Option<&[(String, String)]>) {
+    fn set_latency_and_record(
+        &self,
+        elapsed: Duration,
+        extra_labels: Option<&[(&'static str, String)]>,
+    ) {
         with_span_extensions(self, |mut extensions| {
             if let Some(overhead_data) = extensions.remove::<OverheadSpanData>() {
                 let excluded_time: Duration = overhead_data
@@ -157,7 +165,7 @@ impl OverheadSpanExt for Span {
 
                 if let Some(extra_labels) = extra_labels {
                     let mut labels = Vec::with_capacity(extra_labels.len() + 1);
-                    labels.push(("kind".to_string(), overhead_data.kind));
+                    labels.push(("kind", overhead_data.kind));
                     labels.extend_from_slice(extra_labels);
                     metrics::histogram!("tensorzero_overhead", &labels)
                         .record(overhead.as_millis() as f64);

@@ -141,7 +141,7 @@ pub struct HttpMetricData {
     /// Extra labels to add to the `tensorzero_overhead` histogram metric.
     /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
     /// when recording the overhead of `/inference` requests
-    pub extra_overhead_labels: Vec<(String, String)>,
+    pub extra_overhead_labels: Vec<(&'static str, String)>,
 }
 
 // An Axum middleware that logs request processing events

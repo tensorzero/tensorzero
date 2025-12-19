@@ -180,17 +180,17 @@ pub async fn inference_handler(
     if let Some(function_name) = &params.function_name {
         metric_data
             .extra_overhead_labels
-            .push(("function_name".to_string(), function_name.clone()));
+            .push(("function_name", function_name.clone()));
     }
     if let Some(variant_name) = &params.variant_name {
         metric_data
             .extra_overhead_labels
-            .push(("variant_name".to_string(), variant_name.clone()));
+            .push(("variant_name", variant_name.clone()));
     }
     if let Some(model_name) = &params.model_name {
         metric_data
             .extra_overhead_labels
-            .push(("model_name".to_string(), model_name.clone()));
+            .push(("model_name", model_name.clone()));
     }
     let inference_output = Box::pin(inference(
         config,
