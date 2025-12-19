@@ -1934,6 +1934,7 @@ version = "2025.12.4"
 dependencies = [
  "anyhow",
  "clap",
+ "durable",
  "futures",
  "indicatif",
  "serde",
