@@ -7,10 +7,13 @@ import { CancelButton } from "~/components/utils/CancelButton";
 import { CloneDatapointButton } from "~/components/datapoint/CloneDatapointButton";
 import { useReadOnly } from "~/context/read-only";
 import type { Datapoint } from "~/types/tensorzero";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { useConfig } from "~/context/config";
 
 interface DatapointActionsProps {
   variants: string[];
   onVariantSelect: (variant: string) => void;
+  onModelSelect: (model: string) => void;
   variantInferenceIsLoading: boolean;
   onDelete: () => void;
   isDeleting: boolean;
@@ -20,7 +23,7 @@ interface DatapointActionsProps {
   isSaving: boolean;
   isEditing: boolean;
   onReset: () => void;
-  showTryWithButton: boolean;
+  function_name: string;
   isStale: boolean;
   datapoint: Datapoint;
 }
@@ -28,6 +31,7 @@ interface DatapointActionsProps {
 export function DatapointActions({
   variants,
   onVariantSelect,
+  onModelSelect,
   variantInferenceIsLoading,
   onDelete,
   isDeleting,
@@ -37,7 +41,7 @@ export function DatapointActions({
   isSaving,
   isEditing,
   onReset,
-  showTryWithButton,
+  function_name,
   isStale,
   datapoint,
 }: DatapointActionsProps) {
@@ -46,15 +50,22 @@ export function DatapointActions({
     onReset();
     toggleEditing();
   };
+
+  const config = useConfig();
+  const modelsSet = new Set<string>([...variants, ...config.model_names]);
+  const models = [...modelsSet].sort();
+
+  const isDefault = function_name === DEFAULT_FUNCTION;
+  const options = isDefault ? models : variants;
+
   return (
     <ActionBar>
-      {showTryWithButton && (
-        <TryWithButton
-          options={variants}
-          onOptionSelect={onVariantSelect}
-          isLoading={variantInferenceIsLoading}
-        />
-      )}
+      <TryWithButton
+        options={options}
+        onOptionSelect={isDefault ? onModelSelect : onVariantSelect}
+        isLoading={variantInferenceIsLoading}
+        isDefaultFunction={isDefault}
+      />
       {!isEditing && <CloneDatapointButton datapoint={datapoint} />}
       {isEditing ? (
         <>
