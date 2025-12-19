@@ -78,4 +78,12 @@ pub trait WorkflowEvaluationQueries {
 
     /// Counts workflow evaluation runs.
     async fn count_workflow_evaluation_runs(&self) -> Result<u32, Error>;
+
+    /// Gets workflow evaluation runs by their IDs.
+    /// Returns run info for the specified run IDs, optionally filtered by project_name.
+    async fn get_workflow_evaluation_runs(
+        &self,
+        run_ids: &[Uuid],
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error>;
 }

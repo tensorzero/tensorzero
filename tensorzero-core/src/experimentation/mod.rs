@@ -429,7 +429,7 @@ impl VariantSampler for AlwaysFailsConfig {
         // Find intersection of active_variants and allowed_variants
         let intersection: Vec<&str> = active_variants
             .keys()
-            .filter(|k| self.allowed_variants.contains(&k.to_string()))
+            .filter(|k| self.allowed_variants.contains(*k))
             .map(String::as_str)
             .collect();
 

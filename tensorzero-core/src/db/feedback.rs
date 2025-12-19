@@ -214,16 +214,16 @@ pub enum FeedbackRow {
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FeedbackBounds {
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
-    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
     pub by_type: FeedbackBoundsByType,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FeedbackBoundsByType {
     pub boolean: TableBounds,
@@ -237,7 +237,11 @@ pub struct FeedbackBoundsByType {
 pub struct MetricWithFeedback {
     pub function_name: String,
     pub metric_name: String,
-    pub metric_type: MetricType,
+    /// The type of metric (boolean, float, demonstration).
+    /// None if the metric is not in the current config (e.g., was deleted).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub metric_type: Option<MetricType>,
     pub feedback_count: u32,
 }
 

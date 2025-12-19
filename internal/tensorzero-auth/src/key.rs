@@ -97,7 +97,7 @@ impl TensorZeroApiKey {
             ));
         }
         Ok(Self {
-            public_id: public_id.to_string(),
+            public_id: (*public_id).to_owned(),
             hashed_long_key: Self::hash_long_key(long_key).into(),
         })
     }

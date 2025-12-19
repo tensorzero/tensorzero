@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
         feedback::{
             BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow, LatestFeedbackRow, MetricWithFeedback,
+            FeedbackRow, FloatMetricFeedbackRow, LatestFeedbackRow, MetricType, MetricWithFeedback,
         },
     },
     error::{Error, ErrorDetails},
@@ -20,6 +21,14 @@ use super::{
     ClickHouseConnectionInfo, escape_string_for_clickhouse_literal,
     select_queries::{build_pagination_clause, parse_count, parse_json_rows},
 };
+
+/// Raw database result for metrics with feedback (without metric_type)
+#[derive(Debug, Deserialize)]
+struct MetricWithFeedbackRaw {
+    function_name: String,
+    metric_name: String,
+    feedback_count: u32,
+}
 
 // Configuration for feedback table queries
 struct FeedbackTableConfig {
@@ -382,6 +391,11 @@ impl ClickHouseConnectionInfo {
 }
 
 /// Builds the SQL query for querying metrics with feedback for a function
+///
+/// This query uses FeedbackByVariantStatistics (a pre-aggregated table) for
+/// boolean/float metrics, making it very fast. Demonstrations are queried
+/// separately with a simple join. The metric_type is not returned from the
+/// database - it should be looked up from the config at the endpoint level.
 fn build_metrics_with_feedback_query(
     function_name: &str,
     inference_table: &str,
@@ -392,99 +406,42 @@ fn build_metrics_with_feedback_query(
 
     let variant_clause = if let Some(vname) = variant_name {
         query_params.insert("variant_name".to_string(), vname.to_string());
-        "AND i.variant_name = {variant_name:String}"
+        "AND variant_name = {variant_name:String}"
     } else {
         ""
     };
 
+    // Use FeedbackByVariantStatistics for boolean/float metrics (pre-aggregated, fast)
+    // and a simple query for demonstrations
     let query = format!(
         r"
-        WITH
-        boolean_inference_metrics AS (
-          SELECT
-            i.function_name,
-            bmf.metric_name,
-            'boolean' as metric_type,
-            toUInt32(COUNT(DISTINCT i.id)) as feedback_count
-          FROM {inference_table} i
-          JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
-          WHERE i.function_name = {{function_name:String}}
-            {variant_clause}
-          GROUP BY i.function_name, bmf.metric_name
-          HAVING feedback_count > 0
-        ),
-
-        boolean_episode_metrics AS (
-          SELECT
-            i.function_name,
-            bmf.metric_name,
-            'boolean' as metric_type,
-            toUInt32(COUNT(DISTINCT i.id)) as feedback_count
-          FROM {inference_table} i
-          JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
-          WHERE i.function_name = {{function_name:String}}
-            {variant_clause}
-          GROUP BY i.function_name, bmf.metric_name
-          HAVING feedback_count > 0
-        ),
-
-        float_inference_metrics AS (
-          SELECT
-            i.function_name,
-            fmf.metric_name,
-            'float' as metric_type,
-            toUInt32(COUNT(DISTINCT i.id)) as feedback_count
-          FROM {inference_table} i
-          JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
-          WHERE i.function_name = {{function_name:String}}
-            {variant_clause}
-          GROUP BY i.function_name, fmf.metric_name
-          HAVING feedback_count > 0
-        ),
-
-        float_episode_metrics AS (
-          SELECT
-            i.function_name,
-            fmf.metric_name,
-            'float' as metric_type,
-            toUInt32(COUNT(DISTINCT i.id)) as feedback_count
-          FROM {inference_table} i
-          JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
-          WHERE i.function_name = {{function_name:String}}
-            {variant_clause}
-          GROUP BY i.function_name, fmf.metric_name
-          HAVING feedback_count > 0
-        ),
-        demonstration_metrics AS (
-          SELECT
-            i.function_name,
-            'demonstration' as metric_name,
-            'demonstration' as metric_type,
-            toUInt32(COUNT(DISTINCT i.id)) as feedback_count
-          FROM {inference_table} i
-          JOIN DemonstrationFeedback df ON df.inference_id = i.id
-          WHERE i.function_name = {{function_name:String}}
-            {variant_clause}
-          GROUP BY i.function_name
-          HAVING feedback_count > 0
-        )
         SELECT
           function_name,
           metric_name,
-          metric_type,
           feedback_count
         FROM (
-          SELECT * FROM boolean_inference_metrics
+          -- Boolean/float metrics from pre-aggregated table (very fast)
+          SELECT
+            function_name,
+            metric_name,
+            toUInt32(sum(count)) as feedback_count
+          FROM FeedbackByVariantStatistics
+          WHERE function_name = {{function_name:String}} {variant_clause}
+          GROUP BY function_name, metric_name
+          HAVING feedback_count > 0
+
           UNION ALL
-          SELECT * FROM boolean_episode_metrics
-          UNION ALL
-          SELECT * FROM float_inference_metrics
-          UNION ALL
-          SELECT * FROM float_episode_metrics
-          UNION ALL
-          SELECT * FROM demonstration_metrics
+
+          -- Demonstration metrics (need to join with inference table)
+          SELECT
+            {{function_name:String}} as function_name,
+            'demonstration' as metric_name,
+            toUInt32(COUNT(*)) as feedback_count
+          FROM DemonstrationFeedback
+          WHERE inference_id IN (SELECT id FROM {inference_table} WHERE function_name = {{function_name:String}} {variant_clause})
+          HAVING feedback_count > 0
         )
-        ORDER BY metric_type, metric_name
+        ORDER BY metric_name
         FORMAT JSONEachRow"
     );
 
@@ -967,7 +924,26 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &query_params).await?;
 
-        parse_json_rows(response.response.as_str())
+        // Parse raw results and convert to MetricWithFeedback
+        let raw_results: Vec<MetricWithFeedbackRaw> = parse_json_rows(response.response.as_str())?;
+
+        Ok(raw_results
+            .into_iter()
+            .map(|raw| {
+                // Demonstrations have a known type, others need config lookup at endpoint
+                let metric_type = if raw.metric_name == "demonstration" {
+                    Some(MetricType::Demonstration)
+                } else {
+                    None
+                };
+                MetricWithFeedback {
+                    function_name: raw.function_name,
+                    metric_name: raw.metric_name,
+                    metric_type,
+                    feedback_count: raw.feedback_count,
+                }
+            })
+            .collect())
     }
 
     async fn query_latest_feedback_id_by_metric(
@@ -1925,48 +1901,26 @@ mod tests {
         let (query, params) =
             build_metrics_with_feedback_query("test_function", "ChatInference", None);
 
-        // Check that all CTEs are present
-        assert_query_contains(&query, "boolean_inference_metrics AS");
-        assert_query_contains(&query, "boolean_episode_metrics AS");
-        assert_query_contains(&query, "float_inference_metrics AS");
-        assert_query_contains(&query, "float_episode_metrics AS");
-        assert_query_contains(&query, "demonstration_metrics AS");
+        // Check that we query from FeedbackByVariantStatistics for boolean/float metrics
+        assert_query_contains(&query, "FROM FeedbackByVariantStatistics");
 
-        // Check joins
-        assert_query_contains(&query, "FROM ChatInference i");
-        assert_query_contains(
-            &query,
-            "JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id",
-        );
-        assert_query_contains(
-            &query,
-            "JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id",
-        );
-        assert_query_contains(
-            &query,
-            "JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id",
-        );
-        assert_query_contains(
-            &query,
-            "JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id",
-        );
-        assert_query_contains(
-            &query,
-            "JOIN DemonstrationFeedback df ON df.inference_id = i.id",
-        );
+        // Check that we query DemonstrationFeedback for demonstrations
+        assert_query_contains(&query, "FROM DemonstrationFeedback");
 
-        // Check function name filter
-        assert_query_contains(&query, "WHERE i.function_name = {function_name:String}");
+        // Check demonstration metrics use inference_id with IN subquery
+        assert_query_contains(
+            &query,
+            "WHERE inference_id IN (SELECT id FROM ChatInference WHERE function_name = {function_name:String}",
+        );
 
         // Check no variant filter when variant_name is None
         assert_query_does_not_contain(&query, "variant_name");
 
         // Check UNION ALL
-        assert_query_contains(&query, "SELECT * FROM boolean_inference_metrics");
         assert_query_contains(&query, "UNION ALL");
 
         // Check ORDER BY
-        assert_query_contains(&query, "ORDER BY metric_type, metric_name");
+        assert_query_contains(&query, "ORDER BY metric_name");
 
         // Check params
         assert_eq!(
@@ -1985,7 +1939,10 @@ mod tests {
         );
 
         // Check variant filter is present
-        assert_query_contains(&query, "AND i.variant_name = {variant_name:String}");
+        assert_query_contains(&query, "AND variant_name = {variant_name:String}");
+
+        // Check uses JsonInference table for demonstrations
+        assert_query_contains(&query, "FROM JsonInference WHERE");
 
         // Check params include variant_name
         assert_eq!(

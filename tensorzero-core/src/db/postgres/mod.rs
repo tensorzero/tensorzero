@@ -6,9 +6,9 @@ use tokio::time::timeout;
 
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
-use crate::error::{Error, ErrorDetails};
-
 use super::HealthCheckable;
+use crate::error::{Error, ErrorDetails};
+use durable;
 
 pub mod experimentation;
 pub mod rate_limiting;
@@ -212,8 +212,41 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
         })
     })?;
+    manual_run_postgres_migrations_with_url(&postgres_url).await
+}
+
+pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Result<(), Error> {
+    // Our 'tensorzero-auth' and 'durable' crates currently use an alpha release of 'sqlx',
+    // so the `PgPool` type is different from the one used by tensorzero-core.
+    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    // Run tensorzero-auth migrations
+    tensorzero_auth::postgres::make_migrator()
+        .run(&sqlx_alpha_pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run tensorzero-auth migrations: {e}"),
+            })
+        })?;
+
+    // Run durable migrations to create the durable schema,
+    // which is required by some tensorzero-core migrations.
+    durable::MIGRATOR.run(&sqlx_alpha_pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: format!("Failed to run durable migrations: {e}"),
+        })
+    })?;
+
+    // Run tensorzero-core migrations
     let pool = PgPoolOptions::new()
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -226,22 +259,6 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
         })
     })?;
 
-    // Our 'tensorzero-auth' crate currently uses an alpha release of 'sqlx', so the `PgPool` type is different.
-    let sqlx_alpha_pool = sqlx_alpha::PgPool::connect(&postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-    tensorzero_auth::postgres::make_migrator()
-        .run(&sqlx_alpha_pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresMigration {
-                message: format!("Failed to run tensorzero-auth migrations: {e}"),
-            })
-        })?;
     Ok(())
 }
 
