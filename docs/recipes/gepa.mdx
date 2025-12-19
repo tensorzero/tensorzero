@@ -147,7 +147,7 @@ json_mode = "strict"
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
-description = "Evaluate if named entities are extracted only once to their most appropriate category, without duplication across categories. Scores: True (entity repeated), False (no repetition)."
+description = "Evaluate whether any named entities are repeated, either within the same category or across different categories. Scores: True (entity repeated), False (no repetition)."
 
 [evaluations.extract_entities_eval.evaluators.judge_repetition.variants.baseline]
 type = "chat_completion"
