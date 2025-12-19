@@ -97,7 +97,7 @@ pub struct UninitializedMixtureOfNConfig {
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
@@ -105,7 +105,7 @@ pub struct FuserConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
