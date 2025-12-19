@@ -1,0 +1,4 @@
+export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+export TENSORZERO_POSTGRES_URL="http://postgres:postgres@localhost:5432/tensorzero_ui_fixtures"
+export TENSORZERO_UI_CONFIG_PATH="fixtures/config/tensorzero.toml"
+export TENSORZERO_GATEWAY_URL="http://localhost:3000"
