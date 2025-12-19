@@ -1934,10 +1934,13 @@ version = "2025.12.4"
 dependencies = [
  "anyhow",
  "clap",
+ "durable",
  "futures",
  "indicatif",
+ "rand 0.9.2",
  "serde",
  "serde_json",
+ "sqlx 0.9.0-alpha.1",
  "tensorzero-core",
  "tokio",
  "tokio-util",

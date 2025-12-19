@@ -50,6 +50,58 @@ active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
+[evaluations.test_evaluation.evaluators.error]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.error.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::error"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+# Exact match evaluator: 1.0 if output matches reference, 0.0 otherwise
+# Used with echo/empty variants to produce different scores per variant
+[evaluations.test_evaluation.evaluators.exact_match]
+type = "exact_match"
+
+# Evaluation for testing TopKFound with deterministic scores
+# Uses only zero, one, and exact_match evaluators (no error evaluator)
+# With echo variant: avg score = (0 + 1 + 1) / 3 = 2/3
+# With empty variants: avg score = (0 + 1 + 0) / 3 = 1/3
+[evaluations.test_topk_evaluation]
+type = "inference"
+function_name = "basic_test"
+
+[evaluations.test_topk_evaluation.evaluators.zero]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_topk_evaluation.evaluators.zero.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::zero"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.test_topk_evaluation.evaluators.one]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_topk_evaluation.evaluators.one.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::one"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.test_topk_evaluation.evaluators.exact_match]
+type = "exact_match"
+
 [evaluations.json_evaluation]
 type = "inference"
 function_name = "json_success"
