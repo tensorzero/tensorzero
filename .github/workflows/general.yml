@@ -806,7 +806,9 @@ jobs:
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
+        run: |
+          uv run ./ui/fixtures/download-large-fixtures.py
+          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
         if: matrix.replicated == false
@@ -990,7 +992,9 @@ jobs:
           enable-cache: "false"
 
       - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
+        run: |
+          uv run ./ui/fixtures/download-large-fixtures.py
+          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
