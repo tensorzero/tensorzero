@@ -17,6 +17,7 @@ members = [
     "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
     "internal/autopilot-client",
+    "internal/autopilot-tools",
 ]
 resolver = "2"
 

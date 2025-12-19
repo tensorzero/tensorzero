@@ -295,6 +295,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "autopilot-tools"
+version = "2025.12.4"
+dependencies = [
+ "schemars 1.1.0",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "av-scenechange"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
