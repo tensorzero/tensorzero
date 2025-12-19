@@ -29,7 +29,7 @@ use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 // ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VariantStatus {
     /// Still running evals on this variant
     Active,
@@ -402,6 +402,22 @@ pub fn compute_updates(
 // Stopping Conditions: Variant-Specific Stopping and Global Stopping
 // ============================================================================
 
+/// Returns an iterator over (name, cs) pairs for non-failed variants.
+///
+/// Variants with `VariantStatus::Failed` are excluded. Variants not present in
+/// `variant_status` are included (assumed non-failed).
+fn non_failed_variants<'a>(
+    variant_performance: &'a HashMap<String, MeanBettingConfidenceSequence>,
+    variant_status: &'a HashMap<String, VariantStatus>,
+) -> impl Iterator<Item = (&'a String, &'a MeanBettingConfidenceSequence)> {
+    variant_performance.iter().filter(|(name, _)| {
+        variant_status
+            .get(*name)
+            .map(|s| *s != VariantStatus::Failed)
+            .unwrap_or(true)
+    })
+}
+
 /// Parameters for updating variant statuses during top-k evaluation.
 ///
 /// If `variant_failure_threshold` is set and a variant's failure rate CS lower bound
@@ -452,64 +468,77 @@ fn update_variant_statuses(
     stopping_result: &TopKStoppingResult,
     params: &VariantStatusParams,
 ) {
-    let num_variants = variant_status.len();
-    for (name, status) in variant_status.iter_mut() {
+    // Collect variant names first to avoid borrow checker issues
+    // (we need to borrow variant_status immutably in non_failed_variants while updating it)
+    let variant_names: Vec<String> = variant_status.keys().cloned().collect();
+
+    for name in variant_names {
+        let status = variant_status
+            .get(&name)
+            .copied()
+            .unwrap_or(VariantStatus::Active);
+
         // Skip already-stopped variants
-        if *status != VariantStatus::Active {
+        if status != VariantStatus::Active {
             continue;
         }
 
         // Check for failure based on failure rate
         if let Some(threshold) = params.variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(name)
+            && let Some(failure_cs) = variant_failures.get(&name)
             && failure_cs.cs_lower > threshold
         {
-            *status = VariantStatus::Failed;
+            variant_status.insert(name.clone(), VariantStatus::Failed);
             continue;
         }
 
         // If top-k stopping occurred, update based on inclusion in top set
         if stopping_result.stopped {
-            if stopping_result.top_variants.contains(name) {
-                *status = VariantStatus::Include;
+            if stopping_result.top_variants.contains(&name) {
+                variant_status.insert(name, VariantStatus::Include);
             } else {
-                *status = VariantStatus::Exclude;
+                variant_status.insert(name, VariantStatus::Exclude);
             }
             continue;
         }
 
         // Check if variant can be excluded early because it's confidently outside the top k_max
-        // (its upper bound is below (lower_bound_j + epsilon) for k_max other variants j)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_worse_than = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
-                })
-                .count();
+        // (its upper bound is below (lower_bound_j + epsilon) for k_max other non-failed variants j)
+        if let Some(perf_cs) = variant_performance.get(&name) {
+            let num_definitely_worse_than =
+                non_failed_variants(variant_performance, variant_status)
+                    .filter(|(other_name, other_cs)| {
+                        **other_name != name
+                            && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
+                    })
+                    .count();
 
             // If at least k_max variants are definitely better,
             // this variant cannot be in the top k_max
             if num_definitely_worse_than >= params.k_max as usize {
-                *status = VariantStatus::Exclude;
+                variant_status.insert(name, VariantStatus::Exclude);
                 continue;
             }
         }
 
         // Check if variant can be included early because it's confidently within the top k_min
-        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other variants j)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_better_than = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
-                })
-                .count();
+        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other non-failed variants j)
+        if let Some(perf_cs) = variant_performance.get(&name) {
+            // Count non-failed variants for the threshold calculation
+            let num_non_failed = non_failed_variants(variant_performance, variant_status).count();
 
-            // If this variant beats at least (num_variants - k_min) others,
-            // it's confidently in the top k_min
-            if num_definitely_better_than >= num_variants - params.k_min as usize {
-                *status = VariantStatus::Include;
+            let num_definitely_better_than =
+                non_failed_variants(variant_performance, variant_status)
+                    .filter(|(other_name, other_cs)| {
+                        **other_name != name
+                            && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
+                    })
+                    .count();
+
+            // If this variant beats at least (num_non_failed - k_min) others,
+            // it's confidently in the top k_min among non-failed variants
+            if num_definitely_better_than >= num_non_failed.saturating_sub(params.k_min as usize) {
+                variant_status.insert(name, VariantStatus::Include);
             }
         }
     }
@@ -557,17 +586,11 @@ pub fn check_topk_stopping(
 ) -> anyhow::Result<TopKStoppingResult> {
     let epsilon = epsilon.unwrap_or(0.0);
 
-    // Filter out failed variants if variant_status is provided
-    let filtered_performance: HashMap<String, &MeanBettingConfidenceSequence> = variant_performance
-        .iter()
-        .filter(|(name, _)| {
-            variant_status
-                .and_then(|status| status.get(*name))
-                .map(|s| *s != VariantStatus::Failed)
-                .unwrap_or(true)
-        })
-        .map(|(name, cs)| (name.clone(), cs))
-        .collect();
+    // Filter out failed variants if variant_status is provided, collect to Vec for multiple iterations
+    let empty_status = HashMap::new();
+    let status_map = variant_status.unwrap_or(&empty_status);
+    let filtered_performance: Vec<(&String, &MeanBettingConfidenceSequence)> =
+        non_failed_variants(variant_performance, status_map).collect();
 
     let num_variants = filtered_performance.len();
 
@@ -607,8 +630,8 @@ pub fn check_topk_stopping(
 
     // Collect upper bounds into a sorted vec for binary search
     let mut upper_bounds: Vec<f64> = filtered_performance
-        .values()
-        .map(|cs| cs.cs_upper)
+        .iter()
+        .map(|(_, cs)| cs.cs_upper)
         .collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -627,7 +650,7 @@ pub fn check_topk_stopping(
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
     let mut variants_with_stats: Vec<VariantStats<'_>> = filtered_performance
         .iter()
-        .map(|(name, cs)| {
+        .map(|&(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
             let num_beaten_including_self =
                 upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
