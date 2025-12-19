@@ -21,6 +21,7 @@ use crate::cache::{
     StreamingCacheData, cache_lookup, cache_lookup_streaming, start_cache_write,
     start_cache_write_streaming,
 };
+use crate::config::with_skip_credential_validation;
 use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
@@ -103,30 +104,39 @@ impl UninitializedModelConfig {
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
         http_client: TensorzeroHttpClient,
+        relay_mode: bool,
     ) -> Result<ModelConfig, Error> {
+        let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
             let http_client = http_client.clone();
             async move {
+                let load_future = provider.config.load(
+                    provider_types,
+                    provider_type_default_credentials,
+                    http_client,
+                );
+
+                // In relay mode, don't run credential validation for providers,
+                // since requests to the parent model get redirected to the downstream gateway.
+                // The exception is `skip_relay` models - we'll still use their providers,
+                // so we want to run credential validation for them.
+                let config = if relay_mode && !skip_relay {
+                    Box::pin(with_skip_credential_validation(load_future)).await
+                } else {
+                    load_future.await
+                };
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider
-                            .config
-                            .load(
-                                provider_types,
-                                provider_type_default_credentials,
-                                http_client,
-                            )
-                            .await
-                            .map_err(|e| {
-                                Error::new(ErrorDetails::Config {
-                                    message: format!("models.{model_name}.providers.{name}: {e}"),
-                                })
-                            })?,
+                        config: config.map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("models.{model_name}.providers.{name}: {e}"),
+                            })
+                        })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
@@ -142,7 +152,7 @@ impl UninitializedModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
-            skip_relay: self.skip_relay.unwrap_or(false),
+            skip_relay,
         })
     }
 }
@@ -2530,7 +2540,7 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::cache::CacheEnabledMode;
-    use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
     use crate::{
@@ -3488,14 +3498,15 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
+        let anthropic_provider_config = with_skip_credential_validation(async {
             ProviderConfig::Anthropic(AnthropicProvider::new(
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
                 false,
             ))
-        });
+        })
+        .await;
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(

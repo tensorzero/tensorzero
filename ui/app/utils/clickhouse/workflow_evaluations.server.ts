@@ -1,17 +1,9 @@
 import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
 import {
-  waldConfidenceIntervalLower,
-  waldConfidenceIntervalUpper,
-  wilsonConfidenceIntervalLower,
-  wilsonConfidenceIntervalUpper,
-} from "./helpers";
-import {
   workflowEvaluationRunEpisodeWithFeedbackSchema,
-  workflowEvaluationRunStatisticsByMetricNameSchema,
   groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
   type WorkflowEvaluationRunEpisodeWithFeedback,
-  type WorkflowEvaluationRunStatisticsByMetricName,
   type GroupedWorkflowEvaluationRunEpisodeWithFeedback,
 } from "./workflow_evaluations";
 
@@ -121,66 +113,6 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
   const rows = await result.json<WorkflowEvaluationRunEpisodeWithFeedback[]>();
   return rows.map((row) =>
     workflowEvaluationRunEpisodeWithFeedbackSchema.parse(row),
-  );
-}
-
-export async function getWorkflowEvaluationRunStatisticsByMetricName(
-  run_id: string,
-  metric_name?: string,
-): Promise<WorkflowEvaluationRunStatisticsByMetricName[]> {
-  const query = `
-    WITH
-       episodes AS (
-        SELECT
-          episode_id_uint,
-          run_id_uint,
-          tags,
-          datapoint_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicEvaluationRunEpisodeByRunId
-        WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
-        ORDER BY episode_id_uint DESC
-      ),
-    results AS (
-    SELECT
-      metric_name,
-      toUInt32(count()) as count,
-      avg(value) as avg_metric,
-      stddevSamp(value) as stdev,
-      ${waldConfidenceIntervalLower("value")} AS ci_lower,
-      ${waldConfidenceIntervalUpper("value")} AS ci_upper
-    FROM FloatMetricFeedbackByTargetId
-    WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
-    )
-    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
-    GROUP BY metric_name
-    UNION ALL
-    SELECT
-      metric_name,
-      toUInt32(count()) as count,
-      avg(value) as avg_metric,
-      stddevSamp(value) as stdev,
-      ${wilsonConfidenceIntervalLower("value")} AS ci_lower,
-      ${wilsonConfidenceIntervalUpper("value")} AS ci_upper
-    FROM BooleanMetricFeedbackByTargetId
-    WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
-    )
-    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
-      GROUP BY metric_name
-    )
-    SELECT * FROM results
-    ORDER BY metric_name ASC
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { run_id, metric_name },
-  });
-  const rows =
-    await result.json<WorkflowEvaluationRunStatisticsByMetricName[]>();
-  return rows.map((row) =>
-    workflowEvaluationRunStatisticsByMetricNameSchema.parse(row),
   );
 }
 

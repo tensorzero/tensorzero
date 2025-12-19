@@ -163,6 +163,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
                     TensorzeroHttpClient::new_testing().unwrap(),
+                    false,
                 )
                 .await
                 .unwrap();

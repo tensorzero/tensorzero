@@ -25,22 +25,6 @@ use crate::evaluators::EvaluationResult;
 use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-/// Default batch size for top-k evaluation
-const DEFAULT_BATCH_SIZE: usize = 20;
-
-/// Default confidence sequence resolution (grid points for mean estimation)
-const DEFAULT_CS_RESOLUTION: usize = 1001;
-
-/// Default alpha (significance level) for confidence sequences
-const DEFAULT_ALPHA: f32 = 0.05;
-
-/// Queue name for top-k evaluation tasks
-const _QUEUE_NAME: &str = "evaluations_topk"; // TODO: Remove underscore once used
-
-// ============================================================================
 // Core Types
 // ============================================================================
 
@@ -426,6 +410,8 @@ pub fn compute_updates(
 /// variants as Exclude) are made relative to the current set of active variants.
 /// If variants fail after others have been excluded, the evaluation may end with fewer
 /// than k_min identified variants, since excluded variants are not reconsidered.
+/// TODO: remove #[cfg(test)] once other functions that use this are implemented
+#[cfg(test)]
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
@@ -461,7 +447,7 @@ struct VariantStatusParams {
 /// 5. **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
 ///    `(num_variants - k_min)` others (adjusted by epsilon), it's confidently in the top k_min,
 ///    so mark as `Include`.
-#[expect(dead_code)]
+#[cfg(test)]
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
@@ -763,6 +749,7 @@ pub fn check_topk(
 /// The fourth available reason, DatasetExhausted, is checked elsewhere, because
 /// check_global_stopping() doesn't have access to the number of batches processed
 /// and remaining.
+#[expect(dead_code)]
 fn check_global_stopping(
     progress: &TopKProgress,
     params: &TopKTaskParams,
