@@ -54,13 +54,25 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await?;
+
+    let disabled_time = tensorzero_auth::postgres::disable_key(public_id, &pool).await?;
+
+    tracing::info!("Deleted API key {public_id} at {disabled_time}");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
-    let delayed_log_config = observability::setup_observability(args.log_format)
+    let delayed_log_config = observability::setup_observability(args.log_format, true)
         .await
         .log_err_pretty("Failed to set up logs")?;
 
@@ -70,6 +82,14 @@ async fn main() -> Result<(), ExitCode> {
         handle_create_api_key()
             .await
             .log_err_pretty("Failed to create API key")?;
+        return Ok(());
+    }
+
+    if let Some(public_id) = args.early_exit_commands.disable_api_key {
+        handle_disable_api_key(&public_id)
+            .await
+            .log_err_pretty("Failed to delete API key")?;
+
         return Ok(());
     }
 

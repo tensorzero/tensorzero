@@ -27,6 +27,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model_table::CowNoClone,
@@ -111,6 +112,12 @@ const CONCURRENCY_LIMIT: u8 = 100;
 /// * Improved connection pooling support for HTTP/2
 /// * Workaround for long-lived `h2` spans (see `tensorzero_h2_workaround_span`)
 /// * Outgoing OpenTelemetry 'tracecontext/baggage' propagation
+/// * Integrates with the 'overhead' metric tracking, and excludes the time
+///   taken by the HTTP request from the calculated overhead.
+///   We currently only use `TensorzeroHttpClient` for calls to LLMs, which
+///   we want to exclude from our 'overhead' metric calculation.
+///   If we ever start using `TensorzeroHttpClient` for other purposes (e.g. ClickHouse requests),
+///   we'll probably need to make this configurable on a per-request basis.
 #[derive(Debug, Clone)]
 pub struct TensorzeroHttpClient {
     // A 'waterfall' of clients for connecting pooling.
@@ -301,6 +308,9 @@ pub struct TensorZeroEventSource {
     stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
+    // We deliberately hold this span across the entire lifetime of the event source stream,
+    // as we want the total duration to count as 'external' for our overhead metric.
+    tensorzero_external_span: Span,
 }
 
 impl Stream for TensorZeroEventSource {
@@ -514,6 +524,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
             stream: Box::pin(event_source),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
+            tensorzero_external_span: tracing::debug_span!(
+                "eventsource",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ),
         })
     }
 
@@ -548,6 +562,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 stream: Box::pin(stream),
                 ticket,
                 span: tensorzero_h2_workaround_span(),
+                tensorzero_external_span: tracing::debug_span!(
+                    "eventsource",
+                    { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+                ),
             },
             headers,
         ))
@@ -556,6 +574,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     // This method preserves our ticket (by storing it in the `TensorzeroResponseWrapper`),
     // since holding a `Reponse` still requires an active connection (since the
     // body will not be read until `text()` is called)
+    #[tracing::instrument(skip_all, fields({ TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true))]
     pub async fn send(mut self) -> Result<TensorzeroResponseWrapper, reqwest::Error> {
         self = self.with_otlp_headers();
         Ok(TensorzeroResponseWrapper {
@@ -590,6 +609,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let response = client
             .execute(request)
             .instrument(tensorzero_h2_workaround_span())
+            .instrument(tracing::debug_span!(
+                "send_and_parse_json",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ))
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -606,6 +629,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let raw_response = response
             .text()
             .instrument(tensorzero_h2_workaround_span())
+            .instrument(tracing::debug_span!(
+                "response_text",
+                { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
+            ))
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

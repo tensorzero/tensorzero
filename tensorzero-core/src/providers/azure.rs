@@ -645,7 +645,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     // Azure supports auto and default, but not flex and priority
@@ -673,7 +673,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.verbosity = verbosity.clone();
+        request.verbosity.clone_from(verbosity);
     }
 }
 
