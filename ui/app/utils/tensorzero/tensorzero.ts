@@ -70,6 +70,7 @@ import type {
   UpdateDatapointsResponse,
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
+  GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
 } from "~/types/tensorzero";
@@ -1656,6 +1657,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetEvaluationStatisticsResponse;
+  }
+
+  /**
+   * Gets paginated evaluation results across one or more evaluation runs.
+   * @param evaluationName - The name of the evaluation
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @param limit - Maximum number of datapoints to return (default: 100)
+   * @param offset - Number of datapoints to skip (default: 0)
+   * @returns A promise that resolves with the evaluation results
+   * @throws Error if the request fails
+   */
+  async getEvaluationResults(
+    evaluationName: string,
+    evaluationRunIds: string[],
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<GetEvaluationResultsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_name", evaluationName);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/results?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationResultsResponse;
   }
 
   private async fetch(
