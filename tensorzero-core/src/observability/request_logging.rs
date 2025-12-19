@@ -12,12 +12,13 @@ use tracing::{Level, Span};
 use tracing_futures::Instrument;
 
 use crate::observability::overhead_timing::{
-    TENSORZERO_LATENCY_ATTRIBUTE_NAME, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
+    OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
 };
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
     latency_span: Span,
+    request_logging_data: Option<HttpMetricData>,
     span: Span,
     start_time: Instant,
     finished_with_latency: Cell<Option<Duration>>,
@@ -47,9 +48,11 @@ impl Drop for ConnectionDropGuard {
             .finished_with_latency
             .get()
             .unwrap_or_else(|| self.start_time.elapsed());
-        self.latency_span.record(
-            TENSORZERO_LATENCY_ATTRIBUTE_NAME,
-            latency_duration.as_millis(),
+        self.latency_span.set_latency_and_record(
+            latency_duration,
+            self.request_logging_data
+                .as_ref()
+                .map(|data| data.extra_overhead_labels.as_slice()),
         );
 
         let latency = format!("{} ms", latency_duration.as_millis());
@@ -131,6 +134,16 @@ impl http_body::Body for GuardBodyWrapper {
     }
 }
 
+/// A *response* extension used to pass data from a route handler to `request_logging_middleware`
+/// See the `inference` route handler for an example of how to use this.
+#[derive(Clone)]
+pub struct HttpMetricData {
+    /// Extra labels to add to the `tensorzero_overhead` histogram metric.
+    /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
+    /// when recording the overhead of `/inference` requests
+    pub extra_overhead_labels: Vec<(String, String)>,
+}
+
 // An Axum middleware that logs request processing events
 // * 'started processing request' when we begin processing a request
 // * 'finished processing request' when we we *completely* finish a request.
@@ -152,7 +165,6 @@ pub async fn request_logging_middleware(
         Level::DEBUG,
         "request_latency_tracking",
         { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = method_uri,
-        { TENSORZERO_LATENCY_ATTRIBUTE_NAME } = tracing::field::Empty,
     );
     let span = tracing::info_span!(
         target: "gateway",
@@ -171,12 +183,14 @@ pub async fn request_logging_middleware(
     let is_finished = matches!(request.method(), &Method::HEAD);
     let mut guard = ConnectionDropGuard {
         latency_span,
+        request_logging_data: None,
         span: span.clone(),
         start_time,
         finished_with_latency: Cell::new(None),
         status: None,
     };
-    let response = next.run(request).instrument(span).await;
+    let mut response = next.run(request).instrument(span).await;
+    guard.request_logging_data = response.extensions_mut().remove::<HttpMetricData>();
     guard.status = Some(response.status());
     if is_finished {
         guard.mark_finished();

@@ -52,6 +52,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
@@ -172,7 +173,25 @@ pub async fn inference_handler(
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<Response<Body>, Error> {
+) -> Response<Body> {
+    let mut metric_data = HttpMetricData {
+        extra_overhead_labels: vec![],
+    };
+    if let Some(function_name) = &params.function_name {
+        metric_data
+            .extra_overhead_labels
+            .push(("function_name".to_string(), function_name.clone()));
+    }
+    if let Some(variant_name) = &params.variant_name {
+        metric_data
+            .extra_overhead_labels
+            .push(("variant_name".to_string(), variant_name.clone()));
+    }
+    if let Some(model_name) = &params.model_name {
+        metric_data
+            .extra_overhead_labels
+            .push(("model_name".to_string(), model_name.clone()));
+    }
     let inference_output = Box::pin(inference(
         config,
         &http_client,
@@ -182,17 +201,20 @@ pub async fn inference_handler(
         params,
         api_key_ext,
     ))
-    .await?;
-    match inference_output {
-        InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
-        InferenceOutput::Streaming(stream) => {
+    .await;
+    let mut response = match inference_output {
+        Ok(InferenceOutput::NonStreaming(response)) => Json(response).into_response(),
+        Ok(InferenceOutput::Streaming(stream)) => {
             let event_stream = prepare_serialized_events(stream);
 
-            Ok(Sse::new(event_stream)
+            Sse::new(event_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response())
+                .into_response()
         }
-    }
+        Err(e) => e.into_response(),
+    };
+    response.extensions_mut().insert(metric_data);
+    response
 }
 
 pub type InferenceStream =

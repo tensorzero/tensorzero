@@ -12,13 +12,33 @@ use crate::common::start_gateway_on_random_port;
 mod common;
 
 #[tokio::test]
-async fn test_prometheus_metrics_inference_nonstreaming() {
+async fn test_prometheus_metrics_overhead_inference_nonstreaming() {
     test_prometheus_metrics_inference_helper(false).await;
 }
 
 #[tokio::test]
-async fn test_prometheus_metrics_inference_streaming() {
+async fn test_prometheus_metrics_overhead_inference_streaming() {
     test_prometheus_metrics_inference_helper(true).await;
+}
+
+#[tokio::test]
+async fn test_prometheus_metrics_overhead_health() {
+    let child_data = start_gateway_on_random_port(r"observability.enabled = false", None).await;
+    let client = Client::new();
+
+    let response = client
+        .get(format!("http://{}/health", child_data.addr))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let metrics = get_metrics(&client, &format!("http://{}/metrics", child_data.addr)).await;
+    println!("Metrics: {metrics:#?}");
+    assert_eq!(
+        metrics["tensorzero_overhead_count{kind=\"GET /health\"}"],
+        "1"
+    );
 }
 
 async fn test_prometheus_metrics_inference_helper(stream: bool) {
@@ -81,11 +101,11 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
     println!("Metrics: {metrics:#?}");
 
     assert_eq!(
-        metrics[r#"tensorzero_overhead_count{kind="POST /inference"}"#],
+        metrics["tensorzero_overhead_count{kind=\"POST /inference\",model_name=\"dummy::slow\"}"],
         count.to_string()
     );
 
-    let pct_50 = metrics[r#"tensorzero_overhead{kind="POST /inference",quantile="0.5"}"#]
+    let pct_50 = metrics["tensorzero_overhead{kind=\"POST /inference\",model_name=\"dummy::slow\",quantile=\"0.5\"}"]
         .parse::<f64>()
         .unwrap();
     assert!(
