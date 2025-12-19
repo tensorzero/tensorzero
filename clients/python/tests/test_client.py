@@ -824,7 +824,7 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 },
                 {"role": "assistant", "content": "ok"},
                 # This function has a user schema but we can bypass with RawText
@@ -886,7 +886,7 @@ async def test_async_json_streaming_reasoning(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -931,7 +931,7 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -959,7 +959,7 @@ async def test_async_json_reasoning(async_client: AsyncTensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -1972,7 +1972,7 @@ def test_sync_json_streaming(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -2027,7 +2027,7 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -2071,7 +2071,7 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },
@@ -2098,7 +2098,7 @@ def test_sync_json_reasoning(sync_client: TensorZeroGateway):
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                 }
             ],
         },

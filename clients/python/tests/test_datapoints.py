@@ -117,7 +117,7 @@ def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                     }
                 ],
             },
@@ -132,7 +132,7 @@ def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                     }
                 ],
             },
@@ -241,7 +241,7 @@ async def test_async_insert_delete_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                     }
                 ],
             },
@@ -253,7 +253,7 @@ async def test_async_insert_delete_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "US"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}],
                     }
                 ],
             },
@@ -369,7 +369,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "France"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}],
                     }
                 ],
             },
@@ -458,7 +458,7 @@ async def test_async_render_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "Italy"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "Italy"}}],
                     }
                 ],
             },
@@ -554,7 +554,7 @@ def test_sync_render_filtered_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "Spain"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "Spain"}}],
                     },
                 ],
             },
@@ -689,7 +689,7 @@ def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
                     }
                 ],
             },
@@ -749,7 +749,8 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
                         "role": "user",
                         "content": [
                             {
-                                "type": "text",
+                                "type": "template",
+                                "name": "user",
                                 "arguments": {"country": "Germany"},
                             }
                         ],

@@ -19,109 +19,85 @@ async fn test_payload_produces_error(payload: Value, expected_err: &str) {
 }
 
 #[tokio::test]
-async fn test_bad_text_input() {
+async fn test_bad_text_input_unknown_field() {
     test_payload_produces_error(
         json!({
             "function_name": "basic_test",
-            "input":
-                {
-                   "system": {"assistant_name": "Dr. Mehta"},
-                   "messages": [
-                    {
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "bad_field": "Blah"
-                        }]
-                    }
-                ]},
-
+            "input": {
+                "system": {"assistant_name": "Dr. Mehta"},
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                        "bad_field": "Blah"
+                    }]
+                }]
+            },
         }),
-        "input.messages[0].content[0]: Unknown key `bad_field` in text content",
+        "input.messages[0].content[0]: bad_field: unknown field `bad_field`, expected `text`",
     )
     .await;
+}
 
+#[tokio::test]
+async fn test_bad_text_input_multiple_unknown_fields() {
     test_payload_produces_error(
         json!({
             "function_name": "basic_test",
-            "input":
-                {
-                   "system": {"assistant_name": "Dr. Mehta"},
-                   "messages": [
-                    {
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "bad_field": "Blah",
-                            "bad_field_2": "Other",
-                        }]
-                    }
-                ]},
-
+            "input": {
+                "system": {"assistant_name": "Dr. Mehta"},
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                        "bad_field": "Blah",
+                        "bad_field_2": "Other",
+                    }]
+                }]
+            },
         }),
-        "input.messages[0].content[0]: Expected exactly one other key in text content, found 2 other keys",
+        "input.messages[0].content[0]: bad_field_2: unknown field `bad_field_2`, expected `text`",
     )
     .await;
+}
 
+#[tokio::test]
+async fn test_bad_text_input_missing_text_field() {
     test_payload_produces_error(
         json!({
             "function_name": "basic_test",
-            "input":
-                {
-                   "system": {"assistant_name": "Dr. Mehta"},
-                   "messages": [
-                    {
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                        }]
-                    }
-                ]},
-
+            "input": {
+                "system": {"assistant_name": "Dr. Mehta"},
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                    }]
+                }]
+            },
         }),
-        "input.messages[0].content[0]: Expected exactly one other key in text content, found 0 other keys",
+        "input.messages[0].content[0]: missing field `text`",
     )
     .await;
+}
 
+#[tokio::test]
+async fn test_bad_text_input_wrong_type() {
     test_payload_produces_error(
         json!({
             "function_name": "basic_test",
-            "input":
-                {
-                   "system": {"assistant_name": "Dr. Mehta"},
-                   "messages": [
-                    {
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "text": ["Not", "a", "string"]
-                        }]
-                    }
-                ]},
-
+            "input": {
+                "system": {"assistant_name": "Dr. Mehta"},
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                        "text": ["Not", "a", "string"]
+                    }]
+                }]
+            },
         }),
-        "input.messages[0].content[0]: Error deserializing `text`: invalid type: sequence, expected a string",
-    )
-    .await;
-
-    test_payload_produces_error(
-        json!({
-            "function_name": "basic_test",
-            "input":
-                {
-                   "system": {"assistant_name": "Dr. Mehta"},
-                   "messages": [
-                    {
-                        "role": "user",
-                        "content": [{
-                            "type": "text",
-                            "arguments": "Not an object"
-                        }]
-                    }
-                ]},
-
-        }),
-        "input.messages[0].content[0]: Error deserializing `arguments`: invalid type: string \"Not an object\", expected a map",
+        "input.messages[0].content[0]: text: invalid type: sequence, expected a string",
     )
     .await;
 }
