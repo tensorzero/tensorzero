@@ -26,7 +26,10 @@ test.describe("Try with on datapoint page", () => {
       await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
 
       // Click on the "Try with variant/model" button
-      await page.getByText(buttonText).click();
+      const button = page.getByText(buttonText);
+      await button.waitFor({ state: "visible" });
+      await expect(button).toBeEnabled();
+      await button.click();
 
       // Wait for the dropdown menu to appear and select an option
       const menuOption = page.getByRole("menuitem").filter({
