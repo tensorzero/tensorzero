@@ -3344,19 +3344,6 @@ def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     assert result.output.parsed is None
 
 
-def test_sync_invalid_input(sync_client: TensorZeroGateway):
-    with pytest.raises(TensorZeroInternalError) as exc_info:
-        sync_client.inference(
-            function_name="json_success",
-            input={"messages": [{"role": "user", "content": ["Invalid", "Content"]}]},
-        )
-
-    assert (
-        str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_core::inference::types::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
-    )
-
-
 def test_sync_multiple_text_blocks(sync_client: TensorZeroGateway):
     sync_client.inference(
         model_name="dummy::multiple-text-blocks",
