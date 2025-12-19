@@ -140,6 +140,7 @@ large_futures = "deny"
 explicit_into_iter_loop = "deny"
 cloned_instead_of_copied = "deny"
 inefficient_to_string = "deny"
+assigning_clones = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 default_trait_access = "allow"
