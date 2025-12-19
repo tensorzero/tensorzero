@@ -1533,7 +1533,6 @@ class InputMessage:
     """
     InputMessage and Role are our representation of the input sent by the client
     prior to any processing into LLM representations below.
-    `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
     """
 
     content: list[InputMessageContent]

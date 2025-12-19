@@ -3041,25 +3041,6 @@ mod tests {
             _ => panic!("Expected Text content: {message:?}"),
         }
 
-        // Test case for object content (should be converted to Template)
-        let input = json!({
-            "role": "assistant",
-            "content": {"key": "value"}
-        });
-        let message: InputMessage = serde_json::from_value(input).unwrap();
-        assert_eq!(message.role, Role::Assistant);
-        assert_eq!(message.content.len(), 1);
-        match &message.content[0] {
-            InputMessageContent::Template(template) => {
-                assert_eq!(template.name, "assistant");
-                assert_eq!(
-                    &template.arguments.0,
-                    json!({"key": "value"}).as_object().unwrap()
-                );
-            }
-            _ => panic!("Expected Template content"),
-        }
-
         // Test case for multiple content items
         let input = json!({
             "role": "user",
