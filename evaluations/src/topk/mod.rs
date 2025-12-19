@@ -84,7 +84,7 @@ pub enum GlobalStoppingReason {
 
 /// Application state for the top-k task (non-serializable global resources).
 ///
-/// This struct contains only truly global resources that don't change between task runs.
+/// This struct contains only global resources that don't change between task runs.
 /// All task-specific configuration is stored in `TopKTaskParams` for durable execution.
 #[derive(Clone)]
 pub struct TopKTaskState {
@@ -94,8 +94,8 @@ pub struct TopKTaskState {
 
 /// Serializable parameters for the top-k durable task.
 ///
-/// All task-specific configuration is stored here to ensure durable execution correctness.
-/// The exact config is captured at task creation time and never changes on resumption.
+/// All task-specific configuration is stored here to enable durable execution.
+/// The exact config is captured at task creation time and doesn't change on resumption.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopKTaskParams {
     /// Name of the evaluation
@@ -130,7 +130,7 @@ pub struct TopKTaskParams {
     pub scoring_function: ScoringFunctionType,
 }
 
-/// Serializable progress state for checkpointing between batches.
+/// Serializable progress state for checkpointing between batches of evaluations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopKProgress {
     /// Variant statuses
