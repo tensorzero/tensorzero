@@ -26,16 +26,3 @@ export const groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema = z.object({
 export type GroupedWorkflowEvaluationRunEpisodeWithFeedback = z.infer<
   typeof groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema
 >;
-
-export const workflowEvaluationRunStatisticsByMetricNameSchema = z.object({
-  metric_name: z.string(),
-  count: z.number(),
-  avg_metric: z.number(),
-  stdev: z.number().nullable(),
-  ci_lower: z.number().nullable(),
-  ci_upper: z.number().nullable(),
-});
-
-export type WorkflowEvaluationRunStatisticsByMetricName = z.infer<
-  typeof workflowEvaluationRunStatisticsByMetricNameSchema
->;
