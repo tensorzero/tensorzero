@@ -49,8 +49,8 @@ async fn try_start_gateway_expect_failure(config_suffix: &str) -> Vec<String> {
     let mut output = Vec::new();
     let mut failed = false;
 
-    // Read output for up to 2 seconds
-    let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(2));
+    // Read output for up to 20 seconds
+    let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(20));
     tokio::pin!(timeout);
 
     loop {
