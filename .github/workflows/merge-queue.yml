@@ -57,7 +57,6 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
-  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
 
 jobs:
   live-tests:
@@ -125,7 +124,6 @@ jobs:
             exit 1
           fi
           grep --invert-match -i "please file a bug report" <<< "$LOGS"
-
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
@@ -260,7 +258,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
