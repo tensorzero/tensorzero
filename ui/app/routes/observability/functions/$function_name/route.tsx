@@ -13,10 +13,7 @@ import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
-import {
-  getVariantPerformances,
-  getFunctionThroughputByVariant,
-} from "~/utils/clickhouse/function";
+import { getVariantPerformances } from "~/utils/clickhouse/function";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -93,11 +90,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           time_window_unit: time_granularity,
         })
       : undefined;
-  const variantThroughputPromise = getFunctionThroughputByVariant(
-    function_name,
-    throughput_time_granularity,
-    10,
-  );
+  const variantThroughputPromise = tensorZeroClient
+    .getFunctionThroughputByVariant(
+      function_name,
+      throughput_time_granularity,
+      10,
+    )
+    .then((response) => response.throughput);
 
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation

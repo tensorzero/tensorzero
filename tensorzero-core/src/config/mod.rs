@@ -1514,7 +1514,7 @@ pub enum ConfigInput {
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.
 /// Takes special care to retain the created_at if there was already a row
-/// that had the same hash.
+/// that had the same hash. Tags are merged with existing tags using mapUpdate.
 ///
 /// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
 /// If the env var is not set to "1", the write is skipped.
@@ -1529,6 +1529,7 @@ pub async fn write_config_snapshot(
         extra_templates: &'a HashMap<String, String>,
         hash: SnapshotHash,
         tensorzero_version: &'static str,
+        tags: &'a HashMap<String, String>,
     }
 
     // Get the pre-computed hash
@@ -1547,6 +1548,7 @@ pub async fn write_config_snapshot(
         extra_templates: &snapshot.extra_templates,
         hash: version_hash.clone(),
         tensorzero_version: TENSORZERO_VERSION,
+        tags: &snapshot.tags,
     };
 
     // Serialize to JSON
@@ -1559,21 +1561,26 @@ pub async fn write_config_snapshot(
     // Create the external data info
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String".to_string(),
+        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String, tags Map(String, String)".to_string(),
         format: "JSONEachRow".to_string(),
         data: json_data,
     };
 
-    // Create the query with subquery to preserve created_at
+    // Create the query with subquery to preserve created_at and merge tags
+    // We use any() aggregate function to handle the case when no row exists (returns default value)
     let query = format!(
         r"INSERT INTO ConfigSnapshot
-(config, extra_templates, hash, tensorzero_version, created_at, last_used)
+(config, extra_templates, hash, tensorzero_version, tags, created_at, last_used)
 SELECT
     new_data.config,
     new_data.extra_templates,
     toUInt256(new_data.hash) as hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}') LIMIT 1), now64()) as created_at,
+    mapUpdate(
+        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')),
+        new_data.tags
+    ) as tags,
+    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')), now64()) as created_at,
     now64() as last_used
 FROM new_data"
     );
@@ -1655,7 +1662,7 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]

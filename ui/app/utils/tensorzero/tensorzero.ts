@@ -32,6 +32,7 @@ import type {
   DeleteDatapointsResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
+  GetFunctionThroughputByVariantResponse,
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
@@ -834,6 +835,33 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as InferenceWithFeedbackStatsResponse;
+  }
+
+  /**
+   * Fetches function throughput data grouped by variant and time period.
+   * @param functionName - The name of the function to get throughput data for
+   * @param timeWindow - The time granularity for grouping data (minute, hour, day, week, month, cumulative)
+   * @param maxPeriods - Maximum number of time periods to return
+   * @returns A promise that resolves with the throughput data
+   * @throws Error if the request fails
+   */
+  async getFunctionThroughputByVariant(
+    functionName: string,
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetFunctionThroughputByVariantResponse> {
+    const searchParams = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput-by-variant?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetFunctionThroughputByVariantResponse;
   }
 
   /**
