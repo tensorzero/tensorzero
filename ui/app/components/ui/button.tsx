@@ -74,7 +74,7 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   const Comp = asChild ? Slot.Root : "button";
   const isHydrated = useHydrated();
-  const isDisabled = disabled || !isHydrated;
+  const isDisabled = disabled || (!asChild && !isHydrated);
   const child = asChild ? (
     <Slot.Slottable>{children}</Slot.Slottable>
   ) : (
