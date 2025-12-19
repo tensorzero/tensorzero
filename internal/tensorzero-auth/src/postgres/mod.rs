@@ -53,18 +53,22 @@ pub async fn create_key(
     organization: &str,
     workspace: &str,
     description: Option<&str>,
+    expires_at: Option<DateTime<Utc>>,
     pool: &PgPool,
 ) -> Result<SecretString, TensorZeroAuthError> {
     let key = secure_fresh_api_key();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret())?;
     sqlx::query!(
-        "INSERT INTO tensorzero_auth_api_key (organization, workspace, description, public_id, hash) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO tensorzero_auth_api_key (organization, workspace, description, public_id, hash, expires_at) VALUES ($1, $2, $3, $4, $5, $6)",
         organization,
         workspace,
         description,
         parsed_key.public_id,
-        parsed_key.hashed_long_key.expose_secret()
-    ).execute(pool).await?;
+        parsed_key.hashed_long_key.expose_secret(),
+        expires_at
+    )
+    .execute(pool)
+    .await?;
     Ok(key)
 }
 
