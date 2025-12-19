@@ -437,73 +437,77 @@ struct VariantStatusParams {
     variant_failure_threshold: Option<f64>,
 }
 
-/// Updates variant statuses based on confidence sequences and top-k stopping results.
+/// Updates variant statuses based on confidence sequences.
 ///
-/// This function transitions variants from `Active` to one of the terminal states:
+/// This function may transition variants from `Active` to one of the terminal states:
 /// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
-/// - `Include`: Variant is confidently in the top k_min set
-/// - `Exclude`: Variant is confidently outside the top k_max set
+/// - `Include`: Variant is confidently in the top k_min among non-failed variants (early inclusion)
+/// - `Exclude`: Variant is confidently outside the top k_max among non-failed variants (early exclusion)
 ///
-/// The checks are applied in priority order (failure > global stopping > early exclusion > early inclusion),
-/// so a variant that would otherwise be included can still be marked as `Failed` if its failure rate
-/// is too high.
+/// Note: This function handles failure detection and early inclusion/exclusion only.
+/// Global top-k stopping (when we can identify the full top-k set) should be checked
+/// separately via `check_topk_stopping()` after calling this function. This ensures
+/// that `Failed` status always takes precedence over `Include`.
 ///
 /// # Status Transition Logic
 ///
-/// 1. **Skip non-active**: Variants already in a terminal state are not modified.
+/// The function uses a two-pass approach to ensure failure detection happens before
+/// early inclusion/exclusion checks:
 ///
-/// 2. **Failure check**: If `variant_failure_threshold` is set and the variant's failure rate
-///    CS lower bound exceeds it, mark as `Failed`.
+/// **Pass 1 - Failure detection:**
+/// - Skip variants already in a terminal state
+/// - If `variant_failure_threshold` is set and the variant's failure rate CS lower bound
+///   exceeds it, mark as `Failed`
 ///
-/// 3. **Global stopping**: If `stopping_result.stopped` is true, mark variants in `top_variants`
-///    as `Include` and all others as `Exclude`.
-///
-/// 4. **Early exclusion**: If at least `k_max` other variants have lower bounds above this
-///    variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
-///    so mark as `Exclude`.
-///
-/// 5. **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
-///    `(num_variants - k_min)` others (adjusted by epsilon), it's confidently in the top k_min,
-///    so mark as `Include`.
+/// **Pass 2 - Early exclusion/inclusion (among non-failed variants):**
+/// - Skip variants already in a terminal state (including those just marked as `Failed`)
+/// - **Early exclusion**: If at least `k_max` other non-failed variants have lower bounds above
+///   this variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
+///   so mark as `Exclude`. (Note that other variants may fail later, causing excluded variants
+///   to return to the top-k_max among non-failed variants.)
+/// - **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
+///   `(num_non_failed - k_min)` other non-failed variants (adjusted by epsilon), it's
+///   confidently in the top k_min, so mark as `Include`
 #[cfg(test)]
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
-    stopping_result: &TopKStoppingResult,
     params: &VariantStatusParams,
 ) {
     // Collect variant names first to avoid borrow checker issues
     // (we need to borrow variant_status immutably in non_failed_variants while updating it)
     let variant_names: Vec<String> = variant_status.keys().cloned().collect();
 
+    // Pass 1: Mark failed variants first
+    // This must happen before early inclusion/exclusion checks so that the set of
+    // non-failed variants is accurate when computing those checks.
+    for name in &variant_names {
+        let status = variant_status
+            .get(name)
+            .copied()
+            .unwrap_or(VariantStatus::Active);
+        if status != VariantStatus::Active {
+            continue;
+        }
+
+        if let Some(threshold) = params.variant_failure_threshold
+            && let Some(failure_cs) = variant_failures.get(name)
+            && failure_cs.cs_lower > threshold
+        {
+            variant_status.insert(name.clone(), VariantStatus::Failed);
+        }
+    }
+
+    // Pass 2: Check early exclusion and inclusion among non-failed variants
     for name in variant_names {
         let status = variant_status
             .get(&name)
             .copied()
             .unwrap_or(VariantStatus::Active);
 
-        // Skip already-stopped variants
+        // Skip non-active variants (including those just marked as Failed)
         if status != VariantStatus::Active {
-            continue;
-        }
-
-        // Check for failure based on failure rate
-        if let Some(threshold) = params.variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(&name)
-            && failure_cs.cs_lower > threshold
-        {
-            variant_status.insert(name.clone(), VariantStatus::Failed);
-            continue;
-        }
-
-        // If top-k stopping occurred, update based on inclusion in top set
-        if stopping_result.stopped {
-            if stopping_result.top_variants.contains(&name) {
-                variant_status.insert(name, VariantStatus::Include);
-            } else {
-                variant_status.insert(name, VariantStatus::Exclude);
-            }
             continue;
         }
 
