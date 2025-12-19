@@ -11,7 +11,7 @@ test.describe("Try with on datapoint page", () => {
     {
       buttonText: "Try with model",
       inferenceId: "019926fd-1a06-7fe2-b7f4-2318de2f2046", // default function
-      option: "openai::gpt-4o-mini",
+      option: "gpt-4o-mini-2024-07-18",
     },
   ];
 

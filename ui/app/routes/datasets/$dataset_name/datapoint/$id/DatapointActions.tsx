@@ -62,7 +62,7 @@ export function DatapointActions({
     <ActionBar>
       <TryWithButton
         options={options}
-        onOptionSelect={isDefault ? onModelSelect : onVariantSelect}
+        onSelect={isDefault ? onModelSelect : onVariantSelect}
         isLoading={variantInferenceIsLoading}
         isDefaultFunction={isDefault}
       />

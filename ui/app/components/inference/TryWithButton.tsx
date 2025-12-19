@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useHydrated } from "~/hooks/use-hydrated";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -13,20 +14,21 @@ import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export interface TryWithButtonProps {
   options: string[];
-  onOptionSelect: (variant: string) => void;
+  onSelect: (option: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
 }
 
 export function TryWithButton({
-  options: variants,
-  onOptionSelect: onVariantSelect,
+  options,
+  onSelect,
   isLoading,
   isDefaultFunction,
 }: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isReadOnly = useReadOnly();
-  const isDisabled = isLoading || isReadOnly;
+  const isHydrated = useHydrated();
+  const isDisabled = isLoading || isReadOnly || !isHydrated;
 
   return (
     <ReadOnlyGuard asChild>
@@ -39,16 +41,17 @@ export function TryWithButton({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          {variants.map((variant) => (
+          {options.map((option) => (
             <DropdownMenuItem
-              key={variant}
+              key={option}
               onSelect={() => {
-                onVariantSelect(variant);
+                onSelect(option);
                 setIsOpen(false);
               }}
               className="font-mono text-sm"
+              disabled={isDisabled}
             >
-              {variant}
+              {option}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
