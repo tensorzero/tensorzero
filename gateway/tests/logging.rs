@@ -193,6 +193,10 @@ async fn test_log_early_drop_non_streaming() {
         "Log line missing request information: {next_line}"
     );
     assert!(
+        !next_line.contains("overhead"),
+        "Tensorzero overhead attributes should not be logged to console: {next_line}"
+    );
+    assert!(
         next_line.contains("WARN"),
         "Log line missing WARN: {next_line}"
     );
