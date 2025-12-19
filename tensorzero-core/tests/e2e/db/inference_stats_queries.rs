@@ -187,17 +187,14 @@ async fn test_count_inferences_by_variant_for_chat_function() {
     }
 
     // Each row should have a valid last_used timestamp
+    let rfc3339_millis_regex =
+        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$").unwrap();
     for row in &rows {
         assert!(
-            !row.last_used_at.is_empty(),
-            "last_used should not be empty for variant {}",
+            rfc3339_millis_regex.is_match(&row.last_used_at),
+            "last_used should be in RFC 3339 format, got: {} for variant {}",
+            row.last_used_at,
             row.variant_name
-        );
-        // Verify it's a valid ISO 8601 format
-        assert!(
-            row.last_used_at.contains('T') && row.last_used_at.ends_with('Z'),
-            "last_used should be in ISO 8601 format, got: {}",
-            row.last_used_at
         );
     }
 }

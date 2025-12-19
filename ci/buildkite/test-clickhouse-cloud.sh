@@ -78,7 +78,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
 source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
-uv run ./ui/fixtures/download-fixtures.py
+uv run ./ui/fixtures/download-large-fixtures.py
+uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations

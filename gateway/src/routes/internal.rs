@@ -46,6 +46,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
         )
         .route(
+            "/internal/feedback/{target_id}/count",
+            get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/throughput-by-variant",
+            get(endpoints::internal::inference_stats::get_function_throughput_by_variant_handler),
+        )
+        .route(
             "/internal/model_inferences/{inference_id}",
             get(endpoints::internal::model_inferences::get_model_inferences_handler),
         )
@@ -136,6 +144,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_runs_handler),
         )
         .route(
+            "/internal/workflow-evaluations/get-runs",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_runs_handler),
+        )
+        .route(
             "/internal/workflow-evaluations/runs/count",
             get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_runs_handler),
         )
@@ -154,7 +166,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         // Config snapshot endpoints
         .route(
             "/internal/config",
-            get(endpoints::internal::config::get_live_config_handler),
+            get(endpoints::internal::config::get_live_config_handler)
+                .post(endpoints::internal::config::write_config_handler),
         )
         .route(
             "/internal/config/{hash}",

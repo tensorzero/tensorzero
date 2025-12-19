@@ -10,7 +10,8 @@ use crate::db::datasets::{
 };
 use crate::db::inference_stats::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, InferenceStatsQueries, MockInferenceStatsQueries,
+    CountInferencesWithFeedbackParams, GetFunctionThroughputByVariantParams, InferenceStatsQueries,
+    MockInferenceStatsQueries, VariantThroughput,
 };
 use crate::db::inferences::{
     CountInferencesParams as ListInferencesCountParams, InferenceMetadata, InferenceQueries,
@@ -189,6 +190,15 @@ impl InferenceStatsQueries for MockClickHouseConnectionInfo {
     async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
         self.inference_stats_queries
             .count_inferences_for_episode(episode_id)
+            .await
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        self.inference_stats_queries
+            .get_function_throughput_by_variant(params)
             .await
     }
 }

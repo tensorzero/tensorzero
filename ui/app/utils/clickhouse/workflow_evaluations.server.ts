@@ -8,53 +8,12 @@ import {
 } from "./helpers";
 import {
   workflowEvaluationRunEpisodeWithFeedbackSchema,
-  workflowEvaluationRunSchema,
   workflowEvaluationRunStatisticsByMetricNameSchema,
   groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
-  type WorkflowEvaluationRun,
   type WorkflowEvaluationRunEpisodeWithFeedback,
   type WorkflowEvaluationRunStatisticsByMetricName,
   type GroupedWorkflowEvaluationRunEpisodeWithFeedback,
 } from "./workflow_evaluations";
-
-export async function getWorkflowEvaluationRunsByIds(
-  run_ids: string[], // one or more UUIDv7 strings
-  project_name?: string, // optional extra filter
-): Promise<WorkflowEvaluationRun[]> {
-  if (run_ids.length === 0) return []; // nothing to fetch
-
-  const query = `
-    SELECT
-      run_display_name AS name,
-      uint_to_uuid(run_id_uint) AS id,
-      variant_pins,
-      tags,
-      project_name,
-      formatDateTime(
-        UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) AS timestamp
-    FROM DynamicEvaluationRun
-    WHERE run_id_uint IN (
-      /* turn the parameter array of UUID strings into a real table
-         expression of UInt128 values so the IN predicate is valid */
-      SELECT arrayJoin(
-        arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)})
-      )
-    )
-    ${project_name ? "AND project_name = {project_name:String}" : ""}
-    ORDER BY run_id_uint DESC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { run_ids, project_name },
-  });
-
-  const rows = await result.json<WorkflowEvaluationRun[]>();
-  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
-}
 
 /**
  * Returns information about the episodes that were used in a workflow evaluation run,

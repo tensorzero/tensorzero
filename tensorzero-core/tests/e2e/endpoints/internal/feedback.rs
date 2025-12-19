@@ -4,7 +4,8 @@ use reqwest::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::endpoints::feedback::internal::{
-    GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+    CountFeedbackByTargetIdResponse, GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse,
+    LatestFeedbackIdByMetricResponse,
 };
 use uuid::Uuid;
 
@@ -391,5 +392,91 @@ async fn test_get_feedback_by_target_id_rejects_both_before_and_after() {
         resp.status(),
         reqwest::StatusCode::BAD_REQUEST,
         "Expected 400 when both before and after are specified"
+    );
+}
+
+// ==================== Count Feedback By Target ID Tests ====================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_feedback_by_target_id_with_feedback() {
+    let http_client = Client::new();
+
+    let inference_id = create_inference(&http_client, "basic_test").await;
+    let _feedback_id =
+        submit_inference_feedback(&http_client, inference_id, "task_success", json!(true)).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{inference_id}/count"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Expected success when counting feedback"
+    );
+
+    let response: CountFeedbackByTargetIdResponse = resp.json().await.unwrap();
+    assert_eq!(
+        response.count, 1,
+        "Expected count to be 1 for single feedback entry"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_feedback_by_target_id_multiple_feedback() {
+    let http_client = Client::new();
+
+    let inference_id = create_inference(&http_client, "basic_test").await;
+
+    // Submit multiple feedback entries
+    submit_inference_feedback(&http_client, inference_id, "task_success", json!(true)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    submit_inference_feedback(&http_client, inference_id, "task_success", json!(false)).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{inference_id}/count"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(resp.status().is_success());
+    let response: CountFeedbackByTargetIdResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.count, 2,
+        "Expected count to be 2 for multiple feedback entries"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_feedback_by_target_id_nonexistent_target() {
+    let http_client = Client::new();
+    let nonexistent_id = Uuid::now_v7();
+
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{nonexistent_id}/count"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Expected success for nonexistent target"
+    );
+
+    let response: CountFeedbackByTargetIdResponse = resp.json().await.unwrap();
+    assert_eq!(
+        response.count, 0,
+        "Expected count to be 0 for nonexistent target"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_feedback_by_target_id_invalid_uuid() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/count");
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 for invalid UUID"
     );
 }

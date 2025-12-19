@@ -1,6 +1,8 @@
 #![recursion_limit = "256"]
 
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -75,7 +77,9 @@ pub use tensorzero_core::endpoints::inference::{
 pub use tensorzero_core::endpoints::internal::action::{
     ActionInput, ActionInputInfo, ActionResponse,
 };
-pub use tensorzero_core::endpoints::internal::config::GetConfigResponse;
+pub use tensorzero_core::endpoints::internal::config::{
+    GetConfigResponse, WriteConfigRequest, WriteConfigResponse,
+};
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
@@ -512,6 +516,27 @@ pub trait ClientExt {
         &self,
         hash: Option<&str>,
     ) -> Result<GetConfigResponse, TensorZeroError>;
+
+    /// Writes a config snapshot to the database.
+    ///
+    /// If a config with the same hash already exists, tags are merged
+    /// (new tags override existing keys) and `created_at` is preserved.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The config to write, including optional extra_templates and tags.
+    ///
+    /// # Returns
+    ///
+    /// A `WriteConfigResponse` containing the computed hash of the config.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
@@ -1440,11 +1465,52 @@ impl ClientExt for Client {
                         .map_err(err_to_http)?;
                     Ok(GetConfigResponse {
                         hash: snapshot.hash.to_string(),
-                        config: snapshot.config,
+                        config: snapshot.config.into(),
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
                     })
                 })
+                .await
+            }
+        }
+    }
+
+    async fn write_config(
+        &self,
+        request: WriteConfigRequest,
+    ) -> Result<WriteConfigResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/config").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/config endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Box::pin(with_embedded_timeout(*timeout, async {
+                    let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)
+                        .map_err(err_to_http)?;
+                    snapshot.tags = request.tags;
+
+                    let hash = snapshot.hash.to_string();
+
+                    write_config_snapshot(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        snapshot,
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+
+                    Ok(WriteConfigResponse { hash })
+                }))
                 .await
             }
         }

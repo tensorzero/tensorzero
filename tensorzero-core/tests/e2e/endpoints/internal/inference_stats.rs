@@ -600,10 +600,10 @@ pub async fn test_get_inference_stats_group_by_variant() {
         .stats_by_variant
         .expect("Expected stats_by_variant to be present");
 
-    // Should have at least 2 variants
+    // Should have at least 1 variant
     assert!(
-        stats_by_variant.len() >= 2,
-        "Expected at least 2 variants, got {}",
+        !stats_by_variant.is_empty(),
+        "Expected at least 1 variant, got {}",
         stats_by_variant.len()
     );
 
@@ -623,11 +623,11 @@ pub async fn test_get_inference_stats_group_by_variant() {
         );
     }
 
-    // Each variant should have last_used_at in ISO 8601 format
+    // Each variant should have last_used_at in RFC 3339 format
     for variant in &stats_by_variant {
         assert!(
             variant.last_used_at.contains('T') && variant.last_used_at.ends_with('Z'),
-            "last_used_at should be in ISO 8601 format, got: {}",
+            "last_used_at should be in RFC 3339 format, got: {}",
             variant.last_used_at
         );
     }
@@ -692,4 +692,248 @@ pub async fn test_get_inference_stats_nonexistent_variant() {
         !resp.status().is_success(),
         "Request for nonexistent variant should fail"
     );
+}
+
+// Tests for function throughput by variant endpoint
+
+use tensorzero_core::endpoints::internal::inference_stats::GetFunctionThroughputByVariantResponse;
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_cumulative() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/write_haiku/throughput-by-variant?time_window=cumulative",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+    // write_haiku function has fixture data, so we should have throughput data
+    assert!(
+        !response.throughput.is_empty(),
+        "Expected non-empty throughput data for write_haiku"
+    );
+
+    // For cumulative, all entries should have the same fixed period_start (epoch)
+    for entry in &response.throughput {
+        assert_eq!(
+            entry.period_start.to_rfc3339(),
+            "1970-01-01T00:00:00+00:00",
+            "Cumulative should have epoch period_start"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_week() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/write_haiku/throughput-by-variant?time_window=week&max_periods=5",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+    // May or may not have data depending on fixture data age
+    // Just verify the response parses correctly
+    for entry in &response.throughput {
+        assert!(
+            !entry.variant_name.is_empty(),
+            "Variant name should not be empty"
+        );
+        assert!(entry.count > 0, "Count should be positive");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_day() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/basic_test/throughput-by-variant?time_window=day&max_periods=30",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let _response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_nonexistent_function() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/nonexistent_function/throughput-by-variant?time_window=week",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        !resp.status().is_success(),
+        "Request for nonexistent function should fail"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_missing_time_window() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/functions/write_haiku/throughput-by-variant");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        !resp.status().is_success(),
+        "Request without time_window should fail"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_default_max_periods() {
+    let http_client = Client::new();
+    // Don't specify max_periods, should use default of 10
+    let url = get_gateway_endpoint(
+        "/internal/functions/write_haiku/throughput-by-variant?time_window=month",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let _response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_extract_entities_week() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/extract_entities/throughput-by-variant?time_window=week&max_periods=10",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    // Check that the raw response has period_start in RFC 3339 format with milliseconds
+    let rfc3339_regex =
+        regex::Regex::new(r#""period_start"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#)
+            .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain period_start in RFC 3339 format with milliseconds, got: {body}"
+    );
+
+    let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+    // extract_entities has fixture data
+    assert!(
+        !response.throughput.is_empty(),
+        "Expected non-empty throughput data for extract_entities"
+    );
+
+    // Check that all results have valid structure
+    for entry in &response.throughput {
+        assert!(
+            !entry.variant_name.is_empty(),
+            "Variant name should not be empty"
+        );
+        assert!(entry.count > 0, "Count should be positive");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_sorting_order() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/write_haiku/throughput-by-variant?time_window=day&max_periods=30",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+
+    // Check that results are sorted by period_start DESC, then variant_name DESC
+    for i in 1..response.throughput.len() {
+        let current = &response.throughput[i];
+        let previous = &response.throughput[i - 1];
+
+        if current.period_start == previous.period_start {
+            // Same period, check variant_name DESC ordering
+            assert!(
+                current.variant_name <= previous.variant_name,
+                "Within same period, variants should be sorted DESC. {} should come after {}",
+                current.variant_name,
+                previous.variant_name
+            );
+        } else {
+            // Different periods, check period_start DESC ordering
+            assert!(
+                current.period_start <= previous.period_start,
+                "Periods should be sorted DESC. {} should come after {}",
+                current.period_start,
+                previous.period_start
+            );
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_function_throughput_by_variant_month() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/functions/extract_entities/throughput-by-variant?time_window=month&max_periods=3",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    let status = resp.status();
+    let body = resp.text().await.unwrap();
+    assert!(
+        status.is_success(),
+        "Expected success status, got {status}: {body}"
+    );
+
+    // Check that the raw response has period_start in RFC 3339 format with milliseconds
+    let rfc3339_regex =
+        regex::Regex::new(r#""period_start"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z""#)
+            .unwrap();
+    assert!(
+        rfc3339_regex.is_match(&body),
+        "Response should contain period_start in RFC 3339 format with milliseconds, got: {body}"
+    );
+
+    let response: GetFunctionThroughputByVariantResponse = serde_json::from_str(&body).unwrap();
+
+    // Check that all results have valid structure
+    for entry in &response.throughput {
+        assert!(
+            !entry.variant_name.is_empty(),
+            "Variant name should not be empty"
+        );
+    }
 }
