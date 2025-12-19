@@ -44,9 +44,14 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
     // Create the key with default organization and workspace
-    let key =
-        tensorzero_auth::postgres::create_key(DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE, None, &pool)
-            .await?;
+    let key = tensorzero_auth::postgres::create_key(
+        DEFAULT_ORGANIZATION,
+        DEFAULT_WORKSPACE,
+        None,
+        None,
+        &pool,
+    )
+    .await?;
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);

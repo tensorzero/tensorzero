@@ -696,9 +696,10 @@ async fn test_relay_with_env_api_key() {
     let pool = get_postgres_pool_for_testing().await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let downstream_config = "
     [gateway.auth]
@@ -754,9 +755,10 @@ async fn test_relay_with_dynamic_api_key() {
     let pool = get_postgres_pool_for_testing().await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let downstream_config = "
     [gateway.auth]
@@ -983,9 +985,10 @@ async fn test_relay_embeddings_with_env_api_key() {
     let pool = get_postgres_pool_for_testing().await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let downstream_config = r#"
 [gateway.auth]
@@ -1040,9 +1043,10 @@ async fn test_relay_embeddings_with_dynamic_api_key() {
     let pool = get_postgres_pool_for_testing().await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let downstream_config = r#"
 [gateway.auth]

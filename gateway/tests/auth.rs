@@ -41,7 +41,7 @@ async fn test_tensorzero_auth_enabled() {
     )
     .await;
 
-    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
 
@@ -249,9 +249,10 @@ async fn test_tensorzero_missing_auth() {
     )
     .await;
 
-    let disabled_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let disabled_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let disabled_at = tensorzero_auth::postgres::disable_key(
         &TensorZeroApiKey::parse(disabled_key.expose_secret())
@@ -400,9 +401,10 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     .await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -501,9 +503,10 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     .await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -577,7 +580,7 @@ async fn test_auth_cache_requires_full_key_match() {
 
     // Create a valid key
     let valid_key =
-        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
             .await
             .unwrap();
     let parsed_valid_key = TensorZeroApiKey::parse(valid_key.expose_secret()).unwrap();
@@ -821,16 +824,18 @@ async fn test_create_api_key_cli() {
 #[tokio::test]
 async fn test_rate_limit_auth_single_key() {
     let pool = get_postgres_pool_for_testing().await;
-    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let first_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
     let first_key_public_id = parsed_first_key.public_id;
 
-    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let second_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let child_data = start_gateway_on_random_port(
         &format!(
@@ -955,15 +960,17 @@ async fn test_rate_limit_auth_single_key() {
 #[tokio::test]
 async fn test_rate_limit_auth_each_key() {
     let pool = get_postgres_pool_for_testing().await;
-    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let first_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
 
-    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let second_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_second_key = TensorZeroApiKey::parse(second_key.expose_secret()).unwrap();
 

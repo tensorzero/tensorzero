@@ -11,10 +11,10 @@ use tensorzero_auth::{
 
 #[sqlx::test]
 async fn test_key_lifecycle(pool: PgPool) {
-    let first_key = create_key("my_org", "my_workspace", None, &pool)
+    let first_key = create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
-    let second_key = create_key("my_org", "my_workspace", Some("Second key"), &pool)
+    let second_key = create_key("my_org", "my_workspace", Some("Second key"), None, &pool)
         .await
         .unwrap();
 
@@ -105,32 +105,43 @@ fn unwrap_success(result: Result<AuthResult, TensorZeroAuthError>) -> KeyInfo {
 
 #[sqlx::test]
 async fn test_list_keys(pool: PgPool) {
-    let first_key = create_key("my_org", "my_workspace", None, &pool)
+    let first_key = create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
-    let second_key = create_key("my_org", "my_workspace", Some("Second key"), &pool)
+    let second_key = create_key("my_org", "my_workspace", Some("Second key"), None, &pool)
         .await
         .unwrap();
 
-    let same_org_different_workspace =
-        create_key("my_org", "my_second_workspace", Some("Third key"), &pool)
-            .await
-            .unwrap();
+    let same_org_different_workspace = create_key(
+        "my_org",
+        "my_second_workspace",
+        Some("Third key"),
+        None,
+        &pool,
+    )
+    .await
+    .unwrap();
 
     let different_org = create_key(
         "different_org",
         "different_workspace",
         Some("Fourth key"),
+        None,
         &pool,
     )
     .await
     .unwrap();
 
     // Re-use the 'my_workspace' name in two different organizations
-    let collide_workspace_name =
-        create_key("different_org", "my_workspace", Some("Fifth key"), &pool)
-            .await
-            .unwrap();
+    let collide_workspace_name = create_key(
+        "different_org",
+        "my_workspace",
+        Some("Fifth key"),
+        None,
+        &pool,
+    )
+    .await
+    .unwrap();
 
     let first_key_info = unwrap_success(
         check_key(
@@ -238,11 +249,11 @@ async fn test_list_keys(pool: PgPool) {
 
 #[sqlx::test]
 async fn test_check_bad_key(pool: PgPool) {
-    let first_key = create_key("my_org", "my_workspace", None, &pool)
+    let first_key = create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
 
-    let second_key = create_key("my_org", "my_workspace", None, &pool)
+    let second_key = create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
 
@@ -280,7 +291,7 @@ async fn test_check_bad_key(pool: PgPool) {
 #[sqlx::test]
 async fn test_disable_key_workflow(pool: PgPool) {
     // Create an API key and keep it for later verification
-    let api_key = create_key("test_org", "test_workspace", Some("Test key"), &pool)
+    let api_key = create_key("test_org", "test_workspace", Some("Test key"), None, &pool)
         .await
         .unwrap();
     let parsed_key = TensorZeroApiKey::parse(api_key.expose_secret()).unwrap();

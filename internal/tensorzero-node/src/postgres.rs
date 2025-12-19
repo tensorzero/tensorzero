@@ -38,6 +38,7 @@ impl PostgresClient {
             DEFAULT_ORGANIZATION,
             DEFAULT_WORKSPACE,
             description.as_deref(),
+            None,
             pool,
         )
         .await
