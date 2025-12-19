@@ -29,6 +29,11 @@ use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 // ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
+///
+/// The Include/Exclude/Failed states are terminal, and decisions to transition to
+/// one of these states are based on the current set of non-Failed variants. That
+/// means variant failures can prevent a top-k set from being identified, because
+/// a variant may fail after other variants have already been excluded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VariantStatus {
     /// Still running evals on this variant
@@ -547,8 +552,8 @@ fn update_variant_statuses(
 /// Check if we can confidently identify a top-k set of variants.
 ///
 /// A variant is "confidently in the top k" if its confidence sequence lower bound
-/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
-/// tolerance `epsilon`. This means we can be confident it's better than at least
+/// exceeds the upper bounds of at least (num_variants - k) other non-failed variants,
+/// with a tolerance `epsilon`. This means we can be confident it's better than at least
 /// (num_variants - k) variants, or at least not more than epsilon worse than those
 /// variants.
 ///
