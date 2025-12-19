@@ -546,7 +546,7 @@ jobs:
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
-          tool: cargo-nextest,cargo-deny,cargo-hack
+          tool: cargo-nextest,cargo-deny@0.18.9,cargo-hack
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
@@ -581,7 +581,7 @@ jobs:
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
-          tool: cargo-nextest,cargo-deny,cargo-hack
+          tool: cargo-nextest,cargo-deny0.18.9,cargo-hack
 
       - name: Test (Rust)
         env:
@@ -708,7 +708,7 @@ jobs:
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
-          tool: cargo-nextest,cargo-deny,cargo-hack
+          tool: cargo-nextest,cargo-deny0.18.9,cargo-hack
 
       - name: Run cargo-deny
         run: cargo deny check
