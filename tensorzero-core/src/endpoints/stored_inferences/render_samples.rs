@@ -6,7 +6,7 @@ use tokio::sync::Semaphore;
 
 use crate::config::Config;
 use crate::endpoints::workflow_evaluation_run::validate_variant_pins;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::{RenderedSample, StoredSample, render_stored_sample};
 
 const DEFAULT_CONCURRENCY: usize = 100;
@@ -20,6 +20,12 @@ pub async fn render_samples<T: StoredSample>(
     validate_variant_pins(&variants, &config)?;
 
     let concurrency = concurrency.unwrap_or(DEFAULT_CONCURRENCY);
+    if concurrency == 0 {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "concurrency must be at least 1".to_string(),
+        }
+        .into());
+    }
     let semaphore = Arc::new(Semaphore::new(concurrency));
 
     // Process all samples concurrently with semaphore-limited concurrency.
