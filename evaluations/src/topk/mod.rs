@@ -406,10 +406,7 @@ pub fn compute_updates(
 ///
 /// If `variant_failure_threshold` is set and a variant's failure rate CS lower bound
 /// exceeds it, the variant is marked as Failed. Failed variants are not candidates
-/// for the returned top-k set. Additionally, early exclusion decisions (marking
-/// variants as Exclude) are made relative to the current set of active variants.
-/// If variants fail after others have been excluded, the evaluation may end with fewer
-/// than k_min identified variants, since excluded variants are not reconsidered.
+/// for the returned top-k set.
 /// TODO: remove #[cfg(test)] once other functions that use this are implemented
 #[cfg(test)]
 struct VariantStatusParams {
@@ -542,6 +539,8 @@ fn update_variant_statuses(
 ///
 /// # Arguments
 /// * `variant_performance` - Map from variant name to its performance confidence sequence
+/// * `variant_status` - Map from variant name to its current status. Variants with status
+///   `Failed` are excluded from consideration. If None, all variants are considered.
 /// * `k_min` - Minimum acceptable k value
 /// * `k_max` - Maximum k value to check
 /// * `epsilon` (optional) - A tolerance for performance equivalence. If None, set to 0.0.
@@ -551,12 +550,26 @@ fn update_variant_statuses(
 /// in the top-k. Note that `top_variants.len()` may exceed `k` if there are ties at the boundary.
 pub fn check_topk_stopping(
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_status: Option<&HashMap<String, VariantStatus>>,
     k_min: u32,
     k_max: u32,
     epsilon: Option<f64>,
 ) -> anyhow::Result<TopKStoppingResult> {
     let epsilon = epsilon.unwrap_or(0.0);
-    let num_variants = variant_performance.len();
+
+    // Filter out failed variants if variant_status is provided
+    let filtered_performance: HashMap<String, &MeanBettingConfidenceSequence> = variant_performance
+        .iter()
+        .filter(|(name, _)| {
+            variant_status
+                .and_then(|status| status.get(*name))
+                .map(|s| *s != VariantStatus::Failed)
+                .unwrap_or(true)
+        })
+        .map(|(name, cs)| (name.clone(), cs))
+        .collect();
+
+    let num_variants = filtered_performance.len();
 
     // Invalid parameters: return error
     if k_min == 0 {
@@ -593,7 +606,10 @@ pub fn check_topk_stopping(
     }
 
     // Collect upper bounds into a sorted vec for binary search
-    let mut upper_bounds: Vec<f64> = variant_performance.values().map(|cs| cs.cs_upper).collect();
+    let mut upper_bounds: Vec<f64> = filtered_performance
+        .values()
+        .map(|cs| cs.cs_upper)
+        .collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     // Intermediate struct for sorting variants by their statistics
@@ -609,7 +625,7 @@ pub fn check_topk_stopping(
     // For each variant, count how many other variants' upper bounds its lower bound exceeds
     // with tolerance epsilon. This tells us how many variants it "confidently beats".
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
-    let mut variants_with_stats: Vec<VariantStats<'_>> = variant_performance
+    let mut variants_with_stats: Vec<VariantStats<'_>> = filtered_performance
         .iter()
         .map(|(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
@@ -732,10 +748,11 @@ pub fn check_topk_stopping(
 /// This is equivalent to calling `check_topk_stopping` with k_min = k_max = k.
 pub fn check_topk(
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
+    variant_status: Option<&HashMap<String, VariantStatus>>,
     k: u32,
     epsilon: Option<f64>,
 ) -> anyhow::Result<TopKStoppingResult> {
-    check_topk_stopping(variant_performance, k, k, epsilon)
+    check_topk_stopping(variant_performance, variant_status, k, k, epsilon)
 }
 
 /// Check global stopping conditions in order of precedence.
@@ -755,9 +772,10 @@ fn check_global_stopping(
     progress: &TopKProgress,
     params: &TopKTaskParams,
 ) -> Option<GlobalStoppingReason> {
-    // Check if we identified a top-k set
+    // Check if we identified a top-k set (failed variants are filtered internally)
     let stopping_result = check_topk_stopping(
         &progress.variant_performance,
+        Some(&progress.variant_status),
         params.k_min,
         params.k_max,
         params.epsilon,

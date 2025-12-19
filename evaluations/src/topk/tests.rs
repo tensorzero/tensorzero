@@ -623,7 +623,7 @@ fn test_compute_updates_mixed_success_and_failure() {
 #[test]
 fn test_check_topk_stopping_empty() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(!result.stopped);
     assert!(result.k.is_none());
     assert!(result.top_variants.is_empty());
@@ -635,7 +635,7 @@ fn test_check_topk_stopping_k_min_zero_errors() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
         [mock_cs_with_bounds("a", 0.5, 0.7)].into_iter().collect();
 
-    let result = check_topk_stopping(&variant_performance, 0, 1, None);
+    let result = check_topk_stopping(&variant_performance, None, 0, 1, None);
     assert!(result.is_err());
     assert!(
         result
@@ -651,7 +651,7 @@ fn test_check_topk_stopping_k_max_less_than_k_min_errors() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
         [mock_cs_with_bounds("a", 0.5, 0.7)].into_iter().collect();
 
-    let result = check_topk_stopping(&variant_performance, 2, 1, None);
+    let result = check_topk_stopping(&variant_performance, None, 2, 1, None);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("k_max"));
 }
@@ -662,7 +662,7 @@ fn test_check_topk_stopping_k_min_exceeds_num_variants() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
         [mock_cs_with_bounds("a", 0.5, 0.7)].into_iter().collect();
 
-    let result = check_topk_stopping(&variant_performance, 5, 5, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 5, 5, None).unwrap();
     assert!(!result.stopped);
     assert!(result.k.is_none());
     assert!(result.top_variants.is_empty());
@@ -678,7 +678,7 @@ fn test_check_topk_stopping_negative_epsilon_errors() {
     .into_iter()
     .collect();
 
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(-0.1));
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(-0.1));
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("epsilon"));
 }
@@ -699,7 +699,7 @@ fn test_check_topk_stopping_clear_winner() {
     .into_iter()
     .collect();
 
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 1);
@@ -723,7 +723,7 @@ fn test_check_topk_stopping_top2() {
     .into_iter()
     .collect();
 
-    let result = check_topk_stopping(&variant_performance, 2, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2);
@@ -747,7 +747,7 @@ fn test_check_topk_stopping_overlapping_intervals_no_stop() {
     .into_iter()
     .collect();
 
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(!result.stopped);
     assert!(result.k.is_none());
 }
@@ -773,13 +773,13 @@ fn test_check_topk_stopping_k_range() {
     .collect();
 
     // When k_min=1, k_max=2, should return k=2 (largest k that works)
-    let result = check_topk_stopping(&variant_performance, 1, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 2, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2);
 
     // When k_min=1, k_max=1, should return k=1
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 1);
@@ -794,7 +794,7 @@ fn test_check_topk_single_variant() {
     let variant_performance: HashMap<String, MeanBettingConfidenceSequence> =
         [mock_cs_with_bounds("a", 0.5, 0.7)].into_iter().collect();
 
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants, vec!["a".to_string()]);
@@ -811,7 +811,7 @@ fn test_check_topk_wrapper() {
     .into_iter()
     .collect();
 
-    let result = check_topk(&variant_performance, 1, None).unwrap();
+    let result = check_topk(&variant_performance, None, 1, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
 }
@@ -838,11 +838,11 @@ fn test_check_topk_stopping_epsilon_enables_stopping() {
     .collect();
 
     // Without epsilon, can't identify top-1
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(!result.stopped);
 
     // With epsilon = 0.05, top-1 is identified
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(0.05)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(0.05)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert!(result.top_variants.contains(&"a".to_string()));
@@ -877,15 +877,15 @@ fn test_check_topk_stopping_epsilon_enables_larger_k() {
     .collect();
 
     // Without epsilon, can identify top-1 but not top-2
-    let result = check_topk_stopping(&variant_performance, 1, 1, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
 
-    let result = check_topk_stopping(&variant_performance, 2, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, None).unwrap();
     assert!(!result.stopped);
 
     // With epsilon = 0.05, can identify top-2
-    let result = check_topk_stopping(&variant_performance, 2, 2, Some(0.05)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, Some(0.05)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert!(result.top_variants.contains(&"a".to_string()));
@@ -903,8 +903,8 @@ fn test_check_topk_stopping_epsilon_zero_same_as_none() {
     .into_iter()
     .collect();
 
-    let result_none = check_topk_stopping(&variant_performance, 1, 2, None).unwrap();
-    let result_zero = check_topk_stopping(&variant_performance, 1, 2, Some(0.0)).unwrap();
+    let result_none = check_topk_stopping(&variant_performance, None, 1, 2, None).unwrap();
+    let result_zero = check_topk_stopping(&variant_performance, None, 1, 2, Some(0.0)).unwrap();
 
     assert_eq!(result_none.stopped, result_zero.stopped);
     assert_eq!(result_none.k, result_zero.k);
@@ -931,7 +931,7 @@ fn test_check_topk_stopping_large_epsilon_all_beat_all() {
     // With epsilon = 1.0, all variants beat the other 2 variants
     // (a variant never counts itself as beaten)
     // For top-1, need >= 2. All qualify, so we get a top-3 (largest k checked first)
-    let result = check_topk_stopping(&variant_performance, 1, 3, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 3, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
     assert_eq!(result.top_variants.len(), 3);
@@ -955,7 +955,7 @@ fn test_check_topk_stopping_variant_does_not_beat_itself() {
 
     // With epsilon = 1.0, each variant beats exactly 1 other (not itself)
     // For top-1, need to beat >= 1. Both qualify, so we get top-2.
-    let result = check_topk_stopping(&variant_performance, 1, 2, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 2, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2);
@@ -963,7 +963,7 @@ fn test_check_topk_stopping_variant_does_not_beat_itself() {
     // If variants incorrectly counted themselves, each would beat 2 variants,
     // and top-1 would be viable (need >= 1 beaten). Verify top-1 does NOT
     // incorrectly select just one variant.
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(1.0)).unwrap();
     // Both variants beat exactly 1 other, so top-1 requires beating >= 1, which both do.
     // Since both qualify but we can only pick 1, this should still stop with k=1.
     // The important thing is the count is 1 (not 2).
@@ -996,13 +996,13 @@ fn test_check_topk_stopping_returns_largest_viable_k() {
     .collect();
 
     // k_min=1, k_max=5: should return k=5 (largest viable)
-    let result = check_topk_stopping(&variant_performance, 1, 5, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 5, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(5));
     assert_eq!(result.top_variants.len(), 5);
 
     // k_min=1, k_max=3: should return k=3 (largest viable within range)
-    let result = check_topk_stopping(&variant_performance, 1, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
     assert_eq!(result.top_variants.len(), 3);
@@ -1011,7 +1011,7 @@ fn test_check_topk_stopping_returns_largest_viable_k() {
     assert!(result.top_variants.contains(&"c".to_string()));
 
     // k_min=1, k_max=2: should return k=2
-    let result = check_topk_stopping(&variant_performance, 1, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 2, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2);
@@ -1019,7 +1019,7 @@ fn test_check_topk_stopping_returns_largest_viable_k() {
     assert!(result.top_variants.contains(&"b".to_string()));
 
     // k_min=2, k_max=4: should return k=4 (largest viable within range)
-    let result = check_topk_stopping(&variant_performance, 2, 4, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 4, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(4));
     assert_eq!(result.top_variants.len(), 4);
@@ -1044,17 +1044,17 @@ fn test_check_topk_stopping_k_range_no_viable_k() {
     .collect();
 
     // k_min=1, k_max=2: neither k=1 nor k=2 is viable, so no stopping
-    let result = check_topk_stopping(&variant_performance, 1, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 2, None).unwrap();
     assert!(!result.stopped);
     assert!(result.k.is_none());
 
     // k_min=1, k_max=3: k=3 is viable (all variants beat >= 0 others)
-    let result = check_topk_stopping(&variant_performance, 1, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
 
     // k_min=3, k_max=3: k=3 is viable
-    let result = check_topk_stopping(&variant_performance, 3, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 3, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
 }
@@ -1082,22 +1082,22 @@ fn test_check_topk_stopping_k_range_partial_viability() {
     .collect();
 
     // k_min=1, k_max=3: k=3 is largest viable
-    let result = check_topk_stopping(&variant_performance, 1, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
 
     // k_min=1, k_max=2: only k=1 is viable (k=2 fails)
-    let result = check_topk_stopping(&variant_performance, 1, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 2, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants, vec!["a".to_string()]);
 
     // k_min=2, k_max=2: k=2 is not viable, no stopping
-    let result = check_topk_stopping(&variant_performance, 2, 2, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, None).unwrap();
     assert!(!result.stopped);
 
     // k_min=2, k_max=3: k=3 is viable
-    let result = check_topk_stopping(&variant_performance, 2, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
 }
@@ -1118,14 +1118,14 @@ fn test_check_topk_stopping_tiebreak_by_mean_est() {
 
     // With epsilon = 1.0, all beat all others
     // For top-1, should return "c" (highest mean_est)
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 1);
     assert!(result.top_variants.contains(&"c".to_string()));
 
     // For top-2, should return "c" and "b" (top two by mean_est)
-    let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2);
@@ -1155,7 +1155,7 @@ fn test_check_topk_stopping_tiebreak_by_cs_lower() {
 
     // With epsilon = 1.0, all beat all others
     // For top-1, should return "b" (highest cs_lower since mean_est is tied)
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 1);
@@ -1185,7 +1185,7 @@ fn test_check_topk_stopping_ties_at_boundary_enlarges_set() {
     // With epsilon = 1.0, all beat all others (num_beaten = 3 each)
     // For top-2: "a" is clearly first, but b/c/d are tied for second
     // Should return all 4 variants (enlarged set)
-    let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 4); // Enlarged due to ties
@@ -1210,7 +1210,7 @@ fn test_check_topk_stopping_no_ties_at_boundary() {
 
     // With epsilon = 1.0, all beat all others
     // For top-2, should return exactly 2 variants (a and b by mean_est)
-    let result = check_topk_stopping(&variant_performance, 2, 2, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 2, 2, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(2));
     assert_eq!(result.top_variants.len(), 2); // No enlargement
@@ -1232,14 +1232,14 @@ fn test_check_topk_stopping_all_identical_variants() {
 
     // With epsilon = 0, no one beats anyone (intervals are identical)
     // Only k=3 is viable (need to beat >= 0)
-    let result = check_topk_stopping(&variant_performance, 1, 3, None).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 3, None).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(3));
     assert_eq!(result.top_variants.len(), 3);
 
     // With epsilon = 1.0, all beat all others, but for top-1, all are tied
     // Should return all 3 (enlarged set)
-    let result = check_topk_stopping(&variant_performance, 1, 1, Some(1.0)).unwrap();
+    let result = check_topk_stopping(&variant_performance, None, 1, 1, Some(1.0)).unwrap();
     assert!(result.stopped);
     assert_eq!(result.k, Some(1));
     assert_eq!(result.top_variants.len(), 3); // All tied
