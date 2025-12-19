@@ -305,7 +305,8 @@ test.describe("Inference Filtering", () => {
     });
 
     // All visible function cells should show write_haiku (confirming filter is active)
-    const functionCells = page.locator("tbody tr td:nth-child(3)");
+    // Filter visible elements to try to avoid the weird `<table hidden>` that briefly renders
+    const functionCells = page.locator("tbody tr td:nth-child(3)").filter({ visible: true});
     const count = await functionCells.count();
     for (let i = 0; i < count; i++) {
       await expect(functionCells.nth(i)).toContainText("write_haiku");
