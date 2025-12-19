@@ -21,6 +21,26 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    // Build dynamic credentials from environment (same vars CI uses for SDK auth)
+    let credentials = match (
+        std::env::var("AWS_ACCESS_KEY_ID"),
+        std::env::var("AWS_SECRET_ACCESS_KEY"),
+    ) {
+        (Ok(access_key), Ok(secret_key)) => HashMap::from([
+            ("aws_access_key_id".to_string(), access_key),
+            ("aws_secret_access_key".to_string(), secret_key),
+        ]),
+        _ => HashMap::new(),
+    };
+
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-sagemaker-dynamic".to_string(),
+        model_name: "gemma-3-1b-aws-sagemaker-openai-dynamic".into(),
+        model_provider_name: "aws_sagemaker".into(),
+        credentials,
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-sagemaker-extra-body".to_string(),
@@ -44,7 +64,7 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: vec![],
         embeddings: vec![],
         inference_params_inference: vec![],
-        inference_params_dynamic_credentials: vec![],
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: vec![],
         provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: vec![],
