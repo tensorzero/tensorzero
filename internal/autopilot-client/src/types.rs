@@ -54,8 +54,17 @@ pub struct Event {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
-    StatusUpdate { status_update: StatusUpdate },
+    StatusUpdate {
+        status_update: StatusUpdate,
+    },
     ToolCall(ToolCall),
+    ToolCallApproval(ToolCallApproval),
+    ToolResult {
+        tool_call_event_id: Uuid,
+        outcome: ToolOutcome,
+    },
+    #[serde(other)]
+    Other,
 }
 
 /// A status update within a session.
@@ -63,6 +72,38 @@ pub enum EventPayload {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
+}
+
+// =============================================================================
+// Tool Call Types
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolCallDecisionSource {
+    Ui,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallApproval {
+    source: ToolCallDecisionSource,
+    tool_call_event_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolOutcome {
+    Success(ToolResult),
+    Failure {
+        message: String,
+    },
+    Missing,
+    Rejected {
+        source: ToolCallDecisionSource,
+        reason: String,
+    },
+    #[serde(other)]
+    Other,
 }
 
 // =============================================================================
