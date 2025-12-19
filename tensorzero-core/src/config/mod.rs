@@ -1877,6 +1877,87 @@ impl SchemaData {
     }
 }
 
+/// Propagates deprecated `timeout_s` from best_of_n/mixture_of_n variants to their candidate variants.
+///
+/// If a best_of_n or mixture_of_n variant has `timeout_s` set:
+/// 1. Emits a deprecation warning
+/// 2. Sets `timeouts` on each candidate variant (if not already set)
+/// 3. Returns an error if a candidate already has `timeouts` set (conflict)
+fn propagate_timeout_s_to_candidates(
+    function_name: &str,
+    variants: &mut HashMap<String, UninitializedVariantInfo>,
+) -> Result<(), Error> {
+    use crate::utils::deprecation_warning;
+
+    // Collect timeout_s values from best_of_n/mixture_of_n variants
+    let mut timeout_propagations: Vec<(String, f64, Vec<String>)> = Vec::new();
+
+    for (variant_name, variant_info) in variants.iter() {
+        match &variant_info.inner {
+            UninitializedVariantConfig::BestOfNSampling(config) => {
+                if let Some(timeout_s) = config.timeout_s() {
+                    timeout_propagations.push((
+                        variant_name.clone(),
+                        timeout_s,
+                        config.candidates.clone(),
+                    ));
+                }
+            }
+            UninitializedVariantConfig::MixtureOfN(config) => {
+                if let Some(timeout_s) = config.timeout_s() {
+                    timeout_propagations.push((
+                        variant_name.clone(),
+                        timeout_s,
+                        config.candidates.clone(),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Apply timeout_s to candidate variants
+    for (parent_variant_name, timeout_s, candidates) in timeout_propagations {
+        deprecation_warning(&format!(
+            "Deprecation Warning (#2480 / 2026.2+): `timeout_s` in functions.{function_name}.variants.{parent_variant_name} is deprecated. Please use `[timeouts]` on your candidate variants instead."
+        ));
+
+        let timeout_ms = (timeout_s * 1000.0) as u64;
+        let timeouts_config = TimeoutsConfig {
+            non_streaming: NonStreamingTimeouts {
+                total_ms: Some(timeout_ms),
+            },
+            streaming: StreamingTimeouts {
+                ttft_ms: Some(timeout_ms),
+            },
+        };
+
+        for candidate_name in candidates {
+            let candidate_variant = variants.get_mut(&candidate_name).ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "functions.{function_name}.variants.{parent_variant_name}: candidate `{candidate_name}` not found"
+                    ),
+                })
+            })?;
+
+            // Check for conflict
+            if candidate_variant.timeouts.is_some() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "functions.{function_name}.variants.{parent_variant_name}: cannot use `timeout_s` when candidate `{candidate_name}` already has `[timeouts]` configured. Please remove `timeout_s` and configure timeouts directly on the candidate."
+                    ),
+                }));
+            }
+
+            // Set timeouts on candidate
+            candidate_variant.timeouts = Some(timeouts_config.clone());
+        }
+    }
+
+    Ok(())
+}
+
 impl UninitializedFunctionConfig {
     pub fn load(
         self,
@@ -1884,7 +1965,10 @@ impl UninitializedFunctionConfig {
         metrics: &HashMap<String, MetricConfig>,
     ) -> Result<FunctionConfig, Error> {
         match self {
-            UninitializedFunctionConfig::Chat(params) => {
+            UninitializedFunctionConfig::Chat(mut params) => {
+                // Propagate deprecated timeout_s to candidate variants before loading
+                propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
+
                 let schema_data = SchemaData::load(
                     params
                         .user_schema
@@ -1946,7 +2030,10 @@ impl UninitializedFunctionConfig {
                     experimentation,
                 }))
             }
-            UninitializedFunctionConfig::Json(params) => {
+            UninitializedFunctionConfig::Json(mut params) => {
+                // Propagate deprecated timeout_s to candidate variants before loading
+                propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
+
                 let schema_data = SchemaData::load(
                     params
                         .user_schema

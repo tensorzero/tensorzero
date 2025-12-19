@@ -503,7 +503,7 @@ function variantInfoToUninitializedVariantInfo(
         ...baseUninitialized,
         type: "experimental_best_of_n_sampling" as const,
         weight: inner.weight,
-        timeout_s: inner.timeout_s,
+        timeout_s: null, // deprecated field - no longer on initialized config
         candidates: inner.candidates,
         evaluator: {
           weight: inner.evaluator.weight,
@@ -557,7 +557,7 @@ function variantInfoToUninitializedVariantInfo(
         ...baseUninitialized,
         type: "experimental_mixture_of_n" as const,
         weight: inner.weight,
-        timeout_s: inner.timeout_s,
+        timeout_s: null, // deprecated field - no longer on initialized config
         candidates: inner.candidates,
         fuser: {
           weight: inner.fuser.weight,

@@ -3,7 +3,7 @@ import type { UninitializedFuserConfig } from "./UninitializedFuserConfig";
 
 export type UninitializedMixtureOfNConfig = {
   weight: number | null;
-  timeout_s: number;
+  timeout_s?: number | null;
   candidates: Array<string>;
   fuser: UninitializedFuserConfig;
 };
