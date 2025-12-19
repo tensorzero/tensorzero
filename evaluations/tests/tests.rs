@@ -3186,8 +3186,8 @@ mod topk_tests {
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
             batch_size: Some(5),
-            variant_failure_threshold: None,
-            evaluator_failure_threshold: None,
+            variant_failure_threshold: 1.0,   // disabled
+            evaluator_failure_threshold: 1.0, // disabled
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
             evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
@@ -3716,8 +3716,8 @@ mod topk_tests {
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
             batch_size: Some(5),
-            variant_failure_threshold: None,
-            evaluator_failure_threshold: None,
+            variant_failure_threshold: 1.0,   // disabled
+            evaluator_failure_threshold: 1.0, // disabled
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
             evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
@@ -3878,9 +3878,9 @@ mod topk_tests {
             k_max: 1,
             epsilon: None,
             max_datapoints: Some(25),
-            batch_size: Some(1), // Process one datapoint at a time
-            variant_failure_threshold: None,
-            evaluator_failure_threshold: Some(0.05), // 5% failure rate threshold
+            batch_size: Some(1),               // Process one datapoint at a time
+            variant_failure_threshold: 1.0,    // disabled
+            evaluator_failure_threshold: 0.05, // 5% failure rate threshold
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off,
             evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
@@ -4108,9 +4108,9 @@ mod topk_tests {
             k_max: 2,
             epsilon: None,
             max_datapoints: Some(25),
-            batch_size: Some(1), // Process one datapoint at a time
-            variant_failure_threshold: Some(0.05), // 5% failure rate threshold
-            evaluator_failure_threshold: None,
+            batch_size: Some(1),              // Process one datapoint at a time
+            variant_failure_threshold: 0.05,  // 5% failure rate threshold
+            evaluator_failure_threshold: 1.0, // disabled
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off,
             evaluation_config: EvaluationConfig::Inference(inference_config.clone()),

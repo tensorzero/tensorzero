@@ -52,12 +52,26 @@ const DEFAULT_ALPHA: f32 = 0.05;
 /// Queue name for top-k evaluation tasks
 const QUEUE_NAME: &str = "evaluations_topk";
 
+/// Default failure rate threshold for both variants and evaluators.
+/// A 5% failure rate is the default threshold for marking a variant as failed
+/// or terminating due to evaluator failures.
+const DEFAULT_FAILURE_THRESHOLD: f64 = 0.05;
+
+fn default_failure_threshold() -> f64 {
+    DEFAULT_FAILURE_THRESHOLD
+}
+
 // ============================================================================
 // Core Types
 // ============================================================================
 
 /// Status of a variant in the top-k evaluation process.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The Include/Exclude/Failed states are terminal, and decisions to transition to
+/// one of these states are based on the current set of non-Failed variants. That
+/// means variant failures can prevent a top-k set from being identified, because
+/// a variant may fail after other variants have already been excluded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VariantStatus {
     /// Still running evals on this variant
     Active,
@@ -114,15 +128,19 @@ pub struct TopKTaskParams {
     pub max_datapoints: Option<usize>,
     /// Batch size for processing
     pub batch_size: Option<usize>,
-    /// Failure rate threshold for variants.
+    /// Failure rate threshold for variants (default: 0.05).
     /// If a variant's failure rate confidence sequence lower bound exceeds this threshold,
     /// the variant is marked as Failed and excluded from further evaluation.
     /// Failed variants are not candidates for the returned top-k set.
-    pub variant_failure_threshold: Option<f64>,
-    /// Failure rate threshold for evaluators.
+    /// Set to 1.0 to effectively disable variant failure detection.
+    #[serde(default = "default_failure_threshold")]
+    pub variant_failure_threshold: f64,
+    /// Failure rate threshold for evaluators (default: 0.05).
     /// If any evaluator's failure rate confidence sequence lower bound exceeds this threshold,
     /// the top-k identification run terminates.
-    pub evaluator_failure_threshold: Option<f64>,
+    /// Set to 1.0 to effectively disable evaluator failure detection.
+    #[serde(default = "default_failure_threshold")]
+    pub evaluator_failure_threshold: f64,
     /// Number of concurrent requests
     pub concurrency: usize,
     /// Cache mode for inference
@@ -430,111 +448,144 @@ pub fn compute_updates(
 // Stopping Conditions: Variant-Specific Stopping and Global Stopping
 // ============================================================================
 
+/// Returns an iterator over (name, cs) pairs for non-failed variants.
+///
+/// Variants with `VariantStatus::Failed` are excluded. Variants not present in
+/// `variant_status` are included (assumed non-failed).
+fn non_failed_variants<'a>(
+    variant_performance: &'a HashMap<String, MeanBettingConfidenceSequence>,
+    variant_status: &'a HashMap<String, VariantStatus>,
+) -> impl Iterator<Item = (&'a String, &'a MeanBettingConfidenceSequence)> {
+    variant_performance.iter().filter(|(name, _)| {
+        variant_status
+            .get(*name)
+            .map(|s| *s != VariantStatus::Failed)
+            .unwrap_or(true)
+    })
+}
+
 /// Parameters for updating variant statuses during top-k evaluation.
 ///
-/// If `variant_failure_threshold` is set and a variant's failure rate CS lower bound
-/// exceeds it, the variant is marked as Failed. Failed variants are not candidates
-/// for the returned top-k set.
+/// If a variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
+/// the variant is marked as Failed. Failed variants are not candidates for the
+/// returned top-k set.
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
     epsilon: f64,
-    variant_failure_threshold: Option<f64>,
+    /// Failure rate threshold for variants. Set to 1.0 to disable.
+    variant_failure_threshold: f64,
 }
 
-/// Updates variant statuses based on confidence sequences and top-k stopping results.
+/// Updates variant statuses based on confidence sequences.
 ///
-/// This function transitions variants from `Active` to one of the terminal states:
+/// This function may transition variants from `Active` to one of the terminal states:
 /// - `Failed`: Variant's failure rate confidence interval lower bound exceeds the threshold
-/// - `Include`: Variant is confidently in the top k_min set
-/// - `Exclude`: Variant is confidently outside the top k_max set
+/// - `Include`: Variant is confidently in the top k_min among non-failed variants (early inclusion)
+/// - `Exclude`: Variant is confidently outside the top k_max among non-failed variants (early exclusion)
 ///
-/// The checks are applied in priority order (failure > global stopping > early exclusion > early inclusion),
-/// so a variant that would otherwise be included can still be marked as `Failed` if its failure rate
-/// is too high.
+/// Note: This function handles failure detection and early inclusion/exclusion only.
+/// Global top-k stopping (when we can identify the full top-k set) should be checked
+/// separately via `check_topk_stopping()` after calling this function. This ensures
+/// that `Failed` status always takes precedence over `Include`.
 ///
 /// # Status Transition Logic
 ///
-/// 1. **Skip non-active**: Variants already in a terminal state are not modified.
+/// The function uses a two-pass approach to ensure failure detection happens before
+/// early inclusion/exclusion checks:
 ///
-/// 2. **Failure check**: If `variant_failure_threshold` is set and the variant's failure rate
-///    CS lower bound exceeds it, mark as `Failed`.
+/// **Pass 1 - Failure detection:**
+/// - Skip variants already in a terminal state
+/// - If the variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
+///   mark as `Failed`
 ///
-/// 3. **Global stopping**: If `stopping_result.stopped` is true, mark variants in `top_variants`
-///    as `Include` and all others as `Exclude`.
-///
-/// 4. **Early exclusion**: If at least `k_max` other variants have lower bounds above this
-///    variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
-///    so mark as `Exclude`.
-///
-/// 5. **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
-///    `(num_variants - k_min)` others (adjusted by epsilon), it's confidently in the top k_min,
-///    so mark as `Include`.
+/// **Pass 2 - Early exclusion/inclusion (among non-failed variants):**
+/// - Skip variants already in a terminal state (including those just marked as `Failed`)
+/// - **Early exclusion**: If at least `k_max` other non-failed variants have lower bounds above
+///   this variant's upper bound (adjusted by epsilon), this variant cannot be in the top k_max,
+///   so mark as `Exclude`. (Note that other variants may fail later, causing excluded variants
+///   to return to the top-k_max among non-failed variants.)
+/// - **Early inclusion**: If this variant's lower bound exceeds the upper bounds of at least
+///   `(num_non_failed - k_min)` other non-failed variants (adjusted by epsilon), it's
+///   confidently in the top k_min, so mark as `Include`
 fn update_variant_statuses(
     variant_status: &mut HashMap<String, VariantStatus>,
     variant_performance: &HashMap<String, MeanBettingConfidenceSequence>,
     variant_failures: &HashMap<String, MeanBettingConfidenceSequence>,
-    stopping_result: &TopKStoppingResult,
     params: &VariantStatusParams,
 ) {
-    let num_variants = variant_status.len();
-    for (name, status) in variant_status.iter_mut() {
-        // Skip already-stopped variants
-        if *status != VariantStatus::Active {
+    // Collect variant names first to avoid borrow checker issues
+    // (we need to borrow variant_status immutably in non_failed_variants while updating it)
+    let variant_names: Vec<String> = variant_status.keys().cloned().collect();
+
+    // Pass 1: Mark failed variants first
+    // This must happen before early inclusion/exclusion checks so that the set of
+    // non-failed variants is accurate when computing those checks.
+    for name in &variant_names {
+        let status = variant_status
+            .get(name)
+            .copied()
+            .unwrap_or(VariantStatus::Active);
+        if status != VariantStatus::Active {
             continue;
         }
 
-        // Check for failure based on failure rate
-        if let Some(threshold) = params.variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(name)
-            && failure_cs.cs_lower > threshold
+        if let Some(failure_cs) = variant_failures.get(name)
+            && failure_cs.cs_lower > params.variant_failure_threshold
         {
-            *status = VariantStatus::Failed;
-            continue;
+            variant_status.insert(name.clone(), VariantStatus::Failed);
         }
+    }
 
-        // If top-k stopping occurred, update based on inclusion in top set
-        if stopping_result.stopped {
-            if stopping_result.top_variants.contains(name) {
-                *status = VariantStatus::Include;
-            } else {
-                *status = VariantStatus::Exclude;
-            }
+    // Pass 2: Check early exclusion and inclusion among non-failed variants
+    for name in variant_names {
+        let status = variant_status
+            .get(&name)
+            .copied()
+            .unwrap_or(VariantStatus::Active);
+
+        // Skip non-active variants (including those just marked as Failed)
+        if status != VariantStatus::Active {
             continue;
         }
 
         // Check if variant can be excluded early because it's confidently outside the top k_max
-        // (its upper bound is below (lower_bound_j + epsilon) for k_max other variants j)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_worse_than = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
-                })
-                .count();
+        // (its upper bound is below (lower_bound_j + epsilon) for k_max other non-failed variants j)
+        if let Some(perf_cs) = variant_performance.get(&name) {
+            let num_definitely_worse_than =
+                non_failed_variants(variant_performance, variant_status)
+                    .filter(|(other_name, other_cs)| {
+                        **other_name != name
+                            && perf_cs.cs_upper < other_cs.cs_lower + params.epsilon
+                    })
+                    .count();
 
             // If at least k_max variants are definitely better,
             // this variant cannot be in the top k_max
             if num_definitely_worse_than >= params.k_max as usize {
-                *status = VariantStatus::Exclude;
+                variant_status.insert(name, VariantStatus::Exclude);
                 continue;
             }
         }
 
         // Check if variant can be included early because it's confidently within the top k_min
-        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other variants j)
-        if let Some(perf_cs) = variant_performance.get(name) {
-            let num_definitely_better_than = variant_performance
-                .iter()
-                .filter(|(other_name, other_cs)| {
-                    *other_name != name && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
-                })
-                .count();
+        // (its lower bound is above (upper_bound_j - epsilon) for all but k_min other non-failed variants j)
+        if let Some(perf_cs) = variant_performance.get(&name) {
+            // Count non-failed variants for the threshold calculation
+            let num_non_failed = non_failed_variants(variant_performance, variant_status).count();
 
-            // If this variant beats at least (num_variants - k_min) others,
-            // it's confidently in the top k_min
-            if num_definitely_better_than >= num_variants - params.k_min as usize {
-                *status = VariantStatus::Include;
+            let num_definitely_better_than =
+                non_failed_variants(variant_performance, variant_status)
+                    .filter(|(other_name, other_cs)| {
+                        **other_name != name
+                            && perf_cs.cs_lower > other_cs.cs_upper - params.epsilon
+                    })
+                    .count();
+
+            // If this variant beats at least (num_non_failed - k_min) others,
+            // it's confidently in the top k_min among non-failed variants
+            if num_definitely_better_than >= num_non_failed.saturating_sub(params.k_min as usize) {
+                variant_status.insert(name, VariantStatus::Include);
             }
         }
     }
@@ -543,8 +594,8 @@ fn update_variant_statuses(
 /// Check if we can confidently identify a top-k set of variants.
 ///
 /// A variant is "confidently in the top k" if its confidence sequence lower bound
-/// exceeds the upper bounds of at least (num_variants - k) other variants, with a
-/// tolerance `epsilon`. This means we can be confident it's better than at least
+/// exceeds the upper bounds of at least (num_variants - k) other non-failed variants,
+/// with a tolerance `epsilon`. This means we can be confident it's better than at least
 /// (num_variants - k) variants, or at least not more than epsilon worse than those
 /// variants.
 ///
@@ -582,17 +633,11 @@ pub fn check_topk_stopping(
 ) -> anyhow::Result<TopKStoppingResult> {
     let epsilon = epsilon.unwrap_or(0.0);
 
-    // Filter out failed variants if variant_status is provided
-    let filtered_performance: HashMap<String, &MeanBettingConfidenceSequence> = variant_performance
-        .iter()
-        .filter(|(name, _)| {
-            variant_status
-                .and_then(|status| status.get(*name))
-                .map(|s| *s != VariantStatus::Failed)
-                .unwrap_or(true)
-        })
-        .map(|(name, cs)| (name.clone(), cs))
-        .collect();
+    // Filter out failed variants if variant_status is provided, collect to Vec for multiple iterations
+    let empty_status = HashMap::new();
+    let status_map = variant_status.unwrap_or(&empty_status);
+    let filtered_performance: Vec<(&String, &MeanBettingConfidenceSequence)> =
+        non_failed_variants(variant_performance, status_map).collect();
 
     let num_variants = filtered_performance.len();
 
@@ -632,8 +677,8 @@ pub fn check_topk_stopping(
 
     // Collect upper bounds into a sorted vec for binary search
     let mut upper_bounds: Vec<f64> = filtered_performance
-        .values()
-        .map(|cs| cs.cs_upper)
+        .iter()
+        .map(|(_, cs)| cs.cs_upper)
         .collect();
     upper_bounds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -652,7 +697,7 @@ pub fn check_topk_stopping(
     // We subtract 1 if the variant would count itself as beaten (when cs_upper - epsilon < cs_lower).
     let mut variants_with_stats: Vec<VariantStats<'_>> = filtered_performance
         .iter()
-        .map(|(name, cs)| {
+        .map(|&(name, cs)| {
             // Binary search to find how many upper bounds satisfy: ub - epsilon < cs_lower
             let num_beaten_including_self =
                 upper_bounds.partition_point(|&ub| ub - epsilon < cs.cs_lower);
@@ -814,18 +859,16 @@ fn check_global_stopping(
     }
 
     // Check for evaluator failures
-    if let Some(threshold) = params.evaluator_failure_threshold {
-        let failed_evaluators: Vec<String> = progress
-            .evaluator_failures
-            .iter()
-            .filter(|(_, cs)| cs.cs_lower > threshold)
-            .map(|(name, _)| name.clone())
-            .collect();
-        if !failed_evaluators.is_empty() {
-            return Some(GlobalStoppingReason::EvaluatorsFailed {
-                evaluator_names: failed_evaluators,
-            });
-        }
+    let failed_evaluators: Vec<String> = progress
+        .evaluator_failures
+        .iter()
+        .filter(|(_, cs)| cs.cs_lower > params.evaluator_failure_threshold)
+        .map(|(name, _)| name.clone())
+        .collect();
+    if !failed_evaluators.is_empty() {
+        return Some(GlobalStoppingReason::EvaluatorsFailed {
+            evaluator_names: failed_evaluators,
+        });
     }
 
     // Check for too many variant failures
@@ -959,8 +1002,10 @@ struct ProcessBatchStepParams {
     k_min: u32,
     k_max: u32,
     epsilon: Option<f64>,
-    variant_failure_threshold: Option<f64>,
-    evaluator_failure_threshold: Option<f64>,
+    #[serde(default = "default_failure_threshold")]
+    variant_failure_threshold: f64,
+    #[serde(default = "default_failure_threshold")]
+    evaluator_failure_threshold: f64,
     batch_idx: usize,
     // TopKContext fields that need to be passed through
     evaluation_name: String,
@@ -1088,16 +1133,7 @@ async fn process_batch_step(
     current_state.num_datapoints_processed += params.batch_ids.len();
     current_state.batch_index = params.batch_idx + 1;
 
-    // Check top-k stopping condition
-    let stopping_result = check_topk_stopping(
-        &current_state.variant_performance,
-        Some(&current_state.variant_status),
-        params.k_min,
-        params.k_max,
-        params.epsilon,
-    )?;
-
-    // Update variant statuses
+    // Update variant statuses (failure detection + early inclusion/exclusion)
     let status_params = VariantStatusParams {
         k_min: params.k_min,
         k_max: params.k_max,
@@ -1108,7 +1144,6 @@ async fn process_batch_step(
         &mut current_state.variant_status,
         &current_state.variant_performance,
         &current_state.variant_failures,
-        &stopping_result,
         &status_params,
     );
 
