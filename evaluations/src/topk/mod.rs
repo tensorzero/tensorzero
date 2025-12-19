@@ -749,7 +749,8 @@ pub fn check_topk(
 /// The fourth available reason, DatasetExhausted, is checked elsewhere, because
 /// check_global_stopping() doesn't have access to the number of batches processed
 /// and remaining.
-#[expect(dead_code)]
+/// TODO: remove #[cfg(test)] once other functions that use this are implemented
+#[cfg(test)]
 fn check_global_stopping(
     progress: &TopKProgress,
     params: &TopKTaskParams,

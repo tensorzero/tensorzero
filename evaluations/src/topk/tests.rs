@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tensorzero_core::client::Input;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
+use tensorzero_core::evaluations::{EvaluationConfig, InferenceEvaluationConfig};
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage};
 use tensorzero_core::tool::DynamicToolParams;
 
@@ -39,6 +40,52 @@ fn mock_cs_with_bounds(
             },
         },
     )
+}
+
+fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
+    // Create a minimal dummy evaluation config for unit tests
+    let evaluation_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
+        evaluators: HashMap::new(),
+        function_name: "test_function".to_string(),
+        description: None,
+    });
+    TopKTaskParams {
+        evaluation_name: "eval".to_string(),
+        dataset_name: "dataset".to_string(),
+        variant_names: variant_names.into_iter().map(|s| s.to_string()).collect(),
+        k_min: 2,
+        k_max: 3,
+        epsilon: None,
+        max_datapoints: None,
+        batch_size: Some(1),
+        variant_failure_threshold: Some(0.05),
+        evaluator_failure_threshold: Some(0.05),
+        concurrency: 1,
+        inference_cache: CacheEnabledMode::On,
+        evaluation_config,
+        function_configs: HashMap::new(),
+        scoring_function: ScoringFunctionType::AverageEvaluatorScore,
+    }
+}
+
+fn empty_progress(variant_names: &[&str]) -> TopKProgress {
+    TopKProgress {
+        variant_status: variant_names
+            .iter()
+            .map(|name| ((*name).to_string(), VariantStatus::Active))
+            .collect(),
+        variant_performance: variant_names
+            .iter()
+            .map(|name| {
+                let (_, cs) = mock_cs_with_bounds(name, 0.4, 0.6);
+                ((*name).to_string(), cs)
+            })
+            .collect(),
+        variant_failures: HashMap::new(),
+        evaluator_failures: HashMap::new(),
+        num_datapoints_processed: 0,
+        batch_index: 0,
+    }
 }
 
 /// Helper to create a fresh confidence sequence with no observations (for testing updates)
@@ -1925,4 +1972,141 @@ fn test_update_variant_statuses_global_stopping() {
     // Variants not in top_variants should be Exclude
     assert_eq!(variant_status["c"], VariantStatus::Exclude);
     assert_eq!(variant_status["d"], VariantStatus::Exclude);
+}
+
+// ============================================================================
+// Tests for check_global_stopping
+// ============================================================================
+
+#[test]
+fn test_check_global_stopping_none_when_running() {
+    let names = vec!["a", "b", "c", "d", "e"];
+    let params = default_params_with_variants(names.clone());
+    let progress = empty_progress(&names);
+    // With five variants all sharing overlapping CS intervals, none can prove it beats two others,
+    // so check_global_stopping should report that we're still running.
+    let reason = check_global_stopping(&progress, &params);
+    assert!(reason.is_none());
+}
+
+#[test]
+// Check that the top-k stopping condition triggers and takes precedence over evaluator and variant failures
+fn test_check_global_stopping_prefers_topk() {
+    let variant_names = vec!["a", "b", "c", "d"];
+    let params = default_params_with_variants(variant_names.clone());
+    let mut progress = empty_progress(&variant_names);
+    progress.variant_status = [
+        ("a".to_string(), VariantStatus::Active),
+        ("b".to_string(), VariantStatus::Active),
+        ("c".to_string(), VariantStatus::Failed),
+        ("d".to_string(), VariantStatus::Failed),
+    ]
+    .into_iter()
+    .collect();
+    progress.variant_performance = [
+        mock_cs_with_bounds("a", 0.7, 0.9),
+        mock_cs_with_bounds("b", 0.6, 0.8),
+        mock_cs_with_bounds("c", 0.3, 0.5),
+        mock_cs_with_bounds("d", 0.2, 0.4),
+    ]
+    .into_iter()
+    .collect();
+    progress.evaluator_failures = [("eval1".to_string(), mock_cs_with_bounds("eval1", 0.3, 0.4))]
+        .into_iter()
+        .map(|(name, (_, cs))| (name, cs))
+        .collect();
+
+    // Variants "a" and "b" both beat the remaining two variants, so the algorithm should stop with
+    // k=2 before considering evaluator failures or the too-many-variant-failures condition.
+    let reason = check_global_stopping(&progress, &params);
+    match reason {
+        Some(GlobalStoppingReason::TopKFound { k, top_variants }) => {
+            assert_eq!(k, 2);
+            assert_eq!(top_variants, vec!["a".to_string(), "b".to_string()]);
+        }
+        other => panic!("expected TopKFound, got {other:?}"),
+    }
+}
+
+#[test]
+// Check that the evaluator failure condition triggers and takes precedence over variant failures
+fn test_check_global_stopping_evaluators_failed() {
+    let variant_names = vec!["a", "b", "c", "d"];
+    let mut params = default_params_with_variants(variant_names.clone());
+    params.evaluator_failure_threshold = Some(0.2);
+    let mut progress = empty_progress(&variant_names);
+    progress.variant_status = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Failed),
+        ("c".to_string(), VariantStatus::Failed),
+        ("d".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+    progress.evaluator_failures = [
+        (
+            "eval_one".to_string(),
+            mock_cs_with_bounds("eval_one", 0.25, 0.3),
+        ),
+        (
+            "eval_two".to_string(),
+            mock_cs_with_bounds("eval_two", 0.4, 0.5),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, (_, cs))| (name, cs))
+    .collect();
+    progress.variant_performance = variant_names
+        .iter()
+        .map(|name| {
+            let (_, cs) = mock_cs_with_bounds(name, 0.4, 0.6);
+            ((*name).to_string(), cs)
+        })
+        .collect();
+
+    // Both evaluator failure rates exceed 0.2, so EvaluatorsFailed should win even though too many
+    // variants have also failed.
+    let reason = check_global_stopping(&progress, &params);
+    match reason {
+        Some(GlobalStoppingReason::EvaluatorsFailed { evaluator_names }) => {
+            let mut names = evaluator_names.clone();
+            names.sort();
+            assert_eq!(names, vec!["eval_one".to_string(), "eval_two".to_string()]);
+        }
+        other => panic!("expected EvaluatorsFailed, got {other:?}"),
+    }
+}
+
+#[test]
+// Check that the too-many-variant-failures condition triggers
+fn test_check_global_stopping_too_many_variant_failures() {
+    let variant_names = vec!["a", "b", "c", "d"];
+    let mut params = default_params_with_variants(variant_names.clone());
+    params.k_min = 2;
+    let mut progress = empty_progress(&variant_names);
+    progress.variant_status = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Failed),
+        ("c".to_string(), VariantStatus::Failed),
+        ("d".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+    progress.variant_performance = variant_names
+        .iter()
+        .map(|name| {
+            let (_, cs) = mock_cs_with_bounds(name, 0.4, 0.6);
+            ((*name).to_string(), cs)
+        })
+        .collect();
+
+    // With k_min=2 and three variants failed, only one remains active, triggering
+    // TooManyVariantsFailed (3 > 4 - k_min).
+    let reason = check_global_stopping(&progress, &params);
+    match reason {
+        Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed }) => {
+            assert_eq!(num_failed, 3);
+        }
+        other => panic!("expected TooManyVariantsFailed, got {other:?}"),
+    }
 }
