@@ -40,11 +40,11 @@ jobs:
 
             # Get workflow runs for this PR that are awaiting approval
             # We look for workflow runs on the head ref that have the 'action_required' status
-            runs=$(gh api \
+            runs=$(HEAD_REF="$head_ref" gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "/repos/${{ github.repository }}/actions/runs?event=pull_request&status=action_required&per_page=100" \
-              --jq ".workflow_runs[] | select(.head_branch == \"$head_ref\") | .id")
+              --jq '.workflow_runs[] | select(.head_branch == env.HEAD_REF) | .id')
 
             if [ -z "$runs" ]; then
               echo "  No workflow runs awaiting approval for PR #$pr_number"
