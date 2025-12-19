@@ -50,6 +50,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
         )
         .route(
+            "/internal/feedback/timeseries",
+            get(endpoints::feedback::internal::get_cumulative_feedback_timeseries_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/throughput-by-variant",
             get(endpoints::internal::inference_stats::get_function_throughput_by_variant_handler),
         )

@@ -20,6 +20,7 @@ import type {
   CountModelsResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
+  CumulativeFeedbackTimeSeriesPoint,
   DatapointStatsResponse,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
@@ -311,6 +312,13 @@ export const DatapointResponseSchema = z.object({
   id: z.string(),
 });
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
+
+/**
+ * Response type for getCumulativeFeedbackTimeseries endpoint
+ */
+export interface GetCumulativeFeedbackTimeseriesResponse {
+  timeseries: CumulativeFeedbackTimeSeriesPoint[];
+}
 
 /**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
@@ -1432,6 +1440,43 @@ export class TensorZeroClient {
     }
     const body = (await response.json()) as CountFeedbackByTargetIdResponse;
     return Number(body.count);
+  }
+
+  /**
+   * Gets cumulative feedback time series for a function and metric.
+   * @param functionName - The name of the function to get feedback for
+   * @param metricName - The name of the metric to get feedback for
+   * @param timeWindow - The time window granularity for grouping data
+   * @param maxPeriods - Maximum number of time periods to return
+   * @param variantNames - Optional array of variant names to filter by
+   * @returns A promise that resolves with cumulative feedback time series data
+   * @throws Error if the request fails
+   */
+  async getCumulativeFeedbackTimeseries(params: {
+    function_name: string;
+    metric_name: string;
+    time_window: TimeWindow;
+    max_periods: number;
+    variant_names?: string[];
+  }): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
+    const searchParams = new URLSearchParams({
+      function_name: params.function_name,
+      metric_name: params.metric_name,
+      time_window: params.time_window,
+      max_periods: params.max_periods.toString(),
+    });
+    if (params.variant_names && params.variant_names.length > 0) {
+      searchParams.append("variant_names", params.variant_names.join(","));
+    }
+    const endpoint = `/internal/feedback/timeseries?${searchParams.toString()}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as GetCumulativeFeedbackTimeseriesResponse;
+    return body.timeseries;
   }
 
   /**

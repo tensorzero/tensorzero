@@ -8,7 +8,7 @@ use std::{
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use http::{Method, StatusCode};
 use http_body::{Frame, SizeHint};
-use tracing::Span;
+use tracing::{Level, Span};
 use tracing_futures::Instrument;
 
 use crate::observability::overhead_timing::{
@@ -17,6 +17,7 @@ use crate::observability::overhead_timing::{
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
+    latency_span: Span,
     span: Span,
     start_time: Instant,
     finished_with_latency: Cell<Option<Duration>>,
@@ -46,7 +47,7 @@ impl Drop for ConnectionDropGuard {
             .finished_with_latency
             .get()
             .unwrap_or_else(|| self.start_time.elapsed());
-        self.span.record(
+        self.latency_span.record(
             TENSORZERO_LATENCY_ATTRIBUTE_NAME,
             latency_duration.as_millis(),
         );
@@ -142,14 +143,24 @@ pub async fn request_logging_middleware(
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
     let method_uri = format!("{} {}", request.method(), request.uri());
+    // Create a separate span for latency tracing, using a custom 'target' that will
+    // get filtered out when we log to console/otel
+    // This prevents the `tensorzero.overhead.*` span attributes from being visible to users
+    // in the logs/OTEL
+    let latency_span = tracing::span!(
+        target: "tensorzero.overhead",
+        Level::DEBUG,
+        "request_latency_tracking",
+        { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = method_uri,
+        { TENSORZERO_LATENCY_ATTRIBUTE_NAME } = tracing::field::Empty,
+    );
     let span = tracing::info_span!(
         target: "gateway",
+        parent: &latency_span,
         "request",
         method = %request.method(),
         uri = %request.uri(),
         version = ?request.version(),
-        { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = method_uri,
-        { TENSORZERO_LATENCY_ATTRIBUTE_NAME } = tracing::field::Empty,
     );
     span.in_scope(|| {
         tracing::debug!("started processing request");
@@ -159,6 +170,7 @@ pub async fn request_logging_middleware(
     // To avoid false positives, we never log a warning for HEAD requests.
     let is_finished = matches!(request.method(), &Method::HEAD);
     let mut guard = ConnectionDropGuard {
+        latency_span,
         span: span.clone(),
         start_time,
         finished_with_latency: Cell::new(None),
