@@ -1512,6 +1512,91 @@ fn test_update_variant_statuses_failure_takes_priority() {
     assert_eq!(variant_status["healthy"], VariantStatus::Include);
 }
 
+/// Test that update_variant_statuses filters out failed variants when computing
+/// early exclusion and early inclusion.
+///
+/// Scenario: 4 variants with k_min=1, k_max=2
+/// - "good_a" and "good_b" are clearly better than "bad_a" and "bad_b"
+/// - "good_a" and "good_b" have overlapping bounds (indistinguishable)
+/// - "bad_a" and "bad_b" have overlapping bounds (indistinguishable)
+///
+/// Without any failures:
+/// - "good_a" and "good_b" stay Active (neither can prove it beats the other)
+/// - "bad_a" and "bad_b" get Excluded (2 variants are definitely better, k_max=2)
+///
+/// Then "good_a" fails:
+/// - "good_b" gets Included, "bad_a" and "bad_b" stay Active
+#[test]
+fn test_update_variant_statuses_filters_failed_variants() {
+    // Setup: 4 variants, 2 good (distinguishable from bad), 2 bad (indistinguishable from each other)
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("good_a", 0.7, 0.9),
+        mock_cs_with_bounds("good_b", 0.6, 0.8),
+        mock_cs_with_bounds("bad_a", 0.2, 0.4),
+        mock_cs_with_bounds("bad_b", 0.25, 0.45),
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
+
+    let params = VariantStatusParams {
+        k_min: 1,
+        k_max: 2,
+        epsilon: 0.0,
+        variant_failure_threshold: 1.0, // Disabled
+    };
+
+    // Test 1: No failures - good variants stay Active, bad variants get Excluded
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("good_a".to_string(), VariantStatus::Active),
+        ("good_b".to_string(), VariantStatus::Active),
+        ("bad_a".to_string(), VariantStatus::Active),
+        ("bad_b".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &params,
+    );
+
+    // Good variants stay Active (neither beats the other for early inclusion)
+    assert_eq!(variant_status["good_a"], VariantStatus::Active);
+    assert_eq!(variant_status["good_b"], VariantStatus::Active);
+    // Bad variants get Excluded (2 variants are definitely better, k_max=2)
+    assert_eq!(variant_status["bad_a"], VariantStatus::Exclude);
+    assert_eq!(variant_status["bad_b"], VariantStatus::Exclude);
+
+    // Test 2: good_a fails - good_b gets Included, bad variants stay Active
+    let mut variant_status: HashMap<String, VariantStatus> = [
+        ("good_a".to_string(), VariantStatus::Failed),
+        ("good_b".to_string(), VariantStatus::Active),
+        ("bad_a".to_string(), VariantStatus::Active),
+        ("bad_b".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    update_variant_statuses(
+        &mut variant_status,
+        &variant_performance,
+        &variant_failures,
+        &params,
+    );
+
+    // good_a stays Failed
+    assert_eq!(variant_status["good_a"], VariantStatus::Failed);
+    // good_b gets Included: beats 2 others (bad_a, bad_b), needs >= (3 - 1) = 2
+    assert_eq!(variant_status["good_b"], VariantStatus::Include);
+    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for exclusion
+    assert_eq!(variant_status["bad_a"], VariantStatus::Active);
+    assert_eq!(variant_status["bad_b"], VariantStatus::Active);
+}
+
 /// Test with failure threshold disabled (set to 1.0) - failure check never triggers.
 #[test]
 fn test_update_variant_statuses_failure_threshold_disabled() {
@@ -1961,89 +2046,4 @@ fn test_check_global_stopping_too_many_variant_failures() {
         }
         other => panic!("expected TooManyVariantsFailed, got {other:?}"),
     }
-}
-
-/// Test that update_variant_statuses filters out failed variants when computing
-/// early exclusion and early inclusion.
-///
-/// Scenario: 4 variants with k_min=1, k_max=2
-/// - "good_a" and "good_b" are clearly better than "bad_a" and "bad_b"
-/// - "good_a" and "good_b" have overlapping bounds (indistinguishable)
-/// - "bad_a" and "bad_b" have overlapping bounds (indistinguishable)
-///
-/// Without any failures:
-/// - "good_a" and "good_b" stay Active (neither can prove it beats the other)
-/// - "bad_a" and "bad_b" get Excluded (2 variants are definitely better, k_max=2)
-///
-/// Then "good_a" fails:
-/// - "good_b" gets Included, "bad_a" and "bad_b" stay Active
-#[test]
-fn test_update_variant_statuses_filters_failed_variants() {
-    // Setup: 4 variants, 2 good (distinguishable from bad), 2 bad (indistinguishable from each other)
-    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
-        mock_cs_with_bounds("good_a", 0.7, 0.9),
-        mock_cs_with_bounds("good_b", 0.6, 0.8),
-        mock_cs_with_bounds("bad_a", 0.2, 0.4),
-        mock_cs_with_bounds("bad_b", 0.25, 0.45),
-    ]
-    .into_iter()
-    .collect();
-
-    let variant_failures: HashMap<String, MeanBettingConfidenceSequence> = HashMap::new();
-
-    let params = VariantStatusParams {
-        k_min: 1,
-        k_max: 2,
-        epsilon: 0.0,
-        variant_failure_threshold: 1.0, // Disabled
-    };
-
-    // Test 1: No failures - good variants stay Active, bad variants get Excluded
-    let mut variant_status: HashMap<String, VariantStatus> = [
-        ("good_a".to_string(), VariantStatus::Active),
-        ("good_b".to_string(), VariantStatus::Active),
-        ("bad_a".to_string(), VariantStatus::Active),
-        ("bad_b".to_string(), VariantStatus::Active),
-    ]
-    .into_iter()
-    .collect();
-
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params,
-    );
-
-    // Good variants stay Active (neither beats the other for early inclusion)
-    assert_eq!(variant_status["good_a"], VariantStatus::Active);
-    assert_eq!(variant_status["good_b"], VariantStatus::Active);
-    // Bad variants get Excluded (2 variants are definitely better, k_max=2)
-    assert_eq!(variant_status["bad_a"], VariantStatus::Exclude);
-    assert_eq!(variant_status["bad_b"], VariantStatus::Exclude);
-
-    // Test 2: good_a fails - good_b gets Included, bad variants stay Active
-    let mut variant_status: HashMap<String, VariantStatus> = [
-        ("good_a".to_string(), VariantStatus::Failed),
-        ("good_b".to_string(), VariantStatus::Active),
-        ("bad_a".to_string(), VariantStatus::Active),
-        ("bad_b".to_string(), VariantStatus::Active),
-    ]
-    .into_iter()
-    .collect();
-
-    update_variant_statuses(
-        &mut variant_status,
-        &variant_performance,
-        &variant_failures,
-        &params,
-    );
-
-    // good_a stays Failed
-    assert_eq!(variant_status["good_a"], VariantStatus::Failed);
-    // good_b gets Included: beats 2 others (bad_a, bad_b), needs >= (3 - 1) = 2
-    assert_eq!(variant_status["good_b"], VariantStatus::Include);
-    // Bad variants stay Active: only 1 non-failed variant (good_b) is better, need 2 for exclusion
-    assert_eq!(variant_status["bad_a"], VariantStatus::Active);
-    assert_eq!(variant_status["bad_b"], VariantStatus::Active);
 }
