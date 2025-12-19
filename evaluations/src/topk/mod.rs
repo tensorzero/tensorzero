@@ -700,7 +700,7 @@ pub struct TopKTaskState {
 
 /// Serializable loop state for checkpointing between batches.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopKLoopState {
+pub struct TopKProgress {
     /// Variant statuses
     pub variant_status: HashMap<String, VariantStatus>,
     /// Performance confidence sequences
@@ -727,7 +727,7 @@ struct FetchDatapointIdsParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProcessBatchStepParams {
     batch_ids: Vec<Uuid>,
-    loop_state: TopKLoopState,
+    progress: TopKProgress,
     k_min: u32,
     k_max: u32,
     epsilon: Option<f64>,
@@ -894,8 +894,8 @@ fn update_variant_statuses(
 async fn process_batch_step(
     params: ProcessBatchStepParams,
     state: TopKTaskState,
-) -> anyhow::Result<TopKLoopState> {
-    let mut current_state = params.loop_state;
+) -> anyhow::Result<TopKProgress> {
+    let mut current_state = params.progress;
 
     // Retrieve datapoints from ClickHouse
     let request = GetDatapointsRequest {
@@ -1032,12 +1032,12 @@ async fn process_batch_step(
 
 /// Check global stopping conditions in order of precedence
 fn check_global_stopping(
-    loop_state: &TopKLoopState,
+    progress: &TopKProgress,
     params: &TopKTaskParams,
 ) -> Option<GlobalStoppingReason> {
     // Check if we identified a top-k set
     let stopping_result = check_topk_stopping(
-        &loop_state.variant_performance,
+        &progress.variant_performance,
         params.k_min,
         params.k_max,
         params.epsilon,
@@ -1054,7 +1054,7 @@ fn check_global_stopping(
 
     // Check for evaluator failures
     if let Some(threshold) = params.evaluator_failure_threshold {
-        let failed_evaluators: Vec<String> = loop_state
+        let failed_evaluators: Vec<String> = progress
             .evaluator_failures
             .iter()
             .filter(|(_, cs)| cs.cs_lower > threshold)
@@ -1068,12 +1068,12 @@ fn check_global_stopping(
     }
 
     // Check for too many variant failures
-    let num_failed = loop_state
+    let num_failed = progress
         .variant_status
         .values()
         .filter(|s| **s == VariantStatus::Failed)
         .count();
-    let num_variants = loop_state.variant_status.len();
+    let num_variants = progress.variant_status.len();
     if num_failed > num_variants.saturating_sub(params.k_min as usize) {
         return Some(GlobalStoppingReason::TooManyVariantsFailed { num_failed });
     }
@@ -1176,7 +1176,7 @@ impl Task<TopKTaskState> for TopKTask {
         }
 
         // Initialize loop state
-        let mut loop_state = TopKLoopState {
+        let mut progress = TopKProgress {
             variant_status: params
                 .variant_names
                 .iter()
@@ -1240,7 +1240,7 @@ impl Task<TopKTaskState> for TopKTask {
             // CHECKPOINT 2: Process batch and update state
             let batch_step_params = ProcessBatchStepParams {
                 batch_ids,
-                loop_state: loop_state.clone(),
+                progress: progress.clone(),
                 k_min: params.k_min,
                 k_max: params.k_max,
                 epsilon: params.epsilon,
@@ -1257,7 +1257,7 @@ impl Task<TopKTaskState> for TopKTask {
                 function_configs: params.function_configs.clone(),
                 scoring_function: params.scoring_function.clone(),
             };
-            loop_state = ctx
+            progress = ctx
                 .step(
                     &format!("batch_{batch_idx}"),
                     batch_step_params,
@@ -1271,7 +1271,7 @@ impl Task<TopKTaskState> for TopKTask {
                 "Processing batch"
             );
 
-            if let Some(reason) = check_global_stopping(&loop_state, &params) {
+            if let Some(reason) = check_global_stopping(&progress, &params) {
                 stopping_reason = Some(reason);
                 break;
             }
@@ -1282,18 +1282,18 @@ impl Task<TopKTaskState> for TopKTask {
 
         info!(
             stopping_reason = ?stopping_reason,
-            num_datapoints_processed = loop_state.num_datapoints_processed,
+            num_datapoints_processed = progress.num_datapoints_processed,
             "Top-k evaluation complete"
         );
 
         Ok(TopKTaskOutput {
             evaluation_run_id,
-            variant_status: loop_state.variant_status,
-            variant_performance: loop_state.variant_performance,
-            variant_failures: loop_state.variant_failures,
-            evaluator_failures: loop_state.evaluator_failures,
+            variant_status: progress.variant_status,
+            variant_performance: progress.variant_performance,
+            variant_failures: progress.variant_failures,
+            evaluator_failures: progress.evaluator_failures,
             stopping_reason,
-            num_datapoints_processed: loop_state.num_datapoints_processed,
+            num_datapoints_processed: progress.num_datapoints_processed,
         })
     }
 }
