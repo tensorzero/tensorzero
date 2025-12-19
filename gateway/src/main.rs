@@ -86,7 +86,7 @@ async fn main() -> Result<(), ExitCode> {
     if let Some(public_id) = args.early_exit_commands.disable_api_key {
         handle_disable_api_key(&public_id)
             .await
-            .log_err_pretty("Failed to delete API Key")?;
+            .log_err_pretty("Failed to delete API key")?;
 
         return Ok(());
     }
