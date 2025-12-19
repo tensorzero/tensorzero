@@ -882,26 +882,61 @@ struct FetchDatapointIdsParams {
 }
 
 /// Durable step function to fetch and shuffle datapoint IDs.
+///
+/// Paginates through the entire dataset to fetch all datapoint IDs, respecting
+/// `max_datapoints` if set. The IDs are shuffled for randomized evaluation order.
 #[expect(dead_code)]
 async fn fetch_datapoint_ids_step(
     params: FetchDatapointIdsParams,
     state: TopKTaskState,
 ) -> anyhow::Result<Vec<Uuid>> {
-    let request = ListDatapointsRequest {
-        function_name: Some(params.function_name),
-        limit: params.max_datapoints.map(|n| n as u32),
-        offset: Some(0),
-        ..Default::default()
-    };
-    let datapoints = list_datapoints(
-        &state.clients.clickhouse_client,
-        params.dataset_name,
-        request,
-    )
-    .await?
-    .datapoints;
+    const PAGE_SIZE: u32 = 1000;
 
-    let mut ids: Vec<Uuid> = datapoints.iter().map(|d| d.id()).collect();
+    let mut all_ids: Vec<Uuid> = Vec::new();
+    let mut offset: u32 = 0;
+    let max_to_fetch = params.max_datapoints.map(|n| n as u32);
+
+    loop {
+        // Calculate how many to fetch in this page
+        let limit = match max_to_fetch {
+            Some(max) => {
+                let remaining = max.saturating_sub(offset);
+                if remaining == 0 {
+                    break;
+                }
+                PAGE_SIZE.min(remaining)
+            }
+            None => PAGE_SIZE,
+        };
+
+        let request = ListDatapointsRequest {
+            function_name: Some(params.function_name.clone()),
+            limit: Some(limit),
+            offset: Some(offset),
+            ..Default::default()
+        };
+
+        let response = list_datapoints(
+            &state.clients.clickhouse_client,
+            params.dataset_name.clone(),
+            request,
+        )
+        .await?;
+
+        let page_ids: Vec<Uuid> = response.datapoints.iter().map(|d| d.id()).collect();
+        let page_size = page_ids.len() as u32;
+
+        all_ids.extend(page_ids);
+
+        // Stop if we got fewer than requested (end of dataset)
+        if page_size < limit {
+            break;
+        }
+
+        offset += page_size;
+    }
+
+    let mut ids = all_ids;
 
     // Shuffle for randomization
     use rand::seq::SliceRandom;
