@@ -1,10 +1,10 @@
 name: TensorZero CI Bot Failure Diagnosis
 
-on:
-  workflow_run:
-    workflows: ["General Checks"]
-    types:
-      - completed
+# on:
+# workflow_run:
+#   workflows: ["General Checks"]
+#   types:
+#     - completed
 
 jobs:
   generate-patch:
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha }tcle}
           fetch-depth: 0
           fetch-tags: false
 
