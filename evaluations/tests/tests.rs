@@ -3074,77 +3074,12 @@ mod topk_tests {
     use super::*;
     use durable::WorkerOptions;
     use evaluations::EvaluationFunctionConfig;
-    use evaluations::evaluators::EvaluationResult;
     use evaluations::topk::{
-        GlobalStoppingReason, ScoringFunction, TopKTaskOutput, TopKTaskParams, TopKTaskState,
+        GlobalStoppingReason, ScoringFunctionType, TopKTaskOutput, TopKTaskParams, TopKTaskState,
         VariantStatus, create_client,
     };
     use std::time::Duration;
     use tensorzero_core::evaluations::EvaluationConfig;
-
-    /// A simple scoring function that uses the first successful boolean evaluator's result.
-    /// For boolean evaluators: true = 1.0, false = 0.0.
-    /// For float evaluators: uses the value directly (clamped to [0, 1]).
-    ///
-    /// This scoring function operates on a per-datapoint basis, comparing all variants
-    /// on that datapoint. It returns scores for each variant that has results.
-    struct FirstBooleanScore;
-
-    impl ScoringFunction for FirstBooleanScore {
-        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
-            let mut scores = HashMap::new();
-
-            for (variant_name, eval_result) in evaluations {
-                // Find the first successful evaluator result
-                for result in (*eval_result).values() {
-                    if let Ok(Some(value)) = result {
-                        let score = if let Some(b) = value.as_bool() {
-                            if b { 1.0 } else { 0.0 }
-                        } else if let Some(f) = value.as_f64() {
-                            f.clamp(0.0, 1.0)
-                        } else {
-                            continue;
-                        };
-                        scores.insert(variant_name.clone(), score);
-                        break;
-                    }
-                }
-            }
-
-            scores
-        }
-    }
-
-    /// A scoring function that averages all non-failed evaluator scores for each variant.
-    /// This is useful for testing TopKFound with deterministic evaluators that produce
-    /// different scores per variant (e.g., exact_match with echo vs empty variants).
-    struct AverageEvaluatorScore;
-
-    impl ScoringFunction for AverageEvaluatorScore {
-        fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
-            let mut scores = HashMap::new();
-            for (variant_name, eval_result) in evaluations {
-                let mut sum = 0.0;
-                let mut count = 0;
-                for result in eval_result.values() {
-                    if let Ok(Some(value)) = result {
-                        // Handle both numeric and boolean values
-                        if let Some(num) = value.as_f64() {
-                            sum += num;
-                            count += 1;
-                        } else if let Some(b) = value.as_bool() {
-                            sum += if b { 1.0 } else { 0.0 };
-                            count += 1;
-                        }
-                    }
-                }
-                if count > 0 {
-                    scores.insert(variant_name.clone(), sum / count as f64);
-                }
-            }
-            scores
-        }
-    }
 
     /// Helper to get a Postgres pool for tests
     async fn get_postgres_pool() -> sqlx_alpha::PgPool {
@@ -3232,20 +3167,16 @@ mod topk_tests {
             clickhouse_client: clickhouse.clone(),
         });
 
-        // Create the top-k task state with AverageEvaluatorScore
-        let state = TopKTaskState {
-            clients,
-            evaluation_config: evaluation_config.clone(),
-            function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(AverageEvaluatorScore),
-        };
+        // Create the top-k task state (only clients)
+        let state = TopKTaskState { clients };
 
         // Create the durable client
         let durable_client = create_client(pg_pool.clone(), state)
             .await
             .expect("Failed to create durable client");
 
-        // Create task params
+        // Create task params with configs and scoring function
+        let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
         let params = TopKTaskParams {
             evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
@@ -3259,6 +3190,9 @@ mod topk_tests {
             evaluator_failure_threshold: None,
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
+            evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
+            function_configs,
+            scoring_function: ScoringFunctionType::AverageEvaluatorScore,
         };
 
         // Spawn the task
@@ -3764,12 +3698,7 @@ mod topk_tests {
             clickhouse_client: clickhouse.clone(),
         });
 
-        let state = TopKTaskState {
-            clients,
-            evaluation_config: evaluation_config.clone(),
-            function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(AverageEvaluatorScore),
-        };
+        let state = TopKTaskState { clients };
 
         let durable_client = create_client(pg_pool.clone(), state)
             .await
@@ -3777,6 +3706,7 @@ mod topk_tests {
 
         // With 25 datapoints and 4 identical variants, the dataset will be exhausted
         // before we can identify top-2 or top-3 (confidence intervals will always overlap)
+        let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
         let params = TopKTaskParams {
             evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
@@ -3790,6 +3720,9 @@ mod topk_tests {
             evaluator_failure_threshold: None,
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off, // No caching for clean test
+            evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
+            function_configs,
+            scoring_function: ScoringFunctionType::AverageEvaluatorScore,
         };
 
         let spawn_result = durable_client
@@ -3927,12 +3860,7 @@ mod topk_tests {
             clickhouse_client: clickhouse.clone(),
         });
 
-        let state = TopKTaskState {
-            clients,
-            evaluation_config: evaluation_config.clone(),
-            function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(FirstBooleanScore),
-        };
+        let state = TopKTaskState { clients };
 
         let durable_client = create_client(pg_pool.clone(), state)
             .await
@@ -3941,6 +3869,7 @@ mod topk_tests {
         // Set evaluator failure threshold to 0.05
         // The "error" evaluator always fails (100% failure rate)
         // After 2 datapoints (4 observations), cs_lower = 0.248 > 0.05, so we stop
+        let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
         let params = TopKTaskParams {
             evaluation_name: "test_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
@@ -3954,6 +3883,9 @@ mod topk_tests {
             evaluator_failure_threshold: Some(0.05), // 5% failure rate threshold
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off,
+            evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
+            function_configs,
+            scoring_function: ScoringFunctionType::FirstBooleanScore,
         };
 
         let spawn_result = durable_client
@@ -4157,12 +4089,7 @@ mod topk_tests {
             clickhouse_client: clickhouse.clone(),
         });
 
-        let state = TopKTaskState {
-            clients,
-            evaluation_config: evaluation_config.clone(),
-            function_configs: Arc::new(function_configs),
-            scoring_fn: Arc::new(AverageEvaluatorScore),
-        };
+        let state = TopKTaskState { clients };
 
         let durable_client = create_client(pg_pool.clone(), state)
             .await
@@ -4172,6 +4099,7 @@ mod topk_tests {
         // After 3 datapoints (3 observations per variant), error variants have cs_lower = 0.171 > 0.05
         // With k_min=2, we need 2 active variants. When 2 fail, we only have 1 active,
         // so num_failed=2 > num_variants - k_min = 3-2=1, triggering TooManyVariantsFailed
+        let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
         let params = TopKTaskParams {
             evaluation_name: "test_topk_evaluation".to_string(),
             dataset_name: dataset_name.clone(),
@@ -4185,6 +4113,9 @@ mod topk_tests {
             evaluator_failure_threshold: None,
             concurrency: 10,
             inference_cache: CacheEnabledMode::Off,
+            evaluation_config: EvaluationConfig::Inference(inference_config.clone()),
+            function_configs,
+            scoring_function: ScoringFunctionType::AverageEvaluatorScore,
         };
 
         let spawn_result = durable_client

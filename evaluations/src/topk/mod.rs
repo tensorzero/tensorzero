@@ -186,6 +186,100 @@ pub trait ScoringFunction: Send + Sync {
     fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64>;
 }
 
+/// Serializable enum representing available scoring function types.
+///
+/// This enum allows scoring functions to be specified in task parameters (which must be
+/// serializable for durable execution) and then converted to trait objects at runtime.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ScoringFunctionType {
+    /// Average all non-failed evaluator scores for each variant.
+    AverageEvaluatorScore,
+    /// Use the first successful boolean evaluator result as the score.
+    FirstBooleanScore,
+}
+
+impl ScoringFunctionType {
+    /// Convert this enum variant to a trait object for use in scoring.
+    pub fn into_scoring_fn(self) -> Arc<dyn ScoringFunction> {
+        match self {
+            ScoringFunctionType::AverageEvaluatorScore => Arc::new(AverageEvaluatorScore),
+            ScoringFunctionType::FirstBooleanScore => Arc::new(FirstBooleanScore),
+        }
+    }
+}
+
+/// A scoring function that averages all non-failed evaluator scores for each variant.
+///
+/// For each variant, this function:
+/// 1. Iterates through all evaluator results
+/// 2. For successful results, extracts numeric values (or converts booleans to 0/1)
+/// 3. Returns the mean of all successful evaluator scores
+///
+/// Variants with no successful evaluator results are omitted from the output.
+pub struct AverageEvaluatorScore;
+
+impl ScoringFunction for AverageEvaluatorScore {
+    fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+        let mut scores = HashMap::new();
+        for (variant_name, eval_result) in evaluations {
+            let mut sum = 0.0;
+            let mut count = 0;
+            for result in eval_result.values() {
+                if let Ok(Some(value)) = result {
+                    // Handle both numeric and boolean values
+                    if let Some(num) = value.as_f64() {
+                        sum += num;
+                        count += 1;
+                    } else if let Some(b) = value.as_bool() {
+                        sum += if b { 1.0 } else { 0.0 };
+                        count += 1;
+                    }
+                }
+            }
+            if count > 0 {
+                scores.insert(variant_name.clone(), sum / count as f64);
+            }
+        }
+        scores
+    }
+}
+
+/// A scoring function that uses the first successful boolean evaluator result as the score.
+///
+/// For each variant, this function:
+/// 1. Iterates through evaluator results in arbitrary order
+/// 2. Returns the first successful result that can be converted to a score:
+///    - Boolean values: true → 1.0, false → 0.0
+///    - Numeric values: clamped to [0, 1]
+///
+/// This is useful for evaluations with a single primary boolean evaluator.
+pub struct FirstBooleanScore;
+
+impl ScoringFunction for FirstBooleanScore {
+    fn score(&self, evaluations: &HashMap<String, &EvaluationResult>) -> HashMap<String, f64> {
+        let mut scores = HashMap::new();
+
+        for (variant_name, eval_result) in evaluations {
+            // Find the first successful evaluator result
+            for result in (*eval_result).values() {
+                if let Ok(Some(value)) = result {
+                    let score = if let Some(b) = value.as_bool() {
+                        if b { 1.0 } else { 0.0 }
+                    } else if let Some(f) = value.as_f64() {
+                        f.clamp(0.0, 1.0)
+                    } else {
+                        continue;
+                    };
+                    scores.insert(variant_name.clone(), score);
+                    break;
+                }
+            }
+        }
+
+        scores
+    }
+}
+
 /// Update variant statistics and confidence sequences based on evaluation results.
 ///
 /// This function updates:
@@ -557,7 +651,9 @@ pub fn check_topk(
 // ============================================================================
 
 /// Serializable parameters for the top-k durable task.
-/// Non-serializable resources (clients, scoring_fn) are passed via State.
+///
+/// All task-specific configuration is stored here to ensure durable execution correctness.
+/// The exact config is captured at task creation time and never changes on resumption.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopKTaskParams {
     /// Name of the evaluation
@@ -582,21 +678,24 @@ pub struct TopKTaskParams {
     pub evaluator_failure_threshold: Option<f64>,
     /// Number of concurrent requests
     pub concurrency: usize,
-    /// Cache mode for inference (serialized)
+    /// Cache mode for inference
     pub inference_cache: CacheEnabledMode,
+    /// Evaluation configuration (captured at task creation time)
+    pub evaluation_config: EvaluationConfig,
+    /// Function configs table (captured at task creation time)
+    pub function_configs: EvaluationFunctionConfigTable,
+    /// Scoring function type (converted to trait object at runtime)
+    pub scoring_function: ScoringFunctionType,
 }
 
-/// Application state for the top-k task (non-serializable resources).
+/// Application state for the top-k task (non-serializable global resources).
+///
+/// This struct contains only truly global resources that don't change between task runs.
+/// All task-specific configuration is stored in `TopKTaskParams` for durable execution.
 #[derive(Clone)]
 pub struct TopKTaskState {
     /// Clients for inference and database access
     pub clients: Arc<Clients>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Function configs table
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Scoring function for converting evaluation results to performance scores
-    pub scoring_fn: Arc<dyn ScoringFunction>,
 }
 
 /// Serializable loop state for checkpointing between batches.
@@ -641,6 +740,10 @@ struct ProcessBatchStepParams {
     dataset_name: String,
     inference_cache: CacheEnabledMode,
     concurrency: usize,
+    // Config fields (passed from params for durable execution)
+    evaluation_config: EvaluationConfig,
+    function_configs: EvaluationFunctionConfigTable,
+    scoring_function: ScoringFunctionType,
 }
 
 /// Durable step function to fetch and shuffle datapoint IDs.
@@ -829,8 +932,8 @@ async fn process_batch_step(
             let semaphore = Arc::new(tokio::sync::Semaphore::new(params.concurrency));
             let batch_params = ProcessBatchParams {
                 clients: state.clients.clone(),
-                function_configs: state.function_configs.clone(),
-                evaluation_config: state.evaluation_config.clone(),
+                function_configs: Arc::new(params.function_configs.clone()),
+                evaluation_config: Arc::new(params.evaluation_config.clone()),
                 evaluation_name: Arc::new(params.evaluation_name.clone()),
                 evaluation_run_id: params.evaluation_run_id,
                 dataset_name: Arc::new(params.dataset_name.clone()),
@@ -889,9 +992,10 @@ async fn process_batch_step(
     };
 
     // Update confidence sequences
+    let scoring_fn = params.scoring_function.clone().into_scoring_fn();
     compute_updates(
         &results,
-        state.scoring_fn.as_ref(),
+        scoring_fn.as_ref(),
         &mut current_state.variant_performance,
         &mut current_state.variant_failures,
         &mut current_state.evaluator_failures,
@@ -990,7 +1094,7 @@ impl Task<TopKTaskState> for TopKTask {
     async fn run(
         params: Self::Params,
         mut ctx: TaskContext<TopKTaskState>,
-        state: TopKTaskState,
+        _state: TopKTaskState,
     ) -> TaskResult<Self::Output> {
         // Validate arguments
         if params.variant_names.is_empty() {
@@ -1021,7 +1125,7 @@ impl Task<TopKTaskState> for TopKTask {
         let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
         // Get evaluator names from the evaluation config
-        let EvaluationConfig::Inference(inference_config) = &*state.evaluation_config;
+        let EvaluationConfig::Inference(inference_config) = &params.evaluation_config;
         let evaluator_names: Vec<String> = inference_config.evaluators.keys().cloned().collect();
 
         // Generate evaluation run ID durably
@@ -1148,6 +1252,10 @@ impl Task<TopKTaskState> for TopKTask {
                 dataset_name: params.dataset_name.clone(),
                 inference_cache: params.inference_cache,
                 concurrency: params.concurrency,
+                // Config fields (passed from params for durable execution)
+                evaluation_config: params.evaluation_config.clone(),
+                function_configs: params.function_configs.clone(),
+                scoring_function: params.scoring_function.clone(),
             };
             loop_state = ctx
                 .step(

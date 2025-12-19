@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tensorzero_core::client::Input;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
+use tensorzero_core::evaluations::{EvaluationConfig, InferenceEvaluationConfig};
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text, Usage};
 use tensorzero_core::tool::DynamicToolParams;
 
@@ -42,6 +43,12 @@ fn mock_cs_with_bounds(
 }
 
 fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
+    // Create a minimal dummy evaluation config for unit tests
+    let evaluation_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
+        evaluators: HashMap::new(),
+        function_name: "test_function".to_string(),
+        description: None,
+    });
     TopKTaskParams {
         evaluation_name: "eval".to_string(),
         dataset_name: "dataset".to_string(),
@@ -55,6 +62,9 @@ fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
         evaluator_failure_threshold: Some(0.05),
         concurrency: 1,
         inference_cache: CacheEnabledMode::On,
+        evaluation_config,
+        function_configs: HashMap::new(),
+        scoring_function: ScoringFunctionType::AverageEvaluatorScore,
     }
 }
 
