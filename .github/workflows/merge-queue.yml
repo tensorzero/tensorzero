@@ -124,7 +124,7 @@ jobs:
             echo "ERROR: Gateway logs are empty"
             exit 1
           fi
-          ! grep -i "please file a bug report" "$LOGS"
+          ! grep -i "please file a bug report" <<< "$LOGS"
 
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
