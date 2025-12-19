@@ -738,6 +738,14 @@ async fn test_disable_api_key_cli() {
         StatusCode::OK,
         "Disabled API key should not work for authentication",
     );
+
+    assert!(
+        inference_response
+            .text()
+            .await
+            .unwrap()
+            .contains("API key was disabled at")
+    );
 }
 
 #[tokio::test]
