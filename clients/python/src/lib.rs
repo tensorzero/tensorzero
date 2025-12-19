@@ -1649,12 +1649,14 @@ impl TensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A map from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples(
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -1676,7 +1678,7 @@ impl TensorZeroGateway {
                 deserialize_from_stored_sample(this.py(), x, config)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_samples(stored_samples, variants);
+        let fut = client.experimental_render_samples(stored_samples, variants, concurrency);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
@@ -2937,12 +2939,14 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param stored_samples: A list of stored samples to render.
     /// :param variants: A mapping from function name to variant name.
+    /// :param concurrency: Maximum number of samples to process concurrently. Defaults to 100.
     /// :return: A list of rendered samples.
-    #[pyo3(signature = (*, stored_samples, variants))]
+    #[pyo3(signature = (*, stored_samples, variants, concurrency=None))]
     fn experimental_render_samples<'a>(
         this: PyRef<'a, Self>,
         stored_samples: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
+        concurrency: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
@@ -2965,7 +2969,7 @@ impl AsyncTensorZeroGateway {
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_samples(stored_samples, variants)
+                .experimental_render_samples(stored_samples, variants, concurrency)
                 .await;
             Python::attach(|py| match res {
                 Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),

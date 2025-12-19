@@ -2,53 +2,50 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
+use tokio::sync::Semaphore;
 
 use crate::config::Config;
 use crate::endpoints::workflow_evaluation_run::validate_variant_pins;
 use crate::error::Error;
 use crate::stored_inference::{RenderedSample, StoredSample, render_stored_sample};
 
+const DEFAULT_CONCURRENCY: usize = 100;
+
 pub async fn render_samples<T: StoredSample>(
     config: Arc<Config>,
     stored_samples: Vec<T>,
     variants: HashMap<String, String>,
+    concurrency: Option<usize>,
 ) -> Result<Vec<RenderedSample>, Error> {
     validate_variant_pins(&variants, &config)?;
-    let resolution_futures = stored_samples
-        .iter()
-        .map(|inference_example| inference_example.input().clone().reresolve(&*config));
 
-    // Await all futures concurrently.
+    let concurrency = concurrency.unwrap_or(DEFAULT_CONCURRENCY);
+    let semaphore = Arc::new(Semaphore::new(concurrency));
+
+    // Process all samples concurrently with semaphore-limited concurrency.
     // For now, we drop the errors here.
     // They are logged on construction in the task.
     // TODO: make it configurable whether to drop or error on failures.
-    let results = join_all(resolution_futures).await;
+    let futures = stored_samples.into_iter().map(|sample| {
+        let semaphore = semaphore.clone();
+        let config = config.clone();
+        let variants = variants.clone();
+        async move {
+            // Acquire semaphore permit for this sample's processing
+            let _permit = semaphore.acquire().await.ok()?;
 
-    let final_rendered_examples: Vec<RenderedSample> = join_all(
-        stored_samples
-            .into_iter() // Consumes Vec<impl StoredSample>; elements are already mutated
-            .zip(results.into_iter()) // Creates an iterator of (StoredInference, Result<(), Error>)
-            .filter_map(|(example, resolution_result)| {
-                // Filter out examples where reresolve_input_for_fine_tuning failed.
-                // If resolution_result is Ok, map Some(()) to Some(example).
-                // If resolution_result is Err, .ok() yields None, so filter_map drops it.
-                resolution_result.ok().map(|resolved| (example, resolved))
-            })
-            .map(|(sample, resolved_input)| async {
-                // resolved_example is a StoredInference that was successfully processed by reresolve.
-                // Now, attempt to render it.
-                // render_stored_inference returns Result<RenderedStoredInference, Error>.
-                // .ok() converts this to Option<RenderedStoredInference>.
-                // filter_map will keep Some(RenderedStoredInference) and discard None (if rendering failed).
-                render_stored_sample(sample, resolved_input, &config, &variants)
-                    .await
-                    .ok()
-            }),
-    )
-    .await
-    .into_iter()
-    .flatten()
-    .collect();
+            // Resolve the input
+            let resolved_input = sample.input().clone().reresolve(&*config).await.ok()?;
+
+            // Render the sample
+            render_stored_sample(sample, resolved_input, &config, &variants)
+                .await
+                .ok()
+        }
+    });
+
+    let final_rendered_examples: Vec<RenderedSample> =
+        join_all(futures).await.into_iter().flatten().collect();
 
     Ok(final_rendered_examples)
 }

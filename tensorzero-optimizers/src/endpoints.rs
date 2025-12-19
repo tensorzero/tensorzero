@@ -109,7 +109,8 @@ pub async fn launch_optimization_workflow(
         .await?;
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
     // Template the inferences and fetch any network resources needed
-    let rendered_inferences = render_samples(config.clone(), stored_inferences, variants).await?;
+    let rendered_inferences =
+        render_samples(config.clone(), stored_inferences, variants, None).await?;
 
     // Drop any examples with output that is None
     let rendered_inferences = rendered_inferences
