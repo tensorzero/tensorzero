@@ -25,6 +25,19 @@ use crate::evaluators::EvaluationResult;
 use crate::{BatchItemResult, Clients, EvaluationFunctionConfigTable};
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/// Default failure rate threshold for both variants and evaluators.
+/// A 5% failure rate is the default threshold for marking a variant as failed
+/// or terminating due to evaluator failures.
+const DEFAULT_FAILURE_THRESHOLD: f64 = 0.05;
+
+fn default_failure_threshold() -> f64 {
+    DEFAULT_FAILURE_THRESHOLD
+}
+
+// ============================================================================
 // Core Types
 // ============================================================================
 
@@ -91,15 +104,19 @@ pub struct TopKTaskParams {
     pub max_datapoints: Option<usize>,
     /// Batch size for processing
     pub batch_size: Option<usize>,
-    /// Failure rate threshold for variants.
+    /// Failure rate threshold for variants (default: 0.05).
     /// If a variant's failure rate confidence sequence lower bound exceeds this threshold,
     /// the variant is marked as Failed and excluded from further evaluation.
     /// Failed variants are not candidates for the returned top-k set.
-    pub variant_failure_threshold: Option<f64>,
-    /// Failure rate threshold for evaluators.
+    /// Set to 1.0 to effectively disable variant failure detection.
+    #[serde(default = "default_failure_threshold")]
+    pub variant_failure_threshold: f64,
+    /// Failure rate threshold for evaluators (default: 0.05).
     /// If any evaluator's failure rate confidence sequence lower bound exceeds this threshold,
     /// the top-k identification run terminates.
-    pub evaluator_failure_threshold: Option<f64>,
+    /// Set to 1.0 to effectively disable evaluator failure detection.
+    #[serde(default = "default_failure_threshold")]
+    pub evaluator_failure_threshold: f64,
     /// Number of concurrent requests
     pub concurrency: usize,
     /// Cache mode for inference
@@ -425,16 +442,17 @@ fn non_failed_variants<'a>(
 
 /// Parameters for updating variant statuses during top-k evaluation.
 ///
-/// If `variant_failure_threshold` is set and a variant's failure rate CS lower bound
-/// exceeds it, the variant is marked as Failed. Failed variants are not candidates
-/// for the returned top-k set.
+/// If a variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
+/// the variant is marked as Failed. Failed variants are not candidates for the
+/// returned top-k set.
 /// TODO: remove #[cfg(test)] once other functions that use this are implemented
 #[cfg(test)]
 struct VariantStatusParams {
     k_min: u32,
     k_max: u32,
     epsilon: f64,
-    variant_failure_threshold: Option<f64>,
+    /// Failure rate threshold for variants. Set to 1.0 to disable.
+    variant_failure_threshold: f64,
 }
 
 /// Updates variant statuses based on confidence sequences.
@@ -456,8 +474,8 @@ struct VariantStatusParams {
 ///
 /// **Pass 1 - Failure detection:**
 /// - Skip variants already in a terminal state
-/// - If `variant_failure_threshold` is set and the variant's failure rate CS lower bound
-///   exceeds it, mark as `Failed`
+/// - If the variant's failure rate CS lower bound exceeds `variant_failure_threshold`,
+///   mark as `Failed`
 ///
 /// **Pass 2 - Early exclusion/inclusion (among non-failed variants):**
 /// - Skip variants already in a terminal state (including those just marked as `Failed`)
@@ -491,9 +509,8 @@ fn update_variant_statuses(
             continue;
         }
 
-        if let Some(threshold) = params.variant_failure_threshold
-            && let Some(failure_cs) = variant_failures.get(name)
-            && failure_cs.cs_lower > threshold
+        if let Some(failure_cs) = variant_failures.get(name)
+            && failure_cs.cs_lower > params.variant_failure_threshold
         {
             variant_status.insert(name.clone(), VariantStatus::Failed);
         }
@@ -823,18 +840,16 @@ fn check_global_stopping(
     }
 
     // Check for evaluator failures
-    if let Some(threshold) = params.evaluator_failure_threshold {
-        let failed_evaluators: Vec<String> = progress
-            .evaluator_failures
-            .iter()
-            .filter(|(_, cs)| cs.cs_lower > threshold)
-            .map(|(name, _)| name.clone())
-            .collect();
-        if !failed_evaluators.is_empty() {
-            return Some(GlobalStoppingReason::EvaluatorsFailed {
-                evaluator_names: failed_evaluators,
-            });
-        }
+    let failed_evaluators: Vec<String> = progress
+        .evaluator_failures
+        .iter()
+        .filter(|(_, cs)| cs.cs_lower > params.evaluator_failure_threshold)
+        .map(|(name, _)| name.clone())
+        .collect();
+    if !failed_evaluators.is_empty() {
+        return Some(GlobalStoppingReason::EvaluatorsFailed {
+            evaluator_names: failed_evaluators,
+        });
     }
 
     // Check for too many variant failures

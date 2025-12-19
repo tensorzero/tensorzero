@@ -58,8 +58,8 @@ fn default_params_with_variants(variant_names: Vec<&str>) -> TopKTaskParams {
         epsilon: None,
         max_datapoints: None,
         batch_size: Some(1),
-        variant_failure_threshold: Some(0.05),
-        evaluator_failure_threshold: Some(0.05),
+        variant_failure_threshold: 0.05,
+        evaluator_failure_threshold: 0.05,
         concurrency: 1,
         inference_cache: CacheEnabledMode::On,
         evaluation_config,
@@ -1314,7 +1314,7 @@ fn test_update_variant_statuses_skips_non_active() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1361,7 +1361,7 @@ fn test_update_variant_statuses_marks_failed() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: Some(0.2),
+        variant_failure_threshold: 0.2,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1404,7 +1404,7 @@ fn test_update_variant_statuses_early_exclusion() {
         k_min: 1,
         k_max: 2,
         epsilon: 0.05, // Non-zero epsilon; intervals are well-separated so doesn't affect outcome
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1450,7 +1450,7 @@ fn test_update_variant_statuses_no_early_exclusion_when_uncertain() {
         k_min: 1,
         k_max: 2,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1497,7 +1497,7 @@ fn test_update_variant_statuses_failure_takes_priority() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: Some(0.2),
+        variant_failure_threshold: 0.2,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1512,9 +1512,9 @@ fn test_update_variant_statuses_failure_takes_priority() {
     assert_eq!(variant_status["healthy"], VariantStatus::Include);
 }
 
-/// Test with no failure threshold set (None) - failure check is skipped.
+/// Test with failure threshold disabled (set to 1.0) - failure check never triggers.
 #[test]
-fn test_update_variant_statuses_no_failure_threshold() {
+fn test_update_variant_statuses_failure_threshold_disabled() {
     let mut variant_status: HashMap<String, VariantStatus> =
         [("high_failure".to_string(), VariantStatus::Active)]
             .into_iter()
@@ -1525,7 +1525,7 @@ fn test_update_variant_statuses_no_failure_threshold() {
             .into_iter()
             .collect();
 
-    // High failure rate, but no threshold set
+    // High failure rate (cs_lower = 0.5), but threshold is disabled
     let variant_failures: HashMap<String, MeanBettingConfidenceSequence> =
         [mock_cs_with_bounds("high_failure", 0.5, 0.7)] // cs_lower = 0.5
             .into_iter()
@@ -1535,7 +1535,7 @@ fn test_update_variant_statuses_no_failure_threshold() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled - failure rate can never exceed 1.0
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1544,8 +1544,8 @@ fn test_update_variant_statuses_no_failure_threshold() {
         &params,
     );
 
-    // Without threshold, failure check is skipped.
-    // Single variant with k_min=1 triggers inclusion
+    // With threshold disabled (1.0), failure check never triggers.
+    // Single variant with k_min=1 triggers early inclusion (beats >= 0 others).
     assert_eq!(variant_status["high_failure"], VariantStatus::Include);
 }
 
@@ -1569,7 +1569,7 @@ fn test_update_variant_statuses_missing_failure_cs() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: Some(0.2),
+        variant_failure_threshold: 0.2,
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1599,7 +1599,7 @@ fn test_update_variant_statuses_missing_performance_cs() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1638,7 +1638,7 @@ fn test_update_variant_statuses_early_exclusion_k_max_1() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.05, // Non-zero epsilon; intervals are well-separated so doesn't affect outcome
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1682,7 +1682,7 @@ fn test_update_variant_statuses_epsilon_enables_exclusion() {
         k_min: 2,
         k_max: 2,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1704,7 +1704,7 @@ fn test_update_variant_statuses_epsilon_enables_exclusion() {
         k_min: 2,
         k_max: 2,
         epsilon: 0.01,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1746,7 +1746,7 @@ fn test_update_variant_statuses_epsilon_enables_inclusion() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1768,7 +1768,7 @@ fn test_update_variant_statuses_epsilon_enables_inclusion() {
         k_min: 1,
         k_max: 1,
         epsilon: 0.01,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
     update_variant_statuses(
         &mut variant_status,
@@ -1885,7 +1885,7 @@ fn test_check_global_stopping_filters_failed_variants() {
 fn test_check_global_stopping_evaluators_failed() {
     let variant_names = vec!["a", "b", "c", "d"];
     let mut params = default_params_with_variants(variant_names.clone());
-    params.evaluator_failure_threshold = Some(0.2);
+    params.evaluator_failure_threshold = 0.2;
     let mut progress = empty_progress(&variant_names);
     progress.variant_status = [
         ("a".to_string(), VariantStatus::Failed),
@@ -1995,7 +1995,7 @@ fn test_update_variant_statuses_filters_failed_variants() {
         k_min: 1,
         k_max: 2,
         epsilon: 0.0,
-        variant_failure_threshold: None,
+        variant_failure_threshold: 1.0, // Disabled
     };
 
     // Test 1: No failures - good variants stay Active, bad variants get Excluded
