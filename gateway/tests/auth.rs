@@ -704,7 +704,7 @@ async fn test_disable_api_key_cli() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // Verify the key works for authentication
+    // Verify the key DOES NOT work for authentication
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
