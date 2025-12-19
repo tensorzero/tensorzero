@@ -7,6 +7,10 @@ on:
         required: true
       S3_SECRET_ACCESS_KEY:
         required: true
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
+        required: false
       OPENAI_API_KEY:
         required: false
       FIREWORKS_ACCOUNT_ID:
@@ -131,6 +135,9 @@ jobs:
           version: "0.6.17"
 
       - name: Download JSONL fixtures
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Regenerate model inference cache
