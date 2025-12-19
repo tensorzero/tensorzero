@@ -1,0 +1,79 @@
+name: Auto-approve Trusted External PR Workflows
+
+on:
+  schedule:
+    # Runs every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  actions: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  auto-approve-workflows:
+    if: github.repository == 'tensorzero/tensorzero'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto-approve workflow runs for trusted external PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking for trusted external PRs..."
+
+          # Get all open PRs with the 'trusted-external-pr' label
+          prs=$(gh pr list --repo ${{ github.repository }} --state open --label "trusted-external-pr" --json number,headRefName,author --jq '.[] | "\(.number)|\(.headRefName)|\(.author.login)"')
+
+          if [ -z "$prs" ]; then
+            echo "No open PRs with 'trusted-external-pr' label found."
+            exit 0
+          fi
+
+          echo "Found PRs with 'trusted-external-pr' label:"
+          echo "$prs"
+
+          # Process each PR
+          while IFS='|' read -r pr_number head_ref author; do
+            echo ""
+            echo "Processing PR #$pr_number (branch: $head_ref, author: $author)"
+
+            # Get workflow runs for this PR that are awaiting approval
+            # We look for workflow runs on the head ref that have the 'action_required' status
+            runs=$(HEAD_REF="$head_ref" gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${{ github.repository }}/actions/runs?event=pull_request&status=action_required&per_page=100" \
+              --jq '.workflow_runs[] | select(.head_branch == env.HEAD_REF) | .id')
+
+            if [ -z "$runs" ]; then
+              echo "  No workflow runs awaiting approval for PR #$pr_number"
+              continue
+            fi
+
+            # Approve each workflow run
+            for run_id in $runs; do
+              echo "  Approving workflow run $run_id for PR #$pr_number..."
+
+              # Approve the workflow run
+              response=$(gh api \
+                --method POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/repos/${{ github.repository }}/actions/runs/$run_id/approve" 2>&1)
+
+              if [ $? -eq 0 ]; then
+                echo "  ✓ Successfully approved workflow run $run_id"
+              else
+                # Check if it's already approved or doesn't need approval
+                if echo "$response" | grep -q "Cannot approve a workflow run that is not awaiting approval"; then
+                  echo "  ℹ Workflow run $run_id is already approved or doesn't need approval"
+                else
+                  echo "  ✗ Failed to approve workflow run $run_id: $response"
+                fi
+              fi
+            done
+          done <<< "$prs"
+
+          echo ""
+          echo "Finished processing trusted external PRs"

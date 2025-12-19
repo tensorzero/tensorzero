@@ -950,7 +950,7 @@ pub(crate) fn check_new_tool_call_name(
                 // If the previous tool name was the same as the old name, we can just return None as it will have already been sent
                 return None;
             }
-            *last_tool_name = new_name.clone();
+            last_tool_name.clone_from(&new_name);
             Some(new_name)
         }
     }

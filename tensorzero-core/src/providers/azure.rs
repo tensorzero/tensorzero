@@ -645,7 +645,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        request.reasoning_effort = reasoning_effort.clone();
+        request.reasoning_effort.clone_from(reasoning_effort);
     }
 
     // Azure supports auto and default, but not flex and priority
@@ -673,7 +673,7 @@ fn apply_inference_params(
     }
 
     if verbosity.is_some() {
-        request.verbosity = verbosity.clone();
+        request.verbosity.clone_from(verbosity);
     }
 }
 
@@ -854,7 +854,7 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::config::with_skip_credential_validation;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -1120,16 +1120,15 @@ mod tests {
     #[tokio::test]
     async fn test_azure_provider_with_static_endpoint() {
         // Run in credential validation skip context to avoid API key requirement
-        let provider = SKIP_CREDENTIAL_VALIDATION
-            .scope((), async {
-                AzureProvider::new(
-                    "gpt-4.1-mini".to_string(),
-                    EndpointLocation::Static("https://test.openai.azure.com".to_string()),
-                    AzureCredentials::None,
-                )
-            })
-            .await
-            .unwrap();
+        let provider = with_skip_credential_validation(async {
+            AzureProvider::new(
+                "gpt-4.1-mini".to_string(),
+                EndpointLocation::Static("https://test.openai.azure.com".to_string()),
+                AzureCredentials::None,
+            )
+        })
+        .await
+        .unwrap();
 
         assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {
@@ -1143,16 +1142,15 @@ mod tests {
     #[tokio::test]
     async fn test_azure_provider_with_dynamic_endpoint() {
         // Run in credential validation skip context to avoid API key requirement
-        let provider = SKIP_CREDENTIAL_VALIDATION
-            .scope((), async {
-                AzureProvider::new(
-                    "gpt-4.1-mini".to_string(),
-                    EndpointLocation::Dynamic("azure_endpoint".to_string()),
-                    AzureCredentials::None,
-                )
-            })
-            .await
-            .unwrap();
+        let provider = with_skip_credential_validation(async {
+            AzureProvider::new(
+                "gpt-4.1-mini".to_string(),
+                EndpointLocation::Dynamic("azure_endpoint".to_string()),
+                AzureCredentials::None,
+            )
+        })
+        .await
+        .unwrap();
 
         assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {

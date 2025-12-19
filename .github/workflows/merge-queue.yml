@@ -57,7 +57,6 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
-  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
 
 jobs:
   live-tests:
@@ -116,6 +115,15 @@ jobs:
       - name: Print live tests logs
         if: always()
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
+
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
@@ -250,7 +258,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 
@@ -405,6 +413,10 @@ jobs:
         if: always()
         continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
+
+      - name: Check e2e logs for impossible error messages
+        run: |
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
