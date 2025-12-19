@@ -67,11 +67,20 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 use crate::providers::{
-    anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
+    anthropic::AnthropicProvider,
+    aws_bedrock::{AWSBedrockEndpoint, AWSBedrockProvider},
+    aws_common::{AWSCredentials, AWSRegion},
+    azure::AzureProvider,
+    deepseek::DeepSeekProvider,
+    fireworks::FireworksProvider,
+    gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+    gcp_vertex_gemini::GCPVertexGeminiProvider,
+    groq::GroqProvider,
+    mistral::MistralProvider,
+    openai::OpenAIProvider,
+    openrouter::OpenRouterProvider,
+    together::TogetherProvider,
+    vllm::VLLMProvider,
     xai::XAIProvider,
 };
 
@@ -1061,27 +1070,26 @@ pub enum UninitializedProviderConfig {
     AWSBedrock {
         model_id: String,
         #[serde(default)]
-        region: Option<EndpointLocation>,
+        region: Option<AWSRegion>,
         #[serde(default)]
         allow_auto_detect_region: bool,
         #[serde(default)]
         endpoint: Option<EndpointLocation>,
         #[serde(default)]
-        #[cfg_attr(test, ts(type = "string | null"))]
-        access_key: Option<CredentialLocationWithFallback>,
-        #[serde(default)]
-        #[cfg_attr(test, ts(type = "string | null"))]
-        secret_key: Option<CredentialLocationWithFallback>,
+        credentials: Option<AWSCredentials>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {
         endpoint_name: String,
         model_name: String,
-        region: Option<String>,
+        #[serde(default)]
+        region: Option<AWSRegion>,
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
+        #[serde(default)]
+        credentials: Option<AWSCredentials>,
     },
     Azure {
         deployment_id: String,
@@ -1229,32 +1237,48 @@ impl UninitializedProviderConfig {
                 region,
                 allow_auto_detect_region,
                 endpoint,
-                access_key,
-                secret_key,
-            } => ProviderConfig::AWSBedrock(
-                AWSBedrockProvider::new(
-                    model_id,
-                    region,
-                    allow_auto_detect_region,
-                    endpoint,
-                    access_key,
-                    secret_key,
-                    http_client,
+                credentials,
+            } => {
+                // Parse endpoint from EndpointLocation (only static and dynamic supported)
+                let parsed_endpoint = match endpoint {
+                    Some(EndpointLocation::Static(url_str)) => {
+                        let url = url::Url::parse(&url_str).map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("Invalid endpoint URL '{url_str}': {e}"),
+                            })
+                        })?;
+                        Some(AWSBedrockEndpoint::Static(url))
+                    }
+                    Some(EndpointLocation::Dynamic(key_name)) => {
+                        Some(AWSBedrockEndpoint::Dynamic(key_name))
+                    }
+                    Some(EndpointLocation::Env(_)) => {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: "Environment variable endpoints are not supported for AWS Bedrock. Use a static URL or 'dynamic::key_name'.".to_string(),
+                        }));
+                    }
+                    None => None,
+                };
+                ProviderConfig::AWSBedrock(
+                    AWSBedrockProvider::new(
+                        model_id,
+                        region,
+                        allow_auto_detect_region,
+                        parsed_endpoint,
+                        credentials,
+                        http_client,
+                    )
+                    .await?,
                 )
-                .await?,
-            ),
+            }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
                 region,
                 allow_auto_detect_region,
                 model_name,
                 hosted_provider,
+                credentials,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
-
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
@@ -1286,7 +1310,15 @@ impl UninitializedProviderConfig {
                     };
 
                 ProviderConfig::AWSSagemaker(
-                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                    AWSSagemakerProvider::new(
+                        endpoint_name,
+                        self_hosted,
+                        region,
+                        allow_auto_detect_region,
+                        credentials,
+                        http_client,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::Azure {

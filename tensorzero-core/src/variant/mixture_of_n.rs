@@ -167,8 +167,7 @@ impl Variant for MixtureOfNConfig {
                     clients.clone(),
                 )
                 .await?;
-            match self
-            .fuse_candidates(
+            match Box::pin(self.fuse_candidates(
                 &input,
                 &function,
                 &models.models,
@@ -176,7 +175,7 @@ impl Variant for MixtureOfNConfig {
                 clients,
                 candidate_inference_results,
                 false,
-            )
+            ))
             .await?
         {
             InferenceOrStreamResult::NonStream(inference_result) => {
@@ -209,17 +208,16 @@ impl Variant for MixtureOfNConfig {
             )
             .await?;
 
-        match self
-            .fuse_candidates(
-                &input,
-                &function,
-                &models.models,
-                Arc::clone(&inference_config),
-                clients,
-                candidate_inference_results,
-                true,
-            )
-            .await?
+        match Box::pin(self.fuse_candidates(
+            &input,
+            &function,
+            &models.models,
+            Arc::clone(&inference_config),
+            clients,
+            candidate_inference_results,
+            true,
+        ))
+        .await?
         {
             // We get a NonStream result if we don't have fuser result (either the fuser failed, or it wasn't run at all due to only one candidate existing)
             InferenceOrStreamResult::NonStream(inference_result) => {
@@ -1485,8 +1483,8 @@ mod tests {
             extra_cache_key: None,
         };
 
-        let InferenceOrStreamResult::NonStream(fused) = mixture_of_n_variant
-            .fuse_candidates(
+        let InferenceOrStreamResult::NonStream(fused) =
+            Box::pin(mixture_of_n_variant.fuse_candidates(
                 &input,
                 &json_function_config,
                 &Arc::new(models),
@@ -1494,7 +1492,7 @@ mod tests {
                 inference_clients.clone(),
                 candidates.clone(),
                 false,
-            )
+            ))
             .await
             .expect("Failed to select best candidate")
         else {
@@ -1574,8 +1572,8 @@ mod tests {
             messages: vec![],
         };
 
-        let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
-            .fuse_candidates(
+        let InferenceOrStreamResult::NonStream(result) =
+            Box::pin(mixture_of_n_variant.fuse_candidates(
                 &input,
                 &json_function_config,
                 &Arc::new(models),
@@ -1583,7 +1581,7 @@ mod tests {
                 inference_clients.clone(),
                 candidates.clone(),
                 false,
-            )
+            ))
             .await
             .unwrap()
         else {
@@ -1667,8 +1665,8 @@ mod tests {
         }));
 
         let models_arc = Arc::new(models);
-        let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
-            .fuse_candidates(
+        let InferenceOrStreamResult::NonStream(result) =
+            Box::pin(mixture_of_n_variant.fuse_candidates(
                 &input,
                 &chat_function_config,
                 &models_arc,
@@ -1676,7 +1674,7 @@ mod tests {
                 inference_clients.clone(),
                 candidates.clone(),
                 false,
-            )
+            ))
             .await
             .unwrap()
         else {
@@ -1696,17 +1694,16 @@ mod tests {
         }
         // Test case: No answer choices (should return an error)
         let empty_candidates = vec![];
-        let result = mixture_of_n_variant
-            .fuse_candidates(
-                &input,
-                &json_function_config,
-                &models_arc,
-                Arc::new(inference_config.clone()),
-                inference_clients.clone(),
-                empty_candidates.clone(),
-                false,
-            )
-            .await;
+        let result = Box::pin(mixture_of_n_variant.fuse_candidates(
+            &input,
+            &json_function_config,
+            &models_arc,
+            Arc::new(inference_config.clone()),
+            inference_clients.clone(),
+            empty_candidates.clone(),
+            false,
+        ))
+        .await;
         let err = result.unwrap_err();
         assert_eq!(
             err,

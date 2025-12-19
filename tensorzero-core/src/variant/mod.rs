@@ -319,16 +319,15 @@ impl Variant for VariantInfo {
                 }
 
                 VariantConfig::Dicl(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::MixtureOfN(params) => {
                     Box::pin(params.infer(
