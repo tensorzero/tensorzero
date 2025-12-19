@@ -1245,6 +1245,44 @@ fn test_check_topk_stopping_all_identical_variants() {
     assert_eq!(result.top_variants.len(), 3); // All tied
 }
 
+/// Test that check_topk_stopping filters out failed variants.
+///
+/// Without filtering, variant "a" (failed) would be included in top-1 since it has the
+/// highest confidence bounds. With filtering, only "b" (the best non-failed variant)
+/// should be returned.
+#[test]
+fn test_check_topk_stopping_filters_failed_variants() {
+    // "a" has the best bounds but is Failed
+    // "b" is Active and should be the top-1 after filtering
+    // "c" is Active but has worse bounds than "b"
+    let variant_performance: HashMap<String, MeanBettingConfidenceSequence> = [
+        mock_cs_with_bounds("a", 0.8, 0.95), // Best bounds, but will be Failed
+        mock_cs_with_bounds("b", 0.6, 0.75), // Second best, Active
+        mock_cs_with_bounds("c", 0.3, 0.5),  // Worst, Active
+    ]
+    .into_iter()
+    .collect();
+
+    let variant_status: HashMap<String, VariantStatus> = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Active),
+        ("c".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // Without filtering (variant_status = None), "a" would be top-1
+    let result_unfiltered = check_topk_stopping(&variant_performance, None, 1, 1, None).unwrap();
+    assert!(result_unfiltered.stopped);
+    assert_eq!(result_unfiltered.top_variants, vec!["a".to_string()]);
+
+    // With filtering, "a" is excluded and "b" becomes top-1
+    let result_filtered =
+        check_topk_stopping(&variant_performance, Some(&variant_status), 1, 1, None).unwrap();
+    assert!(result_filtered.stopped);
+    assert_eq!(result_filtered.top_variants, vec!["b".to_string()]);
+}
+
 // ============================================================================
 // Tests for update_variant_statuses
 // ============================================================================
@@ -2025,6 +2063,49 @@ fn test_check_global_stopping_prefers_topk() {
             assert_eq!(top_variants, vec!["a".to_string(), "b".to_string()]);
         }
         other => panic!("expected TopKFound, got {other:?}"),
+    }
+}
+
+/// Test that check_global_stopping filters out failed variants when checking TopKFound.
+///
+/// This test verifies that a failed variant with the best performance doesn't
+/// incorrectly trigger TopKFound. Instead, the algorithm should only consider
+/// non-failed variants.
+#[test]
+fn test_check_global_stopping_filters_failed_variants() {
+    let variant_names = vec!["a", "b", "c"];
+    let mut params = default_params_with_variants(variant_names.clone());
+    params.k_min = 1;
+    params.k_max = 1;
+
+    let mut progress = empty_progress(&variant_names);
+
+    // "a" has the best bounds but is Failed
+    // "b" is Active and clearly beats "c", so top-1 should be found among non-failed
+    progress.variant_performance = [
+        mock_cs_with_bounds("a", 0.9, 0.99), // Best bounds, but Failed
+        mock_cs_with_bounds("b", 0.7, 0.8),  // Second best, Active - beats "c"
+        mock_cs_with_bounds("c", 0.3, 0.5),  // Worst, Active
+    ]
+    .into_iter()
+    .collect();
+
+    progress.variant_status = [
+        ("a".to_string(), VariantStatus::Failed),
+        ("b".to_string(), VariantStatus::Active),
+        ("c".to_string(), VariantStatus::Active),
+    ]
+    .into_iter()
+    .collect();
+
+    // Should find top-1 as "b" (not "a" which is failed)
+    let reason = check_global_stopping(&progress, &params);
+    match reason {
+        Some(GlobalStoppingReason::TopKFound { k, top_variants }) => {
+            assert_eq!(k, 1);
+            assert_eq!(top_variants, vec!["b".to_string()]);
+        }
+        other => panic!("expected TopKFound with variant 'b', got {other:?}"),
     }
 }
 
