@@ -29,14 +29,7 @@ class BooleanMetricFilter:
 @dataclass(kw_only=True)
 class ContentBlockChatOutputText:
     """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
+    Text content that will be templated.
     """
 
     text: str
@@ -498,14 +491,7 @@ class InferenceResponseToolCall:
 @dataclass(kw_only=True)
 class InputMessageContentText:
     """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
+    Text content that will be templated.
     """
 
     text: str
@@ -514,6 +500,10 @@ class InputMessageContentText:
 
 @dataclass(kw_only=True)
 class InputMessageContentTemplate:
+    """
+    A template reference with arguments.
+    """
+
     arguments: dict[str, Any]
     name: str
     type: Literal["template"] = "template"
@@ -534,8 +524,8 @@ class InputMessageContentToolResult:
 @dataclass(kw_only=True)
 class InputMessageContentRawText:
     """
-    Struct that represents raw text content that should be passed directly to the model
-    without any template processing or validation
+    Raw text content that should be passed directly to the model
+    without any template processing or validation.
     """
 
     type: Literal["raw_text"] = "raw_text"
@@ -595,8 +585,8 @@ class ProviderToolScopeModelProvider:
 @dataclass(kw_only=True)
 class RawText:
     """
-    Struct that represents raw text content that should be passed directly to the model
-    without any template processing or validation
+    Raw text content that should be passed directly to the model
+    without any template processing or validation.
     """
 
     value: str
@@ -611,9 +601,9 @@ ServiceTier = Literal["auto", "default", "priority", "flex"]
 @dataclass(kw_only=True)
 class StorageKindS3Compatible:
     """
-    Configuration for the object storage backend
-    Currently, we only support S3-compatible object storage and local filesystem storage
-    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    Configuration for the object storage backend.
+    Currently, we only support S3-compatible object storage and local filesystem storage.
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio.
     """
 
     type: Literal["s3_compatible"] = "s3_compatible"
@@ -631,9 +621,9 @@ class StorageKindS3Compatible:
 @dataclass(kw_only=True)
 class StorageKindFilesystem:
     """
-    Configuration for the object storage backend
-    Currently, we only support S3-compatible object storage and local filesystem storage
-    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    Configuration for the object storage backend.
+    Currently, we only support S3-compatible object storage and local filesystem storage.
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio.
     """
 
     path: str
@@ -643,9 +633,9 @@ class StorageKindFilesystem:
 @dataclass(kw_only=True)
 class StorageKindDisabled:
     """
-    Configuration for the object storage backend
-    Currently, we only support S3-compatible object storage and local filesystem storage
-    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    Configuration for the object storage backend.
+    Currently, we only support S3-compatible object storage and local filesystem storage.
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio.
     """
 
     type: Literal["disabled"] = "disabled"
@@ -670,14 +660,7 @@ class StoragePath:
 @dataclass(kw_only=True)
 class StoredInputMessageContentText:
     """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
+    Text content that will be templated.
     """
 
     text: str
@@ -686,6 +669,10 @@ class StoredInputMessageContentText:
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentTemplate:
+    """
+    A template reference with arguments.
+    """
+
     arguments: dict[str, Any]
     name: str
     type: Literal["template"] = "template"
@@ -706,8 +693,8 @@ class StoredInputMessageContentToolResult:
 @dataclass(kw_only=True)
 class StoredInputMessageContentRawText:
     """
-    Struct that represents raw text content that should be passed directly to the model
-    without any template processing or validation
+    Raw text content that should be passed directly to the model
+    without any template processing or validation.
     """
 
     type: Literal["raw_text"] = "raw_text"
@@ -719,7 +706,6 @@ class StoredInputMessageContentFile:
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
     """
 
     mime_type: str
@@ -749,6 +735,10 @@ class TagFilter:
 
 @dataclass(kw_only=True)
 class Template:
+    """
+    A template reference with arguments.
+    """
+
     arguments: dict[str, Any]
     name: str
 
@@ -756,14 +746,7 @@ class Template:
 @dataclass(kw_only=True)
 class Text:
     """
-    InputMessages are validated against the input schema of the Function
-    and then templated and transformed into RequestMessages for a particular Variant.
-    They might contain tool calls or tool results along with text.
-    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-    ContentBlocks are collected into RequestMessages.
-    These RequestMessages are collected into a ModelInferenceRequest,
-    which should contain all information needed by a ModelProvider to perform the
-    inference that is called for.
+    Text content that will be templated.
     """
 
     text: str
@@ -771,6 +754,10 @@ class Text:
 
 @dataclass(kw_only=True)
 class ThoughtSummaryBlockSummaryText:
+    """
+    Summary block types for thoughts.
+    """
+
     text: str
     type: Literal["summary_text"] = "summary_text"
 
@@ -854,7 +841,7 @@ UnfilteredInferenceExtraBody = list[ExtraBody]
 @dataclass(kw_only=True)
 class Unknown:
     """
-    Struct that represents an unknown provider-specific content block.
+    An unknown provider-specific content block.
     We pass this along as-is without any validation or transformation.
     """
 
@@ -920,7 +907,7 @@ class UpdateDatapointsResponse:
 @dataclass(kw_only=True)
 class UrlFile:
     """
-    A file that can be located at a URL
+    A file that can be located at a URL.
     """
 
     url: str
@@ -932,14 +919,22 @@ class UrlFile:
 @dataclass(kw_only=True)
 class Base64File:
     """
-    A file already encoded as base64
+    A file already encoded as base64.
     """
 
     data: str
+    """
+    Unprefixed base64-encoded data.
+    This field is private and validated during deserialization to ensure
+    it doesn't contain a `data:` prefix.
+    """
     mime_type: str
     detail: Detail | None = None
     filename: str | None = None
     source_url: str | None = None
+    """
+    The original URL we used to download the file (if any).
+    """
 
 
 @dataclass(kw_only=True)
@@ -1119,6 +1114,10 @@ class InferenceParams:
 
 @dataclass(kw_only=True)
 class InputMessageContentToolCall:
+    """
+    Content types that can appear in an input message.
+    """
+
     type: Literal["tool_call"] = "tool_call"
 
 
@@ -1128,8 +1127,6 @@ class InputMessageContentUnknown(Unknown):
     An unknown content block type, used to allow passing provider-specific
     content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     of TensorZero.
-    The `data` field holds the original content block from the provider,
-    without any validation or transformation by TensorZero.
     """
 
     type: Literal["unknown"] = "unknown"
@@ -1155,7 +1152,6 @@ class ObjectStorageFile:
     """
     A file stored in an object storage backend, with data.
     This struct can NOT be stored in the database.
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
     """
 
     data: str
@@ -1171,7 +1167,6 @@ class ObjectStoragePointer:
     """
     A file stored in an object storage backend, without data.
     This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
     """
 
     mime_type: str
@@ -1253,7 +1248,7 @@ class StoredInputMessageContentUnknown(Unknown):
 @dataclass(kw_only=True)
 class Thought:
     """
-    Struct that represents a model's reasoning
+    A model's reasoning/thinking content.
     """
 
     provider_type: str | None = None
@@ -1320,11 +1315,19 @@ File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorage |
 
 @dataclass(kw_only=True)
 class InputMessageContentThought(Thought):
+    """
+    Content types that can appear in an input message.
+    """
+
     type: Literal["thought"] = "thought"
 
 
 @dataclass(kw_only=True)
 class InputMessageContentFile:
+    """
+    Content types that can appear in an input message.
+    """
+
     type: Literal["file"] = "file"
 
 
@@ -1531,9 +1534,7 @@ class DynamicToolParams:
 @dataclass(kw_only=True)
 class InputMessage:
     """
-    InputMessage and Role are our representation of the input sent by the client
-    prior to any processing into LLM representations below.
-    `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
+    An input message in a conversation.
     """
 
     content: list[InputMessageContent]
@@ -1553,7 +1554,7 @@ class StoredInputMessage:
 @dataclass(kw_only=True)
 class Input:
     """
-    API representation of an input to a model.
+    The API representation of an input to a model.
     """
 
     messages: list[InputMessage] | None = field(default_factory=lambda: [])

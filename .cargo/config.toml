@@ -122,4 +122,6 @@ tsbuild = [
     "tensorzero-auth",
     "-p",
     "tensorzero-optimizers",
+    "-p",
+    "tensorzero-types",
 ] # Export Typescript bindings for TensorZero
