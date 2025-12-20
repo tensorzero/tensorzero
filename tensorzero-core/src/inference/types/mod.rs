@@ -50,8 +50,8 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
 pub use file::{
-    Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
-    PendingObjectStoreFile, UrlFile,
+    Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
+    ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
 };
 use futures::FutureExt;
 use futures::future::{join_all, try_join_all};
@@ -86,12 +86,11 @@ use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens}
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
-use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
     FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
     LazyResolvedInputMessageContent, write_file,
 };
-use crate::inference::types::storage::StorageKind;
+use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,

@@ -1670,3 +1670,11 @@ impl From<AnalysisError> for Error {
         Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
     }
 }
+
+impl From<tensorzero_types::TypeError> for Error {
+    fn from(err: tensorzero_types::TypeError) -> Self {
+        Self::new(ErrorDetails::InvalidMessage {
+            message: err.to_string(),
+        })
+    }
+}
