@@ -140,6 +140,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/datapoints/{datapoint_id}/run-infos",
             get(endpoints::internal::evaluations::get_evaluation_run_infos_for_datapoint_handler),
         )
+        .route(
+            "/internal/evaluations/statistics",
+            get(endpoints::internal::evaluations::get_evaluation_statistics_handler),
+        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow-evaluations/projects",

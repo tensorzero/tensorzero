@@ -2,6 +2,7 @@
 
 use reqwest::Client;
 use tensorzero_core::endpoints::internal::evaluations::GetEvaluationRunInfosResponse;
+use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -257,6 +258,153 @@ async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
     assert!(
         resp.status().is_client_error(),
         "get_evaluation_run_infos_for_datapoint wrong function request should fail: status={:?}",
+        resp.status()
+    );
+}
+
+// ============================================================================
+// get_evaluation_statistics endpoint tests
+// ============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_endpoint() {
+    let http_client = Client::new();
+
+    let evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
+    let metric_names = "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match,tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports";
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + &format!(
+            "?function_name=extract_entities&function_type=json&metric_names={metric_names}&evaluation_run_ids={evaluation_run_id}"
+        );
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_statistics request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationStatisticsResponse = resp.json().await.unwrap();
+
+    // Should have statistics for the metrics
+    assert!(
+        !response.statistics.is_empty(),
+        "Expected at least one statistics entry"
+    );
+
+    // Verify structure
+    for stat in &response.statistics {
+        assert_eq!(
+            stat.evaluation_run_id,
+            Uuid::parse_str(evaluation_run_id).unwrap()
+        );
+        assert!(stat.datapoint_count > 0);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_multiple_runs() {
+    let http_client = Client::new();
+
+    let evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
+    let evaluation_run_id2 = "0196368e-53a8-7e82-a88d-db7086926d81";
+    let metric_names =
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match";
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + &format!(
+            "?function_name=extract_entities&function_type=json&metric_names={metric_names}&evaluation_run_ids={evaluation_run_id1},{evaluation_run_id2}"
+        );
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_statistics multiple runs request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationStatisticsResponse = resp.json().await.unwrap();
+
+    // Should have statistics for at least one run
+    assert!(
+        !response.statistics.is_empty(),
+        "Expected statistics for at least one run"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_empty_run_ids() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&metric_names=some_metric&evaluation_run_ids=";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_statistics empty run_ids request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.statistics.len(),
+        0,
+        "Expected 0 statistics for empty run_ids"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_nonexistent_run() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&metric_names=some_metric&evaluation_run_ids=00000000-0000-0000-0000-000000000000";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_statistics nonexistent run request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.statistics.len(),
+        0,
+        "Expected 0 statistics for nonexistent run"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_invalid_function_type() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + "?function_name=extract_entities&function_type=invalid&metric_names=some_metric&evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "get_evaluation_statistics invalid function_type should fail: status={:?}",
+        resp.status()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_statistics_invalid_uuid() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&metric_names=some_metric&evaluation_run_ids=not-a-uuid";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "get_evaluation_statistics invalid UUID should fail: status={:?}",
         resp.status()
     );
 }

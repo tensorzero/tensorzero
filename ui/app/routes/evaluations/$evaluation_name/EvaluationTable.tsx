@@ -21,9 +21,9 @@ import { toEvaluationDatapointUrl } from "~/utils/urls";
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
   EvaluationRunInfo,
-  EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
+import type { EvaluationStatistics } from "~/types/tensorzero";
 import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
