@@ -18,6 +18,7 @@ members = [
     "examples/integrations/cursor/feedback",
     "internal/autopilot-client",
     "internal/autopilot-tools",
+    "internal/autopilot-worker",
 ]
 resolver = "2"
 
