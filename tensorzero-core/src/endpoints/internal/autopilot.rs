@@ -108,3 +108,35 @@ pub async fn stream_events_handler(
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::postgres::PostgresConnectionInfo;
+    use crate::http::TensorzeroHttpClient;
+    use tokio_util::task::TaskTracker;
+
+    fn make_test_app_state_without_autopilot() -> AppStateData {
+        let config = std::sync::Arc::new(Config::default());
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+
+        AppStateData::new_for_snapshot(
+            config,
+            http_client,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            TaskTracker::new(),
+        )
+    }
+
+    #[test]
+    fn test_get_autopilot_client_returns_unavailable_when_none() {
+        let app_state = make_test_app_state_without_autopilot();
+        let error = get_autopilot_client(&app_state).unwrap_err();
+        assert_eq!(error.to_string(), "Autopilot credentials unavailable");
+    }
+}

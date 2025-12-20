@@ -468,13 +468,27 @@ pub async fn setup_postgres(
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
+///
+/// Environment variables:
+/// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
+/// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
 fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
-            let client = AutopilotClient::builder()
-                .api_key(api_key)
-                .build()
-                .map_err(Error::from)?;
+            let mut builder = AutopilotClient::builder().api_key(api_key);
+
+            // Allow custom base URL for testing
+            if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
+                let url = base_url.parse().map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid TENSORZERO_AUTOPILOT_BASE_URL: {e}"),
+                    })
+                })?;
+                builder = builder.base_url(url);
+                tracing::info!("Autopilot client using custom base URL: {}", base_url);
+            }
+
+            let client = builder.build().map_err(Error::from)?;
             // TODO: Handshake with API to validate credentials
             tracing::info!("Autopilot client initialized");
             Ok(Some(Arc::new(client)))

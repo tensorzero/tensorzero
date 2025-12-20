@@ -125,6 +125,7 @@ impl AutopilotClientBuilder {
 // =============================================================================
 
 /// Client for the TensorZero Autopilot API.
+#[derive(Debug)]
 pub struct AutopilotClient {
     http_client: reqwest::Client,
     sse_http_client: reqwest::Client,
