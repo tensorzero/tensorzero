@@ -50,9 +50,14 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
 pub use file::{
-    Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
-    PendingObjectStoreFile, UrlFile,
+    Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
+    ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
 };
+// Re-export content types from tensorzero-types
+pub use tensorzero_types::{
+    Arguments, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+};
+// Re-export message types from tensorzero-types
 use futures::FutureExt;
 use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
@@ -75,6 +80,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tensorzero_derive::export_schema;
+pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
 use crate::cache::{CacheData, NonStreamingCacheData};
@@ -86,12 +92,11 @@ use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens}
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
-use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
     FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
     LazyResolvedInputMessageContent, write_file,
 };
-use crate::inference::types::storage::StorageKind;
+use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
@@ -101,8 +106,8 @@ use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, serialize_json_string,
 };
 use crate::tool::{
-    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    ToolCallWrapper, ToolResult, deserialize_optional_tool_info,
+    InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -112,7 +117,6 @@ pub mod extra_body;
 pub mod extra_headers;
 pub mod extra_stuff;
 pub mod file;
-mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
@@ -142,30 +146,26 @@ pub use usage::Usage;
  * Most of them are defined below.
  */
 
-/// API representation of an input to a model.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
-#[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
-#[export_schema]
-pub struct Input {
-    /// System prompt of the input.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub system: Option<System>,
-
-    /// Messages in the input.
-    #[serde(default)]
-    pub messages: Vec<InputMessage>,
-}
-
 #[derive(Copy, Clone)]
 pub struct FetchContext<'a> {
     pub client: &'a TensorzeroHttpClient,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 
-impl Input {
-    pub fn into_lazy_resolved_input(
+/// Extension trait for `Input` that provides core-specific transformation methods.
+pub trait InputExt {
+    fn into_lazy_resolved_input(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInput, Error>;
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error>;
+}
+
+impl InputExt for Input {
+    fn into_lazy_resolved_input(
         self,
         context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInput, Error> {
@@ -179,9 +179,7 @@ impl Input {
         })
     }
 
-    /// Turns the input into a StoredInput, without resolving network resources for files.
-    /// Returns an error if any files are present.
-    pub fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
         Ok(StoredInput {
             system: self.system,
             messages: self
@@ -228,8 +226,20 @@ impl LazyResolvedInput {
     }
 }
 
-impl InputMessage {
-    pub fn into_lazy_resolved_input_message(
+/// Extension trait for `InputMessage` that provides core-specific transformation methods.
+pub trait InputMessageExt {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessage, Error>;
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error>;
+}
+
+impl InputMessageExt for InputMessage {
+    fn into_lazy_resolved_input_message(
         self,
         context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessage, Error> {
@@ -243,11 +253,7 @@ impl InputMessage {
         })
     }
 
-    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
-    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
-    pub fn into_stored_input_message_without_file_handling(
-        self,
-    ) -> Result<StoredInputMessage, Error> {
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error> {
         Ok(StoredInputMessage {
             role: self.role,
             content: self
@@ -303,11 +309,24 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     Ok(object_store_info.kind.clone())
 }
 
-impl InputMessageContent {
+/// Extension trait for `InputMessageContent` that provides core-specific transformation methods.
+pub trait InputMessageContentExt {
     /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
     /// we can remove the `role` parameter.
-    pub fn into_lazy_resolved_input_message(
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessageContent, Error>;
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error>;
+}
+
+impl InputMessageContentExt for InputMessageContent {
+    fn into_lazy_resolved_input_message(
         self,
         context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
@@ -325,7 +344,7 @@ impl InputMessageContent {
                 LazyResolvedInputMessageContent::Template(template)
             }
             InputMessageContent::ToolCall(tool_call) => {
-                LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
+                LazyResolvedInputMessageContent::ToolCall(tool_call.into_tool_call())
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
@@ -498,8 +517,7 @@ impl InputMessageContent {
         })
     }
 
-    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
-    pub fn into_stored_input_message_content_without_file_handling(
+    fn into_stored_input_message_content_without_file_handling(
         self,
     ) -> Result<StoredInputMessageContent, Error> {
         Ok(match self {
@@ -512,7 +530,7 @@ impl InputMessageContent {
                 StoredInputMessageContent::Template(template)
             }
             InputMessageContent::ToolCall(tool_call) => {
-                StoredInputMessageContent::ToolCall(tool_call.try_into()?)
+                StoredInputMessageContent::ToolCall(tool_call.into_tool_call())
             }
             InputMessageContent::ToolResult(tool_result) => {
                 StoredInputMessageContent::ToolResult(tool_result)
@@ -675,17 +693,6 @@ impl LazyResolvedInputMessageContent {
     }
 }
 
-/// InputMessage and Role are our representation of the input sent by the client
-/// prior to any processing into LLM representations below.
-/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[ts(export, optional_fields)]
-#[export_schema]
-pub struct InputMessage {
-    pub role: Role,
-    pub content: Vec<InputMessageContent>,
-}
-
 impl From<StoredInputMessage> for InputMessage {
     fn from(stored_input_message: StoredInputMessage) -> Self {
         InputMessage {
@@ -699,130 +706,7 @@ impl From<StoredInputMessage> for InputMessage {
     }
 }
 
-/// A newtype wrapper around Map<String, Value> for template and system arguments
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
-#[serde(transparent)]
-pub struct Arguments(
-    // This type cannot be a Python dataclass because it's equivalent to a Map with arbitrary keys, and Python dataclasses
-    // need its slots specified. So all references to this type need to be `Map<String, Value>` in JSON schemas.
-    pub Map<String, Value>,
-);
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[ts(export)]
-#[serde(deny_unknown_fields)]
-#[export_schema]
-pub struct Template {
-    pub name: String,
-    #[schemars(with = "Map<String, Value>")]
-    pub arguments: Arguments,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[serde(untagged)]
-#[ts(export)]
-#[export_schema]
-pub enum System {
-    Text(String),
-    #[schemars(with = "Map<String, Value>")]
-    Template(Arguments),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export, tag = "type", rename_all = "snake_case")]
-#[export_schema]
-pub enum InputMessageContent {
-    #[schemars(title = "InputMessageContentText")]
-    Text(Text),
-    #[schemars(title = "InputMessageContentTemplate")]
-    Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
-    ToolCall(ToolCallWrapper),
-    #[schemars(title = "InputMessageContentToolResult")]
-    ToolResult(ToolResult),
-    #[schemars(title = "InputMessageContentRawText")]
-    RawText(RawText),
-    #[schemars(title = "InputMessageContentThought")]
-    Thought(Thought),
-    #[serde(alias = "image")]
-    #[schemars(title = "InputMessageContentFile")]
-    File(File),
-    /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    /// of TensorZero.
-    /// The `data` field holds the original content block from the provider,
-    /// without any validation or transformation by TensorZero.
-    #[schemars(title = "InputMessageContentUnknown")]
-    Unknown(Unknown),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(untagged, deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
-pub enum TextKind {
-    Text { text: String },
-    Arguments { arguments: Arguments },
-}
-
-impl<'de> Deserialize<'de> for TextKind {
-    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
-        let object: Map<String, Value> = Map::deserialize(de)?;
-        // Expect exactly one key
-        if object.keys().len() != 1 {
-            return Err(serde::de::Error::custom(format!(
-                "Expected exactly one other key in text content, found {} other keys",
-                object.keys().len()
-            )));
-        }
-        let (key, value) = object.into_iter().next().ok_or_else(|| {
-            serde::de::Error::custom(
-                "Internal error: Failed to get key/value after checking length",
-            )
-        })?;
-        match key.as_str() {
-            "text" => Ok(TextKind::Text {
-                text: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `text`: {e}"))
-                })?,
-            }),
-            "arguments" => Ok(TextKind::Arguments {
-                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing `arguments`: {e}"))
-                })?),
-            }),
-            _ => Err(serde::de::Error::custom(format!(
-                "Unknown key `{key}` in text content"
-            ))),
-        }
-    }
-}
-
-/// InputMessages are validated against the input schema of the Function
-/// and then templated and transformed into RequestMessages for a particular Variant.
-/// They might contain tool calls or tool results along with text.
-/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-/// ContentBlocks are collected into RequestMessages.
-/// These RequestMessages are collected into a ModelInferenceRequest,
-/// which should contain all information needed by a ModelProvider to perform the
-/// inference that is called for.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[serde(deny_unknown_fields)]
-#[export_schema]
-pub struct Text {
-    pub text: String,
-}
-
-impl std::fmt::Display for Text {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.text)
-    }
-}
-
+// RateLimitedInputContent impls for types re-exported from tensorzero-types
 impl RateLimitedInputContent for Text {
     fn estimated_input_token_usage(&self) -> u64 {
         let Text { text } = self;
@@ -830,196 +714,10 @@ impl RateLimitedInputContent for Text {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Text {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-/// Struct that represents raw text content that should be passed directly to the model
-/// without any template processing or validation
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[serde(deny_unknown_fields)]
-#[export_schema]
-pub struct RawText {
-    pub value: String,
-}
-
-impl std::fmt::Display for RawText {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
 impl RateLimitedInputContent for RawText {
     fn estimated_input_token_usage(&self) -> u64 {
         get_estimated_tokens(&self.value)
     }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RawText {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-/// Struct that represents an unknown provider-specific content block.
-/// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export, optional_fields)]
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[export_schema]
-pub struct Unknown {
-    /// The underlying content block to be passed to the model provider.
-    pub data: Value,
-    /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_name: Option<String>,
-    /// A provider name for the model you specified (e.g. `my_openai`)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_name: Option<String>,
-}
-
-/// Custom deserializer to handle legacy `model_provider_name` field.
-///
-/// Legacy format: `tensorzero::model_name::{model}::provider_name::{provider}`
-/// Current format: separate `model_name` and `provider_name` fields
-///
-/// If both old and new fields are present, return an error.
-/// If parsing the legacy format fails (e.g. the expected prefix/suffix markers are missing), a deserialization error is returned.
-impl<'de> Deserialize<'de> for Unknown {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct UnknownDeserialize {
-            data: Value,
-            model_provider_name: Option<String>,
-            model_name: Option<String>,
-            provider_name: Option<String>,
-        }
-
-        /// Parse legacy FQN format: `tensorzero::model_name::XXX::provider_name::YYY`
-        /// Uses best-effort parsing: everything between prefix and `::provider_name::` is model_name,
-        /// everything after `::provider_name::` is provider_name.
-        fn parse_fully_qualified_model_provider_name(
-            fqn: &str,
-        ) -> Result<(String, String), String> {
-            const PREFIX: &str = "tensorzero::model_name::";
-            const SUFFIX: &str = "::provider_name::";
-
-            let Some(rest) = fqn.strip_prefix(PREFIX) else {
-                return Err(format!(
-                    "Invalid legacy `model_provider_name` format (missing prefix): {fqn}"
-                ));
-            };
-
-            let Some(suffix_pos) = rest.find(SUFFIX) else {
-                return Err(format!(
-                    "Invalid legacy `model_provider_name` format (missing provider_name): {fqn}"
-                ));
-            };
-
-            let model_name = &rest[..suffix_pos];
-            let provider_name = &rest[suffix_pos + SUFFIX.len()..];
-
-            Ok((model_name.to_string(), provider_name.to_string()))
-        }
-
-        let helper = UnknownDeserialize::deserialize(deserializer)?;
-
-        // If new fields are present, use them directly
-        if helper.model_name.is_some() || helper.provider_name.is_some() {
-            if helper.model_provider_name.is_some() {
-                return Err(serde::de::Error::custom(
-                    "Cannot specify both `model_provider_name` and `model_name`/`provider_name`",
-                ));
-            }
-            return Ok(Unknown {
-                data: helper.data,
-                model_name: helper.model_name,
-                provider_name: helper.provider_name,
-            });
-        }
-
-        // Parse legacy format if present
-        let (model_name, provider_name) = match helper.model_provider_name {
-            Some(ref fqn) => {
-                let (m, p) = parse_fully_qualified_model_provider_name(fqn)
-                    .map_err(serde::de::Error::custom)?;
-                (Some(m), Some(p))
-            }
-            None => (None, None),
-        };
-
-        Ok(Unknown {
-            data: helper.data,
-            model_name,
-            provider_name,
-        })
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Unknown {
-    #[getter]
-    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        use crate::inference::types::pyo3_helpers::serialize_to_dict;
-        serialize_to_dict(py, &self.data).map(|p| p.into_bound(py))
-    }
-
-    #[getter]
-    pub fn model_name(&self) -> Option<String> {
-        self.model_name.clone()
-    }
-
-    #[getter]
-    pub fn provider_name(&self) -> Option<String> {
-        self.provider_name.clone()
-    }
-}
-
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[export_schema]
-pub enum ThoughtSummaryBlock {
-    #[schemars(title = "ThoughtSummaryBlockSummaryText")]
-    SummaryText { text: String },
-}
-
-/// Struct that represents a model's reasoning
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export, optional_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[export_schema]
-pub struct Thought {
-    pub text: Option<String>,
-    /// An optional signature - currently, this is only used with Anthropic,
-    /// and is ignored by other providers.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signature: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<Vec<ThoughtSummaryBlock>>,
-    /// When set, this `Thought` block will only be used for providers
-    /// matching this type (e.g. `anthropic`). Other providers will emit
-    /// a warning and discard the block.
-    #[serde(
-        // This alias is written to the database, so we cannot remove it.
-        alias = "_internal_provider_type",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub provider_type: Option<String>,
 }
 
 impl RateLimitedInputContent for Thought {
@@ -1229,8 +927,11 @@ impl ContentBlockChatOutput {
                 arguments: input_tool_call.raw_arguments,
                 id: input_tool_call.id,
             };
-            let validated_tool_call =
-                InferenceResponseToolCall::new(unvalidated_tool_call, tool_call_config).await;
+            let validated_tool_call = InferenceResponseToolCall::new_from_tool_call(
+                unvalidated_tool_call,
+                tool_call_config,
+            )
+            .await;
             ContentBlockChatOutput::ToolCall(validated_tool_call)
         } else {
             self
@@ -1790,13 +1491,6 @@ pub struct StoredModelInference {
 }
 
 #[cfg(test)]
-impl From<String> for InputMessageContent {
-    fn from(text: String) -> Self {
-        InputMessageContent::Text(Text { text })
-    }
-}
-
-#[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
         ResolvedInputMessageContent::Text(Text { text })
@@ -2181,7 +1875,7 @@ pub async fn parse_chat_output(
                 } else {
                     // Normal tool call handling
                     let inference_response_tool_call =
-                        InferenceResponseToolCall::new(tool_call, tool_config).await;
+                        InferenceResponseToolCall::new_from_tool_call(tool_call, tool_config).await;
                     output.push(ContentBlockChatOutput::ToolCall(
                         inference_response_tool_call,
                     ));
@@ -2296,22 +1990,12 @@ impl ProviderInferenceResponseChunk {
     }
 }
 
-impl From<InferenceResponseToolCall> for ToolCall {
-    fn from(output: InferenceResponseToolCall) -> Self {
-        Self {
-            id: output.id,
-            name: output.raw_name,
-            arguments: output.raw_arguments,
-        }
-    }
-}
-
 impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
             ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
-                ContentBlock::ToolCall(inference_response_tool_call.into())
+                ContentBlock::ToolCall(inference_response_tool_call.into_tool_call())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
@@ -2324,7 +2008,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
             ContentBlockChatOutput::ToolCall(tool_call) => {
-                ContentBlockOutput::ToolCall(tool_call.into())
+                ContentBlockOutput::ToolCall(tool_call.into_tool_call())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
             ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),

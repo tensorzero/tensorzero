@@ -6426,6 +6426,7 @@ version = "2025.12.4"
 dependencies = [
  "aws-smithy-types",
  "chrono",
+ "infer",
  "mime 0.4.0-a.0",
  "object_store",
  "pyo3",

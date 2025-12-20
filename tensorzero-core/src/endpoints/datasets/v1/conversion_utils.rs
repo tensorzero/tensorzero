@@ -8,7 +8,7 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::inference::types::{FetchContext, JsonInferenceOutput};
+use crate::inference::types::{FetchContext, InputExt, JsonInferenceOutput};
 use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::tool::ToolCallConfigDatabaseInsert;
 

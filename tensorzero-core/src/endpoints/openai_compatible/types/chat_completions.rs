@@ -343,7 +343,7 @@ impl Params {
             Some(OpenAICompatibleResponseFormat::Text) => Some(JsonMode::Off),
             None => None,
         };
-        let input = openai_compatible_params.messages.try_into()?;
+        let input = openai_messages_to_input(openai_compatible_params.messages)?;
 
         let mut inference_params = openai_compatible_params
             .tensorzero_params
@@ -443,153 +443,154 @@ impl Params {
     }
 }
 
-impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
-    type Error = Error;
-    fn try_from(
-        openai_compatible_messages: Vec<OpenAICompatibleMessage>,
-    ) -> Result<Self, Self::Error> {
-        let mut system_message = None;
-        let mut messages = Vec::new();
-        let mut tool_call_id_to_name = HashMap::new();
-        let first_system = matches!(
-            openai_compatible_messages.first(),
-            Some(OpenAICompatibleMessage::System(_))
-        );
-        let mut iter = openai_compatible_messages.into_iter().peekable();
-        while let Some(message) = iter.next() {
-            match message {
-                OpenAICompatibleMessage::System(msg) => {
-                    let had_prior_system = system_message.is_some();
-                    let system_content =
-                        convert_openai_message_content("system".to_string(), msg.content.clone())?;
+pub fn openai_messages_to_input(
+    openai_compatible_messages: Vec<OpenAICompatibleMessage>,
+) -> Result<Input, Error> {
+    let mut system_message = None;
+    let mut messages = Vec::new();
+    let mut tool_call_id_to_name = HashMap::new();
+    let first_system = matches!(
+        openai_compatible_messages.first(),
+        Some(OpenAICompatibleMessage::System(_))
+    );
+    let mut iter = openai_compatible_messages.into_iter().peekable();
+    while let Some(message) = iter.next() {
+        match message {
+            OpenAICompatibleMessage::System(msg) => {
+                let had_prior_system = system_message.is_some();
+                let system_content =
+                    convert_openai_message_content("system".to_string(), msg.content.clone())?;
 
-                    for content in system_content {
-                        let text = match content {
-                            InputMessageContent::Text(t) => Some(t.text),
-                            InputMessageContent::RawText(rt) => Some(rt.value),
-                            InputMessageContent::Template(t) => {
-                                if system_message.is_some() {
-                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                        message: "System message cannot contain template with other content".to_string(),
-                                    }.into());
-                                }
-                                system_message = Some(System::Template(t.arguments));
-                                None
-                            }
-                            _ => {
+                for content in system_content {
+                    let text = match content {
+                        InputMessageContent::Text(t) => Some(t.text),
+                        InputMessageContent::RawText(rt) => Some(rt.value),
+                        InputMessageContent::Template(t) => {
+                            if system_message.is_some() {
                                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                    message: "System message must contain only text or template content blocks".to_string(),
-                                }.into())
-                            }
-                        };
-
-                        if let Some(text) = text {
-                            match &mut system_message {
-                                None => system_message = Some(System::Text(text)),
-                                Some(System::Text(s)) => {
-                                    s.push('\n');
-                                    s.push_str(&text);
-                                }
-                                Some(System::Template(_)) => {
-                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                        message: "Cannot add text after template system message"
+                                    message:
+                                        "System message cannot contain template with other content"
                                             .to_string(),
-                                    }
-                                    .into());
                                 }
+                                .into());
+                            }
+                            system_message = Some(System::Template(t.arguments));
+                            None
+                        }
+                        _ => return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message:
+                                "System message must contain only text or template content blocks"
+                                    .to_string(),
+                        }
+                        .into()),
+                    };
+
+                    if let Some(text) = text {
+                        match &mut system_message {
+                            None => system_message = Some(System::Text(text)),
+                            Some(System::Text(s)) => {
+                                s.push('\n');
+                                s.push_str(&text);
+                            }
+                            Some(System::Template(_)) => {
+                                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: "Cannot add text after template system message"
+                                        .to_string(),
+                                }
+                                .into());
                             }
                         }
                     }
+                }
 
-                    if had_prior_system {
-                        tracing::warn!(
-                            "Multiple system messages provided. They will be concatenated and moved to the start of the conversation."
-                        );
-                    } else if !first_system {
-                        tracing::warn!("Moving system message to the start of the conversation.");
-                    }
-                }
-                OpenAICompatibleMessage::User(msg) => {
-                    messages.push(InputMessage {
-                        role: Role::User,
-                        content: convert_openai_message_content("user".to_string(), msg.content)?,
-                    });
-                }
-                OpenAICompatibleMessage::Assistant(msg) => {
-                    let mut message_content = Vec::new();
-                    if let Some(content) = msg.content {
-                        message_content.extend(convert_openai_message_content(
-                            "assistant".to_string(),
-                            content,
-                        )?);
-                    }
-                    if let Some(tool_calls) = msg.tool_calls {
-                        for tool_call in tool_calls {
-                            tool_call_id_to_name
-                                .insert(tool_call.id.clone(), tool_call.function.name.clone());
-                            message_content.push(InputMessageContent::ToolCall(tool_call.into()));
-                        }
-                    }
-                    messages.push(InputMessage {
-                        role: Role::Assistant,
-                        content: message_content,
-                    });
-                }
-                OpenAICompatibleMessage::Tool(msg) => {
-                    // When we encounter a tool result, coalesce all subsequent tool results into a single
-                    // `Role::User` message.
-                    // This ensures that parallel tool call results can be passed through properly to providers
-                    // (e.g. AWS Bedrock) that require parallel tool call results to occur in the same
-                    // `Role::User` message.
-                    let mut tool_results = Vec::new();
-                    let name = tool_call_id_to_name
-                        .get(&msg.tool_call_id)
-                        .ok_or_else(|| {
-                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                message: "tool call id not found".to_string(),
-                            })
-                        })?
-                        .to_string();
-                    tool_results.push(InputMessageContent::ToolResult(ToolResult {
-                        id: msg.tool_call_id,
-                        name,
-                        result: msg.content.unwrap_or_default().to_string(),
-                    }));
-
-                    while let Some(message) = iter.peek() {
-                        if let OpenAICompatibleMessage::Tool(tool_result) = message {
-                            let name = tool_call_id_to_name
-                                .get(&tool_result.tool_call_id)
-                                .ok_or_else(|| {
-                                    Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                        message: "tool call id not found".to_string(),
-                                    })
-                                })?
-                                .to_string();
-                            tool_results.push(InputMessageContent::ToolResult(ToolResult {
-                                id: tool_result.tool_call_id.clone(),
-                                name,
-                                result: tool_result.content.clone().unwrap_or_default().to_string(),
-                            }));
-                            // Consume the tool result that we just peeked
-                            iter.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    messages.push(InputMessage {
-                        role: Role::User,
-                        content: tool_results,
-                    });
+                if had_prior_system {
+                    tracing::warn!(
+                        "Multiple system messages provided. They will be concatenated and moved to the start of the conversation."
+                    );
+                } else if !first_system {
+                    tracing::warn!("Moving system message to the start of the conversation.");
                 }
             }
-        }
+            OpenAICompatibleMessage::User(msg) => {
+                messages.push(InputMessage {
+                    role: Role::User,
+                    content: convert_openai_message_content("user".to_string(), msg.content)?,
+                });
+            }
+            OpenAICompatibleMessage::Assistant(msg) => {
+                let mut message_content = Vec::new();
+                if let Some(content) = msg.content {
+                    message_content.extend(convert_openai_message_content(
+                        "assistant".to_string(),
+                        content,
+                    )?);
+                }
+                if let Some(tool_calls) = msg.tool_calls {
+                    for tool_call in tool_calls {
+                        tool_call_id_to_name
+                            .insert(tool_call.id.clone(), tool_call.function.name.clone());
+                        message_content.push(InputMessageContent::ToolCall(tool_call.into()));
+                    }
+                }
+                messages.push(InputMessage {
+                    role: Role::Assistant,
+                    content: message_content,
+                });
+            }
+            OpenAICompatibleMessage::Tool(msg) => {
+                // When we encounter a tool result, coalesce all subsequent tool results into a single
+                // `Role::User` message.
+                // This ensures that parallel tool call results can be passed through properly to providers
+                // (e.g. AWS Bedrock) that require parallel tool call results to occur in the same
+                // `Role::User` message.
+                let mut tool_results = Vec::new();
+                let name = tool_call_id_to_name
+                    .get(&msg.tool_call_id)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "tool call id not found".to_string(),
+                        })
+                    })?
+                    .to_string();
+                tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                    id: msg.tool_call_id,
+                    name,
+                    result: msg.content.unwrap_or_default().to_string(),
+                }));
 
-        Ok(Input {
-            system: system_message,
-            messages,
-        })
+                while let Some(message) = iter.peek() {
+                    if let OpenAICompatibleMessage::Tool(tool_result) = message {
+                        let name = tool_call_id_to_name
+                            .get(&tool_result.tool_call_id)
+                            .ok_or_else(|| {
+                                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: "tool call id not found".to_string(),
+                                })
+                            })?
+                            .to_string();
+                        tool_results.push(InputMessageContent::ToolResult(ToolResult {
+                            id: tool_result.tool_call_id.clone(),
+                            name,
+                            result: tool_result.content.clone().unwrap_or_default().to_string(),
+                        }));
+                        // Consume the tool result that we just peeked
+                        iter.next();
+                    } else {
+                        break;
+                    }
+                }
+                messages.push(InputMessage {
+                    role: Role::User,
+                    content: tool_results,
+                });
+            }
+        }
     }
+
+    Ok(Input {
+        system: system_message,
+        messages,
+    })
 }
 
 pub fn convert_openai_message_content(
@@ -851,7 +852,7 @@ mod tests {
                 content: Value::String("Second message".to_string()),
             }),
         ];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
 
         assert_eq!(
             input.messages,
@@ -941,7 +942,7 @@ mod tests {
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(input.messages.len(), 1);
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
@@ -959,7 +960,7 @@ mod tests {
                 content: Value::String("Hello, world!".to_string()),
             }),
         ];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(input.messages.len(), 1);
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
@@ -978,7 +979,7 @@ mod tests {
                 }),
             }),
         ];
-        let input: Result<Input, Error> = messages.try_into();
+        let input: Result<Input, Error> = openai_messages_to_input(messages);
         let error = input.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -997,7 +998,7 @@ mod tests {
                 content: Value::String("You are a helpful assistant 2.".to_string()),
             }),
         ];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(
             input.system,
             Some(System::Text(
@@ -1016,7 +1017,7 @@ mod tests {
                 tool_calls: None,
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(input.messages.len(), 1);
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(
@@ -1049,7 +1050,7 @@ mod tests {
                 }]),
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(input.messages.len(), 1);
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(input.messages[0].content.len(), 2);
@@ -1085,7 +1086,7 @@ mod tests {
                 content: Value::String("System message".to_string()),
             }),
         ];
-        let result: Input = out_of_order_messages.try_into().unwrap();
+        let result: Input = openai_messages_to_input(out_of_order_messages).unwrap();
         assert_eq!(
             result.system,
             Some(System::Text("System message".to_string()))
@@ -1111,7 +1112,7 @@ mod tests {
                 }]),
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(
             input.system,
             Some(System::Template(Arguments(
@@ -1135,7 +1136,7 @@ mod tests {
                 }]),
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(
             input.system,
             Some(System::Template(Arguments(
@@ -1160,7 +1161,7 @@ mod tests {
                 ]),
             },
         )];
-        let result: Result<Input, Error> = messages.try_into();
+        let result: Result<Input, Error> = openai_messages_to_input(messages);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(
@@ -1184,7 +1185,7 @@ mod tests {
                 }]),
             }),
         ];
-        let result: Result<Input, Error> = messages.try_into();
+        let result: Result<Input, Error> = openai_messages_to_input(messages);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(
@@ -1208,7 +1209,7 @@ mod tests {
                 content: Value::String("You are helpful.".to_string()),
             }),
         ];
-        let result: Result<Input, Error> = messages.try_into();
+        let result: Result<Input, Error> = openai_messages_to_input(messages);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(
@@ -1238,7 +1239,7 @@ mod tests {
                 }]),
             }),
         ];
-        let result: Result<Input, Error> = messages.try_into();
+        let result: Result<Input, Error> = openai_messages_to_input(messages);
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert_eq!(
@@ -1257,7 +1258,7 @@ mod tests {
                 ]),
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(
             input.system,
             Some(System::Text(
@@ -1274,7 +1275,7 @@ mod tests {
                 }]),
             },
         )];
-        let input: Input = messages.try_into().unwrap();
+        let input: Input = openai_messages_to_input(messages).unwrap();
         assert_eq!(
             input.system,
             Some(System::Text("Raw system text".to_string()))

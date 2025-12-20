@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 aws-smithy-types = { version = "1.3.3", features = ["byte-stream-poll-next"] }
 chrono.workspace = true
+infer.workspace = true
 mime.workspace = true
 object_store.workspace = true
 schemars.workspace = true
