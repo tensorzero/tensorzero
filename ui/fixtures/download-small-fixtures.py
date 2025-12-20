@@ -23,19 +23,19 @@ PART_SIZE = 8388608
 # When a file needs updating, add version suffix to remote name (e.g., "file_v2.jsonl")
 # and keep the local name unchanged (e.g., "file.jsonl")
 FIXTURES = {
-    "model_inference_examples.jsonl": "model_inference_examples.jsonl",
-    "chat_inference_examples.jsonl": "chat_inference_examples.jsonl",
-    "json_inference_examples.jsonl": "json_inference_examples.jsonl",
     "boolean_metric_feedback_examples.jsonl": "boolean_metric_feedback_examples.jsonl",
-    "float_metric_feedback_examples.jsonl": "float_metric_feedback_examples.jsonl",
-    "demonstration_feedback_examples.jsonl": "demonstration_feedback_examples.jsonl",
-    "model_inference_cache_e2e_20251219_035842.jsonl": "model_inference_cache_e2e.jsonl",
-    "json_inference_datapoint_examples.jsonl": "json_inference_datapoint_examples.jsonl",
     "chat_inference_datapoint_examples.jsonl": "chat_inference_datapoint_examples.jsonl",
-    "dynamic_evaluation_run_episode_examples.jsonl": "dynamic_evaluation_run_episode_examples.jsonl",
-    "jaro_winkler_similarity_feedback.jsonl": "jaro_winkler_similarity_feedback.jsonl",
+    "chat_inference_examples.jsonl": "chat_inference_examples.jsonl",
     "comment_feedback_examples.jsonl": "comment_feedback_examples.jsonl",
+    "demonstration_feedback_examples.jsonl": "demonstration_feedback_examples.jsonl",
+    "dynamic_evaluation_run_episode_examples.jsonl": "dynamic_evaluation_run_episode_examples.jsonl",
     "dynamic_evaluation_run_examples.jsonl": "dynamic_evaluation_run_examples.jsonl",
+    "float_metric_feedback_examples.jsonl": "float_metric_feedback_examples.jsonl",
+    "jaro_winkler_similarity_feedback.jsonl": "jaro_winkler_similarity_feedback.jsonl",
+    "json_inference_datapoint_examples.jsonl": "json_inference_datapoint_examples.jsonl",
+    "json_inference_examples.jsonl": "json_inference_examples.jsonl",
+    "model_inference_cache_e2e_v2.jsonl": "model_inference_cache_e2e.jsonl",
+    "model_inference_examples_v2.jsonl": "model_inference_examples.jsonl",
 }
 
 R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"

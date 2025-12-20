@@ -207,7 +207,10 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
         run_info.evaluation_run_id,
         Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").unwrap()
     );
-    assert_eq!(run_info.variant_name, "better_prompt_haiku_3_5");
+    assert_eq!(
+        run_info.variant_name,
+        "better_prompt_claude_haiku_4_5_20251001"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

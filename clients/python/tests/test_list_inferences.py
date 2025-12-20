@@ -100,7 +100,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
     order_by = [OrderBy(by="timestamp", direction="ascending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="write_haiku",
-        variant_name="better_prompt_haiku_3_5",
+        variant_name="better_prompt_claude_haiku_4_5_20251001",
         filters=None,
         output_source="inference",
         limit=3,
@@ -115,7 +115,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
 
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert inference.variant_name == "better_prompt_haiku_3_5"
+        assert inference.variant_name == "better_prompt_claude_haiku_4_5_20251001"
         input = inference.input
         messages = input.messages
         assert messages is not None
@@ -585,7 +585,7 @@ async def test_simple_query_chat_function_async(
     order_by = [OrderBy(by="timestamp", direction="ascending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="write_haiku",
-        variant_name="better_prompt_haiku_3_5",
+        variant_name="better_prompt_claude_haiku_4_5_20251001",
         filters=None,
         output_source="inference",
         limit=3,
@@ -600,7 +600,7 @@ async def test_simple_query_chat_function_async(
 
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert inference.variant_name == "better_prompt_haiku_3_5"
+        assert inference.variant_name == "better_prompt_claude_haiku_4_5_20251001"
         inp = inference.input
         messages = inp.messages
         assert isinstance(messages, list)

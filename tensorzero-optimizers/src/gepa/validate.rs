@@ -1061,7 +1061,7 @@ mod tests {
     fn create_test_variants(count: usize) -> HashMap<String, Arc<VariantInfo>> {
         let models = [
             "openai::gpt-4",
-            "anthropic::claude-3-5-sonnet-20241022",
+            "anthropic::claude-sonnet-4-5-20250929",
             "openai::gpt-3.5-turbo",
         ];
         (0..count)
@@ -1163,7 +1163,7 @@ mod tests {
     fn test_extract_from_variant_info_preserves_all_fields() {
         // Create a config with many fields set
         let mut uninitialized =
-            create_uninitialized_chat_config("anthropic::claude-3-5-sonnet-20241022", Some("Test"));
+            create_uninitialized_chat_config("anthropic::claude-sonnet-4-5-20250929", Some("Test"));
         uninitialized.weight = Some(2.5);
         uninitialized.temperature = Some(0.9);
         uninitialized.top_p = Some(0.95);

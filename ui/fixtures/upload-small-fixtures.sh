@@ -7,19 +7,19 @@ cd "$(dirname "$0")"
 # When updating a file, rename it with a version suffix (e.g., model_inference_examples_v2.jsonl)
 # and update download-small-fixtures.py to use the new filename
 JSONL_FILES=(
-    "model_inference_examples.jsonl"
-    "chat_inference_examples.jsonl"
-    "json_inference_examples.jsonl"
     "boolean_metric_feedback_examples.jsonl"
-    "float_metric_feedback_examples.jsonl"
-    "demonstration_feedback_examples.jsonl"
-    "model_inference_cache_e2e.jsonl"
-    "json_inference_datapoint_examples.jsonl"
     "chat_inference_datapoint_examples.jsonl"
-    "dynamic_evaluation_run_episode_examples.jsonl"
-    "jaro_winkler_similarity_feedback.jsonl"
+    "chat_inference_examples.jsonl"
     "comment_feedback_examples.jsonl"
+    "demonstration_feedback_examples.jsonl"
+    "dynamic_evaluation_run_episode_examples.jsonl"
     "dynamic_evaluation_run_examples.jsonl"
+    "float_metric_feedback_examples.jsonl"
+    "jaro_winkler_similarity_feedback.jsonl"
+    "json_inference_datapoint_examples.jsonl"
+    "json_inference_examples.jsonl"
+    "model_inference_cache_e2e_v2.jsonl"
+    "model_inference_examples_v2.jsonl"
 )
 
 # Upload each file

@@ -280,7 +280,9 @@ describe("getEvaluationsForDatapoint", () => {
     const first_evaluation = evaluations[0] as ChatEvaluationResultWithVariant;
     expect(first_evaluation.datapoint_id).toBe(datapoint_id);
     expect(first_evaluation.evaluation_run_id).toBe(evaluation_run_id);
-    expect(first_evaluation.variant_name).toBe("better_prompt_haiku_3_5");
+    expect(first_evaluation.variant_name).toBe(
+      "better_prompt_claude_haiku_4_5_20251001",
+    );
     expect(first_evaluation.metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
     );

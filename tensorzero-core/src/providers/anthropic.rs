@@ -2091,13 +2091,13 @@ mod tests {
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
-        let model = "claude-3-5-sonnet-20241022".to_string();
+        let model = "claude-sonnet-4-5-20250929".to_string();
         let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
-        let model = "claude-3-5-haiku-20241022".to_string();
+        let model = "claude-haiku-4-5-20251001".to_string();
         let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
@@ -3128,7 +3128,7 @@ mod tests {
             verbosity: Some("low".to_string()),
         };
         let mut request = AnthropicRequestBody {
-            model: "claude-3-5-sonnet-20241022",
+            model: "claude-sonnet-4-5-20250929",
             messages: vec![],
             max_tokens: 1024,
             ..Default::default()

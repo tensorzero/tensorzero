@@ -147,9 +147,11 @@ test("should show experimentation section with pie chart for write_haiku functio
     page.getByText("initial_prompt_gpt4o_mini").first(),
   ).toBeVisible();
   await expect(
-    page.getByText("initial_prompt_haiku_3_5").first(),
+    page.getByText("initial_prompt_haiku_claude_haiku_4_5_20251001").first(),
   ).toBeVisible();
-  await expect(page.getByText("better_prompt_haiku_3_5").first()).toBeVisible();
+  await expect(
+    page.getByText("better_prompt_claude_haiku_4_5_20251001").first(),
+  ).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
