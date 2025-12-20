@@ -155,8 +155,8 @@ impl<'de> Deserialize<'de> for MessageContent {
             where
                 A: serde::de::MapAccess<'de>,
             {
-                tracing::warn!(
-                    "passing in an object for `content` is deprecated. Please use an array of content blocks instead."
+                crate::deprecation_warning(
+                    "passing in an object for `content` is deprecated. Please use an array of content blocks instead.",
                 );
                 let object: Map<String, Value> =
                     Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
@@ -267,8 +267,9 @@ impl<'de> Deserialize<'de> for InputMessage {
     }
 }
 
-impl From<String> for InputMessageContent {
-    fn from(text: String) -> Self {
+impl InputMessageContent {
+    /// Test-only helper; do not use in production code.
+    pub fn test_only_from_string(text: String) -> Self {
         InputMessageContent::Text(Text { text })
     }
 }

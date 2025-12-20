@@ -108,6 +108,42 @@ pub enum ToolCallWrapper {
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
 }
 
+impl ToolCallWrapper {
+    /// Converts a `ToolCallWrapper` into a `ToolCall`.
+    ///
+    /// - `ToolCallWrapper::ToolCall`: passthrough
+    /// - `ToolCallWrapper::InferenceResponseToolCall`: uses raw values, ignores parsed values
+    pub fn into_tool_call(self) -> ToolCall {
+        self.into()
+    }
+}
+
+impl InferenceResponseToolCall {
+    /// Converts this `InferenceResponseToolCall` into a `ToolCall` using raw values.
+    pub fn into_tool_call(self) -> ToolCall {
+        self.into()
+    }
+}
+
+impl From<InferenceResponseToolCall> for ToolCall {
+    fn from(tool_call: InferenceResponseToolCall) -> Self {
+        ToolCall {
+            id: tool_call.id,
+            name: tool_call.raw_name,
+            arguments: tool_call.raw_arguments,
+        }
+    }
+}
+
+impl From<ToolCallWrapper> for ToolCall {
+    fn from(wrapper: ToolCallWrapper) -> Self {
+        match wrapper {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call,
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => tool_call.into(),
+        }
+    }
+}
+
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]

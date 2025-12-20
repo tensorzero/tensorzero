@@ -37,7 +37,7 @@ pub use types::{
 pub use tensorzero_types::{ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
 
 // Extension traits for tool types
-pub use wire::{ToolCallExt, ToolCallWrapperExt, ToolResultExt};
+pub use wire::{ToolCallExt, ToolResultExt};
 
 use serde_json::Value;
 
@@ -684,7 +684,7 @@ mod tests {
             "id": "123"
         });
         let tool_call_wrapper: ToolCallWrapper = serde_json::from_value(tool_call).unwrap();
-        let tool_call: ToolCall = tool_call_wrapper.into_tool_call().unwrap();
+        let tool_call: ToolCall = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "my raw arguments");
         assert_eq!(tool_call.id, "123");
@@ -698,7 +698,7 @@ mod tests {
             "id": "123"
         });
         let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
-        let tool_call = tool_call_wrapper.into_tool_call().unwrap();
+        let tool_call = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
         assert_eq!(tool_call.id, "123");
@@ -750,7 +750,7 @@ mod tests {
             }
         });
         let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
-        let tool_call = tool_call_wrapper.into_tool_call().unwrap();
+        let tool_call = tool_call_wrapper.into_tool_call();
         assert_eq!(tool_call.arguments, "{\"role\":\"intern\"}");
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");

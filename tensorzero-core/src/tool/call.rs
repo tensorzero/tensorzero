@@ -21,9 +21,6 @@ pub trait InferenceResponseToolCallExt {
         tool_call: ToolCall,
         tool_cfg: Option<&ToolCallConfig>,
     ) -> InferenceResponseToolCall;
-
-    /// Converts this `InferenceResponseToolCall` into a `ToolCall`.
-    fn into_tool_call(self) -> ToolCall;
 }
 
 impl InferenceResponseToolCallExt for InferenceResponseToolCall {
@@ -71,14 +68,6 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
             name: parsed_name,
             raw_arguments: tool_call.arguments.clone(),
             raw_name: tool_call.name.clone(),
-        }
-    }
-
-    fn into_tool_call(self) -> ToolCall {
-        ToolCall {
-            id: self.id,
-            name: self.raw_name,
-            arguments: self.raw_arguments,
         }
     }
 }

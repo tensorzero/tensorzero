@@ -4,9 +4,9 @@
 //! that can appear in input messages.
 
 #[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
-#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::PyModule;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -202,8 +202,9 @@ impl Unknown {
         let json_str = serde_json::to_string(&self.data).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Failed to serialize data: {e}"))
         })?;
-        let py_str = pyo3::types::PyString::new(py, &json_str);
-        py_str.into_bound_py_any(py)
+        let json = PyModule::import(py, "json")?;
+        let value = json.call_method1("loads", (json_str,))?;
+        Ok(value)
     }
 
     #[getter]

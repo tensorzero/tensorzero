@@ -1673,8 +1673,14 @@ impl From<AnalysisError> for Error {
 
 impl From<tensorzero_types::TypeError> for Error {
     fn from(err: tensorzero_types::TypeError) -> Self {
-        Self::new(ErrorDetails::InvalidMessage {
-            message: err.to_string(),
-        })
+        match err {
+            tensorzero_types::TypeError::InvalidDataPrefix(message) => {
+                Self::new(ErrorDetails::InternalError { message })
+            }
+            tensorzero_types::TypeError::InvalidBase64(message)
+            | tensorzero_types::TypeError::InvalidMimeType(message) => {
+                Self::new(ErrorDetails::Base64 { message })
+            }
+        }
     }
 }

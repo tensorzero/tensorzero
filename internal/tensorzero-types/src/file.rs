@@ -63,7 +63,7 @@ impl Base64File {
         filename: Option<String>,
     ) -> Result<Self, TypeError> {
         if data.starts_with("data:") {
-            return Err(TypeError::InvalidBase64(
+            return Err(TypeError::InvalidDataPrefix(
                 "The `data` field must not contain `data:` prefix. Data should be pure base64-encoded content only.".to_string(),
             ));
         }
@@ -161,8 +161,8 @@ impl<'de> Deserialize<'de> for Base64File {
 
         // Check if the deprecated "url" field is present (log warning)
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `Base64File`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `Base64File`. Please use `source_url` instead.",
             );
         }
 
@@ -235,8 +235,8 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
         let value = serde_json::Value::deserialize(deserializer)?;
 
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `Base64FileMetadata`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `Base64FileMetadata`. Please use `source_url` instead.",
             );
         }
 
@@ -338,8 +338,8 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
         let value = serde_json::Value::deserialize(deserializer)?;
 
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `ObjectStoragePointer`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `ObjectStoragePointer`. Please use `source_url` instead.",
             );
         }
 

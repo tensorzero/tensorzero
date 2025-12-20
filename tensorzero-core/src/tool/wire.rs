@@ -4,7 +4,6 @@
 //! are re-exported from `tensorzero-types`. This module provides additional
 //! functionality specific to `tensorzero-core`.
 
-use crate::error::Error;
 use crate::rate_limiting::{RateLimitedInputContent, get_estimated_tokens};
 
 // Re-export types from tensorzero-types
@@ -45,27 +44,5 @@ impl ToolResultExt for ToolResult {
 impl RateLimitedInputContent for ToolResult {
     fn estimated_input_token_usage(&self) -> u64 {
         ToolResultExt::estimated_input_token_usage(self)
-    }
-}
-
-/// Extension trait for `ToolCallWrapper` providing core-specific functionality.
-pub trait ToolCallWrapperExt {
-    /// Converts a `ToolCallWrapper` into a `ToolCall`.
-    ///
-    /// - `ToolCallWrapper::ToolCall`: passthrough
-    /// - `ToolCallWrapper::InferenceResponseToolCall`: uses raw values, ignores parsed values
-    fn into_tool_call(self) -> Result<ToolCall, Error>;
-}
-
-impl ToolCallWrapperExt for ToolCallWrapper {
-    fn into_tool_call(self) -> Result<ToolCall, Error> {
-        match self {
-            ToolCallWrapper::ToolCall(tc) => Ok(tc),
-            ToolCallWrapper::InferenceResponseToolCall(tc) => Ok(ToolCall {
-                id: tc.id,
-                name: tc.raw_name,
-                arguments: tc.raw_arguments,
-            }),
-        }
     }
 }

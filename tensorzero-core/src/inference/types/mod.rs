@@ -107,7 +107,7 @@ use crate::serde_util::{
 };
 use crate::tool::{
     InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert, ToolCallWrapperExt, ToolResult, deserialize_optional_tool_info,
+    ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -344,7 +344,7 @@ impl InputMessageContentExt for InputMessageContent {
                 LazyResolvedInputMessageContent::Template(template)
             }
             InputMessageContent::ToolCall(tool_call) => {
-                LazyResolvedInputMessageContent::ToolCall(tool_call.into_tool_call()?)
+                LazyResolvedInputMessageContent::ToolCall(tool_call.into_tool_call())
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
@@ -530,7 +530,7 @@ impl InputMessageContentExt for InputMessageContent {
                 StoredInputMessageContent::Template(template)
             }
             InputMessageContent::ToolCall(tool_call) => {
-                StoredInputMessageContent::ToolCall(tool_call.into_tool_call()?)
+                StoredInputMessageContent::ToolCall(tool_call.into_tool_call())
             }
             InputMessageContent::ToolResult(tool_result) => {
                 StoredInputMessageContent::ToolResult(tool_result)

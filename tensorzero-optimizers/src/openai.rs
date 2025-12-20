@@ -17,7 +17,7 @@ use tensorzero_core::{
         OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE, grader::OpenAIGrader,
     },
     stored_inference::LazyRenderedSample,
-    tool::{InferenceResponseToolCallExt, ToolCall},
+    tool::ToolCall,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -276,7 +276,7 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
                     text_parts.push(text.text.clone());
                 }
                 ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
-                    // Convert InferenceResponseToolCall to ToolCall using the extension trait
+                    // Convert InferenceResponseToolCall to ToolCall using raw values
                     let tool_call: ToolCall = inference_response_tool_call.clone().into_tool_call();
                     tool_calls.push(tool_call);
                 }
