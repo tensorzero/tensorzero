@@ -89,3 +89,12 @@ Please return the entities in the following JSON format:
     "additionalProperties": false
   }
 </output_schema>{% endraw %}
+<notes>
+- ONLY proper nouns - names of specific people, places, organizations, and other named entities should be extracted
+  - Ask: "Does this word name a SPECIFIC instance (a particular person, place, organization, or thing) rather than a general category?"
+- The follwing should not be extracted
+  - Common nouns or category labels (e.g., "players", "manager", "bowling")
+  - Statistical data or numbers (e.g., "25-8-61-1", "70")
+  - Articles, prepositions, or generic descriptive terms
+  - Metadata, headers, or contextual descriptions that don't contain actual entity names
+</notes>

@@ -3,7 +3,7 @@ import os
 import random
 
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
-from tensorzero import AsyncTensorZeroGateway, GEPAConfig, InferenceFilterFloatMetric, JsonInferenceResponse
+from tensorzero import AsyncTensorZeroGateway, GEPAConfig, JsonInferenceResponse
 from tqdm.asyncio import tqdm
 
 FUNCTION_NAME = "extract_entities"
@@ -15,8 +15,8 @@ TEMPLATE_VARIANT_NAME = "baseline"
 FLOAT_METRIC_THRESHOLD = 0.9
 
 # Models to use for analyzing inferences and generating prompt mutations
-ANALYSIS_MODEL = "anthropic::claude-sonnet-4-5"
-MUTATION_MODEL = "anthropic::claude-sonnet-4-5"
+ANALYSIS_MODEL = "openai::gpt-5.2"
+MUTATION_MODEL = "openai::gpt-5.2"
 
 # Initial variants to start the optimization from
 INITIAL_VARIANTS = ["baseline"]
@@ -92,17 +92,10 @@ async def main():
     tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
     await tqdm.gather(*tasks, desc="Processing samples")
 
-    metric_node = InferenceFilterFloatMetric(
-        metric_name=METRIC_NAME,
-        value=FLOAT_METRIC_THRESHOLD,
-        comparison_operator=">=",
-    )
-
     stored_inferences = await t0.experimental_list_inferences(
         function_name=FUNCTION_NAME,
         variant_name=None,
         output_source="inference",  # could also be "demonstration"
-        filters=metric_node,
         limit=NUM_SAMPLES,
     )
 
