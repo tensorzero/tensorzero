@@ -116,7 +116,7 @@ mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
-mod role;
+pub mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;

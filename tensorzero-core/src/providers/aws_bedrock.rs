@@ -691,12 +691,10 @@ fn bedrock_to_tensorzero_stream_message(
     }
 }
 
-impl From<Role> for ConversationRole {
-    fn from(role: Role) -> Self {
-        match role {
-            Role::User => ConversationRole::User,
-            Role::Assistant => ConversationRole::Assistant,
-        }
+fn role_to_conversation_role(role: Role) -> ConversationRole {
+    match role {
+        Role::User => ConversationRole::User,
+        Role::Assistant => ConversationRole::Assistant,
     }
 }
 
@@ -936,7 +934,7 @@ fn bedrock_content_block_to_output(
 
 // `Message` is a foreign type, so we cannot write an `impl` block on it
 async fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
-    let role: ConversationRole = message.role.into();
+    let role = role_to_conversation_role(message.role);
     let content: Vec<BedrockContentBlock> = try_join_all(
         message
             .content
