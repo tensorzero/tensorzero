@@ -67,6 +67,7 @@ import type {
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
   GetEvaluationRunInfosResponse,
+  GetEvaluationStatisticsResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -1526,6 +1527,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetEvaluationRunInfosResponse;
+  }
+
+  /**
+   * Gets evaluation statistics (aggregated metrics) for specified evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param functionType - The type of function: "chat" or "json"
+   * @param metricNames - Array of metric names to query
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @returns A promise that resolves with aggregated statistics for each run/metric
+   * @throws Error if the request fails
+   */
+  async getEvaluationStatistics(
+    functionName: string,
+    functionType: "chat" | "json",
+    metricNames: string[],
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("function_type", functionType);
+    searchParams.append("metric_names", metricNames.join(","));
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/statistics?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationStatisticsResponse;
   }
 
   private async fetch(
