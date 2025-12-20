@@ -18,7 +18,7 @@ use tensorzero_core::{
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
-    inference::types::{Arguments, ContentBlockChatOutput, Role, StoredInput, Template},
+    inference::types::{Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, Template},
     optimization::gepa::GEPAConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };

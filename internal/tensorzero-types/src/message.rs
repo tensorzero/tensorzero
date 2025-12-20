@@ -266,3 +266,9 @@ impl<'de> Deserialize<'de> for InputMessage {
         })
     }
 }
+
+impl From<String> for InputMessageContent {
+    fn from(text: String) -> Self {
+        InputMessageContent::Text(Text { text })
+    }
+}

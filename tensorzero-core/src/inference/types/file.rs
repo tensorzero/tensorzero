@@ -393,8 +393,6 @@ mod tests {
         storage::{StorageKind, StoragePath},
     };
 
-    use super::*;
-
     #[test]
     fn test_sanitize_input() {
         assert_eq!(
