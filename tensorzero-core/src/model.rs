@@ -220,8 +220,8 @@ impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.
     fn should_filter_unknown_block(
-        block_model_name: &Option<String>,
-        block_provider_name: &Option<String>,
+        block_model_name: Option<&String>,
+        block_provider_name: Option<&String>,
         target_model_name: &str,
         target_provider_name: &str,
     ) -> bool {
@@ -254,8 +254,8 @@ impl ModelConfig {
                     provider_name: block_provider_name,
                     data: _,
                 }) => Self::should_filter_unknown_block(
-                    block_model_name,
-                    block_provider_name,
+                    block_model_name.as_ref(),
+                    block_provider_name.as_ref(),
                     model_name,
                     provider_name,
                 ),
@@ -285,8 +285,8 @@ impl ModelConfig {
                                 data: _,
                             }) => {
                                 if Self::should_filter_unknown_block(
-                                    block_model_name,
-                                    block_provider_name,
+                                    block_model_name.as_ref(),
+                                    block_provider_name.as_ref(),
                                     model_name,
                                     provider_name,
                                 ) {
