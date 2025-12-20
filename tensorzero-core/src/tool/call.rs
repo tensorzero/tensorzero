@@ -112,6 +112,8 @@ pub struct ToolCallChunk {
     pub raw_arguments: String,
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_option_string_as_empty<S>(
     value: &Option<String>,
     serializer: S,

@@ -425,6 +425,8 @@ where
     }
 }
 
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
 fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<GroqContentBlock<'_>>>,
     serializer: S,
