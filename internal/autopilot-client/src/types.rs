@@ -16,7 +16,8 @@ use uuid::Uuid;
 // =============================================================================
 
 /// A session representing an autopilot conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
@@ -27,7 +28,8 @@ pub struct Session {
 }
 
 /// An event within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
@@ -36,22 +38,25 @@ pub struct Event {
 }
 
 /// The payload of an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
     StatusUpdate { status_update: StatusUpdate },
 }
 
 /// Payload for an assistant message event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AssistantMessagePayload {
     pub content: Vec<serde_json::Value>,
 }
 
 /// A status update within a session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
 }
@@ -61,7 +66,8 @@ pub enum StatusUpdate {
 // =============================================================================
 
 /// Request body for creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventRequest {
     pub deployment_id: Uuid,
     pub tensorzero_version: String,
@@ -76,7 +82,8 @@ pub struct CreateEventRequest {
 }
 
 /// Query parameters for listing events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -87,7 +94,8 @@ pub struct ListEventsParams {
 }
 
 /// Query parameters for listing sessions.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,7 +106,8 @@ pub struct ListSessionsParams {
 }
 
 /// Query parameters for streaming events.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,14 +119,16 @@ pub struct StreamEventsParams {
 // =============================================================================
 
 /// Response from creating an event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateEventResponse {
     pub event_id: Uuid,
     pub session_id: Uuid,
 }
 
 /// Response from listing events.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `user_message` event in this session.
@@ -125,7 +136,8 @@ pub struct ListEventsResponse {
 }
 
 /// Response from listing sessions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
