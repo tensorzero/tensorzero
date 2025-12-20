@@ -195,4 +195,18 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/action",
             post(endpoints::internal::action::action_handler),
         )
+        // Autopilot proxy endpoints
+        .route(
+            "/internal/autopilot/v1/sessions",
+            get(endpoints::internal::autopilot::list_sessions_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events",
+            get(endpoints::internal::autopilot::list_events_handler)
+                .post(endpoints::internal::autopilot::create_event_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events/stream",
+            get(endpoints::internal::autopilot::stream_events_handler),
+        )
 }
