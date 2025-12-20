@@ -22,6 +22,7 @@ import type {
   CreateDatapointsFromInferenceRequest,
   CumulativeFeedbackTimeSeriesPoint,
   DatapointStatsResponse,
+  DemonstrationFeedbackRow,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
@@ -31,6 +32,7 @@ import type {
   GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetDemonstrationFeedbackResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
@@ -382,6 +384,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     const body = (await response.json()) as GetFeedbackByTargetIdResponse;
+    return body.feedback;
+  }
+
+  /**
+   * Gets demonstration feedback for a given inference.
+   * @param inferenceId - The inference ID to get demonstration feedback for
+   * @param options - Optional pagination parameters
+   * @returns A promise that resolves with a list of demonstration feedback rows
+   * @throws Error if the request fails
+   */
+  async getDemonstrationFeedback(
+    inferenceId: string,
+    options?: {
+      before?: string;
+      after?: string;
+      limit?: number;
+    },
+  ): Promise<DemonstrationFeedbackRow[]> {
+    const params = new URLSearchParams();
+    if (options?.before) params.set("before", options.before);
+    if (options?.after) params.set("after", options.after);
+    if (options?.limit) params.set("limit", options.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/internal/feedback/${encodeURIComponent(inferenceId)}/demonstrations${queryString ? `?${queryString}` : ""}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as GetDemonstrationFeedbackResponse;
     return body.feedback;
   }
 
