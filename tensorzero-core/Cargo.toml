@@ -117,12 +117,6 @@ ts-rs = { workspace = true }
 moka = { workspace = true }
 tonic = { version = "0.14.2", default-features = false }
 sqlx = { workspace = true }
-sqlx_alpha = { package = "sqlx", version = "0.9.0-alpha.1", features = [
-    "sqlx-toml",
-    "postgres",
-    "runtime-tokio",
-    "chrono",
-] }
 pin-project = { workspace = true }
 once_cell = "1.21.3"
 clarabel = { version = "0", default-features = false, features = ["serde"] }
