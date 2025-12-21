@@ -104,7 +104,8 @@ impl ToolExecutor {
         }
 
         // Register the adapter with durable
-        self.durable.register::<TaskToolAdapter<T>>().await;
+        // Note: We ignore the error here as duplicate registration is handled by the registry check above
+        let _ = self.durable.register::<TaskToolAdapter<T>>().await;
 
         self
     }
@@ -144,6 +145,7 @@ impl ToolExecutor {
         self.durable
             .spawn_with_options::<TaskToolAdapter<T>>(wrapped, SpawnOptions::default())
             .await
+            .map_err(Into::into)
     }
 
     /// Spawn a `TaskTool` execution with custom spawn options.
@@ -166,6 +168,7 @@ impl ToolExecutor {
         self.durable
             .spawn_with_options::<TaskToolAdapter<T>>(wrapped, options)
             .await
+            .map_err(Into::into)
     }
 
     /// Spawn a tool by name with JSON parameters.
@@ -218,6 +221,7 @@ impl ToolExecutor {
                 SpawnOptions::default(),
             )
             .await
+            .map_err(Into::into)
     }
 
     /// Start a worker that processes tool tasks.

@@ -8,6 +8,10 @@ pub enum ToolError {
     #[error("Tool not found: {0}")]
     ToolNotFound(String),
 
+    /// Tool with this name is already registered.
+    #[error("Tool '{0}' is already registered. Each tool name must be unique.")]
+    DuplicateToolName(String),
+
     /// Parameter validation or parsing failed.
     #[error("Parameter error: {0}")]
     InvalidParams(String),
@@ -27,6 +31,20 @@ pub enum ToolError {
     /// Durable control flow signal (suspend, cancelled).
     #[error("Control flow: {0:?}")]
     Control(ControlFlow),
+
+    /// Operation timed out.
+    #[error("Timed out waiting for '{step_name}'")]
+    Timeout {
+        /// The name of the step or event that timed out.
+        step_name: String,
+    },
+
+    /// A validation error occurred.
+    #[error("{message}")]
+    Validation {
+        /// A description of the validation error.
+        message: String,
+    },
 }
 
 /// Result type alias for tool operations.
@@ -36,7 +54,17 @@ impl From<TaskError> for ToolError {
     fn from(err: TaskError) -> Self {
         match err {
             TaskError::Control(cf) => ToolError::Control(cf),
-            TaskError::Failed(e) => ToolError::ExecutionFailed(e),
+            TaskError::Database(e) => ToolError::Database(e),
+            TaskError::Serialization(e) => ToolError::Serialization(e),
+            TaskError::Timeout { step_name } => ToolError::Timeout { step_name },
+            TaskError::Validation { message } => ToolError::Validation { message },
+            TaskError::TaskInternal(e) => ToolError::ExecutionFailed(e),
+            TaskError::ChildFailed { step_name, message } => ToolError::ExecutionFailed(
+                anyhow::anyhow!("child task failed at '{step_name}': {message}"),
+            ),
+            TaskError::ChildCancelled { step_name } => ToolError::ExecutionFailed(anyhow::anyhow!(
+                "child task was cancelled at '{step_name}'"
+            )),
         }
     }
 }
@@ -45,11 +73,14 @@ impl From<ToolError> for TaskError {
     fn from(err: ToolError) -> Self {
         match err {
             ToolError::Control(cf) => TaskError::Control(cf),
-            ToolError::ToolNotFound(msg) => TaskError::Failed(anyhow::anyhow!(msg)),
-            ToolError::InvalidParams(msg) => TaskError::Failed(anyhow::anyhow!(msg)),
-            ToolError::ExecutionFailed(e) => TaskError::Failed(e),
-            ToolError::Serialization(e) => TaskError::Failed(e.into()),
-            ToolError::Database(e) => TaskError::Failed(e.into()),
+            ToolError::Database(e) => TaskError::Database(e),
+            ToolError::Serialization(e) => TaskError::Serialization(e),
+            ToolError::Timeout { step_name } => TaskError::Timeout { step_name },
+            ToolError::Validation { message } => TaskError::Validation { message },
+            ToolError::ToolNotFound(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
+            ToolError::DuplicateToolName(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
+            ToolError::InvalidParams(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
+            ToolError::ExecutionFailed(e) => TaskError::TaskInternal(e),
         }
     }
 }

@@ -61,7 +61,9 @@ impl SideInfo for () {}
 ///
 /// #[async_trait]
 /// impl TaskTool for ResearchTool {
-///     const NAME: &'static str = "research";
+///     fn name() -> Cow<'static, str> {
+///         Cow::Borrowed("research")
+///     }
 ///
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Research a topic")
@@ -120,7 +122,9 @@ impl SideInfo for () {}
 ///
 /// #[async_trait]
 /// impl TaskTool for GitHubSearchTool {
-///     const NAME: &'static str = "github_search";
+///     fn name() -> Cow<'static, str> {
+///         Cow::Borrowed("github_search")
+///     }
 ///
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Search GitHub")
@@ -150,7 +154,7 @@ pub trait TaskTool: Send + Sync + 'static {
     /// Unique name for this tool.
     ///
     /// This is used for registration, invocation, and as the durable task name.
-    const NAME: &'static str;
+    fn name() -> Cow<'static, str>;
 
     /// Human-readable description of what this tool does.
     ///
@@ -234,7 +238,10 @@ impl<T: TaskTool> Default for TaskToolAdapter<T> {
 
 #[async_trait]
 impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
-    const NAME: &'static str = T::NAME;
+    fn name() -> Cow<'static, str> {
+        T::name()
+    }
+
     type Params = TaskToolParams<T::LlmParams, T::SideInfo>;
     type Output = T::Output;
 
