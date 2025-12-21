@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use schemars::schema::RootSchema;
+use schemars::Schema;
 use serde_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ pub trait ErasedTool: Send + Sync {
     fn description(&self) -> Cow<'static, str>;
 
     /// Get the JSON Schema for the tool's parameters.
-    fn parameters_schema(&self) -> RootSchema;
+    fn parameters_schema(&self) -> Schema;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
@@ -78,7 +78,7 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         T::description()
     }
 
-    fn parameters_schema(&self) -> RootSchema {
+    fn parameters_schema(&self) -> Schema {
         T::parameters_schema()
     }
 
@@ -101,7 +101,7 @@ impl<T: SimpleTool> ErasedTool for T {
         T::description()
     }
 
-    fn parameters_schema(&self) -> RootSchema {
+    fn parameters_schema(&self) -> Schema {
         T::parameters_schema()
     }
 

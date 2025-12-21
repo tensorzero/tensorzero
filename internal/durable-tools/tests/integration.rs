@@ -16,7 +16,7 @@ use durable_tools::{
     ErasedSimpleTool, InferenceClient, InferenceError, SimpleTool, SimpleToolContext, TaskTool,
     ToolContext, ToolExecutor, ToolResult,
 };
-use schemars::{JsonSchema, schema::RootSchema, schema_for};
+use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tensorzero::{
@@ -109,7 +109,7 @@ impl SimpleTool for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -146,7 +146,7 @@ impl TaskTool for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -211,7 +211,7 @@ impl SimpleTool for InferenceSimpleTool {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(InferencePromptParams)
     }
 
@@ -268,7 +268,7 @@ impl TaskTool for InferenceTaskTool {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(InferencePromptParams)
     }
 
@@ -485,7 +485,7 @@ impl SimpleTool for KeyCapturingSimpleTool {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -521,7 +521,7 @@ impl TaskTool for MultiCallTaskTool {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
