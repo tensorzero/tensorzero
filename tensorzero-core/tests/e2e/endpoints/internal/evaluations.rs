@@ -442,10 +442,16 @@ async fn test_get_evaluation_results_haiku() {
     );
 
     // Verify all results belong to the correct evaluation run
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
     let expected_run_id = Uuid::parse_str(evaluation_run_id).unwrap();
     for result in &response.results {
-        assert_eq!(result.evaluation_run_id, expected_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        match result {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.evaluation_run_id, expected_run_id);
+                assert_eq!(row.variant_name, "better_prompt_haiku_3_5");
+            }
+            _ => panic!("Expected Chat result"),
+        }
     }
 }
 
@@ -477,12 +483,13 @@ async fn test_get_evaluation_results_entity_extraction() {
         "Expected 4 results (2 datapoints * 2 metrics)"
     );
 
-    // Verify JSON function output structure
+    // Verify results are JSON type
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
     for result in &response.results {
-        assert!(
-            result.generated_output.contains("\"raw\""),
-            "Generated output should have 'raw' field for JSON function"
-        );
+        match result {
+            EvaluationResultRow::Json(_) => {}
+            _ => panic!("Expected Json result"),
+        }
     }
 }
 
@@ -516,10 +523,14 @@ async fn test_get_evaluation_results_multiple_runs() {
     );
 
     // Verify both evaluation runs are present
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
     let eval_run_ids: std::collections::HashSet<_> = response
         .results
         .iter()
-        .map(|r| r.evaluation_run_id)
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.evaluation_run_id,
+            EvaluationResultRow::Json(row) => row.evaluation_run_id,
+        })
         .collect();
     assert_eq!(
         eval_run_ids.len(),
@@ -569,10 +580,23 @@ async fn test_get_evaluation_results_pagination() {
     );
 
     // Verify no overlap between pages
-    let page1_datapoints: std::collections::HashSet<_> =
-        page1.results.iter().map(|r| r.datapoint_id).collect();
-    let page2_datapoints: std::collections::HashSet<_> =
-        page2.results.iter().map(|r| r.datapoint_id).collect();
+    use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+    let page1_datapoints: std::collections::HashSet<_> = page1
+        .results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
+    let page2_datapoints: std::collections::HashSet<_> = page2
+        .results
+        .iter()
+        .map(|r| match r {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        })
+        .collect();
 
     let overlap: Vec<_> = page1_datapoints.intersection(&page2_datapoints).collect();
     assert!(

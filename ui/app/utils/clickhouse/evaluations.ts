@@ -163,8 +163,9 @@ export type ConsolidatedEvaluationResult = Omit<
   metrics: ConsolidatedMetric[];
 };
 /**
- * Parse and consolidate evaluation results from the API.
+ * Consolidate evaluation results from the API.
  * Groups results by (datapoint_id, evaluation_run_id, variant_name) and collects metrics.
+ * Input and output fields are already parsed by the backend.
  */
 export async function consolidateEvaluationResults(
   evaluationResults: ParsedEvaluationResultWithVariant[],

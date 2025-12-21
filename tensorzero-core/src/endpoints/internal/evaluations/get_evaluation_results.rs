@@ -10,7 +10,6 @@ use crate::config::Config;
 use crate::db::evaluation_queries::{EvaluationQueries, EvaluationResultRow};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::EvaluationConfig;
-use crate::function::FunctionConfig;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation results.
@@ -103,11 +102,8 @@ pub async fn get_evaluation_results(
         })
     })?;
 
-    // Determine table names based on function type
-    let (inference_table_name, datapoint_table_name) = match function_config.as_ref() {
-        FunctionConfig::Chat(_) => ("ChatInference", "ChatInferenceDatapoint"),
-        FunctionConfig::Json(_) => ("JsonInference", "JsonInferenceDatapoint"),
-    };
+    // Get function type
+    let function_type = function_config.config_type();
 
     // Build metric names from evaluator names
     // Format: tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}
@@ -125,8 +121,7 @@ pub async fn get_evaluation_results(
         .get_evaluation_results(
             function_name,
             evaluation_run_ids,
-            inference_table_name,
-            datapoint_table_name,
+            function_type,
             &metric_names,
             limit,
             offset,
@@ -139,9 +134,10 @@ pub async fn get_evaluation_results(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::evaluation_queries::MockEvaluationQueries;
+    use crate::db::evaluation_queries::{ChatEvaluationResultRow, MockEvaluationQueries};
     use crate::evaluations::{EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig};
-    use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, FunctionConfigType};
+    use crate::inference::types::StoredInput;
     use crate::jsonschema_util::StaticJSONSchema;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -217,12 +213,11 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_results()
             .withf(
-                move |fn_name, run_ids, inf_table, dp_table, metrics, limit, offset| {
+                move |fn_name, run_ids, fn_type, metrics, limit, offset| {
                     fn_name == "test_function"
                         && run_ids.len() == 1
                         && run_ids[0] == evaluation_run_id
-                        && inf_table == "ChatInference"
-                        && dp_table == "ChatInferenceDatapoint"
+                        && *fn_type == FunctionConfigType::Chat
                         && metrics.len() == 1
                         && metrics[0]
                             == "tensorzero::evaluation_name::test_eval::evaluator_name::exact_match"
@@ -231,18 +226,18 @@ mod tests {
                 },
             )
             .times(1)
-            .returning(move |_, _, _, _, _, _, _| {
+            .returning(move |_, _, _, _, _, _| {
                 let datapoint_id = Uuid::now_v7();
                 Box::pin(async move {
-                    Ok(vec![EvaluationResultRow {
+                    Ok(vec![EvaluationResultRow::Chat(ChatEvaluationResultRow {
                         inference_id: Uuid::now_v7(),
                         episode_id: Uuid::now_v7(),
                         datapoint_id,
                         evaluation_run_id,
                         evaluator_inference_id: None,
-                        input: "{}".to_string(),
-                        generated_output: "[]".to_string(),
-                        reference_output: Some("[]".to_string()),
+                        input: StoredInput::default(),
+                        generated_output: vec![],
+                        reference_output: Some(vec![]),
                         dataset_name: "test_dataset".to_string(),
                         metric_name: Some(
                             "tensorzero::evaluation_name::test_eval::evaluator_name::exact_match"
@@ -254,8 +249,7 @@ mod tests {
                         variant_name: "test_variant".to_string(),
                         name: None,
                         staled_at: None,
-                        function_name: "test_function".to_string(),
-                    }])
+                    })])
                 })
             });
 
@@ -271,7 +265,12 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.results.len(), 1);
-        assert_eq!(result.results[0].evaluation_run_id, evaluation_run_id);
+        match &result.results[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.evaluation_run_id, evaluation_run_id);
+            }
+            _ => panic!("Expected Chat result"),
+        }
     }
 
     #[tokio::test]
@@ -282,13 +281,11 @@ mod tests {
         let mut mock_clickhouse = MockEvaluationQueries::new();
         mock_clickhouse
             .expect_get_evaluation_results()
-            .withf(
-                |_fn_name, _run_ids, inf_table, dp_table, _metrics, _limit, _offset| {
-                    inf_table == "JsonInference" && dp_table == "JsonInferenceDatapoint"
-                },
-            )
+            .withf(|_fn_name, _run_ids, fn_type, _metrics, _limit, _offset| {
+                *fn_type == FunctionConfigType::Json
+            })
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,
@@ -374,13 +371,11 @@ mod tests {
         let mut mock_clickhouse = MockEvaluationQueries::new();
         mock_clickhouse
             .expect_get_evaluation_results()
-            .withf(
-                |_fn_name, _run_ids, _inf_table, _dp_table, _metrics, limit, offset| {
-                    *limit == 50 && *offset == 100
-                },
-            )
+            .withf(|_fn_name, _run_ids, _fn_type, _metrics, limit, offset| {
+                *limit == 50 && *offset == 100
+            })
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,
@@ -433,14 +428,12 @@ mod tests {
         let mut mock_clickhouse = MockEvaluationQueries::new();
         mock_clickhouse
             .expect_get_evaluation_results()
-            .withf(
-                |_fn_name, _run_ids, _inf_table, _dp_table, metrics, _limit, _offset| {
-                    // Should have 2 metric names, one for each evaluator
-                    metrics.len() == 2
-                },
-            )
+            .withf(|_fn_name, _run_ids, _fn_type, metrics, _limit, _offset| {
+                // Should have 2 metric names, one for each evaluator
+                metrics.len() == 2
+            })
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,

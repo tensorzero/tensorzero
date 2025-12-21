@@ -29,6 +29,7 @@ import {
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
 import { getMetricType } from "~/utils/config/evaluations";
@@ -48,8 +49,7 @@ import { getConfig } from "~/utils/config/index.server";
 import type {
   EvaluationConfig,
   EvaluatorConfig,
-  ContentBlockChatOutput,
-  JsonInferenceOutput,
+  EvaluationOutput,
 } from "~/types/tensorzero";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
@@ -303,7 +303,10 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input {...consolidatedEvaluationResults[0].input} />
+            {/* Cast StoredInput to ZodDisplayInput - they're structurally compatible for display */}
+            <Input
+              {...(consolidatedEvaluationResults[0].input as unknown as ZodDisplayInput)}
+            />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -498,7 +501,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockChatOutput[] | JsonInferenceOutput;
+    output: EvaluationOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
     episodeId: string | null;
@@ -569,8 +572,8 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              {Array.isArray(result.output) ? (
-                <ChatOutputElement output={result.output} />
+              {result.output.type === "chat" ? (
+                <ChatOutputElement output={result.output.content} />
               ) : (
                 <JsonOutputElement output={result.output} />
               )}
