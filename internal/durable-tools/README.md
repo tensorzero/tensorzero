@@ -22,9 +22,8 @@ For complex, durable operations that may need to call other tools or checkpoint 
 ```rust
 #[async_trait]
 pub trait TaskTool: Send + Sync + 'static {
-    const NAME: &'static str;
+    fn name() -> Cow<'static, str>;
     fn description() -> Cow<'static, str>;
-
     fn parameters_schema() -> Schema;
 
     type LlmParams: Serialize + DeserializeOwned + Send + 'static;
@@ -48,9 +47,8 @@ For simple, stateless operations like API calls or database queries:
 ```rust
 #[async_trait]
 pub trait SimpleTool: Send + Sync + 'static {
-    const NAME: &'static str;
+    fn name() -> Cow<'static, str>;
     fn description() -> Cow<'static, str>;
-
     fn parameters_schema() -> Schema;
 
     type LlmParams: Serialize + DeserializeOwned + Send + 'static;
@@ -75,9 +73,14 @@ pub trait SimpleTool: Send + Sync + 'static {
 | `ToolExecutor`             | High-level orchestrator for registering and spawning tools                               |
 | `ToolExecutorBuilder`      | Builder for configuring `ToolExecutor`                                                   |
 | `ToolContext`              | Context passed to `TaskTool::execute()` with checkpointing and tool-calling capabilities |
-| `SimpleToolContext`        | Simplified context passed to `SimpleTool::execute()` with database access                |
+| `SimpleToolContext`        | Simplified context passed to `SimpleTool::execute()` with database and inference access  |
 | `ToolRegistry`             | Registry of tools for lookup and OpenAI function schema generation                       |
+| `ToolAppState`             | Application state passed to all tools (pool, registry, inference client)                 |
+| `DurableClient`            | Type alias for `Durable<ToolAppState>`                                                   |
 | `ToolError` / `ToolResult` | Error types for tool execution                                                           |
+| `SideInfo`                 | Marker trait for side information types (hidden from LLM)                                |
+| `InferenceClient`          | Trait for TensorZero inference backends                                                  |
+| `InferenceError`           | Error type for inference operations                                                      |
 
 ### Context Management
 
@@ -90,6 +93,8 @@ The crate re-exports commonly needed types:
 - `async_trait` - For implementing tool traits
 - `schemars` - For parameter schema generation
 - `SpawnOptions`, `SpawnResult`, `TaskHandle`, `WorkerOptions` - From `durable`
+- `http_gateway_client`, `embedded_gateway_client` - Inference client constructors
+- TensorZero types: `ClientInferenceParams`, `InferenceParams`, `InferenceResponse`, `Input`, `InputMessage`, `InputMessageContent`, `Role`, `TensorZeroError`
 
 ## Usage Example
 
@@ -117,7 +122,9 @@ struct SearchTool;
 
 #[async_trait]
 impl SimpleTool for SearchTool {
-    const NAME: &'static str = "search";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("search")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Search the web")
@@ -153,7 +160,9 @@ struct ResearchTool;
 
 #[async_trait]
 impl TaskTool for ResearchTool {
-    const NAME: &'static str = "research";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("research")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Research a topic")
