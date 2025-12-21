@@ -21,6 +21,7 @@ use crate::config::{
 use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddingProviderConfig};
 use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedProviderConfig;
@@ -77,6 +78,8 @@ pub struct StoredEmbeddingProviderConfig {
     pub timeouts: TimeoutsConfig,
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {
@@ -87,6 +90,7 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
             timeout_ms,
             timeouts,
             extra_body,
+            extra_headers,
         } = stored;
 
         Self {
@@ -94,6 +98,7 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
             // Migration: prefer new field, fall back to deprecated
             timeout_ms: timeout_ms.or(timeouts.non_streaming.total_ms),
             extra_body,
+            extra_headers,
         }
     }
 }
@@ -105,6 +110,7 @@ impl From<UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfi
             config,
             timeout_ms,
             extra_body,
+            extra_headers,
         } = uninitialized;
 
         Self {
@@ -112,6 +118,7 @@ impl From<UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfi
             timeout_ms,
             timeouts: TimeoutsConfig::default(),
             extra_body,
+            extra_headers,
         }
     }
 }
