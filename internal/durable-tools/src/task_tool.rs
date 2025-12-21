@@ -43,7 +43,7 @@ impl SideInfo for () {}
 ///
 /// ```ignore
 /// use durable_tools::{TaskTool, ToolContext, ToolResult, async_trait};
-/// use schemars::{schema_for, schema::RootSchema, JsonSchema};
+/// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -69,8 +69,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Research a topic")
 ///     }
 ///
-///     fn parameters_schema() -> RootSchema {
-///         schema_for!(ResearchParams)
+///     fn parameters_schema() -> Schema {
+///         schema_for!(ResearchParams).schema
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
@@ -101,7 +101,7 @@ impl SideInfo for () {}
 ///
 /// ```ignore
 /// use durable_tools::{TaskTool, ToolContext, ToolResult, SideInfo, async_trait};
-/// use schemars::{schema_for, schema::RootSchema, JsonSchema};
+/// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -130,8 +130,8 @@ impl SideInfo for () {}
 ///         Cow::Borrowed("Search GitHub")
 ///     }
 ///
-///     fn parameters_schema() -> RootSchema {
-///         schema_for!(GitHubSearchParams)  // Only LlmParams in schema
+///     fn parameters_schema() -> Schema {
+///         schema_for!(GitHubSearchParams).schema  // Only LlmParams in schema
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;
