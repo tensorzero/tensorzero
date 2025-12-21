@@ -19,6 +19,7 @@ members = [
     "internal/autopilot-tools",
     "internal/durable-tools",
     "internal/tensorzero-types",
+    "internal/autopilot-worker",
 ]
 resolver = "2"
 

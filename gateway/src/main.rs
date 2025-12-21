@@ -12,6 +12,7 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -224,6 +225,9 @@ async fn main() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
+    // Start autopilot worker if configured
+    let _autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle);
+
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
@@ -325,6 +329,13 @@ async fn main() -> Result<(), ExitCode> {
         tracing::info!("├ Relay mode: enabled (gateway_url = {gateway_url})");
     } else {
         tracing::info!("├ Relay mode: disabled");
+    }
+
+    // Print whether Autopilot Worker is enabled
+    if _autopilot_worker_handle.is_some() {
+        tracing::info!("├ Autopilot Worker: enabled");
+    } else {
+        tracing::info!("├ Autopilot Worker: disabled");
     }
 
     // Print whether OpenTelemetry is enabled
@@ -461,6 +472,39 @@ pub async fn shutdown_signal() {
             tracing::info!("Received SIGHUP signal");
         }
     };
+}
+
+/// Spawn the autopilot worker if environment variables are set.
+fn spawn_autopilot_worker_if_configured(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Option<AutopilotWorkerHandle> {
+    // Only start if autopilot client is configured
+    if gateway_handle.app_state.autopilot_client.is_none() {
+        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
+        return None;
+    }
+
+    // Only start if postgres is enabled (needed for durable task queue)
+    let pool = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
+        PostgresConnectionInfo::Disabled => {
+            tracing::debug!(
+                "Autopilot worker not configured: Postgres is required for the durable task queue"
+            );
+            return None;
+        }
+        #[cfg(test)]
+        #[expect(unreachable_patterns)]
+        _ => return None,
+    };
+
+    let config = AutopilotWorkerConfig::new(pool);
+
+    spawn_autopilot_worker(
+        &gateway_handle.app_state.deferred_tasks,
+        gateway_handle.cancel_token.clone(),
+        config,
+    )
 }
 
 /// ┌──────────────────────────────────────────────────────────────────────────┐
