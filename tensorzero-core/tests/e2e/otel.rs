@@ -71,7 +71,7 @@ pub async fn install_capturing_otel_exporter() -> CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
     let handle =
-        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()))
+        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()), true)
             .await
             .unwrap();
     handle.delayed_otel.unwrap().enable_otel().unwrap();
@@ -251,6 +251,7 @@ struct ResponseData {
     usage: OTelUsage,
     estimated_tokens: i64,
     underestimate: bool,
+    model_inference_error: bool,
 }
 
 async fn make_non_streaming_inference(client: &Client) -> ResponseData {
@@ -301,6 +302,7 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         },
         underestimate: false,
         estimated_tokens: 1009,
+        model_inference_error: false,
     }
 }
 
@@ -372,6 +374,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
         usage,
         estimated_tokens: 1009,
         underestimate: false,
+        model_inference_error: false,
     }
 }
 
@@ -487,6 +490,7 @@ async fn test_stream_fatal_error_usage() {
                         usage: usage.unwrap_or_default(),
                         estimated_tokens: 1009,
                         underestimate: true,
+                        model_inference_error: true,
                     },
                     OtlpTracesFormat::OpenTelemetry,
                 );
@@ -510,6 +514,7 @@ fn check_spans(
         model_name,
         streaming,
         underestimate,
+        model_inference_error,
     } = response_data;
 
     let all_spans = exporter.take_spans();
@@ -579,7 +584,16 @@ fn check_spans(
         panic!("Expected one child span: {model_children:#?}");
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
-    assert_eq!(model_provider_span.status, Status::Ok);
+    if model_inference_error {
+        assert_eq!(
+            model_provider_span.status,
+            Status::Error {
+                description: "".into()
+            }
+        );
+    } else {
+        assert_eq!(model_provider_span.status, Status::Ok);
+    }
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
 

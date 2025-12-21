@@ -208,3 +208,293 @@ async fn test_search_workflow_evaluation_runs_with_pagination() {
         result.len()
     );
 }
+
+/// Test getting workflow evaluation runs by IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run ID from the fixture data
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id], None)
+        .await
+        .unwrap();
+
+    // Should return exactly 1 run
+    assert_eq!(
+        result.len(),
+        1,
+        "Expected exactly 1 run, got {}",
+        result.len()
+    );
+    assert_eq!(result[0].id, run_id, "Expected run ID to match");
+}
+
+/// Test getting workflow evaluation runs with multiple IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_multiple_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use known run IDs from the fixture data
+    let run_id1 = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+    let run_id2 = uuid::Uuid::parse_str("01968d05-d734-7751-ab33-75dd8b3fb4a3").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id1, run_id2], None)
+        .await
+        .unwrap();
+
+    // Should return 2 runs
+    assert_eq!(result.len(), 2, "Expected 2 runs, got {}", result.len());
+}
+
+/// Test getting workflow evaluation runs with project_name filter.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_with_project_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[run_id], Some("21_questions"))
+        .await
+        .unwrap();
+
+    // Should return the run since it belongs to 21_questions project
+    assert_eq!(result.len(), 1, "Expected 1 run, got {}", result.len());
+    assert_eq!(
+        result[0].project_name.as_deref(),
+        Some("21_questions"),
+        "Expected project_name to be '21_questions'"
+    );
+}
+
+/// Test getting workflow evaluation runs with empty IDs.
+#[tokio::test]
+async fn test_get_workflow_evaluation_runs_empty_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .get_workflow_evaluation_runs(&[], None)
+        .await
+        .unwrap();
+
+    // Should return empty list
+    assert_eq!(
+        result.len(),
+        0,
+        "Expected 0 runs for empty IDs, got {}",
+        result.len()
+    );
+}
+
+/// Test getting workflow evaluation run statistics.
+/// Uses fixture data from ui/fixtures/dynamic_evaluation_run_examples.jsonl.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_statistics_with_fixture_data() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a known run ID from the fixture data that has feedback
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_statistics(run_id, None)
+        .await
+        .unwrap();
+
+    // The fixture data has metrics: elapsed_ms (float), goated (boolean), solved (boolean)
+    assert!(
+        result.len() >= 3,
+        "Expected at least 3 metrics from fixture data, got {}",
+        result.len()
+    );
+
+    // Verify elapsed_ms (float metric with Wald CI)
+    let elapsed_ms = result
+        .iter()
+        .find(|s| s.metric_name == "elapsed_ms")
+        .expect("Expected elapsed_ms metric");
+    // Count may vary if tests add data, so just check it's reasonable
+    assert!(
+        elapsed_ms.count >= 49,
+        "Expected at least 49 elapsed_ms samples, got {}",
+        elapsed_ms.count
+    );
+    // Average should be in a reasonable range
+    assert!(
+        elapsed_ms.avg_metric > 50000.0 && elapsed_ms.avg_metric < 150000.0,
+        "avg_metric out of expected range: {}",
+        elapsed_ms.avg_metric
+    );
+    assert!(elapsed_ms.stdev.is_some());
+    assert!(elapsed_ms.ci_lower.is_some());
+    assert!(elapsed_ms.ci_upper.is_some());
+
+    // Verify goated exists (boolean metric with Wilson CI)
+    let goated = result.iter().find(|s| s.metric_name == "goated");
+    if let Some(goated) = goated {
+        assert!(goated.count >= 1);
+        // Wilson CI should always be present for boolean metrics
+        assert!(goated.ci_lower.is_some());
+        assert!(goated.ci_upper.is_some());
+    }
+
+    // Verify solved (boolean metric with Wilson CI)
+    let solved = result
+        .iter()
+        .find(|s| s.metric_name == "solved")
+        .expect("Expected solved metric");
+    assert!(
+        solved.count >= 49,
+        "Expected at least 49 solved samples, got {}",
+        solved.count
+    );
+    // Average should be between 0 and 1 (boolean metric)
+    assert!(
+        solved.avg_metric >= 0.0 && solved.avg_metric <= 1.0,
+        "avg_metric should be between 0 and 1 for boolean metric: {}",
+        solved.avg_metric
+    );
+    // Wilson CI bounds should be present
+    assert!(solved.ci_lower.is_some());
+    assert!(solved.ci_upper.is_some());
+}
+
+/// Test getting workflow evaluation run statistics with metric_name filter.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_statistics_with_metric_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_statistics(run_id, Some("solved"))
+        .await
+        .unwrap();
+
+    // Should return only the solved metric
+    assert_eq!(result.len(), 1, "Expected 1 metric, got {}", result.len());
+    assert_eq!(result[0].metric_name, "solved");
+    assert!(result[0].count >= 49, "Expected at least 49 samples");
+}
+
+/// Test getting workflow evaluation run statistics for nonexistent run.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_statistics_nonexistent_run() {
+    let clickhouse = get_clickhouse().await;
+
+    // Use a random UUID that doesn't exist
+    let run_id = uuid::Uuid::new_v4();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_statistics(run_id, None)
+        .await
+        .unwrap();
+
+    // Should return empty list for nonexistent run
+    assert!(
+        result.is_empty(),
+        "Expected empty results for nonexistent run, got {}",
+        result.len()
+    );
+}
+
+/// Test getting workflow evaluation run statistics with exact value assertions.
+/// This mirrors the TypeScript test for getWorkflowEvaluationRunStatisticsByMetricName.
+#[tokio::test]
+async fn test_get_workflow_evaluation_run_statistics_exact_values() {
+    let clickhouse = get_clickhouse().await;
+
+    let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    let result = clickhouse
+        .get_workflow_evaluation_run_statistics(run_id, None)
+        .await
+        .unwrap();
+
+    // Should have exactly 3 metrics
+    assert_eq!(result.len(), 3, "Expected 3 metrics, got {}", result.len());
+
+    // Verify elapsed_ms (float metric with Wald CI)
+    let elapsed_ms = result
+        .iter()
+        .find(|s| s.metric_name == "elapsed_ms")
+        .expect("Expected elapsed_ms metric");
+    assert_eq!(elapsed_ms.count, 49);
+    assert!(
+        (elapsed_ms.avg_metric - 91678.72114158163).abs() < 0.001,
+        "avg_metric mismatch: {}",
+        elapsed_ms.avg_metric
+    );
+    assert!(
+        (elapsed_ms.stdev.unwrap() - 21054.80078125).abs() < 0.001,
+        "stdev mismatch: {:?}",
+        elapsed_ms.stdev
+    );
+    assert!(
+        (elapsed_ms.ci_lower.unwrap() - 85783.37692283162).abs() < 0.01,
+        "ci_lower mismatch: {:?}",
+        elapsed_ms.ci_lower
+    );
+    assert!(
+        (elapsed_ms.ci_upper.unwrap() - 97574.06536033163).abs() < 0.01,
+        "ci_upper mismatch: {:?}",
+        elapsed_ms.ci_upper
+    );
+
+    // Verify goated (boolean metric with Wilson CI)
+    let goated = result
+        .iter()
+        .find(|s| s.metric_name == "goated")
+        .expect("Expected goated metric");
+    assert_eq!(goated.count, 1);
+    assert!(
+        (goated.avg_metric - 1.0).abs() < 0.001,
+        "avg_metric mismatch: {}",
+        goated.avg_metric
+    );
+    assert!(
+        goated.stdev.is_none(),
+        "stdev should be None, got {:?}",
+        goated.stdev
+    );
+    assert!(
+        (goated.ci_lower.unwrap() - 0.20654329147389294).abs() < 0.0001,
+        "ci_lower mismatch: {:?}",
+        goated.ci_lower
+    );
+    assert!(
+        (goated.ci_upper.unwrap() - 1.0).abs() < 0.0001,
+        "ci_upper mismatch: {:?}",
+        goated.ci_upper
+    );
+
+    // Verify solved (boolean metric with Wilson CI)
+    let solved = result
+        .iter()
+        .find(|s| s.metric_name == "solved")
+        .expect("Expected solved metric");
+    assert_eq!(solved.count, 49);
+    assert!(
+        (solved.avg_metric - 0.4489795918367347).abs() < 0.001,
+        "avg_metric mismatch: {}",
+        solved.avg_metric
+    );
+    assert!(
+        (solved.stdev.unwrap() - 0.5025445456953674).abs() < 0.001,
+        "stdev mismatch: {:?}",
+        solved.stdev
+    );
+    assert!(
+        (solved.ci_lower.unwrap() - 0.31852624929636336).abs() < 0.0001,
+        "ci_lower mismatch: {:?}",
+        solved.ci_lower
+    );
+    assert!(
+        (solved.ci_upper.unwrap() - 0.5868513320032188).abs() < 0.0001,
+        "ci_upper mismatch: {:?}",
+        solved.ci_upper
+    );
+}

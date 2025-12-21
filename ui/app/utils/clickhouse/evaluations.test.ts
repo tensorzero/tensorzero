@@ -1,8 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
-  getEvaluationStatistics,
   getEvaluationResults,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
@@ -152,111 +150,6 @@ describe("getEvaluationResults", () => {
   });
 });
 
-describe("getEvaluationStatistics", () => {
-  test("should return correct statistics for haiku evaluation", async () => {
-    const evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
-    const statistics = await getEvaluationStatistics(
-      "write_haiku",
-      "chat",
-      [
-        "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
-        "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
-      ],
-      [evaluation_run_id],
-    );
-    expect(statistics.length).toBe(2);
-    expect(statistics[0].evaluation_run_id).toBe(evaluation_run_id);
-    expect(statistics[0].metric_name).toBe(
-      "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
-    );
-    expect(statistics[0].datapoint_count).toBe(77);
-    expect(statistics[0].mean_metric).toBeCloseTo(0);
-    // With mean = 0 and Wilson CI for n=77
-    expect(statistics[0].ci_lower).toBeCloseTo(0);
-    expect(statistics[0].ci_upper).toBeCloseTo(0.04752, 4);
-    expect(statistics[1].evaluation_run_id).toBe(evaluation_run_id);
-    expect(statistics[1].metric_name).toBe(
-      "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
-    );
-    expect(statistics[1].datapoint_count).toBe(77);
-    expect(statistics[1].mean_metric).toBeCloseTo(0.064935);
-    // Wilson CI for n=77, p≈0.065
-    expect(statistics[1].ci_lower).toBeCloseTo(0.028053, 4);
-    expect(statistics[1].ci_upper).toBeCloseTo(0.143166, 4);
-  });
-
-  test("should return correct statistics for entity_extraction evaluation", async () => {
-    const evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const evaluation_run_id2 = "0196368e-53a8-7e82-a88d-db7086926d81";
-    const rawStatistics = await getEvaluationStatistics(
-      "extract_entities",
-      "json",
-      [
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
-      ],
-      [evaluation_run_id1, evaluation_run_id2],
-    );
-
-    // Sort results to ensure deterministic order (ClickHouse UNION ALL ordering is non-deterministic)
-    const statistics = rawStatistics.sort((a, b) => {
-      // First sort by evaluation_run_id DESC
-      if (a.evaluation_run_id !== b.evaluation_run_id) {
-        return b.evaluation_run_id.localeCompare(a.evaluation_run_id);
-      }
-      // Then sort by metric_name ASC
-      return a.metric_name.localeCompare(b.metric_name);
-    });
-
-    expect(statistics.length).toBe(4); // 2 evaluation runs * 2 metrics
-
-    // Results are ordered by evaluation_run_id DESC, metric_name ASC
-    // Run 1 (0196368f...), count_sports
-    expect(statistics[0].evaluation_run_id).toBe(evaluation_run_id1);
-    expect(statistics[0].metric_name).toBe(
-      "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
-    );
-    expect(statistics[0].datapoint_count).toBe(41);
-    expect(statistics[0].mean_metric).toBeCloseTo(0.78049, 4);
-    // Wald CI for n=41, mean≈0.78
-    expect(statistics[0].ci_lower).toBeCloseTo(0.652214, 5);
-    expect(statistics[0].ci_upper).toBeCloseTo(0.908762, 5);
-
-    // Run 1 (0196368f...), exact_match
-    expect(statistics[1].evaluation_run_id).toBe(evaluation_run_id1);
-    expect(statistics[1].metric_name).toBe(
-      "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
-    );
-    expect(statistics[1].datapoint_count).toBe(41);
-    expect(statistics[1].mean_metric).toBeCloseTo(0.09756, 4);
-    // Wilson CI for n=41, p≈0.098
-    expect(statistics[1].ci_lower).toBeCloseTo(0.038596, 5);
-    expect(statistics[1].ci_upper).toBeCloseTo(0.22548, 5);
-
-    // Run 2 (0196368e...), count_sports
-    expect(statistics[2].evaluation_run_id).toBe(evaluation_run_id2);
-    expect(statistics[2].metric_name).toBe(
-      "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
-    );
-    expect(statistics[2].datapoint_count).toBe(42);
-    expect(statistics[2].mean_metric).toBeCloseTo(0.7619, 4);
-    // Wald CI for n=42, mean≈0.762
-    expect(statistics[2].ci_lower).toBeCloseTo(0.631531, 5);
-    expect(statistics[2].ci_upper).toBeCloseTo(0.892278, 5);
-
-    // Run 2 (0196368e...), exact_match
-    expect(statistics[3].evaluation_run_id).toBe(evaluation_run_id2);
-    expect(statistics[3].metric_name).toBe(
-      "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
-    );
-    expect(statistics[3].datapoint_count).toBe(42);
-    expect(statistics[3].mean_metric).toBeCloseTo(0.52381, 4);
-    // Wilson CI for n=42, p≈0.524
-    expect(statistics[3].ci_lower).toBeCloseTo(0.377222, 5);
-    expect(statistics[3].ci_upper).toBeCloseTo(0.666406, 5);
-  });
-});
-
 describe("getEvaluationsForDatapoint", () => {
   test("should return empty array for nonexistent datapoint", async () => {
     const evaluations = await getEvaluationsForDatapoint(
@@ -354,37 +247,5 @@ describe("getEvaluationsForDatapoint", () => {
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
     expect(second_evaluation.metric_value).toBeDefined();
-  });
-});
-
-describe("getEvaluationRunInfosForDatapoint", () => {
-  test("should return correct evaluation run info for ragged json datapoint", async () => {
-    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "0196368e-0b64-7321-ab5b-c32eefbf3e9f",
-      "extract_entities",
-    );
-    // Check that the evaluation run ids are correct
-    const expected1 = {
-      evaluation_run_id: "0196368e-53a8-7e82-a88d-db7086926d81",
-      most_recent_inference_date: "2025-04-14T23:06:59Z",
-      variant_name: "gpt4o_initial_prompt",
-    };
-    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
-    expect(evaluationRunInfos).toEqual([expected1]);
-  });
-
-  test("should return correct evaluation run info for ragged haiku datapoint", async () => {
-    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
-      "0196374a-d03f-7420-9da5-1561cba71ddb",
-      "write_haiku",
-    );
-
-    const expected = {
-      evaluation_run_id: "0196374b-04a3-7013-9049-e59ed5fe3f74",
-      variant_name: "better_prompt_haiku_3_5",
-      most_recent_inference_date: "2025-04-15T02:33:05Z",
-    };
-    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
-    expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));
   });
 });

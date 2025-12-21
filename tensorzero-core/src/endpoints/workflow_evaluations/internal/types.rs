@@ -98,3 +98,40 @@ pub struct WorkflowEvaluationRunWithEpisodeCount {
 pub struct CountWorkflowEvaluationRunsResponse {
     pub count: u32,
 }
+
+// =============================================================================
+// Get Workflow Evaluation Runs
+// =============================================================================
+
+/// Response containing a list of workflow evaluation runs by IDs.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetWorkflowEvaluationRunsResponse {
+    pub runs: Vec<WorkflowEvaluationRun>,
+}
+
+// =============================================================================
+// Get Workflow Evaluation Run Statistics
+// =============================================================================
+
+/// Statistics for a single metric within a workflow evaluation run.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+pub struct WorkflowEvaluationRunStatistics {
+    pub metric_name: String,
+    pub count: u32,
+    pub avg_metric: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdev: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ci_lower: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ci_upper: Option<f64>,
+}
+
+/// Response containing statistics for a workflow evaluation run grouped by metric.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetWorkflowEvaluationRunStatisticsResponse {
+    pub statistics: Vec<WorkflowEvaluationRunStatistics>,
+}
