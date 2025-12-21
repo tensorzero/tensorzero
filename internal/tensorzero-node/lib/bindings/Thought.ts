@@ -2,7 +2,7 @@
 import type { ThoughtSummaryBlock } from "./ThoughtSummaryBlock";
 
 /**
- * Struct that represents a model's reasoning
+ * A model's reasoning/thinking content.
  */
 export type Thought = {
   text?: string;

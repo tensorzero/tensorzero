@@ -2,11 +2,19 @@
 import type { Detail } from "./Detail";
 
 /**
- * A file already encoded as base64
+ * A file already encoded as base64.
  */
 export type Base64File = {
+  /**
+   * The original URL we used to download the file (if any).
+   */
   source_url?: string;
   mime_type: string;
+  /**
+   * Unprefixed base64-encoded data.
+   * This field is private and validated during deserialization to ensure
+   * it doesn't contain a `data:` prefix.
+   */
   data: string;
   detail?: Detail;
   filename?: string;

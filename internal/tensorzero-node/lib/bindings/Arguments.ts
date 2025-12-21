@@ -2,6 +2,6 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * A newtype wrapper around Map<String, Value> for template and system arguments
+ * A newtype wrapper around Map<String, Value> for template and system arguments.
  */
 export type Arguments = { [key in string]?: JsonValue };
