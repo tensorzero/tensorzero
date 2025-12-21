@@ -27,11 +27,13 @@ sqlx = { version = "0.9.0-alpha.1", features = [
 thiserror = "2"
 anyhow = "1"
 uuid.workspace = true
+autopilot-client = { path = "../autopilot-client" }
 chrono.workspace = true
 tensorzero.workspace = true
 url = "2"
 secrecy.workspace = true
 
+tensorzero-core.workspace = true
+
 [dev-dependencies]
 mockall = "0.14"
-tensorzero-core.workspace = true

@@ -61,6 +61,29 @@ impl InferenceClient for MockInferenceClient {
             .clone()
             .ok_or(InferenceError::StreamingNotSupported)
     }
+
+    async fn create_autopilot_event(
+        &self,
+        _session_id: Uuid,
+        _request: durable_tools::CreateEventRequest,
+    ) -> Result<durable_tools::CreateEventResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_events(
+        &self,
+        _session_id: Uuid,
+        _params: durable_tools::ListEventsParams,
+    ) -> Result<durable_tools::ListEventsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
+
+    async fn list_autopilot_sessions(
+        &self,
+        _params: durable_tools::ListSessionsParams,
+    ) -> Result<durable_tools::ListSessionsResponse, InferenceError> {
+        Err(InferenceError::AutopilotUnavailable)
+    }
 }
 
 /// Create a mock chat inference response with the given text content.

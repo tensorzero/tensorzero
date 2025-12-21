@@ -1802,6 +1802,7 @@ version = "2025.12.4"
 dependencies = [
  "anyhow",
  "async-trait",
+ "autopilot-client",
  "chrono",
  "durable",
  "mockall",

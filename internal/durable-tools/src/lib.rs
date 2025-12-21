@@ -189,6 +189,12 @@ pub use inference::{
     InferenceClient, InferenceError, embedded_gateway_client, http_gateway_client,
 };
 
+// Re-export autopilot types for use by tools
+pub use inference::{
+    CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, ToolOutcome,
+};
+
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
     ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
