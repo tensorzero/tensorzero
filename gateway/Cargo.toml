@@ -8,6 +8,9 @@ license.workspace = true
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
+autopilot-worker = { path = "../internal/autopilot-worker" }
+autopilot-client = { path = "../internal/autopilot-client" }
+url = { workspace = true }
 axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }

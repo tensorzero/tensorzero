@@ -6,11 +6,36 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-schemars.workspace = true
+# Internal crates
+autopilot-client = { path = "../autopilot-client" }
+autopilot-tools = { path = "../autopilot-tools" }
+durable-tools = { path = "../durable-tools" }
+tensorzero-core = { path = "../../tensorzero-core" }
+
+# Async runtime and utilities
+tokio.workspace = true
+tokio-util = "0.7"
+async-trait = "0.1"
+
+# Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+schemars.workspace = true
+
+# Database (using durable-tools compatible version)
+sqlx = { version = "0.9.0-alpha.1", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+] }
+
+# Utilities
+anyhow = "1"
 thiserror.workspace = true
-durable.workspace = true
+uuid.workspace = true
+url.workspace = true
+secrecy.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

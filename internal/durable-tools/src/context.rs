@@ -3,6 +3,7 @@ use durable::{Durable, TaskContext, TaskHandle};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
+use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
@@ -16,17 +17,33 @@ use crate::task_tool::TaskToolParams;
 /// Type alias for the Durable client with `ToolAppState`.
 pub type DurableClient = Durable<ToolAppState>;
 
+/// Trait for extension state that can be stored in `ToolAppState`.
+///
+/// This allows downstream crates to add custom state to the tool execution context.
+pub trait StateExtension: Any + Send + Sync {
+    /// Upcast to `Any` for downcasting.
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T: Any + Send + Sync> StateExtension for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// Application state passed to all tools via durable's `State` type parameter.
 ///
 /// This is cloned and passed to each task execution by the durable worker.
 #[derive(Clone)]
 pub struct ToolAppState {
     /// Database connection pool for database operations.
-    pool: PgPool,
+    pub(crate) pool: PgPool,
     /// Tool registry for looking up and calling other tools.
-    tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+    pub(crate) tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
     /// Inference client for calling TensorZero inference.
-    inference_client: Arc<dyn InferenceClient>,
+    pub(crate) inference_client: Arc<dyn InferenceClient>,
+    /// Optional extension state for downstream crates.
+    pub(crate) extension: Option<Arc<dyn StateExtension>>,
 }
 
 impl ToolAppState {
@@ -40,7 +57,32 @@ impl ToolAppState {
             pool,
             tool_registry,
             inference_client,
+            extension: None,
         }
+    }
+
+    /// Create a new application state with an extension.
+    pub fn with_extension<E: StateExtension + 'static>(
+        pool: PgPool,
+        tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+        inference_client: Arc<dyn InferenceClient>,
+        extension: E,
+    ) -> Self {
+        Self {
+            pool,
+            tool_registry,
+            inference_client,
+            extension: Some(Arc::new(extension)),
+        }
+    }
+
+    /// Get the extension state, downcasting to the expected type.
+    ///
+    /// Returns `None` if no extension is set or if the type doesn't match.
+    pub fn extension<E: StateExtension + 'static>(&self) -> Option<&E> {
+        self.extension
+            .as_ref()
+            .and_then(|ext| ext.as_any().downcast_ref::<E>())
     }
 }
 
@@ -90,6 +132,13 @@ impl<'a> ToolContext<'a> {
     /// Get a reference to the database pool.
     pub fn pool(&self) -> &PgPool {
         &self.app_state.pool
+    }
+
+    /// Get the extension state, downcasting to the expected type.
+    ///
+    /// Returns `None` if no extension is set or if the type doesn't match.
+    pub fn extension<E: StateExtension + 'static>(&self) -> Option<&E> {
+        self.app_state.extension()
     }
 
     /// Get a reference to the tool registry (requires async lock).

@@ -267,6 +267,7 @@ pub struct ToolExecutorBuilder {
     queue_name: String,
     default_max_attempts: u32,
     inference_client: Option<Arc<dyn InferenceClient>>,
+    extension: Option<Arc<dyn crate::context::StateExtension>>,
 }
 
 impl ToolExecutorBuilder {
@@ -278,6 +279,7 @@ impl ToolExecutorBuilder {
             queue_name: "tools".to_string(),
             default_max_attempts: 5,
             inference_client: None,
+            extension: None,
         }
     }
 
@@ -316,6 +318,16 @@ impl ToolExecutorBuilder {
         self
     }
 
+    /// Set an extension state that will be available to tools via `ToolContext::extension()`.
+    ///
+    /// This allows downstream crates to inject custom state (like gateway state or
+    /// API clients) that tools can access during execution.
+    #[must_use]
+    pub fn extension<E: crate::context::StateExtension + 'static>(mut self, ext: E) -> Self {
+        self.extension = Some(Arc::new(ext));
+        self
+    }
+
     /// Build the [`ToolExecutor`].
     ///
     /// # Errors
@@ -341,8 +353,17 @@ impl ToolExecutorBuilder {
             PgPool::connect(url.expose_secret()).await?
         };
 
-        // Create the app context with the pool and inference client
-        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), inference_client);
+        // Create the app context with the pool, inference client, and optional extension
+        let app_ctx = if let Some(extension) = self.extension {
+            ToolAppState {
+                pool: pool.clone(),
+                tool_registry: registry.clone(),
+                inference_client,
+                extension: Some(extension),
+            }
+        } else {
+            ToolAppState::new(pool.clone(), registry.clone(), inference_client)
+        };
 
         // Build the durable client with the app context
         let durable = DurableBuilder::new()

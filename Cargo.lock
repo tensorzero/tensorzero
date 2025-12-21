@@ -336,11 +336,23 @@ dependencies = [
 name = "autopilot-worker"
 version = "2025.12.4"
 dependencies = [
- "durable",
+ "anyhow",
+ "async-trait",
+ "autopilot-client",
+ "autopilot-tools",
+ "durable-tools",
  "schemars 1.1.0",
+ "secrecy",
  "serde",
  "serde_json",
+ "sqlx 0.9.0-alpha.1",
+ "tensorzero-core",
  "thiserror 2.0.17",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -2364,6 +2376,8 @@ dependencies = [
 name = "gateway"
 version = "2025.12.4"
 dependencies = [
+ "autopilot-client",
+ "autopilot-worker",
  "axum",
  "brotli",
  "clap",
@@ -2387,6 +2401,7 @@ dependencies = [
  "tokio-stream",
  "tower-http",
  "tracing",
+ "url",
  "uuid",
  "zstd",
 ]

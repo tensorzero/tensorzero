@@ -165,7 +165,7 @@ mod task_tool;
 mod tests;
 
 // Re-export main types
-pub use context::{DurableClient, SimpleToolContext, ToolAppState, ToolContext};
+pub use context::{DurableClient, SimpleToolContext, StateExtension, ToolAppState, ToolContext};
 pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};

@@ -12,6 +12,10 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use std::sync::Arc;
+
+use autopilot_worker::{AutopilotWorkerConfig, spawn_autopilot_worker};
+
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -224,6 +228,10 @@ async fn main() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
+    // Start autopilot worker if configured
+    let autopilot_worker_enabled = spawn_autopilot_worker_if_configured(&gateway_handle)
+        .log_err_pretty("Failed to start autopilot worker")?;
+
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
@@ -315,6 +323,13 @@ async fn main() -> Result<(), ExitCode> {
 
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
+
+    // Print whether autopilot worker is enabled
+    if autopilot_worker_enabled {
+        tracing::info!("├ Autopilot Worker: enabled");
+    } else {
+        tracing::info!("├ Autopilot Worker: disabled");
+    }
 
     if let Some(gateway_url) = config
         .gateway
@@ -544,6 +559,66 @@ fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
     } else {
         tracing::info!("├ Configuration: default");
     }
+}
+
+/// Spawn the autopilot worker if the required environment variables are set.
+///
+/// Returns `Ok(true)` if the worker was spawned, `Ok(false)` if not configured,
+/// or an error if configuration was provided but invalid.
+fn spawn_autopilot_worker_if_configured(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    // Check for required environment variables
+    let durable_db_url = match std::env::var("TENSORZERO_DURABLE_DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => return Ok(false), // Not configured, silently skip
+    };
+
+    let autopilot_api_key = match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            tracing::warn!(
+                "TENSORZERO_DURABLE_DATABASE_URL is set but TENSORZERO_AUTOPILOT_API_KEY is not. \
+                 Autopilot worker will not start."
+            );
+            return Ok(false);
+        }
+    };
+
+    // Optional: custom autopilot API URL (defaults to production)
+    let autopilot_api_url = std::env::var("TENSORZERO_AUTOPILOT_API_URL").ok();
+
+    // Optional: queue name (defaults to "autopilot")
+    let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+        .unwrap_or_else(|_| "autopilot".to_string());
+
+    // Gateway URL for inference calls (default to localhost)
+    let gateway_url = std::env::var("TENSORZERO_AUTOPILOT_GATEWAY_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+    let gateway_url: url::Url = gateway_url.parse()?;
+
+    // Create the autopilot client
+    let mut client_builder =
+        autopilot_client::AutopilotClient::builder().api_key(autopilot_api_key);
+
+    if let Some(url) = autopilot_api_url {
+        client_builder = client_builder.base_url(url.parse()?);
+    }
+
+    let autopilot_client = Arc::new(client_builder.build()?);
+
+    // Create the worker config
+    let config = AutopilotWorkerConfig {
+        durable_database_url: durable_db_url.into(),
+        queue_name,
+        gateway_url,
+        autopilot_client,
+    };
+
+    // Spawn the worker
+    spawn_autopilot_worker(gateway_handle, config);
+
+    Ok(true)
 }
 
 #[cfg(test)]
