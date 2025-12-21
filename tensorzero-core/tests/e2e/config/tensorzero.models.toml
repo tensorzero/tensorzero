@@ -825,3 +825,12 @@ routing = ["openrouter"]
 [embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
 type = "openrouter"
 model_name = "google/gemini-embedding-001"
+
+# Test embedding model with extra_headers for bad auth test
+[embedding_models.openai_bad_auth_extra_headers]
+routing = ["openai"]
+
+[embedding_models.openai_bad_auth_extra_headers.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_openai_auth" }]
