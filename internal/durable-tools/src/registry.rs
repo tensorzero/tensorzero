@@ -16,7 +16,7 @@ use crate::task_tool::TaskTool;
 /// This provides metadata about a tool without exposing its concrete types.
 pub trait ErasedTool: Send + Sync {
     /// Get the tool's unique name.
-    fn name(&self) -> &'static str;
+    fn name(&self) -> Cow<'static, str>;
 
     /// Get the tool's description.
     fn description(&self) -> Cow<'static, str>;
@@ -70,8 +70,8 @@ impl<T: TaskTool> Default for ErasedTaskToolWrapper<T> {
 }
 
 impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
-    fn name(&self) -> &'static str {
-        T::NAME
+    fn name(&self) -> Cow<'static, str> {
+        T::name()
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -93,8 +93,8 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
 impl<T: SimpleTool> ErasedTool for T {
-    fn name(&self) -> &'static str {
-        T::NAME
+    fn name(&self) -> Cow<'static, str> {
+        T::name()
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -162,8 +162,9 @@ impl ToolRegistry {
     ///
     /// Returns `&mut Self` for chaining.
     pub fn register_task_tool<T: TaskTool>(&mut self) -> &mut Self {
+        let name = T::name();
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
-        self.tools.insert(T::NAME.to_string(), wrapper);
+        self.tools.insert(name.into_owned(), wrapper);
         self
     }
 
@@ -171,10 +172,11 @@ impl ToolRegistry {
     ///
     /// Returns `&mut Self` for chaining.
     pub fn register_simple_tool<T: SimpleTool + Default>(&mut self) -> &mut Self {
+        let name = T::name();
         let tool = Arc::new(T::default());
         self.tools
-            .insert(T::NAME.to_string(), tool.clone() as Arc<dyn ErasedTool>);
-        self.simple_tools.insert(T::NAME.to_string(), tool);
+            .insert(name.to_string(), tool.clone() as Arc<dyn ErasedTool>);
+        self.simple_tools.insert(name.into_owned(), tool);
         self
     }
 

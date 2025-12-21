@@ -101,7 +101,9 @@ struct EchoSimpleTool;
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    const NAME: &'static str = "echo_simple";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("echo_simple")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message")
@@ -136,7 +138,9 @@ struct EchoTaskTool;
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    const NAME: &'static str = "echo_task";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("echo_task")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message (durable)")
@@ -199,7 +203,9 @@ struct InferenceSimpleTool;
 
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
-    const NAME: &'static str = "inference_simple";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("inference_simple")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Calls inference and returns the response")
@@ -254,7 +260,9 @@ struct InferenceTaskTool;
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
-    const NAME: &'static str = "inference_task";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("inference_task")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Calls inference (durable) and returns the response")
@@ -469,7 +477,9 @@ struct KeyCapturingSimpleTool;
 
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
-    const NAME: &'static str = "key_capturing_tool";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("key_capturing_tool")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Captures idempotency keys for testing")
@@ -503,7 +513,9 @@ struct MultiCallTaskTool;
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
-    const NAME: &'static str = "multi_call_task";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("multi_call_task")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Calls a SimpleTool multiple times")

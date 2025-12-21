@@ -37,7 +37,9 @@ struct EchoSimpleTool;
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
-    const NAME: &'static str = "echo_simple";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("echo_simple")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message")
@@ -72,7 +74,9 @@ struct EchoTaskTool;
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
-    const NAME: &'static str = "echo_task";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("echo_task")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message (durable)")
@@ -106,7 +110,9 @@ struct DefaultTimeoutTaskTool;
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
-    const NAME: &'static str = "default_timeout_task";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("default_timeout_task")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
@@ -139,7 +145,9 @@ struct DefaultTimeoutSimpleTool;
 
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
-    const NAME: &'static str = "default_timeout_simple";
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("default_timeout_simple")
+    }
 
     fn description() -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
@@ -444,8 +452,8 @@ mod error_tests {
     use durable::{ControlFlow, TaskError};
 
     #[test]
-    fn tool_error_from_task_error_failed() {
-        let task_err = TaskError::Failed(anyhow::anyhow!("test error"));
+    fn tool_error_from_task_error_task_internal() {
+        let task_err = TaskError::TaskInternal(anyhow::anyhow!("test error"));
         let tool_err: ToolError = task_err.into();
 
         match tool_err {
@@ -484,10 +492,10 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Failed(e) => {
+            TaskError::TaskInternal(e) => {
                 assert_eq!(e.to_string(), "test error");
             }
-            TaskError::Control(_) => panic!("Expected Failed"),
+            _ => panic!("Expected TaskInternal"),
         }
     }
 
@@ -498,7 +506,7 @@ mod error_tests {
 
         match task_err {
             TaskError::Control(ControlFlow::Suspend) => {}
-            TaskError::Failed(_) | TaskError::Control(_) => panic!("Expected Control(Suspend)"),
+            _ => panic!("Expected Control(Suspend)"),
         }
     }
 
@@ -508,10 +516,10 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Failed(e) => {
+            TaskError::TaskInternal(e) => {
                 assert!(e.to_string().contains("missing_tool"));
             }
-            TaskError::Control(_) => panic!("Expected Failed"),
+            _ => panic!("Expected TaskInternal"),
         }
     }
 
@@ -521,10 +529,10 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Failed(e) => {
+            TaskError::TaskInternal(e) => {
                 assert!(e.to_string().contains("bad params"));
             }
-            TaskError::Control(_) => panic!("Expected Failed"),
+            _ => panic!("Expected TaskInternal"),
         }
     }
 
@@ -535,8 +543,8 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Failed(_) => {}
-            TaskError::Control(_) => panic!("Expected Failed"),
+            TaskError::Serialization(_) => {}
+            _ => panic!("Expected Serialization"),
         }
     }
 }

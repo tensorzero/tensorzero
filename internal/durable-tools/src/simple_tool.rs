@@ -50,7 +50,9 @@ use crate::task_tool::SideInfo;
 ///
 /// #[async_trait]
 /// impl SimpleTool for SearchTool {
-///     const NAME: &'static str = "search";
+///     fn name() -> Cow<'static, str> {
+///         Cow::Borrowed("search")
+///     }
 ///
 ///     fn description() -> Cow<'static, str> {
 ///         Cow::Borrowed("Search the web")
@@ -81,7 +83,7 @@ pub trait SimpleTool: Send + Sync + 'static {
     /// Unique name for this tool.
     ///
     /// This is used for registration and invocation.
-    const NAME: &'static str;
+    fn name() -> Cow<'static, str>;
 
     /// Human-readable description of what this tool does.
     ///
