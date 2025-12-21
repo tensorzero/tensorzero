@@ -32,7 +32,7 @@ use crate::task_tool::SideInfo;
 ///
 /// ```ignore
 /// use durable_tools::{SimpleTool, SimpleToolContext, ToolResult, async_trait};
-/// use schemars::{schema_for, schema::RootSchema, JsonSchema};
+/// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
 ///
@@ -58,8 +58,8 @@ use crate::task_tool::SideInfo;
 ///         Cow::Borrowed("Search the web")
 ///     }
 ///
-///     fn parameters_schema() -> RootSchema {
-///         schema_for!(SearchParams)
+///     fn parameters_schema() -> Schema {
+///         schema_for!(SearchParams).schema
 ///     }
 ///
 ///     type LlmParams = SearchParams;

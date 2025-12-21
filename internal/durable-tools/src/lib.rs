@@ -25,7 +25,7 @@
 //!     ToolExecutor, ToolResult, async_trait, WorkerOptions,
 //!     http_gateway_client,
 //! };
-//! use schemars::{schema_for, schema::RootSchema, JsonSchema};
+//! use schemars::{schema_for, JsonSchema, Schema};
 //! use serde::{Deserialize, Serialize};
 //! use std::borrow::Cow;
 //! use uuid::Uuid;
@@ -52,8 +52,8 @@
 //!         Cow::Borrowed("Search the web")
 //!     }
 //!
-//!     fn parameters_schema() -> RootSchema {
-//!         schema_for!(SearchParams)
+//!     fn parameters_schema() -> Schema {
+//!         schema_for!(SearchParams).schema
 //!     }
 //!
 //!     type LlmParams = SearchParams;
@@ -92,8 +92,8 @@
 //!         Cow::Borrowed("Research a topic")
 //!     }
 //!
-//!     fn parameters_schema() -> RootSchema {
-//!         schema_for!(ResearchParams)
+//!     fn parameters_schema() -> Schema {
+//!         schema_for!(ResearchParams).schema
 //!     }
 //!
 //!     type LlmParams = ResearchParams;
