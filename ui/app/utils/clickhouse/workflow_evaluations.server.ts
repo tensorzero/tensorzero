@@ -1,60 +1,11 @@
 import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
 import {
-  waldConfidenceIntervalLower,
-  waldConfidenceIntervalUpper,
-  wilsonConfidenceIntervalLower,
-  wilsonConfidenceIntervalUpper,
-} from "./helpers";
-import {
   workflowEvaluationRunEpisodeWithFeedbackSchema,
-  workflowEvaluationRunSchema,
-  workflowEvaluationRunStatisticsByMetricNameSchema,
   groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
-  type WorkflowEvaluationRun,
   type WorkflowEvaluationRunEpisodeWithFeedback,
-  type WorkflowEvaluationRunStatisticsByMetricName,
   type GroupedWorkflowEvaluationRunEpisodeWithFeedback,
 } from "./workflow_evaluations";
-
-export async function getWorkflowEvaluationRunsByIds(
-  run_ids: string[], // one or more UUIDv7 strings
-  project_name?: string, // optional extra filter
-): Promise<WorkflowEvaluationRun[]> {
-  if (run_ids.length === 0) return []; // nothing to fetch
-
-  const query = `
-    SELECT
-      run_display_name AS name,
-      uint_to_uuid(run_id_uint) AS id,
-      variant_pins,
-      tags,
-      project_name,
-      formatDateTime(
-        UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
-        '%Y-%m-%dT%H:%i:%SZ'
-      ) AS timestamp
-    FROM DynamicEvaluationRun
-    WHERE run_id_uint IN (
-      /* turn the parameter array of UUID strings into a real table
-         expression of UInt128 values so the IN predicate is valid */
-      SELECT arrayJoin(
-        arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)})
-      )
-    )
-    ${project_name ? "AND project_name = {project_name:String}" : ""}
-    ORDER BY run_id_uint DESC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { run_ids, project_name },
-  });
-
-  const rows = await result.json<WorkflowEvaluationRun[]>();
-  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
-}
 
 /**
  * Returns information about the episodes that were used in a workflow evaluation run,
@@ -162,66 +113,6 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
   const rows = await result.json<WorkflowEvaluationRunEpisodeWithFeedback[]>();
   return rows.map((row) =>
     workflowEvaluationRunEpisodeWithFeedbackSchema.parse(row),
-  );
-}
-
-export async function getWorkflowEvaluationRunStatisticsByMetricName(
-  run_id: string,
-  metric_name?: string,
-): Promise<WorkflowEvaluationRunStatisticsByMetricName[]> {
-  const query = `
-    WITH
-       episodes AS (
-        SELECT
-          episode_id_uint,
-          run_id_uint,
-          tags,
-          datapoint_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicEvaluationRunEpisodeByRunId
-        WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
-        ORDER BY episode_id_uint DESC
-      ),
-    results AS (
-    SELECT
-      metric_name,
-      toUInt32(count()) as count,
-      avg(value) as avg_metric,
-      stddevSamp(value) as stdev,
-      ${waldConfidenceIntervalLower("value")} AS ci_lower,
-      ${waldConfidenceIntervalUpper("value")} AS ci_upper
-    FROM FloatMetricFeedbackByTargetId
-    WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
-    )
-    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
-    GROUP BY metric_name
-    UNION ALL
-    SELECT
-      metric_name,
-      toUInt32(count()) as count,
-      avg(value) as avg_metric,
-      stddevSamp(value) as stdev,
-      ${wilsonConfidenceIntervalLower("value")} AS ci_lower,
-      ${wilsonConfidenceIntervalUpper("value")} AS ci_upper
-    FROM BooleanMetricFeedbackByTargetId
-    WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
-    )
-    ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
-      GROUP BY metric_name
-    )
-    SELECT * FROM results
-    ORDER BY metric_name ASC
-  `;
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { run_id, metric_name },
-  });
-  const rows =
-    await result.json<WorkflowEvaluationRunStatisticsByMetricName[]>();
-  return rows.map((row) =>
-    workflowEvaluationRunStatisticsByMetricNameSchema.parse(row),
   );
 }
 

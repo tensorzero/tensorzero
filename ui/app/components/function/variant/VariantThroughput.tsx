@@ -1,4 +1,4 @@
-import type { VariantThroughput } from "~/utils/clickhouse/function";
+import type { VariantThroughput } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   CHART_COLORS,

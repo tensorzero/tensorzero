@@ -9,9 +9,11 @@ use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationProjectRow, WorkflowEvaluationQueries, WorkflowEvaluationRunRow,
+    WorkflowEvaluationRunStatisticsRaw, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::statistics_util::{wald_confint, wilson_confint};
 
 #[async_trait]
 impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
@@ -223,11 +225,162 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
             })
         })
     }
+
+    async fn get_workflow_evaluation_runs(
+        &self,
+        run_ids: &[Uuid],
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        if run_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut params = HashMap::new();
+
+        let project_name_filter = if let Some(project_name_str) = project_name {
+            params.insert("project_name", project_name_str);
+            "AND project_name = {project_name:String}"
+        } else {
+            ""
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                run_display_name AS name,
+                uint_to_uuid(run_id_uint) AS id,
+                variant_pins,
+                tags,
+                project_name,
+                formatDateTime(
+                    UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
+                    '%Y-%m-%dT%H:%i:%SZ'
+                ) AS timestamp
+            FROM DynamicEvaluationRun
+            WHERE run_id_uint IN (
+                SELECT arrayJoin(
+                    arrayMap(x -> toUInt128(toUUID(x)), {{run_ids:Array(String)}})
+                )
+            )
+            {project_name_filter}
+            ORDER BY run_id_uint DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        // Format run_ids as ClickHouse array with single quotes
+        let run_ids_str: Vec<String> = run_ids.iter().map(|id| format!("'{id}'")).collect();
+        let run_ids_array = format!("[{}]", run_ids_str.join(","));
+        params.insert("run_ids", run_ids_array.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_workflow_evaluation_run_statistics(
+        &self,
+        run_id: Uuid,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error> {
+        let run_id_str = run_id.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("run_id", run_id_str.as_str());
+
+        // Build the optional metric name filter
+        let metric_name_filter = if let Some(metric_name) = metric_name {
+            params.insert("metric_name", metric_name);
+            "AND metric_name = {metric_name:String}"
+        } else {
+            ""
+        };
+
+        let query = format!(
+            r"
+            WITH
+              episodes AS (
+                SELECT episode_id_uint
+                FROM DynamicEvaluationRunEpisodeByRunId
+                WHERE toUInt128(toUUID({{run_id:String}})) = run_id_uint
+              ),
+              float_stats AS (
+                SELECT
+                  metric_name,
+                  toUInt32(count()) as count,
+                  avg(value) as avg_metric,
+                  stddevSamp(value) as stdev,
+                  false as is_boolean
+                FROM FloatMetricFeedbackByTargetId
+                WHERE target_id IN (
+                  SELECT uint_to_uuid(episode_id_uint) FROM episodes
+                )
+                {metric_name_filter}
+                GROUP BY metric_name
+              ),
+              boolean_stats AS (
+                SELECT
+                  metric_name,
+                  toUInt32(count()) as count,
+                  avg(value) as avg_metric,
+                  stddevSamp(value) as stdev,
+                  true as is_boolean
+                FROM BooleanMetricFeedbackByTargetId
+                WHERE target_id IN (
+                  SELECT uint_to_uuid(episode_id_uint) FROM episodes
+                )
+                {metric_name_filter}
+                GROUP BY metric_name
+              )
+            SELECT * FROM float_stats
+            UNION ALL
+            SELECT * FROM boolean_stats
+            ORDER BY metric_name ASC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        let raw_stats: Vec<WorkflowEvaluationRunStatisticsRaw> =
+            parse_json_rows(response.response.as_str())?;
+
+        // Compute confidence intervals in Rust
+        let stats = raw_stats
+            .into_iter()
+            .map(|raw| {
+                let ci = if raw.is_boolean {
+                    wilson_confint(raw.avg_metric, raw.count)
+                } else if let Some(stdev) = raw.stdev {
+                    wald_confint(raw.avg_metric, stdev, raw.count)
+                } else {
+                    None
+                };
+
+                let (ci_lower, ci_upper) = match ci {
+                    Some((lower, upper)) => (Some(lower), Some(upper)),
+                    None => (None, None),
+                };
+
+                WorkflowEvaluationRunStatisticsRow {
+                    metric_name: raw.metric_name,
+                    count: raw.count,
+                    avg_metric: raw.avg_metric,
+                    stdev: raw.stdev,
+                    ci_lower,
+                    ci_upper,
+                }
+            })
+            .collect();
+
+        Ok(stats)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use uuid::Uuid;
 
     use crate::db::{
         clickhouse::{
@@ -376,5 +529,219 @@ mod tests {
         let count = conn.count_workflow_evaluation_projects().await.unwrap();
 
         assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_empty_ids() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        // No expectations set - should not call the database
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.get_workflow_evaluation_runs(&[], None).await.unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_with_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "SELECT");
+                assert_query_contains(query, "run_display_name AS name");
+                assert_query_contains(query, "uint_to_uuid(run_id_uint) AS id");
+                assert_query_contains(query, "variant_pins");
+                assert_query_contains(query, "tags");
+                assert_query_contains(query, "project_name");
+                assert_query_contains(query, "FROM DynamicEvaluationRun");
+                assert_query_contains(query, "WHERE run_id_uint IN");
+                assert_query_contains(query, "ORDER BY run_id_uint DESC");
+
+                assert!(params.contains_key("run_ids"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"name":"test_run","id":"01968d04-142c-7e53-8ea7-3a3255b518dc","variant_pins":{},"tags":{},"project_name":"test_project","timestamp":"2025-05-01T18:02:56Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+        let result = conn
+            .get_workflow_evaluation_runs(&[run_id], None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, Some("test_run".to_string()));
+        assert_eq!(result[0].id, run_id);
+        assert_eq!(result[0].project_name, Some("test_project".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_runs_with_project_name() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "AND project_name = {project_name:String}");
+                assert!(params.contains_key("run_ids"));
+                assert_eq!(params.get("project_name"), Some(&"my_project"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"name":"filtered_run","id":"01968d04-142c-7e53-8ea7-3a3255b518dc","variant_pins":{},"tags":{},"project_name":"my_project","timestamp":"2025-05-01T18:02:56Z"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+        let result = conn
+            .get_workflow_evaluation_runs(&[run_id], Some("my_project"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].project_name, Some("my_project".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_run_statistics() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, params| {
+                assert_query_contains(query, "SELECT");
+                assert_query_contains(query, "FROM FloatMetricFeedbackByTargetId");
+                assert_query_contains(query, "FROM BooleanMetricFeedbackByTargetId");
+                assert_query_contains(query, "FROM DynamicEvaluationRunEpisodeByRunId");
+                assert_query_contains(query, "UNION ALL");
+                assert_query_contains(query, "ORDER BY metric_name ASC");
+                assert_eq!(
+                    params.get("run_id"),
+                    Some(&"01968d04-142c-7e53-8ea7-3a3255b518dc")
+                );
+                true
+            })
+            .returning(|_, _| {
+                // Return mock data matching the expected format
+                Ok(ClickHouseResponse {
+                    response: r#"{"metric_name":"elapsed_ms","count":49,"avg_metric":91678.72114158163,"stdev":21054.80078125,"is_boolean":false}
+{"metric_name":"goated","count":1,"avg_metric":1.0,"stdev":null,"is_boolean":true}
+{"metric_name":"solved","count":49,"avg_metric":0.4489795918367347,"stdev":0.5025445456953674,"is_boolean":true}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 3,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_workflow_evaluation_run_statistics(run_id, None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 3);
+
+        // Check elapsed_ms (float metric with Wald CI)
+        let elapsed_ms = result
+            .iter()
+            .find(|r| r.metric_name == "elapsed_ms")
+            .unwrap();
+        assert_eq!(elapsed_ms.count, 49);
+        assert!((elapsed_ms.avg_metric - 91678.72114158163).abs() < 0.001);
+        assert!((elapsed_ms.stdev.unwrap() - 21054.80078125).abs() < 0.001);
+        // Check Wald CI bounds
+        let ci_lower = elapsed_ms.ci_lower.unwrap();
+        let ci_upper = elapsed_ms.ci_upper.unwrap();
+        assert!(
+            (ci_lower - 85783.37692283162).abs() < 0.01,
+            "ci_lower = {ci_lower}"
+        );
+        assert!(
+            (ci_upper - 97574.06536033163).abs() < 0.01,
+            "ci_upper = {ci_upper}"
+        );
+
+        // Check goated (boolean metric with Wilson CI)
+        let goated = result.iter().find(|r| r.metric_name == "goated").unwrap();
+        assert_eq!(goated.count, 1);
+        assert!((goated.avg_metric - 1.0).abs() < 0.001);
+        assert!(goated.stdev.is_none());
+        // Check Wilson CI bounds
+        let ci_lower = goated.ci_lower.unwrap();
+        let ci_upper = goated.ci_upper.unwrap();
+        assert!(
+            (ci_lower - 0.20654329147389294).abs() < 0.0001,
+            "ci_lower = {ci_lower}"
+        );
+        assert!((ci_upper - 1.0).abs() < 0.0001, "ci_upper = {ci_upper}");
+
+        // Check solved (boolean metric with Wilson CI)
+        let solved = result.iter().find(|r| r.metric_name == "solved").unwrap();
+        assert_eq!(solved.count, 49);
+        assert!((solved.avg_metric - 0.4489795918367347).abs() < 0.001);
+        // Check Wilson CI bounds
+        let ci_lower = solved.ci_lower.unwrap();
+        let ci_upper = solved.ci_upper.unwrap();
+        assert!(
+            (ci_lower - 0.31852624929636336).abs() < 0.0001,
+            "ci_lower = {ci_lower}"
+        );
+        assert!(
+            (ci_upper - 0.5868513320032188).abs() < 0.0001,
+            "ci_upper = {ci_upper}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_run_statistics_with_metric_name_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let run_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, params| {
+                assert_query_contains(query, "AND metric_name = {metric_name:String}");
+                assert_eq!(params.get("metric_name"), Some(&"solved"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"metric_name":"solved","count":49,"avg_metric":0.4489795918367347,"stdev":0.5025445456953674,"is_boolean":true}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_workflow_evaluation_run_statistics(run_id, Some("solved"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metric_name, "solved");
     }
 }

@@ -6,7 +6,7 @@ import {
 import { Badge } from "../../../../components/ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
-import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import type { WorkflowEvaluationRun } from "~/types/tensorzero";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 
 interface WorkflowEvaluationRunBadgeProps {

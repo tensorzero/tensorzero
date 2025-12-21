@@ -1,10 +1,10 @@
 name: TensorZero CI Bot Failure Diagnosis
 
-on:
-  workflow_run:
-    workflows: ["General Checks"]
-    types:
-      - completed
+# on:
+# workflow_run:
+#   workflows: ["General Checks"]
+#   types:
+#     - completed
 
 jobs:
   generate-patch:

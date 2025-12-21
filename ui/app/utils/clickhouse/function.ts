@@ -8,23 +8,6 @@ import type { InferenceStatsByVariant } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
 
-function getTimeWindowInMs(timeWindow: TimeWindow): number {
-  switch (timeWindow) {
-    case "minute":
-      return 60 * 1000; // 1 minute in ms
-    case "hour":
-      return 60 * 60 * 1000; // 1 hour in ms
-    case "day":
-      return 24 * 60 * 60 * 1000; // 1 day in ms
-    case "week":
-      return 7 * 24 * 60 * 60 * 1000; // 1 week in ms
-    case "month":
-      return 30 * 24 * 60 * 60 * 1000; // 1 month (30 days) in ms
-    case "cumulative":
-      return 365 * 24 * 60 * 60 * 1000; // 1 year in ms (for cumulative)
-  }
-}
-
 export async function getVariantPerformances(params: {
   function_name: string;
   function_config: FunctionConfig;
@@ -339,88 +322,4 @@ export async function getUsedVariants(
   return (response.stats_by_variant ?? []).map(
     (v: InferenceStatsByVariant) => v.variant_name,
   );
-}
-
-const variantThroughputSchema = z.object({
-  period_start: z.string().datetime(),
-  variant_name: z.string(),
-  count: z.number().min(0),
-});
-export type VariantThroughput = z.infer<typeof variantThroughputSchema>;
-
-export async function getFunctionThroughputByVariant(
-  functionName: string,
-  timeWindow: TimeWindow,
-  maxPeriods: number,
-): Promise<VariantThroughput[]> {
-  const timeWindowMs = getTimeWindowInMs(timeWindow);
-  // Calculate the time delta in milliseconds that we want to look back from the most recent inference
-  const timeDeltaMs = (maxPeriods + 1) * timeWindowMs;
-  // Convert time delta to UInt128 representation for UUIDv7 arithmetic
-  const timeDeltaUInt128 = getTimeDeltaAsUInt128(timeDeltaMs);
-
-  // Different query for cumulative stats
-  const query =
-    timeWindow === "cumulative"
-      ? `
-    SELECT
-        -- For cumulative, use a fixed period start
-        '1970-01-01T00:00:00.000Z' AS period_start,
-        i.variant_name AS variant_name,
-        -- Count all inferences per variant
-        toUInt32(count()) AS count
-    FROM InferenceById i
-    WHERE i.function_name = {functionName:String}
-    GROUP BY variant_name
-    -- Order by variant name
-    ORDER BY variant_name DESC
-`
-      : `
-    SELECT
-        -- Truncate timestamp to period boundaries (day/week/month) and format as ISO string
-        formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
-        i.variant_name AS variant_name,
-        -- Count inferences per (period, variant) combination
-        toUInt32(count()) AS count
-    FROM InferenceById i
-    WHERE i.function_name = {functionName:String}
-    -- Filter based on the most recent inference minus the time delta
-    AND i.id_uint >= (
-        SELECT max(id_uint) - {timeDeltaUInt128:UInt128}
-        FROM InferenceById
-        WHERE function_name = {functionName:String}
-    )
-GROUP BY period_start, variant_name
--- Order by most recent periods first, then by variant name
-ORDER BY period_start DESC, variant_name DESC
-`;
-
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      functionName,
-      ...(timeWindow !== "cumulative" ? { timeWindow, timeDeltaUInt128 } : {}),
-    },
-  });
-  const rows = await resultSet.json();
-
-  const parsedRows = z.array(variantThroughputSchema).parse(rows);
-  return parsedRows;
-}
-
-function getTimeDeltaAsUInt128(timeDeltaMs: number): string {
-  // In UUIDv7, the timestamp occupies the first 48 bits (6 bytes) of the 128-bit UUID
-  // To convert milliseconds to the equivalent UInt128 difference, we need to shift
-  // the timestamp by 80 bits (10 bytes) to position it in the most significant bits
-
-  // Convert milliseconds to hex and pad to 12 characters (48 bits)
-  const timestampHex = timeDeltaMs.toString(16).padStart(12, "0");
-
-  // Create UInt128 by placing timestamp in most significant 48 bits, rest zeros
-  // This results in: tttttttttttt0000000000000000000000 (in hex)
-  const uint128Hex = timestampHex + "0000000000000000000000";
-
-  // Convert to decimal string for ClickHouse UInt128 parameter
-  return BigInt("0x" + uint128Hex).toString();
 }

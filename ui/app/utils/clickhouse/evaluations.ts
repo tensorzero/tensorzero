@@ -111,17 +111,6 @@ export type ParsedEvaluationResultWithVariant = z.infer<
   typeof ParsedEvaluationResultWithVariantSchema
 >;
 
-export const EvaluationStatisticsSchema = z.object({
-  evaluation_run_id: z.string(),
-  metric_name: z.string(),
-  datapoint_count: z.number(),
-  mean_metric: z.number(),
-  ci_lower: z.number().nullable(),
-  ci_upper: z.number().nullable(),
-});
-
-export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
-
 export function getEvaluatorMetricName(
   evaluationName: string,
   evaluatorName: string,

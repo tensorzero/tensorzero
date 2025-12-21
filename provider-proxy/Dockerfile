@@ -16,7 +16,7 @@ RUN cargo build -p provider-proxy $CARGO_BUILD_FLAGS && \
 
 # ========== base ==========
 
-FROM debian:bookworm-slim AS base
+FROM debian:trixie-slim AS base
 
 RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 

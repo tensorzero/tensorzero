@@ -77,7 +77,7 @@ jobs:
           curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
 

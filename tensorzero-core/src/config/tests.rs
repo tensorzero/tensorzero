@@ -3223,3 +3223,18 @@ async fn test_deprecated_template_filesystem_access_enabled() {
         "The `gateway.template_filesystem_access.enabled` flag is deprecated"
     ));
 }
+
+#[tokio::test]
+async fn test_nested_skip_credential_validation() {
+    assert!(!skip_credential_validation());
+    with_skip_credential_validation(async move {
+        assert!(skip_credential_validation());
+        with_skip_credential_validation(async move {
+            assert!(skip_credential_validation());
+        })
+        .await;
+        assert!(skip_credential_validation());
+    })
+    .await;
+    assert!(!skip_credential_validation());
+}

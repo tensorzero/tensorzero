@@ -13,10 +13,7 @@ import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
-import {
-  getVariantPerformances,
-  getFunctionThroughputByVariant,
-} from "~/utils/clickhouse/function";
+import { getVariantPerformances } from "~/utils/clickhouse/function";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -33,10 +30,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { TimeWindow } from "~/types/tensorzero";
-import {
-  getNativeDatabaseClient,
-  getNativeTensorZeroClient,
-} from "~/utils/tensorzero/native_client.server";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
 
@@ -44,7 +38,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
-  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -93,11 +86,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           time_window_unit: time_granularity,
         })
       : undefined;
-  const variantThroughputPromise = getFunctionThroughputByVariant(
-    function_name,
-    throughput_time_granularity,
-    10,
-  );
+  const variantThroughputPromise = tensorZeroClient
+    .getFunctionThroughputByVariant(
+      function_name,
+      throughput_time_granularity,
+      10,
+    )
+    .then((response) => response.throughput);
 
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation
@@ -110,14 +105,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
       : null;
   const feedbackTimeseriesPromise = feedbackParams
-    ? (async () => {
-        return dbClient.getCumulativeFeedbackTimeseries({
-          function_name,
-          ...feedbackParams,
-          time_window: feedback_time_granularity as TimeWindow,
-          max_periods: 10,
-        });
-      })()
+    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        ...feedbackParams,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      })
     : Promise.resolve(undefined);
 
   // Get variant sampling probabilities from the gateway

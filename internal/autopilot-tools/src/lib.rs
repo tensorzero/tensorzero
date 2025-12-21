@@ -1,7 +1,7 @@
 //! Client-side tool definitions for TensorZero Autopilot.
 //!
-//! This crate provides the [`ClientTool`] trait and [`ClientToolRegistry`] for defining
-//! tools that are executed client-side (outside of the autopilot server).
+//! This crate re-exports tool traits from `durable-tools` for defining tools
+//! that are executed client-side (outside of the autopilot server).
 //!
 //! # Overview
 //!
@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use autopilot_tools::{ClientTool, ClientToolRegistry};
+//! use autopilot_tools::ToolMetadata;
 //! use schemars::{Schema, schema_for};
 //! use serde::{Deserialize, Serialize};
 //! use std::borrow::Cow;
@@ -26,26 +26,25 @@
 //! #[derive(Default)]
 //! struct ReadFileTool;
 //!
-//! impl ClientTool for ReadFileTool {
-//!     const NAME: &'static str = "read_file";
-//!     type LlmParams = ReadFileParams;
+//! impl ToolMetadata for ReadFileTool {
+//!     fn name() -> Cow<'static, str> {
+//!         Cow::Borrowed("read_file")
+//!     }
 //!
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Read the contents of a file at the given path")
 //!     }
 //!
 //!     fn parameters_schema() -> Schema {
-//!         schema_for!(ReadFileParams).into()
+//!         schema_for!(ReadFileParams)
 //!     }
+//!
+//!     type LlmParams = ReadFileParams;
 //! }
 //!
-//! // Register tools in a registry
-//! let mut registry = ClientToolRegistry::new();
-//! registry.register::<ReadFileTool>();
+//! // Use durable_tools::ToolRegistry for registration
 //! ```
+//! TODO: implement client-side tools in this crate, export as a registry.
 
-mod client_tool;
-mod registry;
-
-pub use client_tool::{ClientTool, ErasedClientTool};
-pub use registry::ClientToolRegistry;
+// Re-export from durable-tools
+pub use durable_tools::{ErasedTool, ToolMetadata, ToolRegistry};

@@ -658,6 +658,70 @@ model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
+
+[functions.generate_secret]
+type = "json"
+output_schema = "../../../../ui/fixtures/config/functions/generate_secret/output_schema.json"
+
+[functions.generate_secret.variants.baseline]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../../ui/fixtures/config/functions/generate_secret/baseline/system_template.minijinja"
+json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 1.5
+
+[functions.ask_question]
+type = "json"
+output_schema = "../../../../ui/fixtures/config/functions/ask_question/output_schema.json"
+system_schema = "../../../../ui/fixtures/config/functions/ask_question/system_schema.json"
+
+[functions.ask_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.ask_question.variants."gpt-4.1-nano"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-nano-2025-04-14"
+system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.ask_question.variants."gpt-4.1-mini"]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-4.1-mini-2025-04-14"
+system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.answer_question]
+type = "chat"
+system_schema = "../../../../ui/fixtures/config/functions/answer_question/system_schema.json"
+
+[functions.answer_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../../ui/fixtures/config/functions/answer_question/baseline/system_template.minijinja"
+# for honesty
+temperature = 0.5
+retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.unleash_kraken]
+type = "chat"
+
+[functions.unleash_kraken.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 [functions.image_judger]
 type = "chat"
 
