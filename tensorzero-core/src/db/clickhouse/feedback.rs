@@ -767,7 +767,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
             }));
         }
 
-        let limit = limit.unwrap_or(100).min(100);
+        let limit = limit.unwrap_or(100);
 
         // Query all 4 feedback tables in parallel
         let (boolean_metrics, float_metrics, comment_feedback, demonstration_feedback) = tokio::join!(
@@ -894,7 +894,13 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
-        let limit = limit.unwrap_or(100).min(100);
+        if before.is_some() && after.is_some() {
+            return Err(Error::new(crate::error::ErrorDetails::InvalidRequest {
+                message: "Cannot specify both before and after in query_feedback_by_target_id"
+                    .to_string(),
+            }));
+        }
+        let limit = limit.unwrap_or(100);
         let (query, params_owned) =
             build_demonstration_feedback_query(inference_id, before, after, limit);
 

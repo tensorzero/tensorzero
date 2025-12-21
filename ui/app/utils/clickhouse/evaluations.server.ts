@@ -4,15 +4,7 @@ import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
 import { inputSchema } from "./common";
 import {
-  waldConfidenceIntervalLower,
-  waldConfidenceIntervalUpper,
-  wilsonConfidenceIntervalLower,
-  wilsonConfidenceIntervalUpper,
-} from "./helpers";
-import {
-  EvaluationStatisticsSchema,
   type EvaluationResult,
-  type EvaluationStatistics,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
   type ParsedEvaluationResultWithVariant,
@@ -202,110 +194,6 @@ export async function getEvaluationResults(
   return Promise.all(
     rows.map((row) => parseEvaluationResult(row, function_name)),
   );
-}
-
-/*
-For each evaluation run and metric, we want to know:
- - how many datapoints were used
- - what was the mean and stderr of the metric value
-*/
-export async function getEvaluationStatistics(
-  function_name: string,
-  function_type: "chat" | "json",
-  metric_names: string[],
-  evaluation_run_ids: string[],
-) {
-  const datapoint_table_name =
-    function_type === "chat"
-      ? "ChatInferenceDatapoint"
-      : "JsonInferenceDatapoint";
-  const inference_table_name =
-    function_type === "chat" ? "ChatInference" : "JsonInference";
-  const query = `
-  WITH ${getEvaluationResultDatapointIdQuery()},
-    filtered_inference AS (
-      SELECT
-        id,
-        tags['tensorzero::evaluation_run_id'] AS evaluation_run_id
-      FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM all_inference_ids)
-      AND function_name = {function_name:String}
-    ),
-    float_feedback AS (
-      SELECT metric_name,
-             argMax(value, timestamp) as value,
-             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-             argMax(id, timestamp) as feedback_id,
-             target_id
-      FROM FloatMetricFeedback
-      WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
-      GROUP BY target_id, metric_name -- for the argMax
-    ),
-    boolean_feedback AS (
-      SELECT metric_name,
-             argMax(value, timestamp) as value,
-             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-             argMax(id, timestamp) as feedback_id,
-             target_id
-      FROM BooleanMetricFeedback
-      WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
-      GROUP BY target_id, metric_name -- for the argMax
-    ),
-    float_stats AS (
-      SELECT
-        filtered_inference.evaluation_run_id,
-        float_feedback.metric_name AS metric_name,
-        toUInt32(count()) AS datapoint_count,
-        avg(toFloat64(float_feedback.value)) AS mean_metric,
-        ${waldConfidenceIntervalLower("toFloat64(float_feedback.value)")} AS ci_lower,
-        ${waldConfidenceIntervalUpper("toFloat64(float_feedback.value)")} AS ci_upper
-      FROM filtered_inference
-      INNER JOIN float_feedback
-        ON float_feedback.target_id = filtered_inference.id
-        AND float_feedback.value IS NOT NULL
-      GROUP BY
-        filtered_inference.evaluation_run_id,
-        float_feedback.metric_name
-    ),
-    boolean_stats AS (
-      SELECT
-        filtered_inference.evaluation_run_id,
-        boolean_feedback.metric_name AS metric_name,
-        toUInt32(count()) AS datapoint_count,
-        avg(toFloat64(boolean_feedback.value)) AS mean_metric,
-        ${wilsonConfidenceIntervalLower("toFloat64(boolean_feedback.value)")} AS ci_lower,
-        ${wilsonConfidenceIntervalUpper("toFloat64(boolean_feedback.value)")} AS ci_upper
-      FROM filtered_inference
-      INNER JOIN boolean_feedback
-        ON boolean_feedback.target_id = filtered_inference.id
-        AND boolean_feedback.value IS NOT NULL
-      GROUP BY
-        filtered_inference.evaluation_run_id,
-        boolean_feedback.metric_name
-    )
-  SELECT * FROM float_stats
-  UNION ALL
-  SELECT * FROM boolean_stats
-  ORDER BY
-    toUInt128(toUUID(evaluation_run_id)) DESC,
-    metric_name ASC
-  `;
-
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-      metric_names: metric_names,
-      function_name: function_name,
-      datapoint_table_name: datapoint_table_name,
-      inference_table_name: inference_table_name,
-    },
-  });
-  const rows = await result.json<EvaluationStatistics>();
-  return rows.map((row) => EvaluationStatisticsSchema.parse(row));
 }
 
 export async function getEvaluationsForDatapoint(

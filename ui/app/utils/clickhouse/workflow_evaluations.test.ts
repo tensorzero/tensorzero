@@ -6,7 +6,6 @@
 import { describe, test, expect } from "vitest";
 import {
   countWorkflowEvaluationRunEpisodes,
-  getWorkflowEvaluationRunEpisodesByTaskName,
   getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
 } from "./workflow_evaluations.server";
 
@@ -111,49 +110,5 @@ describe("countWorkflowEvaluationRunEpisodes", () => {
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
-  });
-});
-
-describe("getWorkflowEvaluationRunByTaskName", () => {
-  test("should return correct run by datapoint name", async () => {
-    const runs = await getWorkflowEvaluationRunEpisodesByTaskName(
-      ["01968d04-142c-7e53-8ea7-3a3255b518dc"],
-      2,
-      0,
-    );
-    expect(runs).toMatchObject([
-      [
-        {
-          episode_id: "0aaedb76-b456-70ef-b2ab-f844a165a25c",
-          feedback_metric_names: ["elapsed_ms", "solved"],
-          feedback_values: ["111887.65", "false"],
-          run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-          tags: {
-            baz: "bat",
-            foo: "bar",
-            "tensorzero::dynamic_evaluation_run_id":
-              "01968d04-142c-7e53-8ea7-3a3255b518dc",
-          },
-          task_name: null,
-          timestamp: "2025-05-01T18:02:57Z",
-        },
-      ],
-      [
-        {
-          episode_id: "0aaedb76-b457-700d-a59a-907787a96515",
-          feedback_metric_names: ["elapsed_ms", "solved"],
-          feedback_values: ["105675.805", "false"],
-          run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-          tags: {
-            baz: "bat",
-            foo: "bar",
-            "tensorzero::dynamic_evaluation_run_id":
-              "01968d04-142c-7e53-8ea7-3a3255b518dc",
-          },
-          task_name: null,
-          timestamp: "2025-05-01T18:02:57Z",
-        },
-      ],
-    ]);
   });
 });
