@@ -44,8 +44,7 @@ impl AutopilotWorker {
         gateway_state: AppStateData,
     ) -> anyhow::Result<Self> {
         // Create inference client pointing to the gateway
-        let inference_client: Arc<dyn InferenceClient> =
-            http_gateway_client(config.gateway_url)?;
+        let inference_client: Arc<dyn InferenceClient> = http_gateway_client(config.gateway_url)?;
 
         // Create the autopilot extension with the client and gateway state
         let extension = AutopilotExtension::new(config.autopilot_client, gateway_state);

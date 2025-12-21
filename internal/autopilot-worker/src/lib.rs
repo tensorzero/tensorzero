@@ -89,7 +89,7 @@ pub use executable::ExecutableClientTool;
 pub use registry::build_default_registry;
 pub use state::AutopilotExtension;
 pub use worker::{AutopilotWorker, AutopilotWorkerConfig, spawn_autopilot_worker};
-pub use wrapper::{execute_client_tool_impl, AutopilotSideInfo, ClientToolWrapper};
+pub use wrapper::{AutopilotSideInfo, ClientToolWrapper, execute_client_tool_impl};
 
 // Re-export commonly used types from dependencies
 pub use async_trait::async_trait;

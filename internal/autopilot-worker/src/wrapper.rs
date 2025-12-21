@@ -1,9 +1,12 @@
 //! Wrapper that adds result publishing to client tools.
 
+use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use autopilot_client::{CreateEventRequest, EventPayload, ToolOutcome};
-use durable_tools::{SideInfo, ToolContext, ToolResult as DurableToolResult};
+use durable_tools::{
+    SideInfo, TaskTool, ToolContext, ToolResult as DurableToolResult, schemars::schema::RootSchema,
+};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::tool::ToolResult;
@@ -65,9 +68,14 @@ struct PublishResultParams {
 /// 1. Executes the underlying tool
 /// 2. Sends the result back to the autopilot API via a checkpointed step
 ///
-/// Note: Due to Rust's requirement for const generics in trait implementations,
-/// each concrete tool type needs to be wrapped explicitly. Use the
-/// [`define_client_tool_wrapper`] macro for this.
+/// # Example
+///
+/// ```ignore
+/// use autopilot_worker::{ClientToolWrapper, ExecutableClientTool};
+///
+/// // Register a wrapped tool
+/// executor.register_task_tool::<ClientToolWrapper<MyTool>>().await;
+/// ```
 pub struct ClientToolWrapper<T: ExecutableClientTool> {
     _marker: PhantomData<T>,
 }
@@ -80,65 +88,45 @@ impl<T: ExecutableClientTool> Default for ClientToolWrapper<T> {
     }
 }
 
-/// Macro to define a wrapper for a specific ExecutableClientTool.
-///
-/// This is needed because TaskTool requires `const NAME: &'static str` and we
-/// cannot derive this from a trait method at compile time.
-///
-/// # Example
-///
-/// ```ignore
-/// define_client_tool_wrapper!(ReadFileToolWrapper, ReadFileTool, "read_file");
-/// ```
-#[macro_export]
-macro_rules! define_client_tool_wrapper {
-    ($wrapper_name:ident, $tool_type:ty, $tool_name:expr) => {
-        pub struct $wrapper_name;
+#[async_trait::async_trait]
+impl<T> TaskTool for ClientToolWrapper<T>
+where
+    T: ExecutableClientTool,
+    T::SideInfo: Default,
+{
+    fn name() -> Cow<'static, str> {
+        T::name()
+    }
 
-        impl Default for $wrapper_name {
-            fn default() -> Self {
-                Self
-            }
-        }
+    fn description() -> Cow<'static, str> {
+        T::description()
+    }
 
-        #[async_trait::async_trait]
-        impl durable_tools::TaskTool for $wrapper_name {
-            const NAME: &'static str = $tool_name;
+    fn parameters_schema() -> RootSchema {
+        // Convert from schemars 1.x Schema to schemars 0.8 RootSchema via JSON.
+        // This is needed because autopilot-tools uses schemars 1.x while
+        // durable-tools uses schemars 0.8.
+        let schema = T::parameters_schema();
+        let json = serde_json::to_value(&schema).expect("schemars Schema should serialize to JSON");
+        serde_json::from_value(json).expect("JSON Schema should deserialize to RootSchema")
+    }
 
-            fn description() -> std::borrow::Cow<'static, str> {
-                <$tool_type as autopilot_tools::ClientTool>::description()
-            }
+    type LlmParams = T::LlmParams;
+    type SideInfo = AutopilotSideInfo<T::SideInfo>;
+    type Output = T::Output;
 
-            fn parameters_schema() -> durable_tools::schemars::schema::RootSchema {
-                let schema = <$tool_type as autopilot_tools::ClientTool>::parameters_schema();
-                durable_tools::schemars::schema::RootSchema {
-                    meta_schema: None,
-                    schema: schema.into(),
-                    definitions: Default::default(),
-                }
-            }
-
-            type LlmParams = <$tool_type as autopilot_tools::ClientTool>::LlmParams;
-            type SideInfo = $crate::AutopilotSideInfo<
-                <$tool_type as $crate::ExecutableClientTool>::SideInfo,
-            >;
-            type Output = <$tool_type as $crate::ExecutableClientTool>::Output;
-
-            async fn execute(
-                llm_params: Self::LlmParams,
-                side_info: Self::SideInfo,
-                ctx: &mut durable_tools::ToolContext<'_>,
-            ) -> durable_tools::ToolResult<Self::Output> {
-                $crate::wrapper::execute_client_tool_impl::<$tool_type>(llm_params, side_info, ctx)
-                    .await
-            }
-        }
-    };
+    async fn execute(
+        llm_params: Self::LlmParams,
+        side_info: Self::SideInfo,
+        ctx: &mut ToolContext<'_>,
+    ) -> DurableToolResult<Self::Output> {
+        execute_client_tool_impl::<T>(llm_params, side_info, ctx).await
+    }
 }
 
 /// Internal implementation of client tool execution.
 ///
-/// This is called by the generated wrapper implementations.
+/// This is called by the `ClientToolWrapper` implementation.
 pub async fn execute_client_tool_impl<T: ExecutableClientTool>(
     llm_params: T::LlmParams,
     side_info: AutopilotSideInfo<T::SideInfo>,
