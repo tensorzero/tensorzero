@@ -4,9 +4,8 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use autopilot_client::{CreateEventRequest, EventPayload, ToolOutcome};
-use durable_tools::{
-    SideInfo, TaskTool, ToolContext, ToolResult as DurableToolResult, schemars::schema::RootSchema,
-};
+use durable_tools::{SideInfo, TaskTool, ToolContext, ToolResult as DurableToolResult};
+use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::tool::ToolResult;
@@ -102,13 +101,8 @@ where
         T::description()
     }
 
-    fn parameters_schema() -> RootSchema {
-        // Convert from schemars 1.x Schema to schemars 0.8 RootSchema via JSON.
-        // This is needed because autopilot-tools uses schemars 1.x while
-        // durable-tools uses schemars 0.8.
-        let schema = T::parameters_schema();
-        let json = serde_json::to_value(&schema).expect("schemars Schema should serialize to JSON");
-        serde_json::from_value(json).expect("JSON Schema should deserialize to RootSchema")
+    fn parameters_schema() -> Schema {
+        T::parameters_schema()
     }
 
     type LlmParams = T::LlmParams;
