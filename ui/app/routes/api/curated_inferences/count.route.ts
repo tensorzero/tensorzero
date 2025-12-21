@@ -21,22 +21,22 @@ export async function loader({
 
   const client = getTensorZeroClient();
 
-  // Get inference stats
-  const inferenceStatsPromise = client.getInferenceStats(functionName);
+  // Get inference counts
+  const inferenceCountPromise = client.getInferenceCount(functionName);
 
   // Get feedback stats if metric is provided
   const feedbackStatsPromise =
     metricName !== null
-      ? client.getFeedbackStats(functionName, metricName, threshold)
+      ? client.getFeedbackCount(functionName, metricName, threshold)
       : Promise.resolve(null);
 
-  const [inferenceStats, feedbackStats] = await Promise.all([
-    inferenceStatsPromise,
+  const [inferenceCount, feedbackStats] = await Promise.all([
+    inferenceCountPromise,
     feedbackStatsPromise,
   ]);
 
   return Response.json({
-    inferenceCount: Number(inferenceStats.inference_count),
+    inferenceCount: Number(inferenceCount.inference_count),
     feedbackCount:
       feedbackStats?.feedback_count === undefined
         ? undefined

@@ -46,13 +46,13 @@ import type {
   GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
   GetWorkflowEvaluationRunsResponse,
   GetWorkflowEvaluationRunStatisticsResponse,
-  InferenceWithFeedbackStatsResponse,
+  InferenceWithFeedbackCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetInferencesRequest,
   GetInferencesResponse,
   GetModelInferencesResponse,
-  InferenceStatsResponse,
+  InferenceCountResponse,
   LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
@@ -78,7 +78,7 @@ import type {
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
   VariantPerformancesResponse,
-  InferenceStatsByVariant,
+  InferenceCountByVariant,
 } from "~/types/tensorzero";
 
 /**
@@ -831,18 +831,18 @@ export class TensorZeroClient {
   }
 
   /**
-   * Fetches inference statistics for a function, optionally filtered by variant or grouped by variant.
-   * @param functionName - The name of the function to get stats for
+   * Fetches inference count for a function, optionally filtered by variant or grouped by variant.
+   * @param functionName - The name of the function to get count for
    * @param options - Optional parameters for filtering or grouping
    * @param options.variantName - Optional variant name to filter by
    * @param options.groupBy - Optional grouping (e.g., "variant" to get counts per variant)
-   * @returns A promise that resolves with the inference stats
+   * @returns A promise that resolves with the inference count
    * @throws Error if the request fails
    */
-  async getInferenceStats(
+  async getInferenceCount(
     functionName: string,
     options?: { variantName?: string; groupBy?: "variant" },
-  ): Promise<InferenceStatsResponse> {
+  ): Promise<InferenceCountResponse> {
     const searchParams = new URLSearchParams();
     if (options?.variantName) {
       searchParams.append("variant_name", options.variantName);
@@ -851,14 +851,14 @@ export class TensorZeroClient {
       searchParams.append("group_by", options.groupBy);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-count${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as InferenceStatsResponse;
+    return (await response.json()) as InferenceCountResponse;
   }
 
   /**
@@ -868,12 +868,12 @@ export class TensorZeroClient {
    * @throws Error if the request fails
    */
   async getUsedVariants(functionName: string): Promise<string[]> {
-    const response = await this.getInferenceStats(functionName, {
+    const response = await this.getInferenceCount(functionName, {
       groupBy: "variant",
     });
 
-    return (response.stats_by_variant ?? []).map(
-      (v: InferenceStatsByVariant) => v.variant_name,
+    return (response.count_by_variant ?? []).map(
+      (v: InferenceCountByVariant) => v.variant_name,
     );
   }
 
@@ -896,31 +896,31 @@ export class TensorZeroClient {
   }
 
   /**
-   * Fetches feedback statistics for a function and metric.
-   * @param functionName - The name of the function to get stats for
-   * @param metricName - The name of the metric to get stats for (or "demonstration")
+   * Fetches feedback counts for a function and metric.
+   * @param functionName - The name of the function to get count for
+   * @param metricName - The name of the metric to get count for (or "demonstration")
    * @param threshold - Optional threshold for float metrics (defaults to 0)
    * @returns A promise that resolves with the feedback and curated inference counts
    * @throws Error if the request fails
    */
-  async getFeedbackStats(
+  async getFeedbackCount(
     functionName: string,
     metricName: string,
     threshold?: number,
-  ): Promise<InferenceWithFeedbackStatsResponse> {
+  ): Promise<InferenceWithFeedbackCountResponse> {
     const searchParams = new URLSearchParams();
     if (threshold !== undefined) {
       searchParams.append("threshold", threshold.toString());
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-count/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as InferenceWithFeedbackStatsResponse;
+    return (await response.json()) as InferenceWithFeedbackCountResponse;
   }
 
   /**
@@ -1073,7 +1073,7 @@ export class TensorZeroClient {
    * @throws Error if the request fails
    */
   async countEvaluationRuns(): Promise<number> {
-    const response = await this.fetch("/internal/evaluations/run-stats", {
+    const response = await this.fetch("/internal/evaluations/runs/count", {
       method: "GET",
     });
     if (!response.ok) {
@@ -1553,9 +1553,9 @@ export class TensorZeroClient {
   }
 
   /**
-   * Gets inference statistics for a specific episode.
+   * Gets inference counts for a specific episode.
    * @param episode_id - The UUID of the episode
-   * @returns A promise that resolves with the inference stats
+   * @returns A promise that resolves with the inference counts
    * @throws Error if the request fails
    */
   async getEpisodeInferenceCount(

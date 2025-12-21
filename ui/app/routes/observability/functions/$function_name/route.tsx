@@ -68,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const tensorZeroClient = getTensorZeroClient();
   const metricsWithFeedbackPromise =
     tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceStats(
+  const variantCountsPromise = tensorZeroClient.getInferenceCount(
     function_name,
     {
       groupBy: "variant",
@@ -146,7 +146,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const variant_counts_with_metadata = (
-    variant_counts.stats_by_variant ?? []
+    variant_counts.count_by_variant ?? []
   ).map((variant_count) => {
     let variant_config = function_config.variants[
       variant_count.variant_name

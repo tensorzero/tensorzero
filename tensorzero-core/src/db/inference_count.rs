@@ -1,4 +1,4 @@
-//! Inference statistics types and trait definitions.
+//! Inference count types and trait definitions.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -81,10 +81,10 @@ pub struct FunctionInferenceCount {
     pub inference_count: u32,
 }
 
-/// Trait for inference statistics queries
+/// Trait for inference count queries
 #[async_trait]
 #[cfg_attr(test, automock)]
-pub trait InferenceStatsQueries {
+pub trait InferenceCountQueries {
     /// Counts the number of inferences for a function, optionally filtered by variant.
     async fn count_inferences_for_function(
         &self,

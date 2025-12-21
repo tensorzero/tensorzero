@@ -18,7 +18,7 @@ pub mod clickhouse;
 pub mod datasets;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_stats;
+pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;

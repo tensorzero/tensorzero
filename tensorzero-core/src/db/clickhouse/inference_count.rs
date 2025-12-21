@@ -1,4 +1,4 @@
-//! ClickHouse queries for inference statistics.
+//! ClickHouse queries for inference count.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -9,10 +9,10 @@ use super::ClickHouseConnectionInfo;
 use super::select_queries::parse_count;
 use crate::config::{MetricConfig, MetricConfigOptimize, MetricConfigType};
 use crate::db::TimeWindow;
-use crate::db::inference_stats::{
+use crate::db::inference_count::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount,
-    GetFunctionThroughputByVariantParams, InferenceStatsQueries, VariantThroughput,
+    GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
@@ -241,8 +241,7 @@ fn build_function_throughput_by_variant_query(
     (query, query_params)
 }
 
-/// Build query for listing all functions with their inference counts.
-/// Returns function_name, last_inference_timestamp (most recent timestamp), and count.
+/// Builds the SQL query for listing functions with inference counts.
 fn build_list_functions_with_inference_count_query() -> String {
     r"SELECT
         function_name,
@@ -262,7 +261,7 @@ fn build_list_functions_with_inference_count_query() -> String {
 }
 
 #[async_trait]
-impl InferenceStatsQueries for ClickHouseConnectionInfo {
+impl InferenceCountQueries for ClickHouseConnectionInfo {
     async fn count_inferences_for_function(
         &self,
         params: CountInferencesParams<'_>,
@@ -382,9 +381,7 @@ impl InferenceStatsQueries for ClickHouseConnectionInfo {
         &self,
     ) -> Result<Vec<FunctionInferenceCount>, Error> {
         let query = build_list_functions_with_inference_count_query();
-        let query_params: HashMap<&str, &str> = HashMap::new();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
+        let response = self.run_query_synchronous_no_params(query).await?;
 
         let result: Vec<FunctionInferenceCount> = response
             .response
@@ -1136,7 +1133,7 @@ mod tests {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
             .expect_run_query_synchronous()
-            .withf(|query, parameters| {
+            .withf(|query, _parameters| {
                 assert_query_contains(
                     query,
                     "SELECT
@@ -1153,24 +1150,18 @@ mod tests {
                     GROUP BY function_name
                     ORDER BY last_inference_timestamp DESC",
                 );
-                assert!(parameters.is_empty());
                 true
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
                     response: r#"{"function_name":"write_haiku","last_inference_timestamp":"2024-12-20T10:30:00.000Z","inference_count":150}
-{"function_name":"extract_entities","last_inference_timestamp":"2024-12-19T14:20:00.000Z","inference_count":75}"#
-                        .to_string(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 2,
-                        written_rows: 0,
-                    },
+{"function_name":"extract_entities","last_inference_timestamp":"2024-12-19T14:20:00.000Z","inference_count":75}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata { read_rows: 2, written_rows: 0 },
                 })
             });
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn.list_functions_with_inference_count().await.unwrap();
-
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].function_name, "write_haiku");
         assert_eq!(result[0].inference_count, 150);
@@ -1195,7 +1186,6 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn.list_functions_with_inference_count().await.unwrap();
-
         assert!(result.is_empty());
     }
 }

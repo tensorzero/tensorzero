@@ -12,7 +12,7 @@ mod search_runs;
 pub mod types;
 
 pub use count_datapoints::count_datapoints_handler;
-pub use count_runs::get_evaluation_run_stats_handler;
+pub use count_runs::count_evaluation_runs_handler;
 pub use get_evaluation_results::{GetEvaluationResultsResponse, get_evaluation_results_handler};
 pub use get_run_infos::{
     GetEvaluationRunInfosResponse, get_evaluation_run_infos_for_datapoint_handler,
