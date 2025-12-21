@@ -109,6 +109,8 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 pub struct ToolResult {
     pub name: String,
     pub result: String,
+    /// Note: this ID is the one that LLMs see to correlate tool calls
+    /// We have a separate ID for correlating tool calls made in the autopilot crates.
     pub id: String,
 }
 
