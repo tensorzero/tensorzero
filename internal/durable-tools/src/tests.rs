@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use schemars::{JsonSchema, schema::RootSchema, schema_for};
+use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 
 use crate::ToolContext;
@@ -45,7 +45,7 @@ impl SimpleTool for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -82,7 +82,7 @@ impl TaskTool for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -118,7 +118,7 @@ impl TaskTool for DefaultTimeoutTaskTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 
@@ -153,7 +153,7 @@ impl SimpleTool for DefaultTimeoutSimpleTool {
         Cow::Borrowed("Uses default timeout")
     }
 
-    fn parameters_schema() -> RootSchema {
+    fn parameters_schema() -> Schema {
         schema_for!(EchoParams)
     }
 

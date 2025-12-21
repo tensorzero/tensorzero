@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
-use schemars::schema::RootSchema;
+use schemars::Schema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -165,7 +165,7 @@ pub trait TaskTool: Send + Sync + 'static {
     ///
     /// This should return the schema for `LlmParams` only.
     /// Side information is not included in the schema.
-    fn parameters_schema() -> RootSchema;
+    fn parameters_schema() -> Schema;
 
     /// The LLM-visible parameter type (must be JSON-serializable).
     ///

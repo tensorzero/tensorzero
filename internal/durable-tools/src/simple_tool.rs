@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use schemars::schema::RootSchema;
+use schemars::Schema;
 use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::time::Duration;
@@ -94,7 +94,7 @@ pub trait SimpleTool: Send + Sync + 'static {
     ///
     /// This should return the schema for `LlmParams` only.
     /// Side information is not included in the schema.
-    fn parameters_schema() -> RootSchema;
+    fn parameters_schema() -> Schema;
 
     /// The LLM-visible parameter type (must be JSON-serializable).
     ///
