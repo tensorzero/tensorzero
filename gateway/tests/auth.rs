@@ -5,7 +5,10 @@ use std::str::FromStr;
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::types::chrono::Utc;
-use tensorzero_auth::key::TensorZeroApiKey;
+use tensorzero_auth::{
+    key::TensorZeroApiKey,
+    postgres::{AuthResult, check_key},
+};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
@@ -754,8 +757,11 @@ async fn test_disable_api_key_cli() {
 
 #[tokio::test]
 async fn test_create_api_key_cli_with_expiration() {
+    let pool = get_postgres_pool_for_testing().await;
+
+    let expires_at = Utc::now();
     let output = Command::new(common::gateway_path())
-        .args(["--create-api-key", Utc::now().to_string().as_str()])
+        .args(["--create-api-key", expires_at.to_string().as_str()])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -776,6 +782,13 @@ async fn test_create_api_key_cli_with_expiration() {
         api_key.starts_with("sk-t0-"),
         "API key should start with 'sk-t0-', got: {api_key}"
     );
+
+    let api_key = TensorZeroApiKey::parse(api_key).unwrap();
+
+    assert!(matches!(
+        check_key(&api_key, &pool).await.unwrap(),
+        AuthResult::Expired(_)
+    ));
 }
 
 #[tokio::test]
