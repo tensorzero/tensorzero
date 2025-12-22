@@ -14,7 +14,6 @@ import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getVariantPerformances } from "~/utils/clickhouse/function";
 import type { TimeWindow } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
@@ -80,15 +79,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
-      ? getVariantPerformances({
-          function_name,
-          function_config,
-          metric_name,
-          metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity as TimeWindow,
-          variant_name,
-        })
-      : undefined;
+      ? tensorZeroClient
+          .getVariantPerformances(
+            function_name,
+            metric_name,
+            time_granularity as TimeWindow,
+            variant_name,
+          )
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
 
   const [
     inferenceResult,

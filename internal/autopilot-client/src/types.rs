@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
 pub use tensorzero_types::{
     Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
-    Template, Text, Thought, ToolCallWrapper, ToolResult, Unknown, UrlFile,
+    Template, Text, Thought, ToolCall, ToolCallWrapper, ToolResult, Unknown, UrlFile,
 };
 use uuid::Uuid;
 
@@ -40,13 +40,29 @@ pub struct Event {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     Message(InputMessage),
-    StatusUpdate { status_update: StatusUpdate },
+    StatusUpdate {
+        status_update: StatusUpdate,
+    },
+    ToolCall(ToolCall),
+    ToolCallApproval(ToolCallApproval),
+    ToolResult {
+        tool_call_event_id: Uuid,
+        outcome: ToolOutcome,
+    },
+    #[serde(other)]
+    Other,
 }
 
-/// Payload for an assistant message event.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssistantMessagePayload {
-    pub content: Vec<serde_json::Value>,
+impl EventPayload {
+    /// Returns true if this payload type can be written by API clients.
+    /// System-generated types (StatusUpdate, ToolCall) return false.
+    pub fn is_client_writable(&self) -> bool {
+        matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
+            || matches!(
+                self,
+                EventPayload::ToolCallApproval(_) | EventPayload::ToolResult { .. }
+            )
+    }
 }
 
 /// A status update within a session.
@@ -54,6 +70,38 @@ pub struct AssistantMessagePayload {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
     Text { text: String },
+}
+
+// =============================================================================
+// Tool Call Types
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolCallDecisionSource {
+    Ui,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallApproval {
+    pub source: ToolCallDecisionSource,
+    pub tool_call_event_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolOutcome {
+    Success(ToolResult),
+    Failure {
+        message: String,
+    },
+    Missing,
+    Rejected {
+        source: ToolCallDecisionSource,
+        reason: String,
+    },
+    #[serde(other)]
+    Other,
 }
 
 // =============================================================================
@@ -70,7 +118,8 @@ pub struct CreateEventRequest {
     ///
     /// When provided (for non-nil `session_id`), the server validates that this ID matches
     /// the most recent `user_message` event in the session. This prevents duplicate events
-    /// from being created if a client retries a request that already succeeded.
+    /// from being created if a client retries a create user request that already succeeded.
+    /// This should only apply to Message events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }
@@ -120,8 +169,13 @@ pub struct CreateEventResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
-    /// The most recent `user_message` event in this session.
+    /// The most recent `message` event with role `user` in this session.
     pub previous_user_message_event_id: Uuid,
+    /// All tool calls in Event history that do not have responses.
+    /// These may be duplicates of some of the values in events.
+    /// All EventPayloads in these Events should be of type ToolCall.
+    #[serde(default)]
+    pub pending_tool_calls: Vec<Event>,
 }
 
 /// Response from listing sessions.

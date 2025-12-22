@@ -341,14 +341,6 @@ user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_tem
 json_mode = "tool"
 max_tokens = 100
 
-[functions.dynamic_json.variants.openai-cot]
-type = "experimental_chain_of_thought"
-model = "openai::gpt-4.1-nano-2025-04-14"
-system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
-user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-max_tokens = 100
-json_mode = "strict"
-
 ## OpenRouter
 
 [functions.dynamic_json.variants.openrouter]
