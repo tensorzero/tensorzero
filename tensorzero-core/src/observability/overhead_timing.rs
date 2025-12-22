@@ -168,13 +168,13 @@ impl OverheadSpanExt for Span {
                     labels.push(("kind", overhead_data.kind));
                     labels.extend_from_slice(extra_labels);
                     metrics::histogram!("tensorzero_inference_latency_overhead_seconds", &labels)
-                        .record(overhead.as_millis() as f64);
+                        .record(overhead.as_secs_f64());
                 } else {
                     metrics::histogram!(
                         "tensorzero_inference_latency_overhead_seconds",
                         &[("kind", overhead_data.kind)]
                     )
-                    .record(overhead.as_millis() as f64);
+                    .record(overhead.as_secs_f64());
                 }
             } else {
                 error_within_tracing(&format!("No OverheadSpanData found for span {self:?}"));
