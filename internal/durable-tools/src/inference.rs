@@ -298,6 +298,26 @@ impl InferenceClient for Client {
     }
 }
 
+/// Create an inference client from an existing TensorZero `Client`.
+///
+/// This wraps the client in an `Arc<dyn InferenceClient>` for use with
+/// `ToolExecutorBuilder`.
+///
+/// # Example
+///
+/// ```ignore
+/// use tensorzero::{ClientBuilder, ClientBuilderMode};
+/// use durable_tools::inference::from_client;
+///
+/// let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+///     url: "http://localhost:3000".parse()?,
+/// }).build_http()?;
+/// let inference_client = from_client(client);
+/// ```
+pub fn from_client(client: Client) -> Arc<dyn InferenceClient> {
+    Arc::new(client)
+}
+
 /// Create an inference client for HTTP gateway mode.
 ///
 /// This connects to a TensorZero gateway server at the specified URL.

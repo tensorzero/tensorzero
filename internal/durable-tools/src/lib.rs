@@ -186,7 +186,7 @@ pub use tool_metadata::ToolMetadata;
 
 // Re-export inference trait and helpers
 pub use inference::{
-    InferenceClient, InferenceError, embedded_gateway_client, http_gateway_client,
+    InferenceClient, InferenceError, embedded_gateway_client, from_client, http_gateway_client,
 };
 
 // Re-export autopilot types for use by tools
@@ -197,7 +197,7 @@ pub use inference::{
 
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
-    ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
+    Client, ClientInferenceParams, InferenceParams, InferenceResponse, Input, InputMessage,
     InputMessageContent, Role, TensorZeroError,
 };
 
