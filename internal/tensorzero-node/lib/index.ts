@@ -8,13 +8,10 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   StaleDatasetResponse,
-  QueryDemonstrationFeedbackByInferenceIdParams,
-  DemonstrationFeedbackRow,
   KeyInfo,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
-  DatabaseClient as NativeDatabaseClientType,
   PostgresClient as NativePostgresClientType,
 } from "../index";
 import { logger } from "./utils/logger";
@@ -28,7 +25,6 @@ const require = createRequire(import.meta.url);
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
-  DatabaseClient: NativeDatabaseClient,
   PostgresClient: NativePostgresClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
@@ -185,33 +181,6 @@ function safeStringify(obj: unknown) {
     );
   } catch {
     return "null";
-  }
-}
-
-/// Wrapper class for type safety and convenience
-/// around the native DatabaseClient
-export class DatabaseClient {
-  private nativeDatabaseClient: NativeDatabaseClientType;
-
-  constructor(client: NativeDatabaseClientType) {
-    this.nativeDatabaseClient = client;
-  }
-
-  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
-    return new DatabaseClient(
-      await NativeDatabaseClient.fromClickhouseUrl(url),
-    );
-  }
-
-  async queryDemonstrationFeedbackByInferenceId(
-    params: QueryDemonstrationFeedbackByInferenceIdParams,
-  ): Promise<DemonstrationFeedbackRow[]> {
-    const paramsString = safeStringify(params);
-    const feedbackString =
-      await this.nativeDatabaseClient.queryDemonstrationFeedbackByInferenceId(
-        paramsString,
-      );
-    return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
   }
 }
 

@@ -135,3 +135,28 @@ pub struct WorkflowEvaluationRunStatistics {
 pub struct GetWorkflowEvaluationRunStatisticsResponse {
     pub statistics: Vec<WorkflowEvaluationRunStatistics>,
 }
+
+// =============================================================================
+// List Workflow Evaluation Run Episodes By Task Name
+// =============================================================================
+
+/// Response containing lists of workflow evaluation run episodes grouped by task name.
+///
+/// Each inner Vec contains all episodes that share the same task_name (or NULL task_name).
+/// Episodes with NULL task_name are grouped individually.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ListWorkflowEvaluationRunEpisodesByTaskNameResponse {
+    pub episodes: Vec<Vec<crate::db::workflow_evaluation_queries::GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>>,
+}
+
+// =============================================================================
+// Count Workflow Evaluation Run Episode Groups
+// =============================================================================
+
+/// Response containing the count of distinct episodes by task_name.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct CountWorkflowEvaluationRunEpisodesByTaskNameResponse {
+    pub count: u32,
+}
