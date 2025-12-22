@@ -20,6 +20,8 @@ pub struct GetEvaluationResultsParams {
     pub evaluation_name: String,
     /// Comma-separated list of evaluation run UUIDs
     pub evaluation_run_ids: String,
+    /// Optional datapoint ID to filter results to a specific datapoint
+    pub datapoint_id: Option<Uuid>,
     /// Maximum number of datapoints to return (default: 100)
     pub limit: Option<u32>,
     /// Number of datapoints to skip (default: 0)
@@ -64,6 +66,7 @@ pub async fn get_evaluation_results_handler(
         &app_state.clickhouse_connection_info,
         &params.evaluation_name,
         &evaluation_run_ids,
+        params.datapoint_id.as_ref(),
         limit,
         offset,
     )
@@ -78,6 +81,7 @@ pub async fn get_evaluation_results(
     clickhouse: &impl EvaluationQueries,
     evaluation_name: &str,
     evaluation_run_ids: &[Uuid],
+    datapoint_id: Option<&Uuid>,
     limit: u32,
     offset: u32,
 ) -> Result<GetEvaluationResultsResponse, Error> {
@@ -128,6 +132,7 @@ pub async fn get_evaluation_results(
             inference_table_name,
             datapoint_table_name,
             &metric_names,
+            datapoint_id,
             limit,
             offset,
         )
@@ -217,7 +222,7 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_results()
             .withf(
-                move |fn_name, run_ids, inf_table, dp_table, metrics, limit, offset| {
+                move |fn_name, run_ids, inf_table, dp_table, metrics, dp_id, limit, offset| {
                     fn_name == "test_function"
                         && run_ids.len() == 1
                         && run_ids[0] == evaluation_run_id
@@ -226,12 +231,13 @@ mod tests {
                         && metrics.len() == 1
                         && metrics[0]
                             == "tensorzero::evaluation_name::test_eval::evaluator_name::exact_match"
+                        && dp_id.is_none()
                         && *limit == 100
                         && *offset == 0
                 },
             )
             .times(1)
-            .returning(move |_, _, _, _, _, _, _| {
+            .returning(move |_, _, _, _, _, _, _, _| {
                 let datapoint_id = Uuid::now_v7();
                 Box::pin(async move {
                     Ok(vec![EvaluationResultRow {
@@ -264,6 +270,7 @@ mod tests {
             &mock_clickhouse,
             "test_eval",
             &[evaluation_run_id],
+            None,
             100,
             0,
         )
@@ -283,18 +290,19 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_results()
             .withf(
-                |_fn_name, _run_ids, inf_table, dp_table, _metrics, _limit, _offset| {
+                |_fn_name, _run_ids, inf_table, dp_table, _metrics, _dp_id, _limit, _offset| {
                     inf_table == "JsonInference" && dp_table == "JsonInferenceDatapoint"
                 },
             )
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,
             &mock_clickhouse,
             "test_eval",
             &[evaluation_run_id],
+            None,
             100,
             0,
         )
@@ -314,6 +322,7 @@ mod tests {
             &mock_clickhouse,
             "nonexistent_eval",
             &[Uuid::now_v7()],
+            None,
             100,
             0,
         )
@@ -355,6 +364,7 @@ mod tests {
             &mock_clickhouse,
             "test_eval",
             &[Uuid::now_v7()],
+            None,
             100,
             0,
         )
@@ -375,18 +385,19 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_results()
             .withf(
-                |_fn_name, _run_ids, _inf_table, _dp_table, _metrics, limit, offset| {
+                |_fn_name, _run_ids, _inf_table, _dp_table, _metrics, _dp_id, limit, offset| {
                     *limit == 50 && *offset == 100
                 },
             )
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,
             &mock_clickhouse,
             "test_eval",
             &[evaluation_run_id],
+            None,
             50,
             100,
         )
@@ -434,19 +445,20 @@ mod tests {
         mock_clickhouse
             .expect_get_evaluation_results()
             .withf(
-                |_fn_name, _run_ids, _inf_table, _dp_table, metrics, _limit, _offset| {
+                |_fn_name, _run_ids, _inf_table, _dp_table, metrics, _dp_id, _limit, _offset| {
                     // Should have 2 metric names, one for each evaluator
                     metrics.len() == 2
                 },
             )
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_evaluation_results(
             &config,
             &mock_clickhouse,
             "test_eval",
             &[Uuid::now_v7()],
+            None,
             100,
             0,
         )
@@ -454,5 +466,70 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_datapoint_id() {
+        let config = create_test_config_with_chat_function();
+        let evaluation_run_id = Uuid::now_v7();
+        let datapoint_id = Uuid::now_v7();
+
+        let mut mock_clickhouse = MockEvaluationQueries::new();
+        mock_clickhouse
+            .expect_get_evaluation_results()
+            .withf(
+                move |_fn_name,
+                      _run_ids,
+                      _inf_table,
+                      _dp_table,
+                      _metrics,
+                      dp_id,
+                      _limit,
+                      _offset| {
+                    dp_id.is_some() && *dp_id.unwrap() == datapoint_id
+                },
+            )
+            .times(1)
+            .returning(move |_, _, _, _, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(vec![EvaluationResultRow {
+                        inference_id: Uuid::now_v7(),
+                        episode_id: Uuid::now_v7(),
+                        datapoint_id,
+                        evaluation_run_id,
+                        evaluator_inference_id: None,
+                        input: "{}".to_string(),
+                        generated_output: "[]".to_string(),
+                        reference_output: Some("[]".to_string()),
+                        dataset_name: "test_dataset".to_string(),
+                        metric_name: Some(
+                            "tensorzero::evaluation_name::test_eval::evaluator_name::exact_match"
+                                .to_string(),
+                        ),
+                        metric_value: Some("true".to_string()),
+                        feedback_id: Some(Uuid::now_v7()),
+                        is_human_feedback: false,
+                        variant_name: "test_variant".to_string(),
+                        name: None,
+                        staled_at: None,
+                        function_name: "test_function".to_string(),
+                    }])
+                })
+            });
+
+        let result = get_evaluation_results(
+            &config,
+            &mock_clickhouse,
+            "test_eval",
+            &[evaluation_run_id],
+            Some(&datapoint_id),
+            u32::MAX,
+            0,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(result.results[0].datapoint_id, datapoint_id);
     }
 }
