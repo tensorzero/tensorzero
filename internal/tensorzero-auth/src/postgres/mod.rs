@@ -97,16 +97,19 @@ pub struct KeyInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
     pub disabled_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
-/// Looks up an API key in the database, and checks that it was not disabled.
+/// Looks up an API key in the database, and checks that it was not disabled or expired.
 pub async fn check_key(
     key: &TensorZeroApiKey,
     pool: &PgPool,
 ) -> Result<AuthResult, TensorZeroAuthError> {
     let key = sqlx::query_as!(
         KeyInfo,
-        "SELECT public_id, organization, workspace, description, created_at, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
         key.public_id,
         key.hashed_long_key.expose_secret()
     ).fetch_optional(pool).await?;
@@ -114,6 +117,12 @@ pub async fn check_key(
         Some(key) => {
             if let Some(disabled_at) = key.disabled_at {
                 Ok(AuthResult::Disabled(disabled_at))
+            } else if let Some(expires_at) = key.expires_at {
+                if expires_at <= Utc::now() {
+                    Ok(AuthResult::Expired(expires_at))
+                } else {
+                    Ok(AuthResult::Success(key))
+                }
             } else {
                 Ok(AuthResult::Success(key))
             }
@@ -152,7 +161,7 @@ pub async fn update_key_description(
         "UPDATE tensorzero_auth_api_key
            SET description = $1, updated_at = NOW()
            WHERE public_id = $2
-           RETURNING public_id, organization, workspace, description, created_at, disabled_at",
+           RETURNING public_id, organization, workspace, description, created_at, disabled_at, expires_at",
         description,
         public_id,
     )
@@ -172,7 +181,7 @@ pub async fn list_key_info(
 ) -> Result<Vec<KeyInfo>, TensorZeroAuthError> {
     let keys = sqlx::query_as!(
         KeyInfo,
-        "SELECT public_id, organization, workspace, description, created_at, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         organization,
         // We take in a 'u32' and convert to 'i64' to avoid any weirdness around negative values
         // Postgres does the right thing when the LIMIT or OFFSET is null (it gets ignored)

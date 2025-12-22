@@ -92,6 +92,7 @@ async fn test_key_lifecycle(pool: PgPool) {
         description: first_key_info.description,
         created_at: first_key_info.created_at,
         disabled_at: Some(disabled_at),
+        expires_at: None,
     };
     assert_eq!(new_list_keys_res, vec![second_key_info, disabled_first_key]);
 }
@@ -286,6 +287,26 @@ async fn test_check_bad_key(pool: PgPool) {
     let AuthResult::MissingKey = result else {
         panic!("Second bad key should be missing: {result:?}");
     };
+}
+
+#[sqlx::test]
+async fn test_check_expired_key(pool: PgPool) {
+    let expired_key = create_key(
+        "my_org",
+        "my_workspace",
+        None,
+        Some(Utc::now() - Duration::seconds(2)),
+        &pool,
+    )
+    .await
+    .unwrap();
+
+    let parsed = TensorZeroApiKey::parse(expired_key.expose_secret()).unwrap();
+
+    assert!(matches!(
+        check_key(&parsed, &pool).await.unwrap(),
+        AuthResult::Expired(_)
+    ));
 }
 
 #[sqlx::test]
