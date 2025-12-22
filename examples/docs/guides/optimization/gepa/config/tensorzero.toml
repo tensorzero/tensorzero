@@ -33,7 +33,7 @@ optimize = "max"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.extract_entities_eval]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.extract_entities_eval.evaluators.judge_improvement]
