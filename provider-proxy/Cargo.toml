@@ -19,7 +19,7 @@ http-body-util = "0.1.2"
 http-serde-ext = "1.0.2"
 hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
 hyper-util = "0.1.19"
-moka = { version = "0.12.10", features = ["sync"] }
+moka = { version = "0.12.12", features = ["sync"] }
 pin-project = "1.1.10"
 rcgen = "0.14.6"
 reqwest.workspace = true
@@ -29,7 +29,7 @@ serde_json.workspace = true
 sha2 = "0.10.9"
 tokio.workspace = true
 tokio-rustls = "0.26.1"
-tracing = "0.1.43"
+tracing = "0.1.44"
 tracing-subscriber.workspace = true
 tempfile = "3.21.0"
 
