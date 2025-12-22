@@ -310,14 +310,18 @@ name = "autopilot-client"
 version = "2025.12.4"
 dependencies = [
  "chrono",
+ "durable-tools-spawn",
  "futures",
+ "moka",
  "reqwest",
  "reqwest-eventsource",
  "secrecy",
  "serde",
  "serde_json",
+ "sqlx",
  "tensorzero-types",
  "thiserror 2.0.17",
+ "tracing",
  "url",
  "uuid",
 ]

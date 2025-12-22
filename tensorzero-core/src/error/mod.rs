@@ -1714,6 +1714,10 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Invalid URL: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),

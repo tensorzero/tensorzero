@@ -15,7 +15,9 @@
 //! // Create a client
 //! let client = AutopilotClient::builder()
 //!     .api_key("your-api-key")
-//!     .build()?;
+//!     .spawn_database_url("postgres://localhost:5432/tensorzero")
+//!     .build()
+//!     .await?;
 //!
 //! // Create a new session by sending an event with a nil session ID
 //! let response = client.create_event(
