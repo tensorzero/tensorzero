@@ -184,7 +184,7 @@ impl OverheadSpanExt for Span {
 }
 
 /// This span attribute indicates that we should track overhead for the span.
-/// The value of this attribute will be used the value of the `kind` label in the `tensorzero_inference_latency_overhead_seconds` histogram metric.
+/// The value of this attribute will be used as the value of the `kind` label in the `tensorzero_inference_latency_overhead_seconds` histogram metric.
 pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.kind";
 /// NOTE - the value of this attribute is ignored - setting to 'false' will still enable it
 pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
