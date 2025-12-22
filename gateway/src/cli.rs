@@ -45,6 +45,7 @@ pub struct EarlyExitCommands {
     /// Create an API key with an optional expiration time, then exit.
     #[arg(
         long,
+        num_args = 0..=1,
         default_missing_value = "infinite",
         value_name = "EXPIRATION_DATETIME"
     )]
