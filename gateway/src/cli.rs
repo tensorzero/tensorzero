@@ -42,7 +42,7 @@ pub struct EarlyExitCommands {
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
-    /// Create an API key then exit.
+    /// Create an API key with an optional expiration time, then exit.
     #[arg(
         long,
         default_missing_value = "infinite",
