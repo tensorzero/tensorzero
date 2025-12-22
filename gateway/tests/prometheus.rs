@@ -22,7 +22,7 @@ async fn test_prometheus_metrics_overhead_inference_streaming() {
 }
 
 #[tokio::test]
-async fn test_prometheus_metrics_overhead_health() {
+async fn test_prometheus_metrics_no_health_metric() {
     let child_data = start_gateway_on_random_port(r"observability.enabled = false", None).await;
     let client = Client::new();
 
@@ -34,11 +34,12 @@ async fn test_prometheus_metrics_overhead_health() {
     assert!(response.status().is_success());
 
     let metrics = get_metrics(&client, &format!("http://{}/metrics", child_data.addr)).await;
-    println!("Metrics: {metrics:#?}");
-    assert_eq!(
-        metrics["tensorzero_inference_latency_overhead_seconds_count{kind=\"GET /health\"}"],
-        "1"
-    );
+    for key in metrics.keys() {
+        assert!(
+            !key.contains("health"),
+            "No prometheus metrics should be present for the /health endpoint, but found: {key}"
+        );
+    }
 }
 
 async fn test_prometheus_metrics_inference_helper(stream: bool) {
@@ -101,11 +102,11 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
     println!("Metrics: {metrics:#?}");
 
     assert_eq!(
-        metrics[r#"tensorzero_inference_latency_overhead_seconds_count{kind="POST /inference"}"#],
+        metrics[r#"tensorzero_inference_latency_overhead_seconds_count{model_name="dummy::slow"}"#],
         count.to_string()
     );
 
-    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{kind="POST /inference",quantile="0.5"}"#]
+    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{model_name="dummy::slow",quantile="0.5"}"#]
         .parse::<f64>()
         .unwrap();
     assert!(

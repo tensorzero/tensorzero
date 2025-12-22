@@ -8,6 +8,7 @@ use std::{
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use http::{Method, StatusCode};
 use http_body::{Frame, SizeHint};
+use metrics::Label;
 use tracing::{Level, Span};
 use tracing_futures::Instrument;
 
@@ -17,7 +18,7 @@ use crate::observability::overhead_timing::{
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
-    latency_span: Span,
+    latency_span: Option<Span>,
     request_logging_data: Option<HttpMetricData>,
     span: Span,
     start_time: Instant,
@@ -44,14 +45,16 @@ impl Drop for ConnectionDropGuard {
         let _guard = self.span.enter();
         let latency_duration = if let Some(finished_with_latency) = self.finished_with_latency.get()
         {
-            // Only update the 'overhead' metric when the request finished, so that we
-            // can accurately subtract off the time taken for 'external' spans.
-            self.latency_span.set_latency_and_record(
-                finished_with_latency,
-                self.request_logging_data
-                    .as_ref()
-                    .map(|data| data.extra_overhead_labels.as_slice()),
-            );
+            if let Some(latency_span) = &self.latency_span {
+                // Only update the 'overhead' metric when the request finished, so that we
+                // can accurately subtract off the time taken for 'external' spans.
+                latency_span.set_inference_latency_and_record(
+                    finished_with_latency,
+                    self.request_logging_data
+                        .take()
+                        .map(|data| data.extra_overhead_labels),
+                );
+            }
             finished_with_latency
         } else {
             // If we didn't explicitly mark the request as 'finished' (due to the connection
@@ -145,7 +148,7 @@ pub struct HttpMetricData {
     /// Extra labels to add to the `tensorzero_inference_latency_overhead_seconds` histogram metric.
     /// We currently use this to attach `function_name`, `variant_name`, and `model_name` labels
     /// when recording the overhead of `/inference` requests
-    pub extra_overhead_labels: Vec<(&'static str, String)>,
+    pub extra_overhead_labels: Vec<Label>,
 }
 
 // An Axum middleware that logs request processing events
@@ -159,25 +162,39 @@ pub async fn request_logging_middleware(
     next: Next,
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
-    let method_uri = format!("{} {}", request.method(), request.uri());
     // Create a separate span for latency tracing, using a custom 'target' that will
     // get filtered out when we log to console/otel
     // This prevents the `tensorzero.overhead.*` span attributes from being visible to users
     // in the logs/OTEL
-    let latency_span = tracing::span!(
-        target: "tensorzero.overhead",
-        Level::DEBUG,
-        "request_latency_tracking",
-        { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = method_uri,
-    );
-    let span = tracing::info_span!(
-        target: "gateway",
-        parent: &latency_span,
-        "request",
-        method = %request.method(),
-        uri = %request.uri(),
-        version = ?request.version(),
-    );
+    let latency_span = if request.method() == Method::POST && request.uri() == "/inference" {
+        Some(tracing::span!(
+            target: "tensorzero.overhead",
+            Level::DEBUG,
+            "request_latency_tracking",
+            { TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME } = true,
+        ))
+    } else {
+        None
+    };
+
+    let span = if let Some(latency_span) = &latency_span {
+        tracing::info_span!(
+            target: "gateway",
+            parent: latency_span,
+            "request",
+            method = %request.method(),
+            uri = %request.uri(),
+            version = ?request.version(),
+        )
+    } else {
+        tracing::info_span!(
+            target: "gateway",
+            "request",
+            method = %request.method(),
+            uri = %request.uri(),
+            version = ?request.version(),
+        )
+    };
     span.in_scope(|| {
         tracing::debug!("started processing request");
     });

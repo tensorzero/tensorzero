@@ -7,7 +7,7 @@ use futures::FutureExt;
 use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
-use metrics::counter;
+use metrics::{Label, counter};
 use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -180,17 +180,17 @@ pub async fn inference_handler(
     if let Some(function_name) = &params.function_name {
         metric_data
             .extra_overhead_labels
-            .push(("function_name", function_name.clone()));
+            .push(Label::new("function_name", function_name.clone()));
     }
     if let Some(variant_name) = &params.variant_name {
         metric_data
             .extra_overhead_labels
-            .push(("variant_name", variant_name.clone()));
+            .push(Label::new("variant_name", variant_name.clone()));
     }
     if let Some(model_name) = &params.model_name {
         metric_data
             .extra_overhead_labels
-            .push(("model_name", model_name.clone()));
+            .push(Label::new("model_name", model_name.clone()));
     }
     let inference_output = Box::pin(inference(
         config,

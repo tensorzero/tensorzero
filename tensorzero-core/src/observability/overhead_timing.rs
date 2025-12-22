@@ -6,20 +6,19 @@
 //!  clients.
 //!
 //! Overhead tracking is controlled by setting the following three attributes on tracing spans:
-//! * `tensorzero.overhead.kind` - Enables overhead tracking for the span. The value determines the 'kind'
-//!   label that we'll use when recording the final overhead value in our histogram metric.
+//! * `tensorzero.overhead.track` - Enables overhead tracking for the span.
 //! * `OverheadSpanExt.set_latency_and_record` - this is a method on a `Span`, rather than an attribute.
 //!   It sets the total latency of a span with overhead tracking enabled, and records the overhead metric.
-//!   This must be called on the same span that has `tensorzero.overhead.kind` applied.
+//!   This must be called on the same span that has `tensorzero.overhead.track` applied.
 //! * `tensorzero.overhead.external_span` - Indicates that the span is an 'external' span, and should be excluded from the overhead metric.
-//!   This should be set on descendants of the span with the `tensorzero.overhead.kind` attribute,
+//!   This should be set on descendants of the span with the `tensorzero.overhead.track` attribute,
 //!   (the actual value is ignored, but should be set to 'true' to make it clear what's going on)
 //!
 //!
 //!  We currently use these attributes to track overhead on HTTP request processing spans.
 //!   For example, an HTTP request might result in the following spans:
 //!
-//! [ request {tensorzero.overhead.kind = "POST /inference"}                                                 ]
+//! [ request {tensorzero.overhead.track}                                                 ]
 //!   [ function_call ]
 //!     [model_inference]
 //!       [model_provider_inference]
@@ -40,9 +39,9 @@
 //!
 //! Notable features:
 //! * The reported metric is a histogram - each recorded value has an associated 'kind' label,
-//!   controlled by the `tensorzero.overhead.kind` span attribute on the top-level span.
+//!   controlled by the `tensorzero.overhead.track` span attribute on the top-level span.
 //! * The initial duration is controlled by calling `set_latency_and_record`
-//!   (on the same span as the `tensorzero.overhead.kind` attribute)
+//!   (on the same span as the `tensorzero.overhead.track` attribute)
 //!   Notably, this will generally be *shorter* than the duration of the entire span
 //!   (as measured by the time between `on_new_span` and `on_close`).
 //!   We currently call `set_latency_and_record` with the response body
@@ -76,10 +75,9 @@ use std::time::{Duration, Instant};
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::disjoint_intervals::DisjointIntervals;
-use std::fmt::Debug;
+use metrics::Label;
 use tracing::{
     Span, Subscriber,
-    field::{Field, Visit},
     span::{Attributes, Id},
 };
 use tracing_subscriber::{
@@ -128,25 +126,21 @@ fn with_span_extensions(span: &Span, f: impl FnOnce(ExtensionsMut<'_>)) {
     }
 }
 pub trait OverheadSpanExt {
-    /// Sets the total latency associated with the span, and record the overhead metric
+    /// Sets the total inference latency associated with the span, and record the overhead metric
     /// (subtracting off any 'external' spans that have *finished*).
     /// Note that any still in-progress 'external' spans will count towards the overhead metric.
     /// We may revisit this decision depending on whether or not we add more uses of `TensorzeroHttpClient`
     /// during inference.
     /// Any key/value pairs in `extra_labels` will be added to the `tensorzero_inference_latency_overhead_seconds` histogram metric.
-    /// NOTE: This method will print an error if called on a span that does not have the `tensorzero.overhead.kind` attribute applied.
-    fn set_latency_and_record(
-        &self,
-        elapsed: Duration,
-        extra_labels: Option<&[(&'static str, String)]>,
-    );
+    /// NOTE: This method will print an error if called on a span that does not have the `tensorzero.overhead.track` attribute applied.
+    fn set_inference_latency_and_record(&self, elapsed: Duration, extra_labels: Option<Vec<Label>>);
 }
 
 impl OverheadSpanExt for Span {
-    fn set_latency_and_record(
+    fn set_inference_latency_and_record(
         &self,
         elapsed: Duration,
-        extra_labels: Option<&[(&'static str, String)]>,
+        extra_labels: Option<Vec<Label>>,
     ) {
         with_span_extensions(self, |mut extensions| {
             if let Some(overhead_data) = extensions.remove::<OverheadSpanData>() {
@@ -164,17 +158,14 @@ impl OverheadSpanExt for Span {
                 });
 
                 if let Some(extra_labels) = extra_labels {
-                    let mut labels = Vec::with_capacity(extra_labels.len() + 1);
-                    labels.push(("kind", overhead_data.kind));
-                    labels.extend_from_slice(extra_labels);
-                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds", &labels)
-                        .record(overhead.as_secs_f64());
-                } else {
                     metrics::histogram!(
                         "tensorzero_inference_latency_overhead_seconds",
-                        &[("kind", overhead_data.kind)]
+                        extra_labels
                     )
                     .record(overhead.as_secs_f64());
+                } else {
+                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds")
+                        .record(overhead.as_secs_f64());
                 }
             } else {
                 error_within_tracing(&format!("No OverheadSpanData found for span {self:?}"));
@@ -184,8 +175,7 @@ impl OverheadSpanExt for Span {
 }
 
 /// This span attribute indicates that we should track overhead for the span.
-/// The value of this attribute will be used as the value of the `kind` label in the `tensorzero_inference_latency_overhead_seconds` histogram metric.
-pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.kind";
+pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.track";
 /// NOTE - the value of this attribute is ignored - setting to 'false' will still enable it
 pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
 
@@ -197,32 +187,9 @@ where
         for attr in attrs.fields() {
             if attr.name() == TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME {
                 if let Some(data) = ctx.span(id) {
-                    // Try to get the value for the `TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME`
-                    struct StringVisitor {
-                        value: Option<String>,
-                    }
-                    impl Visit for StringVisitor {
-                        fn record_debug(&mut self, _field: &Field, _value: &dyn Debug) {}
-                        fn record_str(&mut self, field: &Field, value: &str) {
-                            if field.name() == TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME {
-                                self.value = Some(value.to_string());
-                            }
-                        }
-                    }
-
-                    let mut visitor = StringVisitor { value: None };
-                    attrs.values().record(&mut visitor);
-
-                    if let Some(overhead_value) = visitor.value {
-                        data.extensions_mut().insert(OverheadSpanData {
-                            excluded_intervals: DisjointIntervals::new(),
-                            kind: overhead_value,
-                        });
-                    } else {
-                        error_within_tracing(&format!(
-                            "Missing value for `{TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME}` attribute in span {id:?}"
-                        ));
-                    }
+                    data.extensions_mut().insert(OverheadSpanData {
+                        excluded_intervals: DisjointIntervals::new(),
+                    });
                 } else {
                     error_within_tracing(&format!(
                         "Missing span data for `{TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME}` span {id:?}"
@@ -286,10 +253,9 @@ fn error_within_tracing(message: &str) {
     );
 }
 
-/// Marks spans with the `tensorzero.overhead.kind` attribute applied.
+/// Marks spans with the `tensorzero.overhead.track` attribute applied.
 pub struct OverheadSpanData {
     excluded_intervals: DisjointIntervals<Instant>,
-    kind: String,
 }
 
 /// Marks spans with the `tensorzero.overhead.external_span` attribute applied.
