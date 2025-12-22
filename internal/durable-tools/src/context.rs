@@ -42,6 +42,11 @@ impl ToolAppState {
             inference_client,
         }
     }
+
+    /// Get a reference to the database pool.
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
 
 /// Context provided to `TaskTool` execution.
@@ -90,11 +95,6 @@ impl<'a> ToolContext<'a> {
     /// Get a reference to the database pool.
     pub fn pool(&self) -> &PgPool {
         &self.app_state.pool
-    }
-
-    /// Get a reference to the tool registry (requires async lock).
-    pub async fn tool_registry(&self) -> tokio::sync::RwLockReadGuard<'_, ToolRegistry> {
-        self.app_state.tool_registry.read().await
     }
 
     /// Get mutable access to the underlying durable `TaskContext`.

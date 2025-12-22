@@ -8,8 +8,10 @@ use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
 use crate::context::SimpleToolContext;
+use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
+use crate::tool_metadata::ToolMetadata;
 
 /// Type-erased tool trait for registry storage.
 ///
@@ -71,19 +73,19 @@ impl<T: TaskTool> Default for ErasedTaskToolWrapper<T> {
 
 impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     fn name(&self) -> Cow<'static, str> {
-        T::name()
+        <T as ToolMetadata>::name()
     }
 
     fn description(&self) -> Cow<'static, str> {
-        T::description()
+        <T as ToolMetadata>::description()
     }
 
     fn parameters_schema(&self) -> Schema {
-        T::parameters_schema()
+        <T as ToolMetadata>::parameters_schema()
     }
 
     fn timeout(&self) -> Duration {
-        T::timeout()
+        <T as ToolMetadata>::timeout()
     }
 
     fn is_durable(&self) -> bool {
@@ -94,19 +96,19 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
 impl<T: SimpleTool> ErasedTool for T {
     fn name(&self) -> Cow<'static, str> {
-        T::name()
+        <T as ToolMetadata>::name()
     }
 
     fn description(&self) -> Cow<'static, str> {
-        T::description()
+        <T as ToolMetadata>::description()
     }
 
     fn parameters_schema(&self) -> Schema {
-        T::parameters_schema()
+        <T as ToolMetadata>::parameters_schema()
     }
 
     fn timeout(&self) -> Duration {
-        T::timeout()
+        <T as ToolMetadata>::timeout()
     }
 
     fn is_durable(&self) -> bool {
@@ -125,7 +127,7 @@ impl<T: SimpleTool> ErasedSimpleTool for T {
         idempotency_key: &str,
     ) -> anyhow::Result<JsonValue> {
         // Deserialize params
-        let typed_llm_params: T::LlmParams = serde_json::from_value(llm_params)?;
+        let typed_llm_params: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params)?;
         let typed_side_info: T::SideInfo = serde_json::from_value(side_info)?;
 
         // Execute
@@ -160,24 +162,36 @@ impl ToolRegistry {
 
     /// Register a `TaskTool`.
     ///
-    /// Returns `&mut Self` for chaining.
-    pub fn register_task_tool<T: TaskTool>(&mut self) -> &mut Self {
-        let name = T::name();
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
+        let name = <T as ToolMetadata>::name();
+        if self.tools.contains_key(name.as_ref()) {
+            return Err(ToolError::DuplicateToolName(name.into_owned()));
+        }
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
         self.tools.insert(name.into_owned(), wrapper);
-        self
+        Ok(self)
     }
 
     /// Register a `SimpleTool`.
     ///
-    /// Returns `&mut Self` for chaining.
-    pub fn register_simple_tool<T: SimpleTool + Default>(&mut self) -> &mut Self {
-        let name = T::name();
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_simple_tool<T: SimpleTool + Default>(
+        &mut self,
+    ) -> Result<&mut Self, ToolError> {
+        let name = <T as ToolMetadata>::name();
+        if self.tools.contains_key(name.as_ref()) {
+            return Err(ToolError::DuplicateToolName(name.into_owned()));
+        }
         let tool = Arc::new(T::default());
         self.tools
             .insert(name.to_string(), tool.clone() as Arc<dyn ErasedTool>);
         self.simple_tools.insert(name.into_owned(), tool);
-        self
+        Ok(self)
     }
 
     /// Get a tool by name.

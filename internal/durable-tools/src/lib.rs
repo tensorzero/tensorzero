@@ -30,7 +30,7 @@
 //!
 //! ```ignore
 //! use durable_tools::{
-//!     TaskTool, SimpleTool, ToolContext, SimpleToolContext,
+//!     TaskTool, SimpleTool, ToolContext, SimpleToolContext, ToolMetadata,
 //!     ToolExecutor, ToolResult, async_trait, WorkerOptions,
 //!     http_gateway_client,
 //! };
@@ -53,24 +53,29 @@
 //! #[derive(Default)]
 //! struct SearchTool;
 //!
-//! #[async_trait]
-//! impl SimpleTool for SearchTool {
-//!     const NAME: &'static str = "search";
+//! impl ToolMetadata for SearchTool {
+//!     fn name() -> Cow<'static, str> {
+//!         Cow::Borrowed("search")
+//!     }
 //!
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Search the web")
 //!     }
 //!
 //!     fn parameters_schema() -> Schema {
-//!         schema_for!(SearchParams).schema
+//!         schema_for!(SearchParams)
 //!     }
 //!
 //!     type LlmParams = SearchParams;
+//! }
+//!
+//! #[async_trait]
+//! impl SimpleTool for SearchTool {
 //!     type SideInfo = ();
 //!     type Output = SearchResult;
 //!
 //!     async fn execute(
-//!         llm_params: Self::LlmParams,
+//!         llm_params: <Self as ToolMetadata>::LlmParams,
 //!         _side_info: Self::SideInfo,
 //!         ctx: SimpleToolContext<'_>,
 //!         idempotency_key: &str,
@@ -93,24 +98,29 @@
 //!
 //! struct ResearchTool;
 //!
-//! #[async_trait]
-//! impl TaskTool for ResearchTool {
-//!     const NAME: &'static str = "research";
+//! impl ToolMetadata for ResearchTool {
+//!     fn name() -> Cow<'static, str> {
+//!         Cow::Borrowed("research")
+//!     }
 //!
 //!     fn description() -> Cow<'static, str> {
 //!         Cow::Borrowed("Research a topic")
 //!     }
 //!
 //!     fn parameters_schema() -> Schema {
-//!         schema_for!(ResearchParams).schema
+//!         schema_for!(ResearchParams)
 //!     }
 //!
 //!     type LlmParams = ResearchParams;
+//! }
+//!
+//! #[async_trait]
+//! impl TaskTool for ResearchTool {
 //!     type SideInfo = ();
 //!     type Output = ResearchResult;
 //!
 //!     async fn execute(
-//!         llm_params: Self::LlmParams,
+//!         llm_params: <Self as ToolMetadata>::LlmParams,
 //!         _side_info: Self::SideInfo,
 //!         ctx: &mut ToolContext<'_>,
 //!     ) -> ToolResult<Self::Output> {
@@ -169,6 +179,7 @@ pub mod inference;
 mod registry;
 mod simple_tool;
 mod task_tool;
+mod tool_metadata;
 
 #[cfg(test)]
 mod tests;
@@ -187,9 +198,10 @@ pub use error::{ToolError, ToolResult};
 pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
-pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
 // Re-export TaskToolParams from spawn crate for backward compatibility
 pub use durable_tools_spawn::TaskToolParams;
+pub use task_tool::{SideInfo, TaskTool, TaskToolAdapter};
+pub use tool_metadata::ToolMetadata;
 
 // Re-export inference trait and helpers
 pub use inference::{

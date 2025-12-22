@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
-use schemars::Schema;
 use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::time::Duration;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
+use crate::tool_metadata::ToolMetadata;
 
 /// Marker trait for side information types.
 ///
@@ -30,7 +29,8 @@ impl SideInfo for () {}
 /// - Access to the database pool
 ///
 /// Implement this trait for tools that need durable execution guarantees
-/// or need to call other tools.
+/// or need to call other tools. Note that `TaskTool` extends [`ToolMetadata`],
+/// so you must implement both traits.
 ///
 /// # Side Information
 ///
@@ -41,7 +41,7 @@ impl SideInfo for () {}
 /// # Example (without side info)
 ///
 /// ```ignore
-/// use durable_tools::{TaskTool, ToolContext, ToolResult, async_trait};
+/// use durable_tools::{TaskTool, ToolContext, ToolResult, ToolMetadata, async_trait};
 /// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
@@ -58,8 +58,7 @@ impl SideInfo for () {}
 ///
 /// struct ResearchTool;
 ///
-/// #[async_trait]
-/// impl TaskTool for ResearchTool {
+/// impl ToolMetadata for ResearchTool {
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("research")
 ///     }
@@ -69,15 +68,19 @@ impl SideInfo for () {}
 ///     }
 ///
 ///     fn parameters_schema() -> Schema {
-///         schema_for!(ResearchParams).schema
+///         schema_for!(ResearchParams)
 ///     }
 ///
 ///     type LlmParams = ResearchParams;
+/// }
+///
+/// #[async_trait]
+/// impl TaskTool for ResearchTool {
 ///     type SideInfo = ();
 ///     type Output = ResearchResult;
 ///
 ///     async fn execute(
-///         llm_params: Self::LlmParams,
+///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: Self::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
 ///     ) -> ToolResult<Self::Output> {
@@ -99,7 +102,7 @@ impl SideInfo for () {}
 /// # Example (with side info)
 ///
 /// ```ignore
-/// use durable_tools::{TaskTool, ToolContext, ToolResult, SideInfo, async_trait};
+/// use durable_tools::{TaskTool, ToolContext, ToolResult, ToolMetadata, SideInfo, async_trait};
 /// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
@@ -119,8 +122,7 @@ impl SideInfo for () {}
 ///
 /// struct GitHubSearchTool;
 ///
-/// #[async_trait]
-/// impl TaskTool for GitHubSearchTool {
+/// impl ToolMetadata for GitHubSearchTool {
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("github_search")
 ///     }
@@ -130,15 +132,19 @@ impl SideInfo for () {}
 ///     }
 ///
 ///     fn parameters_schema() -> Schema {
-///         schema_for!(GitHubSearchParams).schema  // Only LlmParams in schema
+///         schema_for!(GitHubSearchParams)  // Only LlmParams in schema
 ///     }
 ///
 ///     type LlmParams = GitHubSearchParams;
+/// }
+///
+/// #[async_trait]
+/// impl TaskTool for GitHubSearchTool {
 ///     type SideInfo = GitHubCredentials;
 ///     type Output = Vec<String>;
 ///
 ///     async fn execute(
-///         llm_params: Self::LlmParams,
+///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         side_info: Self::SideInfo,
 ///         ctx: &mut ToolContext<'_>,
 ///     ) -> ToolResult<Self::Output> {
@@ -149,28 +155,7 @@ impl SideInfo for () {}
 /// }
 /// ```
 #[async_trait]
-pub trait TaskTool: Send + Sync + 'static {
-    /// Unique name for this tool.
-    ///
-    /// This is used for registration, invocation, and as the durable task name.
-    fn name() -> Cow<'static, str>;
-
-    /// Human-readable description of what this tool does.
-    ///
-    /// Used for generating LLM function definitions.
-    fn description() -> Cow<'static, str>;
-
-    /// JSON Schema for the tool's LLM-visible parameters.
-    ///
-    /// This should return the schema for `LlmParams` only.
-    /// Side information is not included in the schema.
-    fn parameters_schema() -> Schema;
-
-    /// The LLM-visible parameter type (must be JSON-serializable).
-    ///
-    /// This is what the LLM sees and can fill in when calling the tool.
-    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
-
+pub trait TaskTool: ToolMetadata {
     /// Side information type provided at spawn time (hidden from LLM).
     ///
     /// Use `()` if no side information is needed.
@@ -178,13 +163,6 @@ pub trait TaskTool: Send + Sync + 'static {
 
     /// The output type for this tool (must be JSON-serializable).
     type Output: Serialize + DeserializeOwned + Send + 'static;
-
-    /// Execution timeout for this tool.
-    ///
-    /// Defaults to 120 seconds.
-    fn timeout() -> Duration {
-        Duration::from_secs(120)
-    }
 
     /// Execute the tool logic.
     ///
@@ -198,7 +176,7 @@ pub trait TaskTool: Send + Sync + 'static {
     /// * `side_info` - Side information provided at spawn time (hidden from LLM)
     /// * `ctx` - The tool execution context
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> ToolExecResult<Self::Output>;
@@ -228,10 +206,10 @@ impl<T: TaskTool> Default for TaskToolAdapter<T> {
 #[async_trait]
 impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
     fn name() -> Cow<'static, str> {
-        T::name()
+        <T as ToolMetadata>::name()
     }
 
-    type Params = TaskToolParams<T::LlmParams, T::SideInfo>;
+    type Params = TaskToolParams<<T as ToolMetadata>::LlmParams, T::SideInfo>;
     type Output = T::Output;
 
     async fn run(
