@@ -4,25 +4,11 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-// Re-export types from tensorzero-core that InputMessage depends on
-pub use tensorzero_core::inference::types::{
-    // File types
-    Base64File,
-    File,
-    // Content types for InputMessageContent
-    InputMessage,
-    InputMessageContent,
-    ObjectStoragePointer,
-    RawText,
-    Role,
-    Template,
-    Text,
-    Thought,
-    Unknown,
-    UrlFile,
+// Re-export types from tensorzero-types that InputMessage depends on
+pub use tensorzero_types::{
+    Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
+    Template, Text, Thought, ToolCall, ToolCallWrapper, ToolResult, Unknown, UrlFile,
 };
-use tensorzero_core::tool::ToolCall;
-pub use tensorzero_core::tool::{ToolCallWrapper, ToolResult};
 use uuid::Uuid;
 
 // =============================================================================

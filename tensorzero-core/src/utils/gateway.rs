@@ -26,6 +26,7 @@ use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
 use crate::db::clickhouse::ClickHouseClient;
@@ -136,6 +137,8 @@ pub struct AppStateData {
     pub auth_cache: Option<Cache<String, AuthResult>>,
     /// Optional cache for historical config snapshots loaded from ClickHouse
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
+    /// Optional Autopilot API client for proxying requests to the Autopilot API
+    pub autopilot_client: Option<Arc<AutopilotClient>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -220,6 +223,7 @@ impl GatewayHandle {
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
+                autopilot_client: None,
                 _private: (),
             },
             cancel_token,
@@ -274,6 +278,8 @@ impl GatewayHandle {
                 .build(),
         );
 
+        let autopilot_client = setup_autopilot_client()?;
+
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -283,6 +289,7 @@ impl GatewayHandle {
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache,
+                autopilot_client,
                 _private: (),
             },
             cancel_token,
@@ -294,7 +301,7 @@ impl GatewayHandle {
 
 impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
-    /// This version does not include auth_cache or config_snapshot_cache
+    /// This version does not include auth_cache, config_snapshot_cache, or autopilot_client
     /// since those are specific to the live gateway.
     pub fn new_for_snapshot(
         config: Arc<Config>,
@@ -311,6 +318,7 @@ impl AppStateData {
             deferred_tasks,
             auth_cache: None,
             config_snapshot_cache: None,
+            autopilot_client: None,
             _private: (),
         }
     }
@@ -443,6 +451,46 @@ pub async fn setup_postgres(
     };
 
     Ok(postgres_connection_info)
+}
+
+/// Sets up the Autopilot API client from the environment.
+/// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
+/// `Ok(None)` if not set, or an error if client construction fails.
+///
+/// Environment variables:
+/// - `TENSORZERO_AUTOPILOT_API_KEY`: Required to enable the client
+/// - `TENSORZERO_AUTOPILOT_BASE_URL`: Optional custom base URL (for testing)
+fn setup_autopilot_client() -> Result<Option<Arc<AutopilotClient>>, Error> {
+    match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
+        Ok(api_key) => {
+            let mut builder = AutopilotClient::builder().api_key(api_key);
+
+            // Allow custom base URL for testing
+            if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
+                let url = base_url.parse().map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid TENSORZERO_AUTOPILOT_BASE_URL: {e}"),
+                    })
+                })?;
+                builder = builder.base_url(url);
+                tracing::info!("Autopilot client using custom base URL: {}", base_url);
+            }
+
+            let client = builder.build().map_err(Error::from)?;
+            // TODO: Handshake with API to validate credentials
+            tracing::info!("Autopilot client initialized");
+            Ok(Some(Arc::new(client)))
+        }
+        Err(std::env::VarError::NotPresent) => {
+            tracing::debug!(
+                "Autopilot client not configured: TENSORZERO_AUTOPILOT_API_KEY not set"
+            );
+            Ok(None)
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(ErrorDetails::AppState {
+            message: "TENSORZERO_AUTOPILOT_API_KEY contains invalid UTF-8".to_string(),
+        })),
+    }
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
