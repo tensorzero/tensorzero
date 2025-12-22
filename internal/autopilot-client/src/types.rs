@@ -44,7 +44,7 @@ pub enum EventPayload {
         status_update: StatusUpdate,
     },
     ToolCall(ToolCall),
-    ToolCallApproval(ToolCallApproval),
+    ToolCallApproval(ToolCallAuthorization),
     ToolResult {
         tool_call_event_id: Uuid,
         outcome: ToolOutcome,
@@ -83,15 +83,15 @@ pub enum ToolCallDecisionSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallApproval {
+pub struct ToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
-    pub status: ToolCallApprovalStatus,
+    pub status: ToolCallAuthorizationStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ToolCallApprovalStatus {
+pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
 }
