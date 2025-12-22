@@ -25,7 +25,7 @@ import {
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
-  consolidate_evaluation_results,
+  consolidateEvaluationResults,
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
@@ -134,7 +134,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const consolidatedEvaluationResults =
-    consolidate_evaluation_results(evaluationResults);
+    await consolidateEvaluationResults(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
@@ -383,7 +383,7 @@ const MetricRow = ({
   evaluatorConfig: EvaluatorConfig;
   datapointId: string;
   inferenceId: string | null;
-  evaluatorInferenceId: string | null;
+  evaluatorInferenceId?: string;
   evalRunId: string;
   variantName: string;
   isHumanFeedback: boolean;

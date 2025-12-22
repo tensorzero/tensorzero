@@ -284,7 +284,15 @@ def generate_rust_schemas(repo_root: Path, schema_dir: Path) -> None:
 
     try:
         result = subprocess.run(
-            ["cargo", "test", "-p", "tensorzero-core", "export_schema"],
+            [
+                "cargo",
+                "test",
+                "-p",
+                "tensorzero-core",
+                "-p",
+                "tensorzero-types",
+                "export_schema",
+            ],
             cwd=repo_root,
             env={**os.environ, "SCHEMA_RS_EXPORT_DIR": str(schema_dir)},
             capture_output=True,

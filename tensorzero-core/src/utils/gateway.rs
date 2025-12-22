@@ -401,8 +401,6 @@ async fn create_postgres_connection(
     postgres_url: &str,
     connection_pool_size: u32,
 ) -> Result<PostgresConnectionInfo, Error> {
-    // TODO - decide how we should handle apply `connection_pool_size` to two pools
-    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
     let pool = PgPoolOptions::new()
         .max_connections(connection_pool_size)
         .connect(postgres_url)
@@ -413,17 +411,7 @@ async fn create_postgres_connection(
             })
         })?;
 
-    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-        .max_connections(connection_pool_size)
-        .connect(postgres_url)
-        .await
-        .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: err.to_string(),
-            })
-        })?;
-
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
     connection_info.check_migrations().await?;
     Ok(connection_info)
 }

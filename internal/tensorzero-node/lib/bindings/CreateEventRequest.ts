@@ -13,7 +13,8 @@ export type CreateEventRequest = {
    *
    * When provided (for non-nil `session_id`), the server validates that this ID matches
    * the most recent `user_message` event in the session. This prevents duplicate events
-   * from being created if a client retries a request that already succeeded.
+   * from being created if a client retries a create user request that already succeeded.
+   * This should only apply to Message events.
    */
   previous_user_message_event_id: string | null;
 };

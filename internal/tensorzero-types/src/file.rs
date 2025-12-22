@@ -24,13 +24,13 @@ pub enum Detail {
     Auto,
 }
 
-/// A file already encoded as base64.
+/// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 #[export_schema]
 pub struct Base64File {
-    /// The original URL we used to download the file (if any).
+    // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
     #[schemars(with = "Option<String>")]
@@ -38,9 +38,8 @@ pub struct Base64File {
     #[ts(type = "string")]
     #[schemars(with = "String")]
     pub mime_type: MediaType,
-    /// Unprefixed base64-encoded data.
-    /// This field is private and validated during deserialization to ensure
-    /// it doesn't contain a `data:` prefix.
+    // This field contains *unprefixed* base64-encoded data.
+    // It's private and validated by the constructor.
     data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -54,20 +53,42 @@ impl Base64File {
     /// Create a new Base64File with validation.
     ///
     /// Returns an error if the data contains a `data:` prefix.
-    /// Note: This does not perform mime type inference. Use the full constructor
-    /// in tensorzero-core if you need mime type inference.
+    /// If `mime_type` is not provided, we will try to detect it from the file data.
     pub fn new(
         source_url: Option<Url>,
-        mime_type: MediaType,
+        mime_type: Option<MediaType>,
         data: String,
         detail: Option<Detail>,
         filename: Option<String>,
     ) -> Result<Self, TypeError> {
         if data.starts_with("data:") {
-            return Err(TypeError::InvalidBase64(
+            return Err(TypeError::InvalidDataPrefix(
                 "The `data` field must not contain `data:` prefix. Data should be pure base64-encoded content only.".to_string(),
             ));
         }
+
+        let mime_type = if let Some(mime_type) = mime_type {
+            mime_type
+        } else {
+            // Decode base64 and infer mime type from the data
+            let decoded = aws_smithy_types::base64::decode(&data).map_err(|e| {
+                TypeError::InvalidBase64(format!("Failed to decode base64 data: {e}"))
+            })?;
+
+            let inferred = infer::get(&decoded);
+            if let Some(inferred_type) = inferred {
+                inferred_type
+                    .mime_type()
+                    .parse::<MediaType>()
+                    .map_err(|e| {
+                        TypeError::InvalidMimeType(format!("Inferred mime type is not valid: {e}"))
+                    })?
+            } else {
+                return Err(TypeError::InvalidMimeType(
+                    "No mime type provided and unable to infer from data".to_string(),
+                ));
+            }
+        };
 
         Ok(Self {
             source_url,
@@ -80,6 +101,32 @@ impl Base64File {
 
     pub fn data(&self) -> &str {
         &self.data
+    }
+
+    /// Create a new Base64File from pre-validated parts.
+    ///
+    /// This is used when you already have valid base64 data (e.g., you just encoded it)
+    /// and a known mime type. Unlike `new`, this does not validate the data format
+    /// or perform mime type inference.
+    ///
+    /// # Safety
+    /// The caller must ensure that:
+    /// - `data` does not contain a `data:` prefix
+    /// - `data` is valid base64-encoded content
+    pub fn from_parts(
+        source_url: Option<Url>,
+        mime_type: MediaType,
+        data: String,
+        detail: Option<Detail>,
+        filename: Option<String>,
+    ) -> Self {
+        Self {
+            source_url,
+            mime_type,
+            data,
+            detail,
+            filename,
+        }
     }
 }
 
@@ -100,7 +147,8 @@ impl<'de> Deserialize<'de> for Base64File {
         struct Base64FileHelper {
             #[serde(alias = "url")]
             source_url: Option<Url>,
-            mime_type: MediaType,
+            #[serde(default)]
+            mime_type: Option<MediaType>,
             data: String,
             #[serde(default)]
             detail: Option<Detail>,
@@ -112,8 +160,8 @@ impl<'de> Deserialize<'de> for Base64File {
 
         // Check if the deprecated "url" field is present (log warning)
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `Base64File`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `Base64File`. Please use `source_url` instead.",
             );
         }
 
@@ -186,8 +234,8 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
         let value = serde_json::Value::deserialize(deserializer)?;
 
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `Base64FileMetadata`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `Base64FileMetadata`. Please use `source_url` instead.",
             );
         }
 
@@ -203,7 +251,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
     }
 }
 
-/// A file that can be located at a URL.
+/// A file that can be located at a URL
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -249,6 +297,7 @@ impl<'de> Deserialize<'de> for UrlFile {
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -289,8 +338,8 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
         let value = serde_json::Value::deserialize(deserializer)?;
 
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "`url` is deprecated for `ObjectStoragePointer`. Please use `source_url` instead."
+            crate::deprecation_warning(
+                "`url` is deprecated for `ObjectStoragePointer`. Please use `source_url` instead.",
             );
         }
 
@@ -309,6 +358,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[export_schema]
 #[ts(export)]
@@ -368,7 +418,8 @@ impl<'de> Deserialize<'de> for File {
                 filename: Option<String>,
             },
             Base64 {
-                mime_type: MediaType,
+                #[serde(default)]
+                mime_type: Option<MediaType>,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,
@@ -404,7 +455,8 @@ impl<'de> Deserialize<'de> for File {
                 filename: Option<String>,
             },
             Base64 {
-                mime_type: MediaType,
+                #[serde(default)]
+                mime_type: Option<MediaType>,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,

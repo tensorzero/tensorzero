@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::export_schema;
 
-/// An input message in a conversation.
+/// InputMessage and Role are our representation of the input sent by the client
+/// prior to any processing into LLM representations below.
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -20,7 +22,6 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
-/// Content types that can appear in an input message.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
@@ -44,11 +45,13 @@ pub enum InputMessageContent {
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
+    /// The `data` field holds the original content block from the provider,
+    /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
     Unknown(Unknown),
 }
 
-/// The API representation of an input to a model.
+/// API representation of an input to a model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
@@ -68,7 +71,6 @@ pub struct Input {
 // Custom Deserialize for InputMessage (handles legacy formats)
 // =============================================================================
 
-/// Helper enum for deserializing legacy text content formats.
 #[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
@@ -155,8 +157,8 @@ impl<'de> Deserialize<'de> for MessageContent {
             where
                 A: serde::de::MapAccess<'de>,
             {
-                tracing::warn!(
-                    "passing in an object for `content` is deprecated. Please use an array of content blocks instead."
+                crate::deprecation_warning(
+                    "passing in an object for `content` is deprecated. Please use an array of content blocks instead.",
                 );
                 let object: Map<String, Value> =
                     Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
@@ -264,5 +266,12 @@ impl<'de> Deserialize<'de> for InputMessage {
             role: helper.role,
             content: finalize_intermediary_content(helper.content.inner, helper.role),
         })
+    }
+}
+
+impl InputMessageContent {
+    /// Test-only helper; do not use in production code.
+    pub fn test_only_from_string(text: String) -> Self {
+        InputMessageContent::Text(Text { text })
     }
 }

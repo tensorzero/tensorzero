@@ -7,7 +7,13 @@ import type { Event } from "./Event";
 export type ListEventsResponse = {
   events: Array<Event>;
   /**
-   * The most recent `user_message` event in this session.
+   * The most recent `message` event with role `user` in this session.
    */
   previous_user_message_event_id: string;
+  /**
+   * All tool calls in Event history that do not have responses.
+   * These may be duplicates of some of the values in events.
+   * All EventPayloads in these Events should be of type ToolCall.
+   */
+  pending_tool_calls: Array<Event>;
 };

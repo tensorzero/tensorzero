@@ -11,6 +11,7 @@ rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 
 [alias]
+check-all = "check --all-targets --all-features"
 test-unit = "nextest run --lib --bins"
 test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
 test-all = "nextest run --features e2e_tests"
@@ -123,4 +124,6 @@ tsbuild = [
     "tensorzero-optimizers",
     "-p",
     "autopilot-client",
+    "-p",
+    "tensorzero-types"
 ] # Export Typescript bindings for TensorZero

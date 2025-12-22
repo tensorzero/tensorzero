@@ -1,4 +1,4 @@
-import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
+import type { VariantPerformanceRow } from "~/types/tensorzero";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
@@ -187,8 +187,8 @@ type PerformanceDataGroupedByDate = {
     {
       num_inferences: number;
       avg_metric: number;
-      stdev: number | null;
-      ci_error: number | null;
+      stdev?: number;
+      ci_error?: number;
     }
   >;
 }[];

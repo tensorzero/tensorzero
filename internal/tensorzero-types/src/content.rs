@@ -4,15 +4,15 @@
 //! that can appear in input messages.
 
 #[cfg(feature = "pyo3")]
-use pyo3::IntoPyObjectExt;
-#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::PyModule;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::export_schema;
 
-/// A newtype wrapper around Map<String, Value> for template and system arguments.
+/// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(transparent)]
@@ -23,7 +23,6 @@ pub struct Arguments(
     pub Map<String, Value>,
 );
 
-/// A template reference with arguments.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
@@ -34,7 +33,6 @@ pub struct Template {
     pub arguments: Arguments,
 }
 
-/// System prompt: either raw text or template arguments.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export)]
@@ -45,7 +43,14 @@ pub enum System {
     Template(Arguments),
 }
 
-/// Text content that will be templated.
+/// InputMessages are validated against the input schema of the Function
+/// and then templated and transformed into RequestMessages for a particular Variant.
+/// They might contain tool calls or tool results along with text.
+/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+/// ContentBlocks are collected into RequestMessages.
+/// These RequestMessages are collected into a ModelInferenceRequest,
+/// which should contain all information needed by a ModelProvider to perform the
+/// inference that is called for.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
@@ -69,8 +74,8 @@ impl Text {
     }
 }
 
-/// Raw text content that should be passed directly to the model
-/// without any template processing or validation.
+/// Struct that represents raw text content that should be passed directly to the model
+/// without any template processing or validation
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
@@ -94,7 +99,7 @@ impl RawText {
     }
 }
 
-/// An unknown provider-specific content block.
+/// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export, optional_fields)]
@@ -202,8 +207,9 @@ impl Unknown {
         let json_str = serde_json::to_string(&self.data).map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Failed to serialize data: {e}"))
         })?;
-        let py_str = pyo3::types::PyString::new(py, &json_str);
-        py_str.into_bound_py_any(py)
+        let json = PyModule::import(py, "json")?;
+        let value = json.call_method1("loads", (json_str,))?;
+        Ok(value)
     }
 
     #[getter]
@@ -217,7 +223,6 @@ impl Unknown {
     }
 }
 
-/// Summary block types for thoughts.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
@@ -228,7 +233,7 @@ pub enum ThoughtSummaryBlock {
     SummaryText { text: String },
 }
 
-/// A model's reasoning/thinking content.
+/// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
