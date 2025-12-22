@@ -2,6 +2,7 @@ use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
+use sqlx::types::chrono::{DateTime, Utc};
 use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -35,7 +36,26 @@ fn print_key(key: &secrecy::SecretString) {
     println!("{}", key.expose_secret());
 }
 
-async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Debug, Clone)]
+enum ApiKeyExpiration {
+    Inifinite,
+    Finite(DateTime<Utc>),
+}
+
+impl From<&str> for ApiKeyExpiration {
+    fn from(v: &str) -> Self {
+        if v == "infinite" {
+            Self::Inifinite
+        } else {
+            v.parse::<DateTime<Utc>>()
+                .map_or(Self::Inifinite, Self::Finite)
+        }
+    }
+}
+
+async fn handle_create_api_key(
+    expiration: ApiKeyExpiration,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Read the Postgres URL from the environment
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
@@ -48,7 +68,10 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
         DEFAULT_ORGANIZATION,
         DEFAULT_WORKSPACE,
         None,
-        None,
+        match expiration {
+            ApiKeyExpiration::Inifinite => None,
+            ApiKeyExpiration::Finite(datetime) => Some(datetime),
+        },
         &pool,
     )
     .await?;
@@ -83,8 +106,8 @@ async fn main() -> Result<(), ExitCode> {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
-    if args.early_exit_commands.create_api_key {
-        handle_create_api_key()
+    if let Some(expiration) = args.early_exit_commands.create_api_key {
+        handle_create_api_key(expiration)
             .await
             .log_err_pretty("Failed to create API key")?;
         return Ok(());
