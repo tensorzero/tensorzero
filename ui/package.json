@@ -12,7 +12,9 @@
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
     "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache",
-    "test": "vitest",
+    "test": "vitest --config vitest.config.ts",
+    "test:unit": "vitest --config vitest.config.ts --project unit",
+    "test:storybook": "vitest --config vitest.config.ts --project storybook",
     "test-e2e-fast": "playwright test --grep-invert @slow",
     "test-e2e": "playwright test",
     "test-e2e-base-path": "playwright test --grep @base-path",
@@ -78,8 +80,9 @@
     "@types/node": "^22.16.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitest/browser": "^4.0.8",
-    "@vitest/coverage-v8": "^4.0.8",
+    "@vitest/browser": "^4.0.15",
+    "@vitest/browser-playwright": "^4.0.15",
+    "@vitest/coverage-v8": "^4.0.15",
     "buildkite-test-collector": "^1.9.1",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^9.1.15",
@@ -94,7 +97,7 @@
     "vite-plugin-devtools-json": "^1.0.0",
     "vite-plugin-wasm": "^3.5.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.15"
   },
   "eslintConfig": {
     "extends": [

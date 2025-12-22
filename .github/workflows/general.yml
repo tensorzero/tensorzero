@@ -1067,6 +1067,14 @@ jobs:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
     needs: [build-gateway-container, build-mock-inference-container]
 
+  ui-storybook-tests:
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/ui-tests-storybook.yml
+    with:
+      is_merge_group: ${{ github.event_name == 'merge_group' }}
+
   ui-tests-e2e:
     permissions:
       contents: read
@@ -1188,6 +1196,7 @@ jobs:
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        ui-storybook-tests,
         mock-optimization-tests,
         run-merge-queue-checks,
       ]

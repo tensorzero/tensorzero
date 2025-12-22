@@ -7,6 +7,8 @@
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
+    "ui:test:unit": "pnpm --filter=tensorzero-ui test:unit",
+    "ui:test:storybook": "pnpm --filter=tensorzero-ui test:storybook",
     "ui:test:e2e": "pnpm --filter=tensorzero-ui test-e2e",
     "ui:test:e2e-base-path": "pnpm --filter=tensorzero-ui test-e2e-base-path",
     "tensorzero-node:test": "cd internal/tensorzero-node && pnpm test",
