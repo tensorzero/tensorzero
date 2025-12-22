@@ -7,7 +7,7 @@ use clap::{Args, Parser};
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
 
-use crate::ApiKeyExpiration;
+use crate::ApiKeyExpirySetting;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -49,7 +49,7 @@ pub struct EarlyExitCommands {
         default_missing_value = "infinite",
         value_name = "EXPIRATION_DATETIME"
     )]
-    pub create_api_key: Option<ApiKeyExpiration>,
+    pub create_api_key: Option<ApiKeyExpirySetting>,
 
     /// Disable an API key using its public ID then exit.
     #[arg(long, value_name = "PUBLIC_ID")]

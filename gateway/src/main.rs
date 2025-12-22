@@ -36,13 +36,16 @@ fn print_key(key: &secrecy::SecretString) {
     println!("{}", key.expose_secret());
 }
 
+/// Specify the expiration policy for newly-created API keys.
 #[derive(Debug, Clone)]
-enum ApiKeyExpiration {
+enum ApiKeyExpirySetting {
+    /// Denotes an API key that has no expiration datetime.
     Inifinite,
+    /// Denotes an API key that is set to expire at the corresponding datetime.
     Finite(DateTime<Utc>),
 }
 
-impl From<&str> for ApiKeyExpiration {
+impl From<&str> for ApiKeyExpirySetting {
     fn from(v: &str) -> Self {
         if v == "infinite" {
             Self::Inifinite
@@ -53,21 +56,21 @@ impl From<&str> for ApiKeyExpiration {
     }
 }
 
-impl std::fmt::Display for ApiKeyExpiration {
+impl std::fmt::Display for ApiKeyExpirySetting {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                ApiKeyExpiration::Inifinite => "infinite".to_string(),
-                ApiKeyExpiration::Finite(dt) => dt.to_string(),
+                ApiKeyExpirySetting::Inifinite => "infinite".to_string(),
+                ApiKeyExpirySetting::Finite(dt) => dt.to_string(),
             }
         )
     }
 }
 
 async fn handle_create_api_key(
-    expiration: ApiKeyExpiration,
+    expiration: ApiKeyExpirySetting,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read the Postgres URL from the environment
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
@@ -82,8 +85,8 @@ async fn handle_create_api_key(
         DEFAULT_WORKSPACE,
         None,
         match expiration {
-            ApiKeyExpiration::Inifinite => None,
-            ApiKeyExpiration::Finite(datetime) => Some(datetime),
+            ApiKeyExpirySetting::Inifinite => None,
+            ApiKeyExpirySetting::Finite(datetime) => Some(datetime),
         },
         &pool,
     )
