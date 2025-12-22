@@ -17,12 +17,3 @@ export const workflowEvaluationRunEpisodeWithFeedbackSchema = z
 export type WorkflowEvaluationRunEpisodeWithFeedback = z.infer<
   typeof workflowEvaluationRunEpisodeWithFeedbackSchema
 >;
-
-export const groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema = z.object({
-  group_key: z.string(),
-  ...workflowEvaluationRunEpisodeWithFeedbackSchema.shape,
-});
-
-export type GroupedWorkflowEvaluationRunEpisodeWithFeedback = z.infer<
-  typeof groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema
->;

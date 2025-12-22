@@ -185,6 +185,8 @@ impl OverheadSpanExt for Span {
 pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.kind";
 /// NOTE - the value of this attribute is ignored - setting to 'false' will still enable it
 pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
+/// This span attribute records the latency value (in milliseconds) for overhead calculation.
+pub const TENSORZERO_LATENCY_ATTRIBUTE_NAME: &str = "tensorzero.overhead.latency";
 
 impl<S: Subscriber> Layer<S> for OverheadTimingLayer
 where
@@ -241,6 +243,48 @@ where
                 // A span can have at most one of our two attributes, so we can exit after seeing one
                 break;
             }
+        }
+    }
+
+    fn on_record(&self, id: &Id, values: &tracing::span::Record<'_>, _ctx: Context<'_, S>) {
+        struct RecordNumberVisitor {
+            latency: Option<u128>,
+        }
+
+        impl Visit for RecordNumberVisitor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn Debug) {}
+            fn record_u128(&mut self, field: &Field, value: u128) {
+                if field.name() == TENSORZERO_LATENCY_ATTRIBUTE_NAME {
+                    self.latency = Some(value);
+                }
+            }
+        }
+        let mut visitor = RecordNumberVisitor { latency: None };
+        values.record(&mut visitor);
+
+        if let Some(latency) = visitor.latency
+            && let Some(data) = _ctx.span(id)
+            && let Some(overhead_data) = data.extensions_mut().remove::<OverheadSpanData>()
+        {
+            let elapsed = Duration::from_millis(latency as u64);
+            let excluded_time: Duration = overhead_data
+                .excluded_intervals
+                .into_disjoint_intervals()
+                .iter()
+                .map(|i| *i.end() - *i.start())
+                .sum();
+            let overhead = elapsed.checked_sub(excluded_time).unwrap_or_else(|| {
+                error_within_tracing(
+                    "Excluded time exceeded elapsed span duration; clamping overhead to zero",
+                );
+                Duration::ZERO
+            });
+
+            metrics::histogram!(
+                "tensorzero_inference_latency_overhead_seconds",
+                &[("kind", overhead_data.kind)]
+            )
+            .record(overhead.as_secs_f64());
         }
     }
 

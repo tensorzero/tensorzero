@@ -1,7 +1,6 @@
 import type { Route } from "./+types/route";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
-  getEvaluationStatistics,
   getEvaluationResults,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
@@ -112,12 +111,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let statisticsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
-    statisticsPromise = getEvaluationStatistics(
-      function_name,
-      function_type,
-      metric_names,
-      selected_evaluation_run_ids_array,
-    );
+    statisticsPromise = tensorZeroClient
+      .getEvaluationStatistics(
+        function_name,
+        function_type,
+        metric_names,
+        selected_evaluation_run_ids_array,
+      )
+      .then((response) => response.statistics);
   } else {
     statisticsPromise = Promise.resolve([]);
   }

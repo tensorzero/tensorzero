@@ -33,7 +33,7 @@ impl ConnectionDropGuard {
     fn mark_finished(&self) {
         // Calculate the elapsed time when we've finished sending the response to
         // the client - this is the latency that we want to log to users,
-        // and use for computing the `tensorzero_overhead` metric
+        // and use for computing the `tensorzero_inference_latency_overhead_seconds` metric
         self.finished_with_latency
             .set(Some(self.start_time.elapsed()));
     }

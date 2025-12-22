@@ -101,22 +101,22 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
     println!("Metrics: {metrics:#?}");
 
     assert_eq!(
-        metrics["tensorzero_overhead_count{kind=\"POST /inference\",model_name=\"dummy::slow\"}"],
+        metrics[r#"tensorzero_inference_latency_overhead_seconds_count{kind="POST /inference"}"#],
         count.to_string()
     );
 
-    let pct_50 = metrics["tensorzero_overhead{kind=\"POST /inference\",model_name=\"dummy::slow\",quantile=\"0.5\"}"]
+    let pct_50 = metrics[r#"tensorzero_inference_latency_overhead_seconds{kind="POST /inference",quantile="0.5"}"#]
         .parse::<f64>()
         .unwrap();
     assert!(
-        pct_50 > 1.0,
+        pct_50 > 0.001,
         "50th percentile overhead should be greater than 1ms"
     );
     // We have observability disabled, so we expect the overhead to be low (even though this is a debug build)
     // Notably, it does *not* include the 5-second sleep in the 'dummy::slow' model
     // This test can be slow on CI, so we give a generous 200ms margin
     assert!(
-        pct_50 < 200.0,
-        "Unexpectedly high 50th percentile overhead: {pct_50}ms"
+        pct_50 < 0.2,
+        "Unexpectedly high 50th percentile overhead: {pct_50}s"
     );
 }

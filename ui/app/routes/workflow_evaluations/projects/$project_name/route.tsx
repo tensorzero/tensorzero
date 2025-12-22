@@ -2,10 +2,6 @@ import { PageHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow_evaluations/projects/$project_name/WorkflowEvalRunSelector";
-import {
-  countWorkflowEvaluationRunEpisodesByTaskName,
-  getWorkflowEvaluationRunEpisodesByTaskName,
-} from "~/utils/clickhouse/workflow_evaluations.server";
 import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
@@ -44,12 +40,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       .getWorkflowEvaluationRuns(runIds, projectName)
       .then((response) => response.runs);
 
-    const episodeInfoPromise = getWorkflowEvaluationRunEpisodesByTaskName(
-      runIds,
-      limit,
-      offset,
-    );
-    const countPromise = countWorkflowEvaluationRunEpisodesByTaskName(runIds);
+    const client = getTensorZeroClient();
+    const episodeInfoPromise = client
+      .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
+      .then((response) => response.episodes);
+    const countPromise =
+      client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
     // Run all promises concurrently
     const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
       Promise.all(statsPromises),
