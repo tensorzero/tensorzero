@@ -30,6 +30,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::functions::internal::get_variant_performances_handler),
         )
         .route(
+            "/internal/functions/inference-counts",
+            get(endpoints::internal::inference_stats::list_functions_with_inference_count_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/inference-stats",
             get(endpoints::internal::inference_stats::get_inference_stats_handler),
         )
