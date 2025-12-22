@@ -133,7 +133,7 @@ pub trait OverheadSpanExt {
     /// Note that any still in-progress 'external' spans will count towards the overhead metric.
     /// We may revisit this decision depending on whether or not we add more uses of `TensorzeroHttpClient`
     /// during inference.
-    /// Any key/value pairs in `extra_labels` will be added to the `tensorzero_overhead` histogram metric.
+    /// Any key/value pairs in `extra_labels` will be added to the `tensorzero_inference_latency_overhead_seconds` histogram metric.
     /// NOTE: This method will print an error if called on a span that does not have the `tensorzero.overhead.kind` attribute applied.
     fn set_latency_and_record(
         &self,
@@ -167,11 +167,14 @@ impl OverheadSpanExt for Span {
                     let mut labels = Vec::with_capacity(extra_labels.len() + 1);
                     labels.push(("kind", overhead_data.kind));
                     labels.extend_from_slice(extra_labels);
-                    metrics::histogram!("tensorzero_overhead", &labels)
+                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds", &labels)
                         .record(overhead.as_millis() as f64);
                 } else {
-                    metrics::histogram!("tensorzero_overhead", &[("kind", overhead_data.kind)])
-                        .record(overhead.as_millis() as f64);
+                    metrics::histogram!(
+                        "tensorzero_inference_latency_overhead_seconds",
+                        &[("kind", overhead_data.kind)]
+                    )
+                    .record(overhead.as_millis() as f64);
                 }
             } else {
                 error_within_tracing(&format!("No OverheadSpanData found for span {self:?}"));
@@ -181,7 +184,7 @@ impl OverheadSpanExt for Span {
 }
 
 /// This span attribute indicates that we should track overhead for the span.
-/// The value of this attribute will be used the value of the `kind` label in the `tensorzero_overhead` histogram metric.
+/// The value of this attribute will be used the value of the `kind` label in the `tensorzero_inference_latency_overhead_seconds` histogram metric.
 pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.kind";
 /// NOTE - the value of this attribute is ignored - setting to 'false' will still enable it
 pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
