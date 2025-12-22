@@ -1,5 +1,5 @@
 import { expect, test, describe } from "vitest";
-import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
+import type { VariantPerformanceRow } from "~/types/tensorzero";
 import { transformVariantPerformances } from "./VariantPerformance";
 
 describe("transformVariantPerformances", () => {

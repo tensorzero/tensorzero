@@ -15,16 +15,7 @@ async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
-# Using sqlx 0.9.0-alpha.1 to match the `durable` crate's sqlx version
-# The workspace uses sqlx 0.8.x which is incompatible
-sqlx = { version = "0.9.0-alpha.1", features = [
-    "runtime-tokio",
-    "tls-rustls",
-    "postgres",
-    "migrate",
-    "chrono",
-    "uuid",
-] }
+sqlx.workspace = true
 thiserror = "2"
 anyhow = "1"
 uuid.workspace = true

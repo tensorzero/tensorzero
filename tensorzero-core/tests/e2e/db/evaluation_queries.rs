@@ -449,3 +449,270 @@ async fn test_get_evaluation_statistics_chat_function() {
         assert_eq!(stat.evaluation_run_id, evaluation_run_id);
     }
 }
+
+// ============================================================================
+// get_evaluation_results tests
+// ============================================================================
+
+/// Test that get_evaluation_results returns correct results for haiku evaluation.
+#[tokio::test]
+async fn test_get_evaluation_results_haiku() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &[
+                "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
+                "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
+                    .to_string(),
+            ],
+            5,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // Verify we get the expected number of results (5 datapoints * 2 metrics = 10)
+    assert_eq!(
+        results.len(),
+        10,
+        "Expected 10 results (5 datapoints * 2 metrics)"
+    );
+
+    // Verify all results belong to the correct evaluation run
+    for result in &results {
+        assert_eq!(result.evaluation_run_id, evaluation_run_id);
+        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+    }
+
+    // Verify we have both metric types
+    let metric_names: std::collections::HashSet<_> = results
+        .iter()
+        .filter_map(|r| r.metric_name.as_ref())
+        .collect();
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()
+        ),
+        "Should have exact_match metric"
+    );
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f".to_string()
+        ),
+        "Should have topic_starts_with_f metric"
+    );
+
+    // Verify datapoint count (should be 5 unique datapoints)
+    let datapoint_ids: std::collections::HashSet<_> =
+        results.iter().map(|r| r.datapoint_id).collect();
+    assert_eq!(datapoint_ids.len(), 5, "Expected 5 unique datapoints");
+}
+
+/// Test that get_evaluation_results handles entity_extraction (JSON function) correctly.
+#[tokio::test]
+async fn test_get_evaluation_results_entity_extraction() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("0196368f-19bd-7082-a677-1c0bf346ff24").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "extract_entities",
+            &[evaluation_run_id],
+            "JsonInference",
+            "JsonInferenceDatapoint",
+            &[
+                "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
+                    .to_string(),
+                "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                    .to_string(),
+            ],
+            2,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // Verify we get 4 results (2 datapoints * 2 metrics)
+    assert_eq!(
+        results.len(),
+        4,
+        "Expected 4 results (2 datapoints * 2 metrics)"
+    );
+
+    // Verify we have both metrics
+    let metric_names: std::collections::HashSet<_> = results
+        .iter()
+        .filter_map(|r| r.metric_name.as_ref())
+        .collect();
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
+                .to_string()
+        ),
+        "Should have exact_match metric"
+    );
+    assert!(
+        metric_names.contains(
+            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                .to_string()
+        ),
+        "Should have count_sports metric"
+    );
+
+    // Verify datapoint count
+    let datapoint_ids: std::collections::HashSet<_> =
+        results.iter().map(|r| r.datapoint_id).collect();
+    assert_eq!(datapoint_ids.len(), 2, "Expected 2 unique datapoints");
+
+    // Verify JSON structure
+    for result in &results {
+        assert!(result.input.starts_with('{'), "Input should be JSON object");
+        assert!(
+            result.generated_output.contains("\"raw\""),
+            "Generated output should have 'raw' field"
+        );
+    }
+}
+
+/// Test that get_evaluation_results handles multiple evaluation runs (ragged case).
+#[tokio::test]
+async fn test_get_evaluation_results_multiple_runs() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id1 =
+        Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").expect("Valid UUID");
+    let evaluation_run_id2 =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id1, evaluation_run_id2],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &[
+                "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string(),
+                "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"
+                    .to_string(),
+            ],
+            5,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // With ragged data: 5 datapoints * 2 metrics * 2 runs - some missing = 18
+    // (one datapoint is after all runs, another only in one run)
+    assert_eq!(
+        results.len(),
+        18,
+        "Expected 18 results for ragged evaluation"
+    );
+
+    // Verify both evaluation runs are present
+    let eval_run_ids: std::collections::HashSet<_> =
+        results.iter().map(|r| r.evaluation_run_id).collect();
+    assert!(
+        eval_run_ids.contains(&evaluation_run_id1),
+        "Should have results from first evaluation run"
+    );
+    assert!(
+        eval_run_ids.contains(&evaluation_run_id2),
+        "Should have results from second evaluation run"
+    );
+
+    // Verify datapoint count
+    let datapoint_ids: std::collections::HashSet<_> =
+        results.iter().map(|r| r.datapoint_id).collect();
+    assert_eq!(datapoint_ids.len(), 5, "Expected 5 unique datapoints");
+}
+
+/// Test that get_evaluation_results returns empty for nonexistent function.
+#[tokio::test]
+async fn test_get_evaluation_results_nonexistent_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+
+    let results = clickhouse
+        .get_evaluation_results(
+            "nonexistent_function",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["some_metric".to_string()],
+            100,
+            0,
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        results.is_empty(),
+        "Expected no results for nonexistent function"
+    );
+}
+
+/// Test that get_evaluation_results respects pagination offset.
+#[tokio::test]
+async fn test_get_evaluation_results_pagination() {
+    let clickhouse = get_clickhouse().await;
+
+    let evaluation_run_id =
+        Uuid::parse_str("01963691-9d3c-7793-a8be-3937ebb849c1").expect("Valid UUID");
+
+    // Get first page (5 datapoints)
+    let first_page = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            5,
+            0,
+        )
+        .await
+        .unwrap();
+
+    // Get second page (5 datapoints starting from offset 5)
+    let second_page = clickhouse
+        .get_evaluation_results(
+            "write_haiku",
+            &[evaluation_run_id],
+            "ChatInference",
+            "ChatInferenceDatapoint",
+            &["tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()],
+            5,
+            5,
+        )
+        .await
+        .unwrap();
+
+    // Verify we got results on both pages
+    assert_eq!(first_page.len(), 5, "First page should have 5 results");
+    assert_eq!(second_page.len(), 5, "Second page should have 5 results");
+
+    // Verify no overlap between pages
+    let first_datapoints: std::collections::HashSet<_> =
+        first_page.iter().map(|r| r.datapoint_id).collect();
+    let second_datapoints: std::collections::HashSet<_> =
+        second_page.iter().map(|r| r.datapoint_id).collect();
+
+    let overlap: Vec<_> = first_datapoints.intersection(&second_datapoints).collect();
+    assert!(
+        overlap.is_empty(),
+        "Pages should not have overlapping datapoints"
+    );
+}
