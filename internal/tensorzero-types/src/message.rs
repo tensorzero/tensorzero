@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::export_schema;
 
-/// An input message in a conversation.
+/// InputMessage and Role are our representation of the input sent by the client
+/// prior to any processing into LLM representations below.
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[export_schema]
@@ -20,7 +22,6 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
-/// Content types that can appear in an input message.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
@@ -44,11 +45,13 @@ pub enum InputMessageContent {
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
+    /// The `data` field holds the original content block from the provider,
+    /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
     Unknown(Unknown),
 }
 
-/// The API representation of an input to a model.
+/// API representation of an input to a model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
