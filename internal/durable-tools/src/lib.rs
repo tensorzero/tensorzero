@@ -186,7 +186,8 @@ pub use tool_metadata::ToolMetadata;
 
 // Re-export inference trait and helpers
 pub use inference::{
-    InferenceClient, InferenceError, embedded_gateway_client, from_client, http_gateway_client,
+    EmbeddedInferenceClient, InferenceClient, InferenceError, embedded_gateway_client, from_client,
+    http_gateway_client,
 };
 
 // Re-export autopilot types for use by tools

@@ -3,11 +3,10 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use durable_tools::{ToolExecutor, WorkerOptions, http_gateway_client};
+use durable_tools::{InferenceClient, ToolExecutor, WorkerOptions};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use url::Url;
 
 use crate::tools::EchoTool;
 use crate::wrapper::ClientToolWrapper;
@@ -18,41 +17,29 @@ pub struct AutopilotWorkerConfig {
     pub pool: PgPool,
     /// Queue name for durable tasks (default: "autopilot").
     pub queue_name: String,
-    /// URL of the TensorZero gateway for inference (default: http://127.0.0.1:3000).
-    pub gateway_url: Url,
+    /// Inference client for calling TensorZero endpoints.
+    pub inference_client: Arc<dyn InferenceClient>,
 }
 
-/// Default gateway URL for the autopilot worker.
-const DEFAULT_GATEWAY_URL: &str = "http://127.0.0.1:3000";
-
 impl AutopilotWorkerConfig {
-    /// Create config with an existing pool and optional overrides from environment.
+    /// Create config with required components.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database pool for the durable task queue
+    /// * `inference_client` - Inference client for TensorZero operations
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
-    /// - `TENSORZERO_AUTOPILOT_GATEWAY_URL`: Gateway URL (default: http://127.0.0.1:3000)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `TENSORZERO_AUTOPILOT_GATEWAY_URL` is set but invalid.
-    pub fn new(pool: PgPool) -> Result<Self> {
+    pub fn new(pool: PgPool, inference_client: Arc<dyn InferenceClient>) -> Self {
         let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
             .unwrap_or_else(|_| "autopilot".to_string());
 
-        let gateway_url = match std::env::var("TENSORZERO_AUTOPILOT_GATEWAY_URL") {
-            Ok(s) => s
-                .parse()
-                .map_err(|e| anyhow::anyhow!("Invalid TENSORZERO_AUTOPILOT_GATEWAY_URL: {e}"))?,
-            Err(_) => DEFAULT_GATEWAY_URL
-                .parse()
-                .map_err(|e| anyhow::anyhow!("Invalid default gateway URL: {e}"))?,
-        };
-
-        Ok(Self {
+        Self {
             pool,
             queue_name,
-            gateway_url,
-        })
+            inference_client,
+        }
     }
 }
 
@@ -66,14 +53,12 @@ impl AutopilotWorker {
     ///
     /// # Errors
     ///
-    /// Returns an error if the inference client cannot be created.
+    /// Returns an error if the executor cannot be created.
     pub async fn new(config: AutopilotWorkerConfig) -> Result<Self> {
-        let inference_client = http_gateway_client(config.gateway_url)?;
-
         let executor = ToolExecutor::builder()
             .pool(config.pool)
             .queue_name(&config.queue_name)
-            .inference_client(inference_client)
+            .inference_client(config.inference_client)
             .build()
             .await?;
 
@@ -140,7 +125,7 @@ impl AutopilotWorkerHandle {
 ///
 /// * `deferred_tasks` - Task tracker from the gateway for spawning background tasks
 /// * `cancel_token` - Cancellation token for graceful shutdown
-/// * `config` - Worker configuration (as a Result from `AutopilotWorkerConfig::new()`)
+/// * `config` - Worker configuration
 ///
 /// # Returns
 ///
@@ -149,20 +134,12 @@ impl AutopilotWorkerHandle {
 pub fn spawn_autopilot_worker(
     deferred_tasks: &TaskTracker,
     cancel_token: CancellationToken,
-    config: Result<AutopilotWorkerConfig>,
+    config: AutopilotWorkerConfig,
 ) -> Option<AutopilotWorkerHandle> {
     // We use a oneshot channel to get the handle back from the spawned task
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     deferred_tasks.spawn(async move {
-        let config = match config {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("Invalid autopilot worker config: {e}");
-                let _ = tx.send(None);
-                return;
-            }
-        };
         match AutopilotWorker::new(config).await {
             Ok(worker) => {
                 tracing::info!("Autopilot worker started");

@@ -1836,6 +1836,7 @@ dependencies = [
  "tensorzero-core",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-util",
  "url",
  "uuid",
 ]
@@ -2325,6 +2326,7 @@ dependencies = [
  "axum",
  "brotli",
  "clap",
+ "durable-tools",
  "flate2",
  "futures",
  "http 1.4.0",
