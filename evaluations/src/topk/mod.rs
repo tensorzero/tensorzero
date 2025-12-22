@@ -529,6 +529,12 @@ fn update_variant_statuses(
         if let Some(failure_cs) = variant_failures.get(name)
             && failure_cs.cs_lower > params.variant_failure_threshold
         {
+            tracing::warn!(
+                variant = %name,
+                failure_rate_lower_bound = failure_cs.cs_lower,
+                threshold = params.variant_failure_threshold,
+                "Variant marked as Failed due to high failure rate"
+            );
             variant_status.insert(name.clone(), VariantStatus::Failed);
         }
     }
