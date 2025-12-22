@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
 use schemars::Schema;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::time::Duration;
-use uuid::Uuid;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
@@ -205,18 +204,8 @@ pub trait TaskTool: Send + Sync + 'static {
     ) -> ToolExecResult<Self::Output>;
 }
 
-/// Wrapper params that include `episode_id`, LLM params, and side info.
-///
-/// This is what gets serialized as the durable task params.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskToolParams<L, S = ()> {
-    /// The LLM-provided parameters.
-    pub llm_params: L,
-    /// Side information (hidden from LLM).
-    pub side_info: S,
-    /// The episode ID for this execution.
-    pub episode_id: Uuid,
-}
+// Re-export TaskToolParams from spawn crate
+pub use durable_tools_spawn::TaskToolParams;
 
 /// Adapter that implements `durable::Task` for any `TaskTool`.
 ///

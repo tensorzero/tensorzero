@@ -1,5 +1,5 @@
 [package]
-name = "durable-tools"
+name = "durable-tools-spawn"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -8,31 +8,18 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-durable-tools-spawn.workspace = true
 durable.workspace = true
 tokio.workspace = true
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true
-schemars.workspace = true
 # Using sqlx 0.9.0-alpha.1 to match the `durable` crate's sqlx version
 # The workspace uses sqlx 0.8.x which is incompatible
 sqlx = { version = "0.9.0-alpha.1", features = [
     "runtime-tokio",
     "tls-rustls",
     "postgres",
-    "migrate",
-    "chrono",
-    "uuid",
 ] }
 thiserror = "2"
-anyhow = "1"
 uuid.workspace = true
-chrono.workspace = true
-tensorzero.workspace = true
-url = "2"
 secrecy.workspace = true
-
-[dev-dependencies]
-mockall = "0.14"
-tensorzero-core.workspace = true
