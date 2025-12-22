@@ -32,7 +32,8 @@ use crate::endpoints::feedback::{
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::{
-    ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput, TaggedInferenceDatabaseInsert,
+    ContentBlockChatOutput, FetchContext, Input, InputExt, JsonInferenceOutput,
+    TaggedInferenceDatabaseInsert,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};

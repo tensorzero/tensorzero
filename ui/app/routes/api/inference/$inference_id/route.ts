@@ -1,7 +1,6 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { resolveModelInferences } from "~/utils/resolve.server";
-import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
@@ -97,7 +96,7 @@ export async function loader({
     // Get used variants for default function
     const usedVariants =
       inference.function_name === DEFAULT_FUNCTION
-        ? await getUsedVariants(inference.function_name)
+        ? await client.getUsedVariants(inference.function_name)
         : [];
 
     const inferenceData: InferenceDetailData = {

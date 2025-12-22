@@ -4907,9 +4907,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.26"
+version = "0.12.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b4c14b2d9afca6a60277086b0cc6a6ae0b568f6f7916c943a8cdc79f8be240f"
+checksum = "8e893f6bece5953520ddbb3f8f46f3ef36dd1fef4ee9b087c4b4a725fd5d10e4"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -5366,9 +5366,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.145"
+version = "1.0.146"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
+checksum = "217ca874ae0207aac254aa02c957ded05585a90892cc8d87f9e5fa49669dadd8"
 dependencies = [
  "indexmap 2.12.1",
  "itoa",
@@ -6139,6 +6139,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-types",
  "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
@@ -6237,6 +6238,27 @@ dependencies = [
  "tensorzero-core",
  "tokio",
  "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tensorzero-types"
+version = "2025.12.4"
+dependencies = [
+ "aws-smithy-types",
+ "chrono",
+ "infer",
+ "mime 0.4.0-a.0",
+ "object_store",
+ "pyo3",
+ "schemars 1.1.0",
+ "serde",
+ "serde_json",
+ "tensorzero-derive",
+ "thiserror 2.0.17",
+ "tracing",
+ "ts-rs",
  "url",
  "uuid",
 ]

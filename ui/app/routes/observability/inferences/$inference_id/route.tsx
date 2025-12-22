@@ -18,7 +18,6 @@ import type { ReactNode } from "react";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
-import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   InferenceDetailContent,
@@ -125,7 +124,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const usedVariants =
     inference.function_name === DEFAULT_FUNCTION
-      ? await getUsedVariants(inference.function_name)
+      ? await tensorZeroClient.getUsedVariants(inference.function_name)
       : [];
   const resolvedInput = await loadFileDataForStoredInput(inference.input);
 

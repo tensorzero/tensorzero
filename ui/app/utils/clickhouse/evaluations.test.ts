@@ -6,16 +6,14 @@ import {
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
 
+// These tests still provide value since they validate the parsed results; we will remove them once we start returning
+// structured objects from the gateway (instead of strings that the UI parses).
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {
     const evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
+      "haiku",
       "write_haiku",
-      "chat",
-      [
-        "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
-        "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
-      ],
       [evaluation_run_id],
       5,
       0,
@@ -28,7 +26,6 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
-      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");
@@ -63,12 +60,8 @@ describe("getEvaluationResults", () => {
     // table only having one evaluation run.
     const evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
     const results = await getEvaluationResults(
+      "entity_extraction",
       "extract_entities",
-      "json",
-      [
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
-        "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports",
-      ],
       [evaluation_run_id],
       2,
       0,
@@ -95,12 +88,8 @@ describe("getEvaluationResults", () => {
     const evaluation_run_id1 = "0196374b-04a3-7013-9049-e59ed5fe3f74";
     const evaluation_run_id2 = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
+      "haiku",
       "write_haiku",
-      "chat",
-      [
-        "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
-        "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
-      ],
       [evaluation_run_id1, evaluation_run_id2],
       5,
       0,
@@ -116,7 +105,6 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
-      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");

@@ -1,4 +1,4 @@
-use durable::{ControlFlow, TaskError};
+use durable::{ControlFlow, DurableError, TaskError};
 use thiserror::Error;
 
 /// Error type for tool execution.
@@ -81,6 +81,28 @@ impl From<ToolError> for TaskError {
             ToolError::DuplicateToolName(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
             ToolError::InvalidParams(msg) => TaskError::TaskInternal(anyhow::anyhow!(msg)),
             ToolError::ExecutionFailed(e) => TaskError::TaskInternal(e),
+        }
+    }
+}
+
+impl From<DurableError> for ToolError {
+    fn from(err: DurableError) -> Self {
+        match err {
+            DurableError::Database(e) => ToolError::Database(e),
+            DurableError::Serialization(e) => ToolError::Serialization(e),
+            DurableError::TaskNotRegistered { task_name } => ToolError::ToolNotFound(task_name),
+            DurableError::TaskAlreadyRegistered { task_name } => {
+                ToolError::DuplicateToolName(task_name)
+            }
+            DurableError::ReservedHeaderPrefix { key } => ToolError::Validation {
+                message: format!(
+                    "header key '{key}' uses reserved prefix 'durable::'. \
+                     User headers cannot start with 'durable::'."
+                ),
+            },
+            DurableError::InvalidEventName { reason } => ToolError::Validation {
+                message: format!("invalid event name: {reason}"),
+            },
         }
     }
 }

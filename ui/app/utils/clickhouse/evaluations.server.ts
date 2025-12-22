@@ -1,21 +1,22 @@
 import { logger } from "~/utils/logger";
+import type { EvaluationResultRow } from "~/types/tensorzero";
+
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
 import { inputSchema } from "./common";
 import {
-  type EvaluationResult,
-  getEvaluatorMetricName,
-  type EvaluationResultWithVariant,
-  type ParsedEvaluationResultWithVariant,
-  type ParsedEvaluationResult,
-  JsonEvaluationResultSchema,
   ChatEvaluationResultSchema,
+  JsonEvaluationResultSchema,
+  getEvaluatorMetricName,
+  type ParsedEvaluationResult,
+  type ParsedEvaluationResultWithVariant,
   ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
+import { getTensorZeroClient } from "../tensorzero.server";
 
-async function parseEvaluationResult(
-  result: EvaluationResult,
+export async function parseEvaluationResult(
+  result: EvaluationResultRow,
   function_name: string,
 ): Promise<ParsedEvaluationResult> {
   // Parse the input field
@@ -26,7 +27,9 @@ async function parseEvaluationResult(
 
   // Parse the outputs
   const generatedOutput = JSON.parse(result.generated_output);
-  const referenceOutput = JSON.parse(result.reference_output);
+  const referenceOutput = result.reference_output
+    ? JSON.parse(result.reference_output)
+    : null;
   // Determine if this is a chat result by checking if generated_output is an array
   if (Array.isArray(generatedOutput)) {
     // This is likely a chat evaluation result
@@ -48,7 +51,7 @@ async function parseEvaluationResult(
 }
 
 async function parseEvaluationResultWithVariant(
-  result: EvaluationResultWithVariant,
+  result: EvaluationResultRow,
   function_name: string,
 ): Promise<ParsedEvaluationResultWithVariant> {
   try {
@@ -78,121 +81,39 @@ async function parseEvaluationResultWithVariant(
   }
 }
 
-const getEvaluationResultDatapointIdQuery = (
-  limit?: number,
-  offset?: number,
-) => {
-  return `
-    all_inference_ids AS (
-      SELECT DISTINCT inference_id
-      FROM TagInference FINAL WHERE key = 'tensorzero::evaluation_run_id'
-      AND function_name = {function_name:String}
-      AND value IN ({evaluation_run_ids:Array(String)})
-    ),
-    all_datapoint_ids AS (
-      SELECT DISTINCT value as datapoint_id
-      FROM TagInference FINAL
-      WHERE key = 'tensorzero::datapoint_id'
-      AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM all_inference_ids)
-      ORDER BY toUInt128(toUUID(datapoint_id)) DESC
-      ${limit ? `LIMIT ${limit}` : ""}
-      ${offset ? `OFFSET ${offset}` : ""}
-    )
-`;
-};
-
+/**
+ * Gets paginated evaluation results using the TensorZero gateway API.
+ *
+ * @param evaluation_name The name of the evaluation.
+ * @param function_name The name of the function being evaluated.
+ * @param evaluation_run_ids Array of evaluation run IDs to query.
+ * @param limit Maximum number of datapoints to return.
+ * @param offset Offset for pagination.
+ * @returns An array of parsed evaluation results.
+ */
 export async function getEvaluationResults(
+  evaluation_name: string,
   function_name: string,
-  function_type: "chat" | "json",
-  metric_names: string[],
   evaluation_run_ids: string[],
   limit: number = 100,
   offset: number = 0,
-) {
-  const datapoint_table_name =
-    function_type === "chat"
-      ? "ChatInferenceDatapoint"
-      : "JsonInferenceDatapoint";
-  const inference_table_name =
-    function_type === "chat" ? "ChatInference" : "JsonInference";
-  const query = `
-  WITH ${getEvaluationResultDatapointIdQuery(limit, offset)},
-    filtered_dp AS (
-      SELECT * FROM {datapoint_table_name:Identifier} FINAL
-      WHERE function_name = {function_name:String}
-      -- We don't have the dataset_name here but there is an index on datapoint_ids so this should not be a full scan
-      AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
-    ),
-    filtered_inference AS (
-      SELECT * FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM all_inference_ids)
-      AND function_name = {function_name:String}
-    ),
-    filtered_feedback AS (
-      SELECT metric_name,
-             argMax(toString(value), timestamp) as value,
-             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-             argMax(id, timestamp) as feedback_id,
-             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
-             target_id
-      FROM BooleanMetricFeedback
-      WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
-      GROUP BY target_id, metric_name -- for the argMax
-      UNION ALL
-      SELECT metric_name,
-             argMax(toString(value), timestamp) as value,
-             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-             argMax(id, timestamp) as feedback_id,
-             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback,
-             target_id
-      FROM FloatMetricFeedback
-      WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
-      GROUP BY target_id, metric_name -- for the argMax
-    )
-  SELECT
-    dp.input as input,
-    dp.id as datapoint_id,
-    dp.name as name,
-    dp.output as reference_output,
-    ci.output as generated_output,
-    ci.function_name as function_name,
-    ci.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
-    ci.tags['tensorzero::dataset_name'] as dataset_name,
-    if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
-    ci.id as inference_id,
-    ci.episode_id as episode_id,
-    feedback.metric_name as metric_name,
-    feedback.value as metric_value,
-    feedback.feedback_id as feedback_id,
-    toBool(feedback.is_human_feedback) as is_human_feedback,
-    formatDateTime(dp.staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
-  FROM filtered_dp dp
-  INNER JOIN filtered_inference ci
-    ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
-  LEFT JOIN filtered_feedback feedback
-    ON feedback.target_id = ci.id
-  ORDER BY toUInt128(datapoint_id) DESC
-  `;
+): Promise<ParsedEvaluationResult[]> {
+  const tensorZeroClient = getTensorZeroClient();
 
-  const result = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-      metric_names: metric_names,
-      function_name: function_name,
-      datapoint_table_name: datapoint_table_name,
-      inference_table_name: inference_table_name,
-      limit: limit,
-      offset: offset,
-    },
-  });
-  const rows = await result.json<EvaluationResult>();
+  const response = await tensorZeroClient.getEvaluationResults(
+    evaluation_name,
+    evaluation_run_ids,
+    limit,
+    offset,
+  );
+
+  // Filter out results without metrics (from LEFT JOIN with feedback table)
+  const resultsWithMetrics = response.results.filter(
+    (row) => row.metric_name != null,
+  );
+
   return Promise.all(
-    rows.map((row) => parseEvaluationResult(row, function_name)),
+    resultsWithMetrics.map((row) => parseEvaluationResult(row, function_name)),
   );
 }
 
@@ -304,7 +225,7 @@ export async function getEvaluationsForDatapoint(
       datapoint_table_name,
     },
   });
-  const rows = await result.json<EvaluationResultWithVariant>();
+  const rows = await result.json<EvaluationResultRow>();
   const parsed_rows = await Promise.all(
     rows.map((row) => parseEvaluationResultWithVariant(row, function_name)),
   );
@@ -366,9 +287,8 @@ export async function pollForEvaluations(
  * Polls for evaluation results until they are available or max retries is reached.
  * This is useful when waiting for newly created evaluations to be available in ClickHouse.
  *
+ * @param evaluation_name The name of the evaluation.
  * @param function_name The name of the function.
- * @param function_type The type of function (chat or json).
- * @param metric_names Array of metric names to query.
  * @param evaluation_run_ids Array of evaluation run IDs to query.
  * @param new_feedback_id The ID of the feedback item to find.
  * @param limit Maximum number of results to return.
@@ -378,9 +298,8 @@ export async function pollForEvaluations(
  * @returns An array of parsed evaluation results.
  */
 export async function pollForEvaluationResults(
+  evaluation_name: string,
   function_name: string,
-  function_type: "chat" | "json",
-  metric_names: string[],
   evaluation_run_ids: string[],
   new_feedback_id: string,
   limit: number = 100,
@@ -393,9 +312,8 @@ export async function pollForEvaluationResults(
 
   for (let i = 0; i < max_retries; i++) {
     results = await getEvaluationResults(
+      evaluation_name,
       function_name,
-      function_type,
-      metric_names,
       evaluation_run_ids,
       limit,
       offset,
