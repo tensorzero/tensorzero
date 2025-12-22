@@ -3143,7 +3143,7 @@ mod topk_tests {
         // Based on simulation, exactly 25 datapoints needed for top-1 identification
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(1)).await;
 
         // Get the evaluation config for test_topk_evaluation
         // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
@@ -3192,7 +3192,7 @@ mod topk_tests {
             k_max: 1,
             epsilon: None, // No epsilon relaxation - require strict separation
             max_datapoints: Some(25),
-            batch_size: Some(5),
+            batch_size: Some(25),
             variant_failure_threshold: 1.0,   // disabled
             evaluator_failure_threshold: 1.0, // disabled
             concurrency: 10,
@@ -3247,7 +3247,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         // Get the task result
@@ -3676,7 +3676,7 @@ mod topk_tests {
         // Write 25 datapoints - same as test_topk_topk_found
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(1)).await;
 
         // Get the evaluation config for test_topk_evaluation
         // This evaluation uses zero, one, and exact_match evaluators (no error evaluator)
@@ -3783,7 +3783,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         // Get the task result
@@ -3855,7 +3855,7 @@ mod topk_tests {
         // Write 25 datapoints to ensure enough are available even if ClickHouse is slow
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(1)).await;
 
         // Get the evaluation config for test_evaluation which has an "error" evaluator
         let evaluation_config = config
@@ -3954,7 +3954,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         // Get the task result
@@ -4087,7 +4087,7 @@ mod topk_tests {
         // Write 25 datapoints to ensure enough are available even if ClickHouse is slow
         write_basic_test_datapoints(&dataset_name, 25).await;
         clickhouse_flush_async_insert(&clickhouse).await;
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(1)).await;
 
         // Get the test_topk_evaluation config (uses basic_test function)
         let evaluation_config = config
@@ -4192,7 +4192,7 @@ mod topk_tests {
                 }
             }
 
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         // Get the task result
