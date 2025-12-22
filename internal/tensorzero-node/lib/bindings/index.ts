@@ -349,6 +349,8 @@ export * from "./Usage";
 export * from "./VLLMProvider";
 export * from "./VariantConfig";
 export * from "./VariantInfo";
+export * from "./VariantPerformanceRow";
+export * from "./VariantPerformancesResponse";
 export * from "./VariantThroughput";
 export * from "./WorkflowEvaluationProject";
 export * from "./WorkflowEvaluationRun";
