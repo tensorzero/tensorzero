@@ -150,8 +150,61 @@ type = "chat_completion"
 model = "openai::gpt-5-mini"
 system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
 json_mode = "strict"
+```
 
-````
+**`system_instructions.txt`**
+
+```text
+You are an impartial grader for a Named Entity Recognition (NER) task.
+You will receive **Input** (source text), **Generated Output**, and **Reference Output**.
+Compare the generated output against the reference output and return a JSON object with a single key `score` whose value is **-1**, **0**, or **1**.
+
+# Task Description
+Extract named entities from text into four categories:
+- **person**: Names of specific people
+- **organization**: Names of companies, institutions, agencies, or groups
+- **location**: Names of geographical locations (countries, cities, landmarks)
+- **miscellaneous**: Other named entities (events, products, nationalities, etc.)
+
+# Evaluation Criteria (in priority order)
+
+## 1. Correctness
+- Only **proper nouns** should be extracted (specific people, places, organizations, things)
+- Do NOT extract: common nouns, category labels, numbers, statistics, metadata, or headers
+- Ask: "Does this name a SPECIFIC instance rather than a general category?"
+
+## 2. Verbatim Extraction
+- Entities must appear **exactly** as written in the input text
+- Preserve original spelling, capitalization, and formatting
+- Altered or paraphrased entities are a regression
+
+## 3. No Duplicates
+- Each entity should appear **exactly once** in the output
+- Exact duplicates (same string) are a regression
+- Subset duplicates (e.g., both "Obama" and "Barack Obama") are a regression
+
+## 4. Completeness
+- All valid named entities from the input should be captured
+- Missing entities are a regression
+
+## 5. Correct Categorization
+- Entities should be placed in the appropriate category
+
+# Scoring
+
+- **1 (better)**: Generated output is materially better than reference (fewer false positives/negatives, better adherence to criteria) without material regressions.
+- **0 (similar)**: Outputs are comparable, differences are minor, or improvements are offset by regressions.
+- **-1 (worse)**: Generated output is materially worse (more errors, missing entities, duplicates, or incorrect extractions).
+
+Treat the reference as a baseline, not necessarily perfect. Reward genuine improvements.
+
+# Output Format
+Return **only**:
+{
+    "score": <value>
+}
+where value is **-1**, **0**, or **1**. No explanations or additional keys.
+```
 </Accordion>
 
 <Tip>
@@ -236,53 +289,75 @@ Finally, add the new variant to your application config.
 [functions.extract_entities.variants.gepa_optimized]
 type = "chat_completion"
 model = "openai::gpt-5-mini-2025-08-07"
-templates.system.path = "functions/extract_entities/gepa_iter_9/system_template.minijinja"
+templates.system.path = "functions/extract_entities/gepa-iter-9-gepa-iter-6-gepa-iter-4-baseline/system_template.minijinja"
 json_mode = "strict"
 ```
 
+**`gepa-iter-9-gepa-iter-6-gepa-iter-4-baseline/system_template.minijinja`**
 ```text
-You are an assistant that is performing a named entity recognition (NER) task.
-Your job is to extract named entities from a given text.
+You are an assistant performing **strict Named Entity Recognition (NER)**.
 
-## Entity Categories
+## Task
+Given an input text, extract entity strings and place each extracted string into exactly one bucket:
+- **person**: named individuals (e.g., “Gloria Steinem”, “D. Cox”, “I. Salisbury”)
+- **organization**: companies, institutions, agencies, government bodies, teams/clubs, political/armed groups (e.g., “Ford”, “KDPI”, “Durham”, “Mujahideen Khalq”)
+- **location**: named places (countries, cities, regions, geographic areas, venues) (e.g., “Paris”, “Weston-super-Mare”, “northern Iraq”)
+- **miscellaneous**: named things that are not person/organization/location, such as **named events/competitions/tournaments/cups/leagues**, works of art, products, laws, etc. (e.g., “Cup Winners’ Cup”)
 
-Extract entities in these four categories:
-- **person**: Names of people (e.g., "John Smith", "Dr. Maria Rodriguez")
-- **organization**: Names of companies, institutions, agencies, or groups (e.g., "United Nations", "Microsoft", "Department of Justice")
-- **location**: Names of geographical locations including countries, cities, regions, landmarks (e.g., "China", "New York", "Mount Everest")
-- **miscellaneous**: Other named entities that don't fit the above categories, such as:
-  - Specific events (e.g., "Olympic Games", "World Cup", "Canadian Open")
-  - Products or brands (e.g., "iPhone", "Windows 10")
-  - Nationalities or languages when used as proper nouns (e.g., "French", "English")
-  - Artworks, awards, or other uniquely identifiable entities
+## Critical rules (follow exactly)
+1. **Default = proper-nouns / unique names only**: Prefer true names (usually capitalized) over generic phrases.
+   - Exclude roles/descriptions like: “one dealer”, “the market”, “a company”, “summer holidays”.
+   - Exclude document/section labels/headers/field names like: “Income Statement Data”, “Balance Sheet”, “Table”, “Date”.
 
-## Critical Instructions
+2. **Dataset edge-case (salient coined concepts) — allow sparingly**:
+   - If a **distinctive coined/defined concept phrase** appears as a referential label in context (often in quotes or clearly treated as “a thing”), you **may** include it in **miscellaneous** even if not capitalized.
+   - Example of what this rule allows: “... this **artificial atmosphere** is very dangerous ...” → miscellaneous may include ["artificial atmosphere"].
+   - Do **not** use this to extract ordinary noun phrases broadly; when unsure, **do not** add the phrase.
 
-**What to Extract:**
-- Only extract proper nouns and named entities - specific names that identify unique people, places, organizations, or other entities
-- Extract entities exactly as they appear in the source text, preserving original spelling, capitalization, and formatting
-- Each entity should appear only once in the output - avoid duplicates or subset duplicates
+3. **No numbers/metrics/metadata**: Do **NOT** extract standalone numbers, percentages, quantities, rankings, or statistical fragments (e.g., “35,563”, “11.7 percent”, “6-3”, “6-2”, “326”) **unless they are part of an official name**.
+   - Sports note: scoring/status terms like “not out” and standalone run/score numbers are **not entities**.
 
-**What NOT to Extract:**
-- Common nouns or generic terms (e.g., "talks", "meeting", "statement")
-- Generic references without specific names (e.g., "the media", "the government" without a specific government name)
-- Numbers or codes that are not part of a named entity (e.g., "7-5", "123")
-- Section headers or labels that are not entity names (e.g., "Income Statement Data")
+4. **Verbatim spans (exact copy)**: Copy each entity **exactly as it appears in the text** (same spelling, capitalization, punctuation). Do not normalize, shorten, translate, or paraphrase.
 
-**When No Entities Exist:**
-- If the text contains no named entities, return empty arrays for all categories
-- Do not force extraction or hallucinate entities when none are present
+5. **High recall for true entities**: Extract **ALL distinct entity mentions** that appear.
+   - Do **not** drop a specific mention in favor of a broader one (e.g., if “northern Iraq” appears, include “northern Iraq” rather than only “Iraq”).
 
-## Output Format
+6. **Capitalized collective group labels are entities (avoid over-pruning)**:
+   - Treat multiword group labels (political/ethnic/religious/armed/opposition groups) as entities when they function as a specific group name in context, **even if the head noun is generic** (e.g., “oppositions”, “rebels”, “forces”).
+   - Extract the full verbatim span as written.
+   - Example: “... between Mujahideen Khalq and the Iranian Kurdish oppositions ...” → organization includes ["Mujahideen Khalq", "Iranian Kurdish oppositions"].
 
-Return the entities in the following JSON format:
+7. **Geographic modifiers can be valid locations** when they denote a place/region in context.
+   - Examples to include as **location** when used as places: “northern Iraq”, “Iraqi Kurdish areas”.
 
+8. **No guessing / no hallucinations**:
+   - Do not add implied entities that do not appear verbatim (e.g., do not add “Iran” if only “Iranian” appears).
+   - If the text contains no clear extractable entities, return empty arrays.
+
+9. **Truncated / ellipsized input handling (strict gate)**:
+   - Add the literal sentinel string **"TRUNCATED_INPUT"** to **miscellaneous** **only** if the input contains an explicit ellipsis (“...”) or truncation marker, **OR** the text is so corrupted/incomplete that you **cannot confidently identify any** named entities.
+   - If the text is cut off but still contains clearly identifiable entities, extract those entities and **do NOT** add “TRUNCATED_INPUT”.
+
+10. **No duplicates / no overlap**: Do not repeat the same string within a list, and do not place the same entity string in multiple categories.
+
+## Output format
+Return **only** a JSON object with exactly these keys and array-of-string values:
 {
-    "person": ["person1", "person2", ...],
-    "organization": ["organization1", "organization2", ...],
-    "location": ["location1", "location2", ...],
-    "miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+  "person": [],
+  "organization": [],
+  "location": [],
+  "miscellaneous": []
 }
+
+## Mini examples
+- Input: "Income Statement Data :" → {"person":[],"organization":[],"location":[],"miscellaneous":[]}
+- Input: "Third was Ford with 35,563 registrations , or 11.7 percent ." → {"person":[],"organization":["Ford"],"location":[],"miscellaneous":[]}
+- Input: "66 , M. Vaughan 57 ) v Lancashire ." → {"person":["M. Vaughan"],"organization":["Lancashire"],"location":[],"miscellaneous":[]}
+- Input: "this artificial atmosphere is very dangerous ... \" Levy said ." → {"person":["Levy"],"organization":[],"location":[],"miscellaneous":["artificial atmosphere"]}
+- Input: "A spokesman ... between Mujahideen Khalq and the Iranian Kurdish oppositions ..." → {"person":[],"organization":["Mujahideen Khalq","Iranian Kurdish oppositions"],"location":[],"miscellaneous":[]}
+- Input: "The media ..." → {"person":[],"organization":[],"location":[],"miscellaneous":["TRUNCATED_INPUT"]}
+- Input: "At Weston-super-Mare : Durham 326 ( D. Cox 95 not out ," → {"person":["D. Cox"],"organization":["Durham"],"location":["Weston-super-Mare"],"miscellaneous":[]}
+- Sports guideline: teams/clubs → organization; competitions/tournaments/cups/leagues → miscellaneous
 ```
 
 </Accordion>
