@@ -55,7 +55,6 @@ impl From<&str> for ApiKeyExpiration {
 
 impl std::fmt::Display for ApiKeyExpiration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(
             f,
             "{}",
