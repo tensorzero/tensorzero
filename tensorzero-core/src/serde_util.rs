@@ -259,6 +259,7 @@ where
 /// #[derive(Deserialize)]
 /// struct ParamsStruct {
 ///     #[serde(default, deserialize_with = "deserialize_double_option")]
+///     #[expect(clippy::option_option)]
 ///     maybe_null_field: Option<Option<String>>,
 /// }
 /// ```
@@ -797,6 +798,8 @@ mod tests {
     #[derive(Debug, Deserialize, PartialEq)]
     struct TestDoubleOptionStruct<T: for<'a> Deserialize<'a>> {
         #[serde(default, deserialize_with = "deserialize_double_option")]
+        // Expect to distinguish between an omitted field, JSON null, and a concrete value.
+        #[expect(clippy::option_option)]
         maybe_null_field: Option<Option<T>>,
     }
 
