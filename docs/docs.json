@@ -77,7 +77,7 @@
           },
           {
             "group": "Optimization",
-            "pages": ["recipes/index", "recipes/gepa"]
+            "pages": ["recipes/index", "optimization/gepa"]
           },
           {
             "group": "Evaluations",

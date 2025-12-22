@@ -3,16 +3,18 @@ import os
 import random
 
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
-from tensorzero import AsyncTensorZeroGateway, GEPAConfig, JsonInferenceResponse
+from tensorzero import (
+    AsyncTensorZeroGateway,
+    GEPAConfig,
+    JsonInferenceResponse,
+    ListInferencesRequest,
+)
 from tqdm.asyncio import tqdm
 
 FUNCTION_NAME = "extract_entities"
 EVALUATION_NAME = "extract_entities_eval"
 
-# Dataset Curation Args
-METRIC_NAME = "jaccard_similarity"
 TEMPLATE_VARIANT_NAME = "baseline"
-FLOAT_METRIC_THRESHOLD = 0.9
 
 # Models to use for analyzing inferences and generating prompt mutations
 ANALYSIS_MODEL = "openai::gpt-5.2"
@@ -22,7 +24,7 @@ MUTATION_MODEL = "openai::gpt-5.2"
 INITIAL_VARIANTS = ["baseline"]
 
 # Number of evolution iterations (each iteration evaluates, analyzes, and mutates variants)
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 10
 
 NUM_SAMPLES = 500
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
@@ -92,15 +94,16 @@ async def main():
     tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
     await tqdm.gather(*tasks, desc="Processing samples")
 
-    stored_inferences = await t0.experimental_list_inferences(
-        function_name=FUNCTION_NAME,
-        variant_name=None,
-        output_source="inference",  # could also be "demonstration"
-        limit=NUM_SAMPLES,
+    inferences_response = await t0.list_inferences(
+        request=ListInferencesRequest(
+            function_name=FUNCTION_NAME,
+            output_source="inference",  # could also be "demonstration"
+            limit=NUM_SAMPLES,
+        ),
     )
 
     rendered_samples = await t0.experimental_render_samples(
-        stored_samples=stored_inferences,
+        stored_samples=inferences_response.inferences,
         variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
     )
 
@@ -117,6 +120,7 @@ async def main():
         initial_variants=INITIAL_VARIANTS,
         max_iterations=MAX_ITERATIONS,
         max_concurrency=MAX_CONCURRENCY,
+        max_tokens=16384,
     )
 
     job_handle = await t0.experimental_launch_optimization(

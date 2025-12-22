@@ -39,34 +39,10 @@ type = "llm_judge"
 output_type = "float"
 include = { reference_output = true }
 optimize = "max"
-description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Prioritizes correctness, schema compliance, completeness, and clarity."
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Evaluates: correctness (only proper nouns, no common nouns/numbers/metadata), schema compliance, completeness, verbatim entity extraction (exact spelling/capitalization), and absence of duplicate entities."
 
 [evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
 system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
-json_mode = "strict"
-
-[evaluations.extract_entities_eval.evaluators.judge_verbatim]
-type = "llm_judge"
-output_type = "boolean"
-optimize = "max"
-description = "Evaluate if the extracted named entities appear exactly as written in the source document, preserving original spelling, capitalization, and formatting. Scores: True (verbatim), False (altered)."
-
-[evaluations.extract_entities_eval.evaluators.judge_verbatim.variants.baseline]
-type = "chat_completion"
-model = "openai::gpt-5-mini"
-system_instructions = "evaluations/extract_entities/judge_verbatim/system_instructions.txt"
-json_mode = "strict"
-
-[evaluations.extract_entities_eval.evaluators.judge_repetition]
-type = "llm_judge"
-output_type = "boolean"
-optimize = "min"
-description = "Evaluate if named entities are extracted exactly once, without exact or subset duplicates. Scores: True (repetition found), False (no repetition)."
-
-[evaluations.extract_entities_eval.evaluators.judge_repetition.variants.baseline]
-type = "chat_completion"
-model = "openai::gpt-5-mini"
-system_instructions = "evaluations/extract_entities/judge_repetition/system_instructions.txt"
 json_mode = "strict"

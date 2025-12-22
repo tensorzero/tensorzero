@@ -1,4 +1,4 @@
-# Code Example: How to optimize your LLM application with GEPA
+# Code Example: How to optimize your LLM prompts with GEPA
 
 This folder contains the code for the [Guides » Optimization » GEPA](https://www.tensorzero.com/docs/optimization/gepa/) page in the documentation.
 [^1]
