@@ -898,19 +898,25 @@ fn check_global_stopping(
 
 /// Creates a Durable client configured for top-k evaluation tasks.
 ///
-/// The client is configured to use the `evaluations_topk` queue, which must
-/// have been created by running the database migrations.
+/// The client is configured to use the `evaluations_topk` queue by default,
+/// which must have been created by running the database migrations.
 ///
 /// # Arguments
 /// * `pool` - A PostgreSQL connection pool
 /// * `state` - Application state containing clients for inference and database access
+/// * `queue_name` - Optional custom queue name. If None, uses the default "evaluations_topk" queue.
 ///
 /// # Returns
 /// A configured `Durable` client for spawning and processing `TopKTask` tasks.
-pub async fn create_client(pool: PgPool, state: TopKTaskState) -> Result<Durable<TopKTaskState>> {
+pub async fn create_client(
+    pool: PgPool,
+    state: TopKTaskState,
+    queue_name: Option<&str>,
+) -> Result<Durable<TopKTaskState>> {
+    let queue_name = queue_name.unwrap_or(QUEUE_NAME);
     let client = Durable::builder()
         .pool(pool)
-        .queue_name(QUEUE_NAME)
+        .queue_name(queue_name)
         .build_with_state(state)
         .await?;
 

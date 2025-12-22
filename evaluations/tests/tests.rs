@@ -3090,13 +3090,15 @@ mod topk_tests {
             .expect("Failed to connect to Postgres")
     }
 
-    /// Helper to create the durable queue if it doesn't exist
-    async fn ensure_queue_exists(pool: &sqlx_alpha::PgPool) {
-        // The queue should be created by the durable migrations, but we create it here
-        // just in case. This is idempotent.
+    /// Helper to create a durable queue if it doesn't exist.
+    ///
+    /// Each test should use a unique queue name to prevent shared state.
+    async fn ensure_queue_exists(pool: &sqlx_alpha::PgPool, queue_name: &str) {
+        // The queue should be created by the durable migrations for production,
+        // but for tests we create unique queues to prevent shared state.
         let client = durable::Durable::builder()
             .pool(pool.clone())
-            .queue_name("evaluations_topk")
+            .queue_name(queue_name)
             .build()
             .await
             .expect("Failed to create durable client");
@@ -3127,7 +3129,12 @@ mod topk_tests {
         let clickhouse = get_clickhouse().await;
         let tensorzero_client = get_tensorzero_client().await;
         let pg_pool = get_postgres_pool().await;
-        ensure_queue_exists(&pg_pool).await;
+
+        // Use a unique queue name for this test to prevent shared state
+        // Keep it short to avoid Postgres identifier length limits (63 chars)
+        // Use simple format (no hyphens) to avoid SQL identifier issues
+        let queue_name = format!("topk1_{}", Uuid::now_v7().simple());
+        ensure_queue_exists(&pg_pool, &queue_name).await;
 
         // Create a unique dataset for this test with programmatically generated datapoints
         let dataset_name = format!("topk_test_topk_found_{}", Uuid::now_v7());
@@ -3170,8 +3177,8 @@ mod topk_tests {
         // Create the top-k task state (only clients)
         let state = TopKTaskState { clients };
 
-        // Create the durable client
-        let durable_client = create_client(pg_pool.clone(), state)
+        // Create the durable client with test-specific queue
+        let durable_client = create_client(pg_pool.clone(), state, Some(&queue_name))
             .await
             .expect("Failed to create durable client");
 
@@ -3222,14 +3229,13 @@ mod topk_tests {
                 panic!("Top-k task timed out after {timeout:?}");
             }
 
-            // Check task state
-            let state: Option<(String,)> = sqlx_alpha::query_as(
-                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
-            )
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task state");
+            // Check task state (use dynamic table name based on queue)
+            let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+            let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task state");
 
             if let Some((state,)) = state {
                 if state == "completed" {
@@ -3245,13 +3251,14 @@ mod topk_tests {
         }
 
         // Get the task result
-        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
-            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
-        )
-        .bind(spawn_result.task_id)
-        .fetch_optional(&pg_pool)
-        .await
-        .expect("Failed to query task result");
+        let query =
+            format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
+        let result: Option<(Option<serde_json::Value>,)> =
+            sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task result");
 
         let output: TopKTaskOutput = result
             .and_then(|(payload,)| payload)
@@ -3656,7 +3663,12 @@ mod topk_tests {
         let clickhouse = get_clickhouse().await;
         let tensorzero_client = get_tensorzero_client().await;
         let pg_pool = get_postgres_pool().await;
-        ensure_queue_exists(&pg_pool).await;
+
+        // Use a unique queue name for this test to prevent shared state
+        // Keep it short to avoid Postgres identifier length limits (63 chars)
+        // Use simple format (no hyphens) to avoid SQL identifier issues
+        let queue_name = format!("topk2_{}", Uuid::now_v7().simple());
+        ensure_queue_exists(&pg_pool, &queue_name).await;
 
         // Create a unique dataset
         let dataset_name = format!("topk_test_exhaustion_{}", Uuid::now_v7());
@@ -3700,7 +3712,8 @@ mod topk_tests {
 
         let state = TopKTaskState { clients };
 
-        let durable_client = create_client(pg_pool.clone(), state)
+        // Create the durable client with test-specific queue
+        let durable_client = create_client(pg_pool.clone(), state, Some(&queue_name))
             .await
             .expect("Failed to create durable client");
 
@@ -3753,13 +3766,13 @@ mod topk_tests {
                 panic!("Top-k task timed out after {timeout:?}");
             }
 
-            let state: Option<(String,)> = sqlx_alpha::query_as(
-                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
-            )
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task state");
+            // Check task state (use dynamic table name based on queue)
+            let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+            let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task state");
 
             if let Some((state,)) = state {
                 if state == "completed" {
@@ -3773,13 +3786,15 @@ mod topk_tests {
             sleep(Duration::from_secs(2)).await;
         }
 
-        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
-            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
-        )
-        .bind(spawn_result.task_id)
-        .fetch_optional(&pg_pool)
-        .await
-        .expect("Failed to query task result");
+        // Get the task result
+        let query =
+            format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
+        let result: Option<(Option<serde_json::Value>,)> =
+            sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task result");
 
         let output: TopKTaskOutput = result
             .and_then(|(payload,)| payload)
@@ -3826,7 +3841,12 @@ mod topk_tests {
         let clickhouse = get_clickhouse().await;
         let tensorzero_client = get_tensorzero_client().await;
         let pg_pool = get_postgres_pool().await;
-        ensure_queue_exists(&pg_pool).await;
+
+        // Use a unique queue name for this test to prevent shared state
+        // Keep it short to avoid Postgres identifier length limits (63 chars)
+        // Use simple format (no hyphens) to avoid SQL identifier issues
+        let queue_name = format!("topk3_{}", Uuid::now_v7().simple());
+        ensure_queue_exists(&pg_pool, &queue_name).await;
 
         // Create a unique dataset
         let dataset_name = format!("topk_test_eval_fail_{}", Uuid::now_v7());
@@ -3862,7 +3882,8 @@ mod topk_tests {
 
         let state = TopKTaskState { clients };
 
-        let durable_client = create_client(pg_pool.clone(), state)
+        // Create the durable client with test-specific queue
+        let durable_client = create_client(pg_pool.clone(), state, Some(&queue_name))
             .await
             .expect("Failed to create durable client");
 
@@ -3916,13 +3937,13 @@ mod topk_tests {
                 panic!("Top-k task timed out after {timeout:?}");
             }
 
-            let state: Option<(String,)> = sqlx_alpha::query_as(
-                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
-            )
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task state");
+            // Check task state (use dynamic table name based on queue)
+            let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+            let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task state");
 
             if let Some((state,)) = state {
                 if state == "completed" {
@@ -3936,13 +3957,15 @@ mod topk_tests {
             sleep(Duration::from_secs(2)).await;
         }
 
-        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
-            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
-        )
-        .bind(spawn_result.task_id)
-        .fetch_optional(&pg_pool)
-        .await
-        .expect("Failed to query task result");
+        // Get the task result
+        let query =
+            format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
+        let result: Option<(Option<serde_json::Value>,)> =
+            sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task result");
 
         let output: TopKTaskOutput = result
             .and_then(|(payload,)| payload)
@@ -4050,7 +4073,12 @@ mod topk_tests {
         let clickhouse = get_clickhouse().await;
         let tensorzero_client = get_tensorzero_client().await;
         let pg_pool = get_postgres_pool().await;
-        ensure_queue_exists(&pg_pool).await;
+
+        // Use a unique queue name for this test to prevent shared state
+        // Keep it short to avoid Postgres identifier length limits (63 chars)
+        // Use simple format (no hyphens) to avoid SQL identifier issues
+        let queue_name = format!("topk4_{}", Uuid::now_v7().simple());
+        ensure_queue_exists(&pg_pool, &queue_name).await;
 
         // Create a unique dataset
         let dataset_name = format!("topk_test_variant_fail_{}", Uuid::now_v7());
@@ -4091,7 +4119,8 @@ mod topk_tests {
 
         let state = TopKTaskState { clients };
 
-        let durable_client = create_client(pg_pool.clone(), state)
+        // Create the durable client with test-specific queue
+        let durable_client = create_client(pg_pool.clone(), state, Some(&queue_name))
             .await
             .expect("Failed to create durable client");
 
@@ -4146,13 +4175,13 @@ mod topk_tests {
                 panic!("Top-k task timed out after {timeout:?}");
             }
 
-            let state: Option<(String,)> = sqlx_alpha::query_as(
-                "SELECT state FROM durable.t_evaluations_topk WHERE task_id = $1",
-            )
-            .bind(spawn_result.task_id)
-            .fetch_optional(&pg_pool)
-            .await
-            .expect("Failed to query task state");
+            // Check task state (use dynamic table name based on queue)
+            let query = format!("SELECT state FROM durable.t_{queue_name} WHERE task_id = $1");
+            let state: Option<(String,)> = sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task state");
 
             if let Some((state,)) = state {
                 if state == "completed" {
@@ -4166,13 +4195,15 @@ mod topk_tests {
             sleep(Duration::from_secs(2)).await;
         }
 
-        let result: Option<(Option<serde_json::Value>,)> = sqlx_alpha::query_as(
-            "SELECT completed_payload FROM durable.t_evaluations_topk WHERE task_id = $1",
-        )
-        .bind(spawn_result.task_id)
-        .fetch_optional(&pg_pool)
-        .await
-        .expect("Failed to query task result");
+        // Get the task result
+        let query =
+            format!("SELECT completed_payload FROM durable.t_{queue_name} WHERE task_id = $1");
+        let result: Option<(Option<serde_json::Value>,)> =
+            sqlx_alpha::query_as(sqlx_alpha::AssertSqlSafe(query))
+                .bind(spawn_result.task_id)
+                .fetch_optional(&pg_pool)
+                .await
+                .expect("Failed to query task result");
 
         let output: TopKTaskOutput = result
             .and_then(|(payload,)| payload)
@@ -4203,18 +4234,18 @@ mod topk_tests {
         // 3. Verify variant statuses
         assert_eq!(
             output.variant_status.get("test"),
-            Some(&VariantStatus::Active),
-            "test variant should be Active"
+            Some(&VariantStatus::Include),
+            "test variant status should be Include"
         );
         assert_eq!(
             output.variant_status.get("error"),
             Some(&VariantStatus::Failed),
-            "error variant should be Failed"
+            "error variant status should be Failed"
         );
         assert_eq!(
             output.variant_status.get("error2"),
             Some(&VariantStatus::Failed),
-            "error2 variant should be Failed"
+            "error2 variant status should be Failed"
         );
 
         // 4. Verify error variant failures confidence sequence
