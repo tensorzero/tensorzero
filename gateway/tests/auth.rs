@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
+use sqlx::types::chrono::Utc;
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -748,6 +749,32 @@ async fn test_disable_api_key_cli() {
             .await
             .unwrap()
             .contains("API key was disabled at")
+    );
+}
+
+#[tokio::test]
+async fn test_create_api_key_cli_with_expiration() {
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key", Utc::now().to_string().as_str()])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let api_key = stdout.trim();
+
+    // Verify the key has the correct format
+    assert!(
+        api_key.starts_with("sk-t0-"),
+        "API key should start with 'sk-t0-', got: {api_key}"
     );
 }
 
