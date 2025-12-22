@@ -26,6 +26,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::functions::internal::get_function_metrics_handler),
         )
         .route(
+            "/internal/functions/{function_name}/variant-performances",
+            get(endpoints::functions::internal::get_variant_performances_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/inference-stats",
             get(endpoints::internal::inference_stats::get_inference_stats_handler),
         )
@@ -144,6 +148,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/statistics",
             get(endpoints::internal::evaluations::get_evaluation_statistics_handler),
         )
+        .route(
+            "/internal/evaluations/results",
+            get(endpoints::internal::evaluations::get_evaluation_results_handler),
+        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow-evaluations/projects",
@@ -174,6 +182,22 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/workflow-evaluations/run-statistics",
             get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_statistics_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/episodes-by-task-name",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_run_episodes_by_task_name_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/episodes-by-task-name/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/run-episodes",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow-evaluations/run-episodes/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_total_handler),
         )
         .route(
             "/internal/models/usage",
