@@ -65,7 +65,7 @@ pub trait SelectQueries {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
@@ -75,6 +75,21 @@ pub enum TimeWindow {
     Week,
     Month,
     Cumulative,
+}
+
+impl TimeWindow {
+    /// Converts the time window to the ClickHouse interval function string.
+    /// Returns the string used in dateTrunc and other time functions.
+    pub fn to_clickhouse_string(&self) -> &'static str {
+        match self {
+            TimeWindow::Minute => "minute",
+            TimeWindow::Hour => "hour",
+            TimeWindow::Day => "day",
+            TimeWindow::Week => "week",
+            TimeWindow::Month => "month",
+            TimeWindow::Cumulative => "year", // Cumulative uses a full year as fallback
+        }
+    }
 }
 
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]

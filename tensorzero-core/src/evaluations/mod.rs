@@ -6,6 +6,8 @@ use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
+use crate::variant::chain_of_thought::ChainOfThoughtConfig;
+
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
 use crate::experimentation::ExperimentationConfig;
 use crate::utils::retries::RetryConfig;
@@ -29,7 +31,6 @@ use crate::{
         best_of_n_sampling::{
             UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
         },
-        chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
@@ -977,6 +978,9 @@ impl UninitializedLLMJudgeVariantInfo {
                 VariantConfig::Dicl(uninitialized_config.load()?)
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
+                tracing::warn!(
+                    "Deprecation Warning (#5298 / 2026.2+): We are deprecating `experimental_chain_of_thought` now that reasoning models are prevalent. Please use a different variant type (e.g. `chat_completion` with reasoning)."
+                );
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {
                     inner: convert_chat_completion_judge_to_variant(
                         evaluation_name,

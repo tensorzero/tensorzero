@@ -44,35 +44,11 @@ mod types;
 
 pub use client::{AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL};
 pub use error::AutopilotError;
+pub use tensorzero_core::tool::ToolCall;
 pub use types::{
-    // Autopilot-specific types
-    AssistantMessagePayload,
-    // Re-exported from tensorzero: InputMessage and its dependencies
-    Base64File,
-    CreateEventRequest,
-    CreateEventResponse,
-    ErrorDetail,
-    ErrorResponse,
-    Event,
-    EventPayload,
-    File,
-    InputMessage,
-    InputMessageContent,
-    ListEventsParams,
-    ListEventsResponse,
-    ListSessionsParams,
-    ListSessionsResponse,
-    ObjectStoragePointer,
-    RawText,
-    Role,
-    Session,
-    StatusUpdate,
-    StreamEventsParams,
-    Template,
-    Text,
-    Thought,
-    ToolCallWrapper,
-    ToolResult,
-    Unknown,
-    UrlFile,
+    Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event,
+    EventPayload, File, InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, ObjectStoragePointer, RawText, Role, Session,
+    StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCallApproval,
+    ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, ToolResult, Unknown, UrlFile,
 };

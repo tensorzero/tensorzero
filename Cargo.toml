@@ -85,13 +85,14 @@ tower-http = { version = "0.6.7", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
-sqlx = { version = "0.8.6", features = [
+sqlx = { version = "0.9.0-alpha.1", features = [
     "runtime-tokio",
     "tls-rustls",
     "postgres",
     "migrate",
     "chrono",
     "uuid",
+    "sqlx-toml",
 ] }
 rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
