@@ -8,6 +8,7 @@ use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
 
 use crate::context::SimpleToolContext;
+use crate::error::ToolError;
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
 
@@ -160,24 +161,36 @@ impl ToolRegistry {
 
     /// Register a `TaskTool`.
     ///
-    /// Returns `&mut Self` for chaining.
-    pub fn register_task_tool<T: TaskTool>(&mut self) -> &mut Self {
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = T::name();
+        if self.tools.contains_key(name.as_ref()) {
+            return Err(ToolError::DuplicateToolName(name.into_owned()));
+        }
         let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
         self.tools.insert(name.into_owned(), wrapper);
-        self
+        Ok(self)
     }
 
     /// Register a `SimpleTool`.
     ///
-    /// Returns `&mut Self` for chaining.
-    pub fn register_simple_tool<T: SimpleTool + Default>(&mut self) -> &mut Self {
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_simple_tool<T: SimpleTool + Default>(
+        &mut self,
+    ) -> Result<&mut Self, ToolError> {
         let name = T::name();
+        if self.tools.contains_key(name.as_ref()) {
+            return Err(ToolError::DuplicateToolName(name.into_owned()));
+        }
         let tool = Arc::new(T::default());
         self.tools
             .insert(name.to_string(), tool.clone() as Arc<dyn ErasedTool>);
         self.simple_tools.insert(name.into_owned(), tool);
-        self
+        Ok(self)
     }
 
     /// Get a tool by name.
