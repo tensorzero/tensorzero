@@ -53,6 +53,20 @@ impl From<&str> for ApiKeyExpiration {
     }
 }
 
+impl std::fmt::Display for ApiKeyExpiration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(
+            f,
+            "{}",
+            match self {
+                ApiKeyExpiration::Inifinite => "infinite".to_string(),
+                ApiKeyExpiration::Finite(dt) => dt.to_string(),
+            }
+        )
+    }
+}
+
 async fn handle_create_api_key(
     expiration: ApiKeyExpiration,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -75,6 +89,8 @@ async fn handle_create_api_key(
         &pool,
     )
     .await?;
+
+    tracing::debug!("Created API key with expiration: {expiration}");
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
