@@ -19,6 +19,7 @@ import type {
   CountInferencesResponse,
   CountModelsResponse,
   CountWorkflowEvaluationRunEpisodesByTaskNameResponse,
+  CountWorkflowEvaluationRunEpisodesResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   CumulativeFeedbackTimeSeriesPoint,
@@ -41,6 +42,7 @@ import type {
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
+  GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
   GetWorkflowEvaluationRunsResponse,
   GetWorkflowEvaluationRunStatisticsResponse,
   InferenceWithFeedbackStatsResponse,
@@ -1359,6 +1361,56 @@ export class TensorZeroClient {
     }
     const body =
       (await response.json()) as CountWorkflowEvaluationRunEpisodesByTaskNameResponse;
+    return body.count;
+  }
+
+  /**
+   * Gets workflow evaluation run episodes with their feedback for a specific run.
+   * @param runId - The run ID to get episodes for
+   * @param limit - Maximum number of episodes to return (default: 15)
+   * @param offset - Offset for pagination (default: 0)
+   * @returns A promise that resolves with the workflow evaluation run episodes response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRunEpisodesWithFeedback(
+    runId: string,
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<GetWorkflowEvaluationRunEpisodesWithFeedbackResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-episodes?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunEpisodesWithFeedbackResponse;
+  }
+
+  /**
+   * Counts the total number of episodes for a workflow evaluation run.
+   * @param runId - The run ID to count episodes for
+   * @returns A promise that resolves with the count of episodes
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodes(runId: string): Promise<number> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow-evaluations/run-episodes/count?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesResponse;
     return body.count;
   }
 
