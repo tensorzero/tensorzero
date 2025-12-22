@@ -42,18 +42,22 @@ impl ConnectionDropGuard {
 impl Drop for ConnectionDropGuard {
     fn drop(&mut self) {
         let _guard = self.span.enter();
-        // If we didn't explicitly mark the request as 'finished' (due to the connection
-        // getting dropped early), then use the current time to compute the latency.
-        let latency_duration = self
-            .finished_with_latency
-            .get()
-            .unwrap_or_else(|| self.start_time.elapsed());
-        self.latency_span.set_latency_and_record(
-            latency_duration,
-            self.request_logging_data
-                .as_ref()
-                .map(|data| data.extra_overhead_labels.as_slice()),
-        );
+        let latency_duration = if let Some(finished_with_latency) = self.finished_with_latency.get()
+        {
+            // Only update the 'overhead' metric when the request finished, so that we
+            // can accurately subtract off the time taken for 'external' spans.
+            self.latency_span.set_latency_and_record(
+                finished_with_latency,
+                self.request_logging_data
+                    .as_ref()
+                    .map(|data| data.extra_overhead_labels.as_slice()),
+            );
+            finished_with_latency
+        } else {
+            // If we didn't explicitly mark the request as 'finished' (due to the connection
+            // getting dropped early), then use the current time to compute the latency.
+            self.start_time.elapsed()
+        };
 
         let latency = format!("{} ms", latency_duration.as_millis());
 
