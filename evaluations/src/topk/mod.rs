@@ -1345,9 +1345,23 @@ impl Task<TopKTaskState> for TopKTask {
             }
         }
 
-        // If we prcoessed all batches without satisfying one of the other stopping conditions,
+        // If we processed all batches without satisfying one of the other stopping conditions,
         // then assign reason DatasetExhausted.
         let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
+
+        // Finalize variant statuses if a top-k set was found
+        if let GlobalStoppingReason::TopKFound { top_variants, .. } = &stopping_reason {
+            // Mark top variants as Include, remaining non-failed variants as Exclude
+            for (name, status) in &mut progress.variant_status {
+                if *status == VariantStatus::Active {
+                    if top_variants.contains(name) {
+                        *status = VariantStatus::Include;
+                    } else {
+                        *status = VariantStatus::Exclude;
+                    }
+                }
+            }
+        }
 
         info!(
             stopping_reason = ?stopping_reason,
