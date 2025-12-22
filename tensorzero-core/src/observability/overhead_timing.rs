@@ -203,8 +203,11 @@ where
                 Duration::ZERO
             });
 
-            metrics::histogram!("tensorzero_overhead", &[("kind", overhead_data.kind)])
-                .record(overhead.as_millis() as f64);
+            metrics::histogram!(
+                "tensorzero_inference_latency_overhead_seconds",
+                &[("kind", overhead_data.kind)]
+            )
+            .record(overhead.as_secs_f64());
         }
     }
 
