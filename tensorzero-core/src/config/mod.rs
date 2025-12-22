@@ -2071,6 +2071,7 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
 }
 
+/// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
 #[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type")]
@@ -2084,6 +2085,7 @@ pub enum UninitializedVariantConfig {
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfN(UninitializedMixtureOfNConfig),
+    /// DEPRECATED (#5298 / 2026.2+): Use `chat_completion` with reasoning instead.
     #[serde(rename = "experimental_chain_of_thought")]
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
@@ -2122,6 +2124,9 @@ impl UninitializedVariantInfo {
                 VariantConfig::MixtureOfN(params.load(schemas, error_context)?)
             }
             UninitializedVariantConfig::ChainOfThought(params) => {
+                tracing::warn!(
+                    "Deprecation Warning (#5298 / 2026.2+): We are deprecating `experimental_chain_of_thought` now that reasoning models are prevalent. Please use a different variant type (e.g. `chat_completion` with reasoning)."
+                );
                 VariantConfig::ChainOfThought(params.load(schemas, error_context)?)
             }
         };

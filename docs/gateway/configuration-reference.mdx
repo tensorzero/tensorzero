@@ -2459,13 +2459,12 @@ Defines the type of the variant.
 
 TensorZero currently supports the following variant types:
 
-| Type                                       | Description                                                                                                                                                                                                                                             |
-| :----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat_completion`                          | Uses a chat completion model to generate responses by processing a series of messages in a conversational format. This is typically what you use out of the box with most LLMs.                                                                         |
-| `experimental_best_of_n`                   | Generates multiple response candidates with other variants, and selects the best one using an evaluator model.                                                                                                                                          |
-| `experimental_chain_of_thought`            | Encourages the model to reason step by step using a chain-of-thought prompting strategy, which is particularly useful for tasks requiring logical reasoning or multi-step problem-solving. Only available for non-streaming requests to JSON functions. |
-| `experimental_dynamic_in_context_learning` | Selects similar high-quality examples using an embedding of the input, and incorporates them into the prompt to enhance context and improve response quality.                                                                                           |
-| `experimental_mixture_of_n`                | Generates multiple response candidates with other variants, and combines the responses using a fuser model.                                                                                                                                             |
+| Type                                       | Description                                                                                                                                                                     |
+| :----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat_completion`                          | Uses a chat completion model to generate responses by processing a series of messages in a conversational format. This is typically what you use out of the box with most LLMs. |
+| `experimental_best_of_n`                   | Generates multiple response candidates with other variants, and selects the best one using an evaluator model.                                                                  |
+| `experimental_dynamic_in_context_learning` | Selects similar high-quality examples using an embedding of the input, and incorporates them into the prompt to enhance context and improve response quality.                   |
+| `experimental_mixture_of_n`                | Generates multiple response candidates with other variants, and combines the responses using a fuser model.                                                                     |
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3077,18 +3076,6 @@ Multiple timeouts can be active simultaneously.
 
 </Accordion>
 
-<Accordion title='type: "experimental_chain_of_thought"'>
-
-The `experimental_chain_of_thought` variant type uses the same configuration as a `chat_completion` variant.
-
-<Warning>
-
-This variant type is only available for non-streaming requests to JSON functions.
-
-</Warning>
-
-</Accordion>
-
 <Accordion title='type: "experimental_mixture_of_n"'>
 
 ##### `candidates`
@@ -3576,11 +3563,6 @@ You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
 
 </Accordion>
-
-#### `type: "experimental_chain_of_thought"`
-
-Besides the type parameter, this variant has the same configuration options as the `chat_completion` variant type.
-Please refer to that documentation to see what options are available.
 
 ## `[functions.function_name.experimentation]`
 
