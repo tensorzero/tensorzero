@@ -921,7 +921,10 @@ fn check_global_stopping(
 //    e. Checkpoint progress via `ProcessBatchStepParams`
 // 3. Return `TopKTaskOutput` with final state and stopping reason
 
-/// Parameters for the fetch_datapoint_ids step.
+/// Parameters for the `fetch_datapoint_ids` durable step.
+///
+/// This step paginates through the dataset to collect all datapoint IDs,
+/// then shuffles them for randomized evaluation order.
 #[allow(dead_code, reason = "used by fetch_datapoint_ids_step skeleton")]
 #[allow(
     clippy::allow_attributes,
@@ -929,8 +932,11 @@ fn check_global_stopping(
 )]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FetchDatapointIdsParams {
+    /// Name of the function to filter datapoints by
     function_name: String,
+    /// Name of the dataset to fetch datapoints from
     dataset_name: String,
+    /// Maximum number of datapoints to fetch (None = unlimited)
     max_datapoints: Option<usize>,
 }
 
@@ -999,7 +1005,10 @@ async fn fetch_datapoint_ids_step(
     Ok(ids)
 }
 
-/// Extract variant name from EvaluationVariant.
+/// Extracts the variant name from an `EvaluationVariant`.
+///
+/// For named variants, returns the name directly. For dynamic variants (which don't
+/// have persistent names), returns a placeholder string "dynamic_variant".
 #[allow(dead_code, reason = "used by process_batch_step skeleton")]
 #[allow(
     clippy::allow_attributes,
@@ -1013,7 +1022,11 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
     }
 }
 
-/// Parameters for the process_batch step.
+/// Parameters for the `process_batch` durable step.
+///
+/// This step processes a batch of datapoints: runs inference for each active variant,
+/// evaluates the results, updates confidence sequences, and checks stopping conditions.
+/// All necessary context is included to enable durable execution with checkpointing.
 #[allow(dead_code, reason = "used by process_batch_step skeleton")]
 #[allow(
     clippy::allow_attributes,
@@ -1021,25 +1034,39 @@ fn get_variant_name(variant: &EvaluationVariant) -> String {
 )]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProcessBatchStepParams {
+    /// IDs of the datapoints to process in this batch
     batch_ids: Vec<Uuid>,
+    /// Current progress state (confidence sequences, variant statuses, etc.)
     progress: TopKProgress,
+    /// Minimum k for top-k identification
     k_min: u32,
+    /// Maximum k for top-k identification
     k_max: u32,
+    /// Tolerance for performance equivalence
     epsilon: Option<f64>,
+    /// Failure rate threshold for marking variants as failed
     #[serde(default = "default_failure_threshold")]
     variant_failure_threshold: f64,
+    /// Failure rate threshold for terminating due to evaluator failures
     #[serde(default = "default_failure_threshold")]
     evaluator_failure_threshold: f64,
+    /// Index of this batch (0-indexed)
     batch_idx: usize,
-    // TopKContext fields that need to be passed through
+    /// Name of the evaluation being run
     evaluation_name: String,
+    /// Unique ID for this evaluation run
     evaluation_run_id: Uuid,
+    /// Name of the dataset being evaluated
     dataset_name: String,
+    /// Cache mode for inference requests
     inference_cache: CacheEnabledMode,
+    /// Maximum number of concurrent inference requests
     concurrency: usize,
-    // Config fields (passed from params for durable execution)
+    /// Evaluation configuration (evaluators, function name, etc.)
     evaluation_config: EvaluationConfig,
+    /// Function configurations for inference
     function_configs: EvaluationFunctionConfigTable,
+    /// Scoring function to convert evaluation results to variant scores
     scoring_function: ScoringFunctionType,
 }
 
@@ -1176,6 +1203,28 @@ async fn process_batch_step(
 }
 
 /// The durable top-k evaluation task.
+///
+/// This task implements an adaptive evaluation algorithm that identifies the top-k
+/// performing variants from a set of candidates. It uses betting-based confidence
+/// sequences to provide anytime-valid statistical guarantees on the results.
+///
+/// The task is designed for durable execution with checkpointing between batches,
+/// allowing recovery from failures without losing progress. Each batch processes
+/// a set of datapoints across all active variants, updates confidence sequences,
+/// and checks stopping conditions.
+///
+/// # Stopping Conditions
+///
+/// The task stops when one of the following conditions is met:
+/// - **TopKFound**: A top-k set is confidently identified (for some k in [k_min, k_max])
+/// - **DatasetExhausted**: All datapoints have been processed
+/// - **EvaluatorsFailed**: An evaluator's failure rate exceeds the threshold
+/// - **TooManyVariantsFailed**: Too many variants failed to identify top-k
+///
+/// # Usage
+///
+/// Use [`create_client`] to create a durable client, then spawn tasks with
+/// [`TopKTaskParams`] specifying the evaluation configuration.
 #[expect(dead_code)]
 struct TopKTask;
 
