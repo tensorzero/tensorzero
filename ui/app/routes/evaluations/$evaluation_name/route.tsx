@@ -5,6 +5,7 @@ import {
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
+import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -82,25 +83,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .then((response) => response.run_infos);
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise;
+  let resultsPromise: Promise<ParsedEvaluationResult[]>;
   if (selected_evaluation_run_ids_array.length > 0) {
     // If there is a freshly inserted feedback, ClickHouse may take some time to
     // update the evaluation results as it is eventually consistent.
     // In this case, we poll for the evaluation results until the feedback is found.
     resultsPromise = newFeedbackId
       ? pollForEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
           newFeedbackId,
           limit,
           offset,
         )
       : getEvaluationResults(
+          params.evaluation_name,
           function_name,
-          function_type,
-          metric_names,
           selected_evaluation_run_ids_array,
           limit,
           offset,
