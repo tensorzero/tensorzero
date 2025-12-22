@@ -3,7 +3,7 @@ import type { InputMessage } from "./InputMessage";
 import type { System } from "./System";
 
 /**
- * The API representation of an input to a model.
+ * API representation of an input to a model.
  */
 export type Input = {
   /**

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tensorzero_derive::export_schema;
 
-/// A newtype wrapper around Map<String, Value> for template and system arguments.
+/// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(transparent)]
@@ -33,7 +33,6 @@ pub struct Template {
     pub arguments: Arguments,
 }
 
-/// System prompt: either raw text or template arguments.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export)]

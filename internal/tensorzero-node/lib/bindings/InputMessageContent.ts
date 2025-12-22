@@ -8,9 +8,6 @@ import type { ToolCallWrapper } from "./ToolCallWrapper";
 import type { ToolResult } from "./ToolResult";
 import type { Unknown } from "./Unknown";
 
-/**
- * Content types that can appear in an input message.
- */
 export type InputMessageContent =
   | ({ type: "text" } & Text)
   | ({ type: "template" } & Template)

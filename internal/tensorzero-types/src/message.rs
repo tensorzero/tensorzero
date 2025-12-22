@@ -71,7 +71,6 @@ pub struct Input {
 // Custom Deserialize for InputMessage (handles legacy formats)
 // =============================================================================
 
-/// Helper enum for deserializing legacy text content formats.
 #[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
