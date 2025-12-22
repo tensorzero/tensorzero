@@ -794,6 +794,8 @@ async fn test_create_api_key_cli_with_expiration() {
 #[tokio::test]
 async fn test_create_api_key_cli() {
     // This test verifies that the --create-api-key CLI command works correctly
+    let pool = get_postgres_pool_for_testing().await;
+
     let output = Command::new(common::gateway_path())
         .args(["--create-api-key"])
         .stdout(Stdio::piped())
@@ -824,6 +826,15 @@ async fn test_create_api_key_cli() {
         "API key should be valid, got error: {:?}",
         parsed_key.err()
     );
+
+    if let AuthResult::Success(key_info) = check_key(&parsed_key.unwrap(), &pool).await.unwrap() {
+        assert!(
+            key_info.expires_at.is_none(),
+            "Created key should not have expires_at set"
+        );
+    } else {
+        panic!("Created key is unexpectedly invalid");
+    };
 
     // Verify the key works for authentication
     let child_data = start_gateway_on_random_port(
