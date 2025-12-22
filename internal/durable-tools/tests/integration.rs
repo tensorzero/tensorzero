@@ -14,7 +14,7 @@ use durable::MIGRATOR;
 use durable::WorkerOptions;
 use durable_tools::{
     ErasedSimpleTool, InferenceClient, InferenceError, SimpleTool, SimpleToolContext, TaskTool,
-    ToolContext, ToolExecutor, ToolResult,
+    ToolContext, ToolExecutor, ToolMetadata, ToolResult,
 };
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -99,8 +99,7 @@ struct EchoOutput {
 #[derive(Default)]
 struct EchoSimpleTool;
 
-#[async_trait]
-impl SimpleTool for EchoSimpleTool {
+impl ToolMetadata for EchoSimpleTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -114,15 +113,18 @@ impl SimpleTool for EchoSimpleTool {
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
+}
 
+#[async_trait]
+impl SimpleTool for EchoSimpleTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
@@ -136,8 +138,7 @@ impl SimpleTool for EchoSimpleTool {
 /// A simple `TaskTool` for testing.
 struct EchoTaskTool;
 
-#[async_trait]
-impl TaskTool for EchoTaskTool {
+impl ToolMetadata for EchoTaskTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -151,15 +152,18 @@ impl TaskTool for EchoTaskTool {
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
+}
 
+#[async_trait]
+impl TaskTool for EchoTaskTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
@@ -201,8 +205,7 @@ fn extract_text_from_response(response: &InferenceResponse) -> String {
 /// A `SimpleTool` that calls inference and returns the response text.
 struct InferenceSimpleTool;
 
-#[async_trait]
-impl SimpleTool for InferenceSimpleTool {
+impl ToolMetadata for InferenceSimpleTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_simple")
     }
@@ -216,15 +219,18 @@ impl SimpleTool for InferenceSimpleTool {
     }
 
     type LlmParams = InferencePromptParams;
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(30)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+}
 
+#[async_trait]
+impl SimpleTool for InferenceSimpleTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
@@ -258,8 +264,7 @@ impl SimpleTool for InferenceSimpleTool {
 /// A `TaskTool` that calls inference and returns the response text.
 struct InferenceTaskTool;
 
-#[async_trait]
-impl TaskTool for InferenceTaskTool {
+impl ToolMetadata for InferenceTaskTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("inference_task")
     }
@@ -273,15 +278,18 @@ impl TaskTool for InferenceTaskTool {
     }
 
     type LlmParams = InferencePromptParams;
-    type SideInfo = ();
-    type Output = InferenceToolOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = InferenceToolOutput;
+}
 
+#[async_trait]
+impl TaskTool for InferenceTaskTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
@@ -487,8 +495,7 @@ static CAPTURED_KEYS: std::sync::LazyLock<Arc<Mutex<Vec<String>>>> =
 #[derive(Default)]
 struct KeyCapturingSimpleTool;
 
-#[async_trait]
-impl SimpleTool for KeyCapturingSimpleTool {
+impl ToolMetadata for KeyCapturingSimpleTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("key_capturing_tool")
     }
@@ -504,9 +511,12 @@ impl SimpleTool for KeyCapturingSimpleTool {
     type LlmParams = EchoParams;
     type SideInfo = ();
     type Output = EchoOutput;
+}
 
+#[async_trait]
+impl SimpleTool for KeyCapturingSimpleTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
         idempotency_key: &str,
@@ -523,8 +533,7 @@ impl SimpleTool for KeyCapturingSimpleTool {
 /// A `TaskTool` that calls a `SimpleTool` multiple times.
 struct MultiCallTaskTool;
 
-#[async_trait]
-impl TaskTool for MultiCallTaskTool {
+impl ToolMetadata for MultiCallTaskTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("multi_call_task")
     }
@@ -540,9 +549,12 @@ impl TaskTool for MultiCallTaskTool {
     type LlmParams = EchoParams;
     type SideInfo = ();
     type Output = EchoOutput;
+}
 
+#[async_trait]
+impl TaskTool for MultiCallTaskTool {
     async fn execute(
-        _llm_params: Self::LlmParams,
+        _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {

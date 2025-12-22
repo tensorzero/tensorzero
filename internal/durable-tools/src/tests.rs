@@ -16,6 +16,7 @@ use crate::executor::ToolExecutorBuilder;
 use crate::registry::{ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 use crate::simple_tool::SimpleTool;
 use crate::task_tool::TaskTool;
+use crate::tool_metadata::ToolMetadata;
 
 // ============================================================================
 // Test Fixtures
@@ -35,8 +36,7 @@ struct EchoOutput {
 #[derive(Default)]
 struct EchoSimpleTool;
 
-#[async_trait]
-impl SimpleTool for EchoSimpleTool {
+impl ToolMetadata for EchoSimpleTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
@@ -50,15 +50,18 @@ impl SimpleTool for EchoSimpleTool {
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
+}
 
+#[async_trait]
+impl SimpleTool for EchoSimpleTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
@@ -72,8 +75,7 @@ impl SimpleTool for EchoSimpleTool {
 /// A simple `TaskTool` for testing.
 struct EchoTaskTool;
 
-#[async_trait]
-impl TaskTool for EchoTaskTool {
+impl ToolMetadata for EchoTaskTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
@@ -87,15 +89,18 @@ impl TaskTool for EchoTaskTool {
     }
 
     type LlmParams = EchoParams;
-    type SideInfo = ();
-    type Output = EchoOutput;
 
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
+    type SideInfo = ();
+    type Output = EchoOutput;
+}
 
+#[async_trait]
+impl TaskTool for EchoTaskTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
@@ -108,8 +113,7 @@ impl TaskTool for EchoTaskTool {
 /// Another `TaskTool` with different timeout for testing defaults.
 struct DefaultTimeoutTaskTool;
 
-#[async_trait]
-impl TaskTool for DefaultTimeoutTaskTool {
+impl ToolMetadata for DefaultTimeoutTaskTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_task")
     }
@@ -123,13 +127,16 @@ impl TaskTool for DefaultTimeoutTaskTool {
     }
 
     type LlmParams = EchoParams;
+
+    // Uses default timeout (60 seconds from ToolMetadata)
     type SideInfo = ();
     type Output = EchoOutput;
+}
 
-    // Uses default timeout (120 seconds)
-
+#[async_trait]
+impl TaskTool for DefaultTimeoutTaskTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
@@ -143,8 +150,7 @@ impl TaskTool for DefaultTimeoutTaskTool {
 #[derive(Default)]
 struct DefaultTimeoutSimpleTool;
 
-#[async_trait]
-impl SimpleTool for DefaultTimeoutSimpleTool {
+impl ToolMetadata for DefaultTimeoutSimpleTool {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_simple")
     }
@@ -158,13 +164,16 @@ impl SimpleTool for DefaultTimeoutSimpleTool {
     }
 
     type LlmParams = EchoParams;
+
+    // Uses default timeout (60 seconds from ToolMetadata)
     type SideInfo = ();
     type Output = EchoOutput;
+}
 
-    // Uses default timeout (30 seconds)
-
+#[async_trait]
+impl SimpleTool for DefaultTimeoutSimpleTool {
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
@@ -383,8 +392,7 @@ mod registry_tests {
         #[derive(Default)]
         struct ConflictingSimpleTool;
 
-        #[async_trait::async_trait]
-        impl SimpleTool for ConflictingSimpleTool {
+        impl ToolMetadata for ConflictingSimpleTool {
             fn name() -> Cow<'static, str> {
                 Cow::Borrowed("echo_task") // Same name as EchoTaskTool
             }
@@ -400,9 +408,12 @@ mod registry_tests {
             type LlmParams = EchoParams;
             type SideInfo = ();
             type Output = EchoOutput;
+        }
 
+        #[async_trait::async_trait]
+        impl SimpleTool for ConflictingSimpleTool {
             async fn execute(
-                llm_params: Self::LlmParams,
+                llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,
                 _ctx: SimpleToolContext<'_>,
                 _idempotency_key: &str,
@@ -461,7 +472,7 @@ mod erasure_tests {
     #[test]
     fn erased_task_tool_wrapper_default_timeout() {
         let wrapper = ErasedTaskToolWrapper::<DefaultTimeoutTaskTool>::new();
-        assert_eq!(wrapper.timeout(), Duration::from_secs(120));
+        assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
@@ -481,7 +492,7 @@ mod erasure_tests {
     #[test]
     fn erased_simple_tool_default_timeout() {
         let tool = DefaultTimeoutSimpleTool;
-        assert_eq!(tool.timeout(), Duration::from_secs(30));
+        assert_eq!(tool.timeout(), Duration::from_secs(60));
     }
 
     #[test]

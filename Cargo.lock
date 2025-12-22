@@ -323,6 +323,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "autopilot-tools"
+version = "2025.12.4"
+dependencies = [
+ "durable-tools",
+]
+
+[[package]]
 name = "av-scenechange"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1771,7 +1778,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=6984ee936b8315ead4199cc66646bfaf0c76e134#6984ee936b8315ead4199cc66646bfaf0c76e134"
+source = "git+https://github.com/tensorzero/durable?rev=551f3cb4e672ca854cad1b35d912d08e7bf55607#551f3cb4e672ca854cad1b35d912d08e7bf55607"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1797,6 +1804,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "durable",
+ "durable-tools-spawn",
  "mockall",
  "schemars 1.1.0",
  "secrecy",
@@ -1808,6 +1816,21 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "durable-tools-spawn"
+version = "2025.12.4"
+dependencies = [
+ "async-trait",
+ "durable",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
  "uuid",
 ]
 

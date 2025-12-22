@@ -16,6 +16,8 @@ members = [
     "internal/tensorzero-unsafe-helpers",
     "internal/minijinja-utils",
     "internal/autopilot-client",
+    "internal/durable-tools-spawn",
+    "internal/autopilot-tools",
     "internal/durable-tools",
     "internal/tensorzero-types",
 ]
@@ -103,7 +105,8 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.2"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "6984ee936b8315ead4199cc66646bfaf0c76e134" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "551f3cb4e672ca854cad1b35d912d08e7bf55607" }
+durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"

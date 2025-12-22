@@ -1,12 +1,8 @@
 use async_trait::async_trait;
-use schemars::Schema;
-use serde::{Serialize, de::DeserializeOwned};
-use std::borrow::Cow;
-use std::time::Duration;
 
 use crate::context::SimpleToolContext;
 use crate::error::ToolResult;
-use crate::task_tool::SideInfo;
+use crate::tool_metadata::ToolMetadata;
 
 /// A lightweight tool that runs inside a `TaskTool`'s `step()` checkpoint.
 ///
@@ -22,6 +18,9 @@ use crate::task_tool::SideInfo;
 /// the database pool. The `idempotency_key` parameter can be used to make
 /// external API calls idempotent.
 ///
+/// Note that `SimpleTool` extends [`ToolMetadata`], so you must implement
+/// both traits.
+///
 /// # Side Information
 ///
 /// Like `TaskTools`, `SimpleTools` can receive "side information" - parameters
@@ -31,7 +30,7 @@ use crate::task_tool::SideInfo;
 /// # Example (without side info)
 ///
 /// ```ignore
-/// use durable_tools::{SimpleTool, SimpleToolContext, ToolResult, async_trait};
+/// use durable_tools::{SimpleTool, SimpleToolContext, ToolResult, ToolMetadata, async_trait};
 /// use schemars::{schema_for, JsonSchema, Schema};
 /// use serde::{Deserialize, Serialize};
 /// use std::borrow::Cow;
@@ -48,8 +47,7 @@ use crate::task_tool::SideInfo;
 ///
 /// struct SearchTool;
 ///
-/// #[async_trait]
-/// impl SimpleTool for SearchTool {
+/// impl ToolMetadata for SearchTool {
 ///     fn name() -> Cow<'static, str> {
 ///         Cow::Borrowed("search")
 ///     }
@@ -59,15 +57,19 @@ use crate::task_tool::SideInfo;
 ///     }
 ///
 ///     fn parameters_schema() -> Schema {
-///         schema_for!(SearchParams).schema
+///         schema_for!(SearchParams)
 ///     }
 ///
 ///     type LlmParams = SearchParams;
+/// }
+///
+/// #[async_trait]
+/// impl SimpleTool for SearchTool {
 ///     type SideInfo = ();
 ///     type Output = SearchResult;
 ///
 ///     async fn execute(
-///         llm_params: Self::LlmParams,
+///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: Self::SideInfo,
 ///         ctx: SimpleToolContext<'_>,
 ///         idempotency_key: &str,
@@ -79,43 +81,7 @@ use crate::task_tool::SideInfo;
 /// }
 /// ```
 #[async_trait]
-pub trait SimpleTool: Send + Sync + 'static {
-    /// Unique name for this tool.
-    ///
-    /// This is used for registration and invocation.
-    fn name() -> Cow<'static, str>;
-
-    /// Human-readable description of what this tool does.
-    ///
-    /// Used for generating LLM function definitions.
-    fn description() -> Cow<'static, str>;
-
-    /// JSON Schema for the tool's LLM-visible parameters.
-    ///
-    /// This should return the schema for `LlmParams` only.
-    /// Side information is not included in the schema.
-    fn parameters_schema() -> Schema;
-
-    /// The LLM-visible parameter type (must be JSON-serializable).
-    ///
-    /// This is what the LLM sees and can fill in when calling the tool.
-    type LlmParams: Serialize + DeserializeOwned + Send + 'static;
-
-    /// Side information type provided at call time (hidden from LLM).
-    ///
-    /// Use `()` if no side information is needed.
-    type SideInfo: SideInfo;
-
-    /// The output type for this tool (must be JSON-serializable).
-    type Output: Serialize + DeserializeOwned + Send + 'static;
-
-    /// Execution timeout for this tool.
-    ///
-    /// Defaults to 30 seconds (shorter than `TaskTool` since these are lightweight).
-    fn timeout() -> Duration {
-        Duration::from_secs(30)
-    }
-
+pub trait SimpleTool: ToolMetadata {
     /// Execute the tool logic.
     ///
     /// # Arguments
@@ -125,7 +91,7 @@ pub trait SimpleTool: Send + Sync + 'static {
     /// * `ctx` - The simple tool context (provides database access)
     /// * `idempotency_key` - A unique key for this execution (use for external API calls)
     async fn execute(
-        llm_params: Self::LlmParams,
+        llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
         idempotency_key: &str,
