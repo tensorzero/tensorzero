@@ -7,5 +7,5 @@ export type StreamEventsParams = {
   /**
    * Resume streaming from this event ID (exclusive).
    */
-  last_event_id: string | null;
+  last_event_id?: string;
 };

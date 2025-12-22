@@ -125,6 +125,7 @@ pub struct CreateEventRequest {
     /// the most recent `user_message` event in the session. This prevents duplicate events
     /// from being created if a client retries a create user request that already succeeded.
     /// This should only apply to Message events.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_user_message_event_id: Option<Uuid>,
 }
@@ -134,9 +135,11 @@ pub struct CreateEventRequest {
 #[ts(export)]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Cursor for pagination: return events with id < before.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
 }
@@ -146,9 +149,11 @@ pub struct ListEventsParams {
 #[ts(export)]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Offset for pagination.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
 }
@@ -158,6 +163,7 @@ pub struct ListSessionsParams {
 #[ts(export)]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_event_id: Option<Uuid>,
 }

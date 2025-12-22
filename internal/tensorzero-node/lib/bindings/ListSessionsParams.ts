@@ -7,9 +7,9 @@ export type ListSessionsParams = {
   /**
    * Maximum number of sessions to return. Defaults to 20.
    */
-  limit: number | null;
+  limit?: number;
   /**
    * Offset for pagination.
    */
-  offset: number | null;
+  offset?: number;
 };

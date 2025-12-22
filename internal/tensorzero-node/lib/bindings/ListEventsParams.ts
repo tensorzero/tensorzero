@@ -7,9 +7,9 @@ export type ListEventsParams = {
   /**
    * Maximum number of events to return. Defaults to 20.
    */
-  limit: number | null;
+  limit?: number;
   /**
    * Cursor for pagination: return events with id < before.
    */
-  before: string | null;
+  before?: string;
 };

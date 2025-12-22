@@ -16,5 +16,5 @@ export type CreateEventRequest = {
    * from being created if a client retries a create user request that already succeeded.
    * This should only apply to Message events.
    */
-  previous_user_message_event_id: string | null;
+  previous_user_message_event_id?: string;
 };
