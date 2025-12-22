@@ -86,6 +86,14 @@ pub enum ToolCallDecisionSource {
 pub struct ToolCallApproval {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
+    pub status: ToolCallApprovalStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolCallApprovalStatus {
+    Approved,
+    Rejected { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,10 +104,6 @@ pub enum ToolOutcome {
         message: String,
     },
     Missing,
-    Rejected {
-        source: ToolCallDecisionSource,
-        reason: String,
-    },
     #[serde(other)]
     Other,
 }
