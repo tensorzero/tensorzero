@@ -53,11 +53,11 @@ async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphor
         # Get the predicted output
         predicted = response.output.parsed if response.output.parsed else {}
 
-        # Compute metrics
+        # Compute metrics and send feedback to TensorZero
+        # Note: these metrics are not used by GEPA but can be used for other purposes
         exact_match = compute_exact_match(predicted, datapoint.label)
         jaccard_similarity = compute_jaccard_similarity(predicted, datapoint.label)
 
-        # Send feedback to TensorZero
         await t0.feedback(
             metric_name="exact_match",
             value=exact_match,

@@ -16,6 +16,8 @@ json_mode = "strict"
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+# These metrics are not used by GEPA but can be used for other purposes.
+
 [metrics.exact_match]
 type = "boolean"
 level = "inference"
