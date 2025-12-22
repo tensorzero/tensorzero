@@ -177,20 +177,16 @@ pub async fn inference_handler(
     let mut metric_data = HttpMetricData {
         extra_overhead_labels: vec![],
     };
+    // If 'function_name' and 'model_name' are both provided, we'll emit
+    // an error when we call `inference`
     if let Some(function_name) = &params.function_name {
         metric_data
             .extra_overhead_labels
             .push(Label::new("function_name", function_name.clone()));
-    }
-    if let Some(variant_name) = &params.variant_name {
+    } else if params.model_name.is_some() {
         metric_data
             .extra_overhead_labels
-            .push(Label::new("variant_name", variant_name.clone()));
-    }
-    if let Some(model_name) = &params.model_name {
-        metric_data
-            .extra_overhead_labels
-            .push(Label::new("model_name", model_name.clone()));
+            .push(Label::new("function_name", "tensorzero::default"));
     }
     let inference_output = Box::pin(inference(
         config,
@@ -203,13 +199,22 @@ pub async fn inference_handler(
     ))
     .await;
     let mut response = match inference_output {
-        Ok(InferenceOutput::NonStreaming(response)) => Json(response).into_response(),
-        Ok(InferenceOutput::Streaming(stream)) => {
-            let event_stream = prepare_serialized_events(stream);
+        Ok(data) => {
+            if let Some(variant_name) = data.exactly_one_variant {
+                metric_data
+                    .extra_overhead_labels
+                    .push(Label::new("variant_name", variant_name));
+            }
+            match data.output {
+                InferenceOutput::NonStreaming(response) => Json(response).into_response(),
+                InferenceOutput::Streaming(stream) => {
+                    let event_stream = prepare_serialized_events(stream);
 
-            Sse::new(event_stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response()
+                    Sse::new(event_stream)
+                        .keep_alive(axum::response::sse::KeepAlive::new())
+                        .into_response()
+                }
+            }
         }
         Err(e) => e.into_response(),
     };
@@ -240,6 +245,13 @@ pub struct InferenceIds {
     pub episode_id: Uuid,
 }
 
+pub struct InferenceOutputData {
+    pub output: InferenceOutput,
+    /// If `Some`, then we tried exactly one variant (which succeeded)
+    /// If multiple variants were tried (regardless of whether or not one eventually succeeded), then this will be `None`
+    pub exactly_one_variant: Option<String>,
+}
+
 #[instrument(
     name="inference",
     skip_all
@@ -260,7 +272,7 @@ pub async fn inference(
     deferred_tasks: TaskTracker,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
-) -> Result<InferenceOutput, Error> {
+) -> Result<InferenceOutputData, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
         span.record("function_name", function_name);
@@ -431,8 +443,8 @@ pub async fn inference(
                 })
             })?;
 
-        return infer_variant(InferVariantArgs {
-            variant_name,
+        let output = infer_variant(InferVariantArgs {
+            variant_name: variant_name.clone(),
             variant,
             function: &function,
             function_name: &function_name,
@@ -455,10 +467,15 @@ pub async fn inference(
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
         })
-        .await;
+        .await?;
+        return Ok(InferenceOutputData {
+            output,
+            exactly_one_variant: Some(variant_name),
+        });
     }
 
     // Keep sampling variants until one succeeds
+    let mut already_sampled = false;
     while !candidate_variants.is_empty() {
         let result = function
             .experimentation()
@@ -509,7 +526,16 @@ pub async fn inference(
         .await;
 
         match result {
-            Ok(output) => return Ok(output),
+            Ok(output) => {
+                return Ok(InferenceOutputData {
+                    output,
+                    exactly_one_variant: if already_sampled {
+                        None
+                    } else {
+                        Some(variant_name)
+                    },
+                });
+            }
             Err(e) => {
                 tracing::warn!(
                     "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
@@ -517,6 +543,7 @@ pub async fn inference(
                     variant_name = variant_name,
                 );
                 variant_errors.insert(variant_name, e);
+                already_sampled = true;
                 continue;
             }
         }
