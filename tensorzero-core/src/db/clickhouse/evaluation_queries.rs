@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
@@ -10,8 +11,53 @@ use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
+use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
+use crate::statistics_util::{wald_confint, wilson_confint};
+
+/// Raw statistics row from ClickHouse before CI computation.
+/// This is an intermediate representation used to compute confidence intervals in Rust.
+#[derive(Debug, Deserialize)]
+struct RawEvaluationStatisticsRow {
+    evaluation_run_id: uuid::Uuid,
+    metric_name: String,
+    metric_type: String, // "float" or "boolean"
+    datapoint_count: u32,
+    mean_metric: f64,
+    stdev: Option<f64>, // Only present for float metrics
+}
+
+impl RawEvaluationStatisticsRow {
+    /// Converts the raw row to the final `EvaluationStatisticsRow` by computing
+    /// confidence intervals in Rust.
+    fn into_evaluation_statistics_row(self) -> EvaluationStatisticsRow {
+        let (ci_lower, ci_upper) = if self.metric_type == "float" {
+            // Use Wald confidence interval for continuous (float) metrics
+            if let Some(stdev) = self.stdev {
+                wald_confint(self.mean_metric, stdev, self.datapoint_count)
+                    .map(|(l, u)| (Some(l), Some(u)))
+                    .unwrap_or((None, None))
+            } else {
+                (None, None)
+            }
+        } else {
+            // Use Wilson confidence interval for Bernoulli (boolean) metrics
+            wilson_confint(self.mean_metric, self.datapoint_count)
+                .map(|(l, u)| (Some(l), Some(u)))
+                .unwrap_or((None, None))
+        };
+
+        EvaluationStatisticsRow {
+            evaluation_run_id: self.evaluation_run_id,
+            metric_name: self.metric_name,
+            datapoint_count: self.datapoint_count,
+            mean_metric: self.mean_metric,
+            ci_lower,
+            ci_upper,
+        }
+    }
+}
 
 // Private helper for constructing the subquery for datapoint IDs
 fn get_evaluation_result_datapoint_id_subquery(
@@ -279,6 +325,118 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(sql_query, &params).await?;
         parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_evaluation_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<crate::db::evaluation_queries::EvaluationStatisticsRow>, Error> {
+        let inference_table_name = function_type.table_name();
+
+        // Build the datapoint ID subquery
+        let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
+            function_name,
+            evaluation_run_ids,
+            /* limit= */ None,
+            /* offset= */ None,
+        );
+
+        // Build metric names array for ClickHouse
+        let metric_names_str: Vec<String> = metric_names.iter().map(|s| format!("'{s}'")).collect();
+        let metric_names_joined = format!("[{}]", metric_names_str.join(","));
+
+        // Query returns raw statistics (mean, count, stdev) without CI computation.
+        // CI is computed in Rust using wald_confint (float) or wilson_confint (boolean).
+        let sql_query = format!(
+            r"WITH {datapoint_id_subquery},
+            filtered_inference AS (
+                SELECT
+                    id,
+                    tags['tensorzero::evaluation_run_id'] AS evaluation_run_id
+                FROM {inference_table_name}
+                WHERE id IN (SELECT inference_id FROM all_inference_ids)
+                AND function_name = {{function_name:String}}
+            ),
+            float_feedback AS (
+                SELECT metric_name,
+                       argMax(value, timestamp) as value,
+                       target_id
+                FROM FloatMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+            ),
+            boolean_feedback AS (
+                SELECT metric_name,
+                       argMax(value, timestamp) as value,
+                       target_id
+                FROM BooleanMetricFeedback
+                WHERE metric_name IN ({{metric_names:Array(String)}})
+                AND target_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY target_id, metric_name
+            ),
+            float_stats AS (
+                SELECT
+                    filtered_inference.evaluation_run_id,
+                    float_feedback.metric_name AS metric_name,
+                    'float' AS metric_type,
+                    toUInt32(count()) AS datapoint_count,
+                    avg(toFloat64(float_feedback.value)) AS mean_metric,
+                    stddevSamp(toFloat64(float_feedback.value)) AS stdev
+                FROM filtered_inference
+                INNER JOIN float_feedback
+                    ON float_feedback.target_id = filtered_inference.id
+                    AND float_feedback.value IS NOT NULL
+                GROUP BY
+                    filtered_inference.evaluation_run_id,
+                    float_feedback.metric_name
+            ),
+            boolean_stats AS (
+                SELECT
+                    filtered_inference.evaluation_run_id,
+                    boolean_feedback.metric_name AS metric_name,
+                    'boolean' AS metric_type,
+                    toUInt32(count()) AS datapoint_count,
+                    avg(toFloat64(boolean_feedback.value)) AS mean_metric,
+                    NULL AS stdev
+                FROM filtered_inference
+                INNER JOIN boolean_feedback
+                    ON boolean_feedback.target_id = filtered_inference.id
+                    AND boolean_feedback.value IS NOT NULL
+                GROUP BY
+                    filtered_inference.evaluation_run_id,
+                    boolean_feedback.metric_name
+            )
+            SELECT * FROM float_stats
+            UNION ALL
+            SELECT * FROM boolean_stats
+            ORDER BY
+                toUInt128(toUUID(evaluation_run_id)) DESC,
+                metric_name ASC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let function_name_str = function_name.to_string();
+        let mut params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        params.insert("function_name", function_name_str.as_str());
+        params.insert("metric_names", metric_names_joined.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        let raw_rows: Vec<RawEvaluationStatisticsRow> =
+            parse_json_rows(response.response.as_str())?;
+
+        // Compute confidence intervals in Rust
+        Ok(raw_rows
+            .into_iter()
+            .map(|row| row.into_evaluation_statistics_row())
+            .collect())
     }
 }
 
@@ -974,5 +1132,259 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 0);
+    }
+
+    // ============================================================================
+    // get_evaluation_statistics tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_chat_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "FROM ChatInference");
+                assert_query_contains(query, "float_stats");
+                assert_query_contains(query, "boolean_stats");
+                assert_query_contains(query, "FloatMetricFeedback");
+                assert_query_contains(query, "BooleanMetricFeedback");
+                assert_query_contains(query, "'float' AS metric_type");
+                assert_query_contains(query, "'boolean' AS metric_type");
+                assert_query_contains(query, "stddevSamp");
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(
+                    params.get("metric_names"),
+                    Some(&"['metric1','metric2']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                // Return raw stats with metric_type and stdev; CI is computed in Rust
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":100,"mean_metric":0.75,"stdev":0.1}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric2","metric_type":"boolean","datapoint_count":100,"mean_metric":0.8,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string(), "metric2".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        // Float metric uses Wald CI
+        assert_eq!(result[0].metric_name, "metric1");
+        assert_eq!(result[0].datapoint_count, 100);
+        assert!((result[0].mean_metric - 0.75).abs() < 0.001);
+        // Wald CI: 0.75 ± 1.96 * (0.1 / sqrt(100)) = 0.75 ± 0.0196
+        assert!((result[0].ci_lower.unwrap() - 0.7304).abs() < 0.001);
+        assert!((result[0].ci_upper.unwrap() - 0.7696).abs() < 0.001);
+
+        // Boolean metric uses Wilson CI
+        assert_eq!(result[1].metric_name, "metric2");
+        assert_eq!(result[1].datapoint_count, 100);
+        assert!((result[1].mean_metric - 0.8).abs() < 0.001);
+        // Wilson CI for p=0.8, n=100
+        assert!(result[1].ci_lower.is_some());
+        assert!(result[1].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_json_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                assert_query_contains(query, "FROM JsonInference");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"accuracy","metric_type":"boolean","datapoint_count":5,"mean_metric":0.9,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Json,
+                &["accuracy".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[0].datapoint_count, 5);
+        assert!((result[0].mean_metric - 0.9).abs() < 0.001);
+        // Wilson CI is computed in Rust
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_multiple_runs() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d','0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":10,"mean_metric":0.75,"stdev":0.1}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","metric_name":"metric1","metric_type":"float","datapoint_count":15,"mean_metric":0.80,"stdev":0.12}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        // Both should have CI computed
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+        assert!(result[1].ci_lower.is_some());
+        assert!(result[1].ci_upper.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_empty_results() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "nonexistent_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_single_datapoint_float() {
+        // For float metrics with single datapoint, stdev is null so CI cannot be computed
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"float","datapoint_count":1,"mean_metric":1.0,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        // Float metric with null stdev cannot compute Wald CI
+        assert!(result[0].ci_lower.is_none());
+        assert!(result[0].ci_upper.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_single_datapoint_boolean() {
+        // For boolean metrics with single datapoint, Wilson CI can still be computed
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","metric_name":"metric1","metric_type":"boolean","datapoint_count":1,"mean_metric":1.0,"stdev":null}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        // Boolean metric can still compute Wilson CI even with single datapoint
+        assert!(result[0].ci_lower.is_some());
+        assert!(result[0].ci_upper.is_some());
+        // For p=1.0, n=1, Wilson lower is approximately 0.206
+        assert!((result[0].ci_lower.unwrap() - 0.206543).abs() < 0.001);
+        assert!((result[0].ci_upper.unwrap() - 1.0).abs() < 0.001);
     }
 }
