@@ -1345,7 +1345,8 @@ impl Task<TopKTaskState> for TopKTask {
             }
         }
 
-        // If we exited without an explicit stopping reason then assign reason DatasetExhausted.
+        // If we prcoessed all batches without satisfying one of the other stopping conditions,
+        // then assign reason DatasetExhausted.
         let stopping_reason = stopping_reason.unwrap_or(GlobalStoppingReason::DatasetExhausted);
 
         info!(
