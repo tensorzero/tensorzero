@@ -78,7 +78,7 @@ pub enum AuthResult {
     Success(KeyInfo),
     /// The API key exists, but was disabled at the specified time.
     Disabled(DateTime<Utc>),
-    /// The API key exists, but has expired.
+    /// The API key exists, but expired at the specified time.
     Expired(DateTime<Utc>),
     /// The API key does not exist.
     MissingKey,
