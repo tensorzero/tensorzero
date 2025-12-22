@@ -3037,21 +3037,6 @@ type = "experimental_best_of_n"
 # ...
 ```
 
-##### `timeout_s`
-
-- **Type:** float
-- **Required:** no (default: 300s)
-
-The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
-Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
-
-```toml
-[functions.draft-email.variants.best-of-n]
-type = "experimental_best_of_n"
-timeout_s = 60
-# ...
-```
-
 ##### `timeouts`
 
 - **Type:** object
@@ -3123,21 +3108,6 @@ type = "experimental_mixture_of_n"
 [functions.draft-email.variants.mixture-of-n.fuser]
 # Same fields as a `chat_completion` variant (excl.`type`), e.g.:
 # user_template = "functions/draft-email/mixture-of-n/user.minijinja"
-# ...
-```
-
-##### `timeout_s`
-
-- **Type:** float
-- **Required:** no (default: 300s)
-
-The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
-Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
-
-```toml
-[functions.draft-email.variants.mixture-of-n]
-type = "experimental_mixture_of_n"
-timeout_s = 60
 # ...
 ```
 
