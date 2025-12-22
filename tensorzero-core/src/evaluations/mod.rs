@@ -690,17 +690,14 @@ fn convert_chat_completion_judge_to_variant(
     )
 }
 
-fn default_timeout() -> f64 {
-    300.0
-}
-
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
     pub active: Option<bool>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
     pub evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -711,8 +708,9 @@ pub struct UninitializedLLMJudgeBestOfNVariantConfig {
 pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     pub active: Option<bool>,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: f64,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
     pub fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -823,6 +821,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
+                #[expect(deprecated)]
                 VariantConfig::BestOfNSampling(
                     UninitializedBestOfNSamplingConfig {
                         weight: get_weight(params.active),
@@ -895,6 +894,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
+                #[expect(deprecated)]
                 VariantConfig::MixtureOfN(
                     UninitializedMixtureOfNConfig {
                         weight: get_weight(params.active),
@@ -1038,10 +1038,11 @@ fn check_convert_variant_to_llm_judge_variant(
             ))
         }
         VariantConfig::BestOfNSampling(variant) => {
+            #[expect(deprecated)]
             Ok(UninitializedLLMJudgeVariantConfig::BestOfNSampling(
                 UninitializedLLMJudgeBestOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s(),
+                    timeout_s: None, // Deprecated field
                     candidates: variant.candidates().clone(),
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
@@ -1070,10 +1071,11 @@ fn check_convert_variant_to_llm_judge_variant(
             ))
         }
         VariantConfig::MixtureOfN(variant) => {
+            #[expect(deprecated)]
             Ok(UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(
                 UninitializedLLMJudgeMixtureOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s(),
+                    timeout_s: None, // Deprecated field
                     candidates: variant.candidates().clone(),
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),

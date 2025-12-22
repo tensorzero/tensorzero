@@ -195,13 +195,6 @@ export default function BasicInfo({
               )}
 
               <BasicInfoItem>
-                <BasicInfoItemTitle>Timeout</BasicInfoItemTitle>
-                <BasicInfoItemContent>
-                  <Chip label={`${config.timeout_s}s`} />
-                </BasicInfoItemContent>
-              </BasicInfoItem>
-
-              <BasicInfoItem>
                 <BasicInfoItemTitle>Candidates</BasicInfoItemTitle>
                 <BasicInfoItemContent>
                   <div className="flex flex-wrap gap-1">
@@ -383,13 +376,6 @@ export default function BasicInfo({
                   </BasicInfoItemContent>
                 </BasicInfoItem>
               )}
-
-              <BasicInfoItem>
-                <BasicInfoItemTitle>Timeout</BasicInfoItemTitle>
-                <BasicInfoItemContent>
-                  <Chip label={`${config.timeout_s}s`} />
-                </BasicInfoItemContent>
-              </BasicInfoItem>
 
               <BasicInfoItem>
                 <BasicInfoItemTitle>Candidates</BasicInfoItemTitle>

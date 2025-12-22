@@ -6132,6 +6132,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-types",
  "tensorzero-unsafe-helpers",
  "thiserror 2.0.17",
  "tokio",
@@ -6230,6 +6231,27 @@ dependencies = [
  "tensorzero-core",
  "tokio",
  "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tensorzero-types"
+version = "2025.12.4"
+dependencies = [
+ "aws-smithy-types",
+ "chrono",
+ "infer",
+ "mime 0.4.0-a.0",
+ "object_store",
+ "pyo3",
+ "schemars 1.1.0",
+ "serde",
+ "serde_json",
+ "tensorzero-derive",
+ "thiserror 2.0.17",
+ "tracing",
+ "ts-rs",
  "url",
  "uuid",
 ]
