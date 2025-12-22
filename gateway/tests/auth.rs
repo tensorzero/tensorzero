@@ -1,10 +1,11 @@
 #![expect(clippy::print_stdout)]
-use std::process::Stdio;
 use std::str::FromStr;
+use std::{process::Stdio, time::Duration};
 
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::types::chrono::Utc;
+
 use tensorzero_auth::{
     key::TensorZeroApiKey,
     postgres::{AuthResult, check_key},
@@ -759,7 +760,9 @@ async fn test_disable_api_key_cli() {
 async fn test_create_api_key_cli_with_expiration() {
     let pool = get_postgres_pool_for_testing().await;
 
-    let expires_at = Utc::now();
+    // Deliberately set an expiration time in the past
+    let expires_at = Utc::now() - Duration::from_secs(2);
+
     let output = Command::new(common::gateway_path())
         .args(["--create-api-key", expires_at.to_string().as_str()])
         .stdout(Stdio::piped())
