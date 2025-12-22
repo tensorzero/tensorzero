@@ -1252,6 +1252,11 @@ impl Task<TopKTaskState> for TopKTask {
                 params.variant_names.len()
             )));
         }
+        if params.batch_size == Some(0) {
+            return Err(durable::TaskError::Failed(anyhow::anyhow!(
+                "batch_size must be > 0"
+            )));
+        }
 
         let batch_size = params.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
