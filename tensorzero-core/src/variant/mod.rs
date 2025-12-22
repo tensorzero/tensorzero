@@ -321,46 +321,43 @@ impl Variant for VariantInfo {
                 }
 
                 VariantConfig::Dicl(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::MixtureOfN(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::ChainOfThought(params) => {
-                    params
-                        .infer(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
             }
         };
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
             let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+            Box::pin(tokio::time::timeout(timeout, fut))
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
                 // so that it can be handled by the `match response` block below
@@ -372,7 +369,7 @@ impl Variant for VariantInfo {
                     }))
                 })
         } else {
-            fut.await
+            Box::pin(fut).await
         }
     }
 
@@ -432,28 +429,26 @@ impl Variant for VariantInfo {
                         .await
                 }
                 VariantConfig::MixtureOfN(params) => {
-                    params
-                        .infer_stream(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer_stream(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
                 VariantConfig::ChainOfThought(params) => {
-                    params
-                        .infer_stream(
-                            Arc::clone(&input),
-                            models,
-                            function,
-                            inference_config,
-                            clients,
-                            inference_params,
-                        )
-                        .await
+                    Box::pin(params.infer_stream(
+                        Arc::clone(&input),
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    ))
+                    .await
                 }
             }
         };
@@ -462,7 +457,7 @@ impl Variant for VariantInfo {
         // `streaming_ttft_timeout` is correct.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
             let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+            Box::pin(tokio::time::timeout(timeout, fut))
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
@@ -472,7 +467,7 @@ impl Variant for VariantInfo {
                     }))
                 })
         } else {
-            fut.await
+            Box::pin(fut).await
         }
     }
 

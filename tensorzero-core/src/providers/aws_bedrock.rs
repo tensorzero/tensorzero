@@ -12,17 +12,23 @@ use aws_sdk_bedrockruntime::types::{
     ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::{Document, Number, error::display::DisplayErrorContext};
-use aws_types::region::Region;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use reqwest::StatusCode;
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
+use url::Url;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::aws_common::{self, InterceptorAndRawBody, build_interceptor};
+use super::aws_common::{
+    self, AWSCredentials, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    credentials_need_dynamic_resolution, region_needs_dynamic_resolution, resolve_aws_credentials,
+    resolve_aws_region,
+};
 use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -49,13 +55,53 @@ use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
-// NB: If you add `Clone` someday, you'll need to wrap client in Arc
+/// Endpoint configuration for AWS Bedrock (can be static or dynamic).
+#[derive(Clone, Debug)]
+pub enum AWSBedrockEndpoint {
+    Static(Url),
+    Dynamic(String),
+}
+
+impl AWSBedrockEndpoint {
+    fn resolve(&self, dynamic_credentials: &InferenceCredentials) -> Result<Url, Error> {
+        match self {
+            AWSBedrockEndpoint::Static(url) => Ok(url.clone()),
+            AWSBedrockEndpoint::Dynamic(key_name) => {
+                let endpoint_str = dynamic_credentials.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicEndpointNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Url::parse(endpoint_str.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::InvalidDynamicEndpoint {
+                        url: endpoint_str.expose_secret().to_string(),
+                    })
+                })
+            }
+        }
+    }
+
+    fn needs_dynamic_resolution(&self) -> bool {
+        matches!(self, AWSBedrockEndpoint::Dynamic(_))
+    }
+}
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
-    client: aws_sdk_bedrockruntime::Client,
+    endpoint: Option<AWSBedrockEndpoint>,
+    #[serde(skip)]
+    client: Arc<aws_sdk_bedrockruntime::Client>,
+    #[serde(skip)]
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    credentials: Option<AWSCredentials>,
+    #[serde(skip)]
+    http_client: TensorzeroHttpClient,
+    #[serde(skip)]
+    allow_auto_detect_region: bool,
 }
 
 fn apply_inference_params(
@@ -170,21 +216,139 @@ fn number_from_i32(value: i32) -> Number {
 impl AWSBedrockProvider {
     pub async fn new(
         model_id: String,
-        region: Option<Region>,
+        region: Option<AWSRegion>,
+        allow_auto_detect_region: bool,
+        endpoint: Option<AWSBedrockEndpoint>,
+        credentials: Option<AWSCredentials>,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
-        let config = aws_sdk_bedrockruntime::config::Builder::from(
-            &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
-        )
-        .http_client(super::aws_http_client::Client::new(http_client))
-        .build();
-        let client = aws_sdk_bedrockruntime::Client::from_conf(config);
+        // Validate region requirement
+        let region_will_be_dynamic = region_needs_dynamic_resolution(region.as_ref());
+        let effective_allow_auto_detect = allow_auto_detect_region || region_will_be_dynamic;
+        if region.is_none() && !effective_allow_auto_detect {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "AWS Bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string(),
+            }));
+        }
 
-        Ok(Self { model_id, client })
+        // Build initial client - try to resolve static values for initialization
+        let empty_credentials = InferenceCredentials::default();
+        let initial_region = if region_will_be_dynamic {
+            None
+        } else {
+            resolve_aws_region(region.as_ref(), &empty_credentials)
+                .ok()
+                .flatten()
+        };
+
+        let initial_creds = if credentials_need_dynamic_resolution(credentials.as_ref()) {
+            None
+        } else {
+            resolve_aws_credentials(credentials.as_ref(), &empty_credentials)
+                .ok()
+                .flatten()
+        };
+
+        let (initial_access_key, initial_secret_key) = match initial_creds {
+            Some((ak, sk)) => (Some(ak), Some(sk)),
+            None => (None, None),
+        };
+
+        let aws_config = aws_common::config_with_region_and_credentials(
+            PROVIDER_TYPE,
+            initial_region,
+            initial_access_key,
+            initial_secret_key,
+        )
+        .await?;
+
+        let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(&aws_config);
+
+        // Set custom endpoint URL if provided (for static endpoints)
+        if let Some(AWSBedrockEndpoint::Static(url)) = &endpoint {
+            config_builder = config_builder.endpoint_url(url.as_str());
+        }
+
+        let config = config_builder
+            .http_client(super::aws_http_client::Client::new(http_client.clone()))
+            .build();
+        let client = Arc::new(aws_sdk_bedrockruntime::Client::from_conf(config));
+
+        Ok(Self {
+            model_id,
+            endpoint,
+            client,
+            region,
+            credentials,
+            http_client,
+            allow_auto_detect_region,
+        })
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
+    }
+
+    /// Returns a client configured for the current request.
+    /// If all config values are static, returns the cached client.
+    /// Otherwise, builds a new client with dynamically resolved values.
+    async fn get_client(
+        &self,
+        dynamic_credentials: &InferenceCredentials,
+    ) -> Result<Arc<aws_sdk_bedrockruntime::Client>, Error> {
+        let needs_dynamic = self
+            .endpoint
+            .as_ref()
+            .is_some_and(|e| e.needs_dynamic_resolution())
+            || region_needs_dynamic_resolution(self.region.as_ref())
+            || credentials_need_dynamic_resolution(self.credentials.as_ref());
+
+        if !needs_dynamic {
+            return Ok(self.client.clone());
+        }
+
+        // Resolve all dynamic values
+        let resolved_region = resolve_aws_region(self.region.as_ref(), dynamic_credentials)?;
+        if resolved_region.is_none() && !self.allow_auto_detect_region {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "AWS Bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string(),
+            }));
+        }
+
+        let resolved_creds =
+            resolve_aws_credentials(self.credentials.as_ref(), dynamic_credentials)?;
+        let (resolved_access_key, resolved_secret_key) = match resolved_creds {
+            Some((ak, sk)) => (Some(ak), Some(sk)),
+            None => (None, None),
+        };
+
+        let endpoint_url = match &self.endpoint {
+            Some(ep) => Some(ep.resolve(dynamic_credentials)?.to_string()),
+            None => None,
+        };
+
+        // Build new client with resolved values
+        let aws_config = aws_common::config_with_region_and_credentials(
+            PROVIDER_TYPE,
+            resolved_region,
+            resolved_access_key,
+            resolved_secret_key,
+        )
+        .await?;
+
+        let mut config_builder = aws_sdk_bedrockruntime::config::Builder::from(&aws_config);
+
+        if let Some(url) = &endpoint_url {
+            config_builder = config_builder.endpoint_url(url);
+        }
+
+        let config = config_builder
+            .http_client(super::aws_http_client::Client::new(
+                self.http_client.clone(),
+            ))
+            .build();
+
+        Ok(Arc::new(aws_sdk_bedrockruntime::Client::from_conf(config)))
     }
 }
 
@@ -237,8 +401,8 @@ impl InferenceProvider for AWSBedrockProvider {
         }
         let inference_config = inference_config.build();
 
-        let mut bedrock_request = self
-            .client
+        let client = self.get_client(_dynamic_api_keys).await?;
+        let mut bedrock_request = client
             .converse()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
@@ -378,8 +542,8 @@ impl InferenceProvider for AWSBedrockProvider {
         }
         let inference_config = inference_config.build();
 
-        let mut bedrock_request = self
-            .client
+        let client = self.get_client(_dynamic_api_keys).await?;
+        let mut bedrock_request = client
             .converse_stream()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
@@ -1162,13 +1326,17 @@ fn tool_choice_to_aws_bedrock(tool_choice: ToolChoice) -> Result<AWSBedrockToolC
 mod tests {
     use super::*;
     use crate::utils::testing::reset_capture_logs;
+
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
         let logs_contain = crate::utils::testing::capture_logs();
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
         AWSBedrockProvider::new(
             "test".to_string(),
-            Some(Region::new("uk-hogwarts-1")),
+            Some(AWSRegion::Static("uk-hogwarts-1".to_string())),
+            false,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1182,7 +1350,10 @@ mod tests {
 
         AWSBedrockProvider::new(
             "test".to_string(),
-            Some(Region::new("uk-hogwarts-1")),
+            Some(AWSRegion::Static("uk-hogwarts-1".to_string())),
+            false,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1201,6 +1372,9 @@ mod tests {
         let err = AWSBedrockProvider::new(
             "test".to_string(),
             None,
+            true,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await
@@ -1217,7 +1391,10 @@ mod tests {
 
         AWSBedrockProvider::new(
             "test".to_string(),
-            Some(Region::new("me-shire-2")),
+            Some(AWSRegion::Static("me-shire-2".to_string())),
+            false,
+            None,
+            None,
             TensorzeroHttpClient::new_testing().unwrap(),
         )
         .await

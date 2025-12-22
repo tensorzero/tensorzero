@@ -409,7 +409,7 @@ pub async fn inference(
                 })
             })?;
 
-        return infer_variant(InferVariantArgs {
+        return Box::pin(infer_variant(InferVariantArgs {
             variant_name,
             variant,
             function: &function,
@@ -432,7 +432,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
-        })
+        }))
         .await;
     }
 
@@ -460,7 +460,7 @@ pub async fn inference(
             }
         };
 
-        let result = infer_variant(InferVariantArgs {
+        let result = Box::pin(infer_variant(InferVariantArgs {
             variant_name: variant_name.clone(),
             variant,
             function: &function,
@@ -483,7 +483,7 @@ pub async fn inference(
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
             include_original_response: params.include_original_response,
-        })
+        }))
         .await;
 
         match result {
@@ -582,16 +582,15 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
     if stream {
         let deferred_tasks = inference_clients.deferred_tasks.clone();
-        let result = variant
-            .infer_stream(
-                resolved_input.clone(),
-                inference_models,
-                function.clone(),
-                inference_config.clone(),
-                inference_clients,
-                variant_inference_params,
-            )
-            .await;
+        let result = Box::pin(variant.infer_stream(
+            resolved_input.clone(),
+            inference_models,
+            function.clone(),
+            inference_config.clone(),
+            inference_clients,
+            variant_inference_params,
+        ))
+        .await;
 
         // Make sure the response worked prior to launching the thread and starting to return chunks.
         // The provider has already checked that the first chunk is OK.
@@ -641,16 +640,15 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         Ok(InferenceOutput::Streaming(Box::pin(stream)))
     } else {
         let deferred_tasks = inference_clients.deferred_tasks.clone();
-        let result = variant
-            .infer(
-                Arc::clone(&resolved_input),
-                inference_models,
-                function.clone(),
-                Arc::clone(&inference_config),
-                inference_clients,
-                variant_inference_params,
-            )
-            .await;
+        let result = Box::pin(variant.infer(
+            Arc::clone(&resolved_input),
+            inference_models,
+            function.clone(),
+            Arc::clone(&inference_config),
+            inference_clients,
+            variant_inference_params,
+        ))
+        .await;
 
         let mut result = result?;
 

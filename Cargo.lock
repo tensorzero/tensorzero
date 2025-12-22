@@ -6060,6 +6060,7 @@ dependencies = [
  "async-trait",
  "autopilot-client",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-bedrockruntime",
  "aws-sdk-sagemakerruntime",
  "aws-smithy-runtime-api",

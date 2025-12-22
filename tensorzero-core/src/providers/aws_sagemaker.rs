@@ -1,7 +1,11 @@
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
-use crate::providers::aws_common::{InterceptorAndRawBody, build_interceptor};
+use crate::providers::aws_common::{
+    AWSCredentials, AWSRegion, InterceptorAndRawBody, build_interceptor,
+    credentials_need_dynamic_resolution, region_needs_dynamic_resolution, resolve_aws_credentials,
+    resolve_aws_region,
+};
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
@@ -12,12 +16,12 @@ use crate::{
     },
     model::ModelProvider,
 };
-use aws_config::Region;
 use aws_sdk_sagemakerruntime::types::ResponseStream;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use eventsource_stream::{EventStreamError, Eventsource};
 use futures::StreamExt;
 use serde::Serialize;
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::aws_common;
@@ -33,28 +37,131 @@ const PROVIDER_TYPE: &str = "aws_sagemaker";
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]
-    client: aws_sdk_sagemakerruntime::Client,
+    client: Arc<aws_sdk_sagemakerruntime::Client>,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
     #[serde(skip)]
-    base_config: aws_sdk_sagemakerruntime::config::Builder,
+    region: Option<AWSRegion>,
+    #[serde(skip)]
+    credentials: Option<AWSCredentials>,
+    #[serde(skip)]
+    allow_auto_detect_region: bool,
+    #[serde(skip)]
+    http_client: TensorzeroHttpClient,
 }
 
 impl AWSSagemakerProvider {
     pub async fn new(
         endpoint_name: String,
         hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-        region: Option<Region>,
+        region: Option<AWSRegion>,
+        allow_auto_detect_region: bool,
+        credentials: Option<AWSCredentials>,
+        http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
-        let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
-        let client = aws_sdk_sagemakerruntime::Client::new(&config);
+        // Validate region requirement
+        let region_will_be_dynamic = region_needs_dynamic_resolution(region.as_ref());
+        let effective_allow_auto_detect = allow_auto_detect_region || region_will_be_dynamic;
+        if region.is_none() && !effective_allow_auto_detect {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "AWS Sagemaker provider requires a region to be provided or `allow_auto_detect_region = true`.".to_string(),
+            }));
+        }
+
+        // Build initial client - try to resolve static values for initialization
+        let empty_credentials = InferenceCredentials::default();
+        let initial_region = if region_will_be_dynamic {
+            None
+        } else {
+            resolve_aws_region(region.as_ref(), &empty_credentials)
+                .ok()
+                .flatten()
+        };
+
+        let initial_creds = if credentials_need_dynamic_resolution(credentials.as_ref()) {
+            None
+        } else {
+            resolve_aws_credentials(credentials.as_ref(), &empty_credentials)
+                .ok()
+                .flatten()
+        };
+
+        let (initial_access_key, initial_secret_key) = match initial_creds {
+            Some((ak, sk)) => (Some(ak), Some(sk)),
+            None => (None, None),
+        };
+
+        let aws_config = aws_common::config_with_region_and_credentials(
+            PROVIDER_TYPE,
+            initial_region,
+            initial_access_key,
+            initial_secret_key,
+        )
+        .await?;
+
+        let config = aws_sdk_sagemakerruntime::config::Builder::from(&aws_config)
+            .http_client(super::aws_http_client::Client::new(http_client.clone()))
+            .build();
+        let client = Arc::new(aws_sdk_sagemakerruntime::Client::from_conf(config));
 
         Ok(Self {
             endpoint_name,
             client,
             hosted_provider,
-            base_config: aws_sdk_sagemakerruntime::config::Builder::from(&config),
+            region,
+            credentials,
+            allow_auto_detect_region,
+            http_client,
         })
+    }
+
+    /// Returns a client configured for the current request.
+    /// If all config values are static, returns the cached client.
+    /// Otherwise, builds a new client with dynamically resolved values.
+    async fn get_client(
+        &self,
+        dynamic_credentials: &InferenceCredentials,
+    ) -> Result<Arc<aws_sdk_sagemakerruntime::Client>, Error> {
+        let needs_dynamic = region_needs_dynamic_resolution(self.region.as_ref())
+            || credentials_need_dynamic_resolution(self.credentials.as_ref());
+
+        if !needs_dynamic {
+            return Ok(self.client.clone());
+        }
+
+        // Resolve all dynamic values
+        let resolved_region = resolve_aws_region(self.region.as_ref(), dynamic_credentials)?;
+        if resolved_region.is_none() && !self.allow_auto_detect_region {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string(),
+            }));
+        }
+
+        let resolved_creds =
+            resolve_aws_credentials(self.credentials.as_ref(), dynamic_credentials)?;
+        let (resolved_access_key, resolved_secret_key) = match resolved_creds {
+            Some((ak, sk)) => (Some(ak), Some(sk)),
+            None => (None, None),
+        };
+
+        // Build new client with resolved values
+        let aws_config = aws_common::config_with_region_and_credentials(
+            PROVIDER_TYPE,
+            resolved_region,
+            resolved_access_key,
+            resolved_secret_key,
+        )
+        .await?;
+
+        let config = aws_sdk_sagemakerruntime::config::Builder::from(&aws_config)
+            .http_client(super::aws_http_client::Client::new(
+                self.http_client.clone(),
+            ))
+            .build();
+
+        Ok(Arc::new(aws_sdk_sagemakerruntime::Client::from_conf(
+            config,
+        )))
     }
 }
 
@@ -62,8 +169,8 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        _http_client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -77,23 +184,14 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
-        // Use our custom `reqwest::Client` when making requests to Sagemaker.
-        // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
-        // here when it's enabled.
-
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
+        let client = self.get_client(dynamic_api_keys).await?;
         let start_time = Instant::now();
-        let res = self
-            .client
+        let res = client
             .invoke_endpoint()
             .endpoint_name(self.endpoint_name.clone())
             .body(request_body.to_string().into_bytes().into())
             .content_type("application/json")
             .customize()
-            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -143,8 +241,8 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer_stream<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        http_client: &'a TensorzeroHttpClient,
-        _dynamic_api_keys: &'a InferenceCredentials,
+        _http_client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = self.hosted_provider.make_body(request).await?;
@@ -159,20 +257,14 @@ impl InferenceProvider for AWSSagemakerProvider {
             request.model_name.to_string(),
         );
 
-        // See `infer` for more details
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
+        let client = self.get_client(dynamic_api_keys).await?;
         let start_time = Instant::now();
-        let res = self
-            .client
+        let res = client
             .invoke_endpoint_with_response_stream()
             .endpoint_name(self.endpoint_name.clone())
             .body(request_body.to_string().into_bytes().into())
             .content_type("application/json")
             .customize()
-            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await

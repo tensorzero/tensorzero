@@ -161,6 +161,15 @@ type = "aws_bedrock"
 model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 region = "us-east-1"
 
+[models.claude-3-haiku-20240307-aws-bedrock-dynamic]
+routing = ["aws_bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock-dynamic.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "us-east-1"
+credentials = { access_key = "dynamic::aws_access_key_id", secret_key = "dynamic::aws_secret_access_key" }
+
 [models."claude-sonnet-4-5-20250929-thinking-aws-bedrock"]
 routing = ["aws_bedrock"]
 
@@ -179,6 +188,17 @@ region = "us-east-2"
 model_name = "gemma3:1b"
 # We actually host an ollama container, but we don't have an ollama provider yet
 hosted_provider = "openai"
+
+[models.gemma-3-1b-aws-sagemaker-openai-dynamic]
+routing = ["aws_sagemaker"]
+
+[models.gemma-3-1b-aws-sagemaker-openai-dynamic.providers.aws_sagemaker]
+type = "aws_sagemaker"
+endpoint_name = "gemma3-1b-provisioned-endpoint"
+region = "us-east-2"
+model_name = "gemma3:1b"
+hosted_provider = "openai"
+credentials = { access_key = "dynamic::aws_access_key_id", secret_key = "dynamic::aws_secret_access_key" }
 
 [models.gemma-3-1b-aws-sagemaker-tgi]
 routing = ["aws_sagemaker"]

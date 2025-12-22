@@ -378,11 +378,9 @@ impl BestOfNSamplingConfig {
         }
 
         // Wait for all the inference tasks to complete
-        let inference_results: Vec<_> = join_all(
-            inference_futures
-                .into_iter()
-                .map(|(candidate_name, future)| async move { (candidate_name, future.await) }),
-        )
+        let inference_results: Vec<_> = join_all(inference_futures.into_iter().map(
+            |(candidate_name, future)| async move { (candidate_name, Box::pin(future).await) },
+        ))
         .await;
 
         // Collect the successful results

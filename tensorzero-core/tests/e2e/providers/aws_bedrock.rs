@@ -33,6 +33,26 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    // Build dynamic credentials from environment (same vars CI uses for SDK auth)
+    let credentials = match (
+        std::env::var("AWS_ACCESS_KEY_ID"),
+        std::env::var("AWS_SECRET_ACCESS_KEY"),
+    ) {
+        (Ok(access_key), Ok(secret_key)) => HashMap::from([
+            ("aws_access_key_id".to_string(), access_key),
+            ("aws_secret_access_key".to_string(), secret_key),
+        ]),
+        _ => HashMap::new(),
+    };
+
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-dynamic".to_string(),
+        model_name: "claude-3-haiku-20240307-aws-bedrock-dynamic".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials,
+    }];
+
     let mut simple_inference_providers = standard_providers.clone();
     simple_inference_providers.push(deepseek_r1_provider.clone());
 
@@ -91,7 +111,7 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: vec![],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
-        inference_params_dynamic_credentials: vec![],
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: vec![],
         provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: standard_providers.clone(),
