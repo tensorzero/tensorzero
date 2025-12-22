@@ -15,7 +15,7 @@ use crate::endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, validate_dataset_na
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{FetchContext, Input};
+use crate::inference::types::{FetchContext, Input, InputExt};
 use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
