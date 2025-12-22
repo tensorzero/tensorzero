@@ -36,7 +36,7 @@ async fn test_prometheus_metrics_overhead_health() {
     let metrics = get_metrics(&client, &format!("http://{}/metrics", child_data.addr)).await;
     println!("Metrics: {metrics:#?}");
     assert_eq!(
-        metrics["tensorzero_overhead_count{kind=\"GET /health\"}"],
+        metrics["tensorzero_inference_latency_overhead_seconds_count{kind=\"GET /health\"}"],
         "1"
     );
 }
