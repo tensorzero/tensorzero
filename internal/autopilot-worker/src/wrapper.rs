@@ -92,8 +92,7 @@ where
         let tool_name = T::name().to_string();
         let outcome = match &result {
             Ok(output) => {
-                let result_json = serde_json::to_string(output)
-                    .unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"));
+                let result_json = serde_json::to_string(output)?;
                 ToolOutcome::Success(AutopilotToolResult {
                     name: tool_name.clone(),
                     result: result_json,

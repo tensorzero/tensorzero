@@ -84,18 +84,13 @@ impl AutopilotWorker {
     }
 
     /// Start the worker and run until cancellation.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the worker fails to start.
-    pub async fn run(&self, cancel_token: CancellationToken) -> Result<()> {
+    pub async fn run(&self, cancel_token: CancellationToken) {
         let worker = self.executor.start_worker(WorkerOptions::default()).await;
 
         tokio::select! {
             () = cancel_token.cancelled() => {
                 tracing::info!("Autopilot worker received shutdown signal");
                 worker.shutdown().await;
-                Ok(())
             }
         }
     }
