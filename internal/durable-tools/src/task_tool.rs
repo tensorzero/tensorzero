@@ -156,6 +156,14 @@ impl SideInfo for () {}
 /// ```
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
+    /// Side information type provided at spawn time (hidden from LLM).
+    ///
+    /// Use `()` if no side information is needed.
+    type SideInfo: SideInfo;
+
+    /// The output type for this tool (must be JSON-serializable).
+    type Output: Serialize + DeserializeOwned + Send + 'static;
+
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.

@@ -11,6 +11,7 @@ workspace = true
 durable-tools-spawn.workspace = true
 durable.workspace = true
 tokio.workspace = true
+tokio-util = "0.7"
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true

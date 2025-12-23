@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::context::SimpleToolContext;
 use crate::error::ToolResult;
+use crate::task_tool::SideInfo;
 use crate::tool_metadata::ToolMetadata;
 
 /// A lightweight tool that runs inside a `TaskTool`'s `step()` checkpoint.
@@ -82,6 +84,14 @@ use crate::tool_metadata::ToolMetadata;
 /// ```
 #[async_trait]
 pub trait SimpleTool: ToolMetadata {
+    /// Side information type provided at call time (hidden from LLM).
+    ///
+    /// Use `()` if no side information is needed.
+    type SideInfo: SideInfo;
+
+    /// The output type for this tool (must be JSON-serializable).
+    type Output: Serialize + DeserializeOwned + Send + 'static;
+
     /// Execute the tool logic.
     ///
     /// # Arguments

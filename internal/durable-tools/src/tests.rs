@@ -54,13 +54,13 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout() -> Duration {
         Duration::from_secs(10)
     }
-
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -94,12 +94,13 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout() -> Duration {
         Duration::from_secs(60)
     }
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -130,12 +131,13 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -167,12 +169,13 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
     type LlmParams = EchoParams;
 
     // Uses default timeout (60 seconds from ToolMetadata)
-    type SideInfo = ();
-    type Output = EchoOutput;
 }
 
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
+    type SideInfo = ();
+    type Output = EchoOutput;
+
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
@@ -407,12 +410,13 @@ mod registry_tests {
             }
 
             type LlmParams = EchoParams;
-            type SideInfo = ();
-            type Output = EchoOutput;
         }
 
         #[async_trait::async_trait]
         impl SimpleTool for ConflictingSimpleTool {
+            type SideInfo = ();
+            type Output = EchoOutput;
+
             async fn execute(
                 llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,

@@ -102,6 +102,7 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
         // Register with tool registry
         {
@@ -123,6 +124,7 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
     pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> Result<&Self, ToolError> {
         let mut registry = self.registry.write().await;
         registry.register_simple_tool::<T>()?;

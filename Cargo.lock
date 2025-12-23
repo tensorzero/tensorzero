@@ -331,6 +331,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "autopilot-worker"
+version = "2025.12.5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "autopilot-client",
+ "durable-tools",
+ "schemars 1.1.0",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tensorzero-core",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "av-scenechange"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1817,6 +1838,7 @@ dependencies = [
  "tensorzero-core",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-util",
  "url",
  "uuid",
 ]
@@ -2317,9 +2339,11 @@ dependencies = [
 name = "gateway"
 version = "2025.12.5"
 dependencies = [
+ "autopilot-worker",
  "axum",
  "brotli",
  "clap",
+ "durable-tools",
  "flate2",
  "futures",
  "http 1.4.0",
