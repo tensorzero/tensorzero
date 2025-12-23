@@ -44,7 +44,7 @@ pub enum EventPayload {
         status_update: StatusUpdate,
     },
     ToolCall(ToolCall),
-    ToolCallApproval(ToolCallAuthorization),
+    ToolCallAuthorization(ToolCallAuthorization),
     ToolResult {
         tool_call_event_id: Uuid,
         outcome: ToolOutcome,
@@ -60,7 +60,7 @@ impl EventPayload {
         matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
             || matches!(
                 self,
-                EventPayload::ToolCallApproval(_) | EventPayload::ToolResult { .. }
+                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
             )
     }
 }
