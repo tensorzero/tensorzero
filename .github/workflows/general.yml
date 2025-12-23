@@ -1013,7 +1013,7 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
+          cargo run-e2e-mock-optimization > e2e_logs.txt 2>&1 &
           while ! curl http://localhost:3000/health; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
