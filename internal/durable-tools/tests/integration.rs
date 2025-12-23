@@ -108,8 +108,8 @@ impl ToolMetadata for EchoSimpleTool {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -147,8 +147,8 @@ impl ToolMetadata for EchoTaskTool {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -214,8 +214,8 @@ impl ToolMetadata for InferenceSimpleTool {
         Cow::Borrowed("Calls inference and returns the response")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(InferencePromptParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(InferencePromptParams))
     }
 
     type LlmParams = InferencePromptParams;
@@ -273,8 +273,8 @@ impl ToolMetadata for InferenceTaskTool {
         Cow::Borrowed("Calls inference (durable) and returns the response")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(InferencePromptParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(InferencePromptParams))
     }
 
     type LlmParams = InferencePromptParams;
@@ -504,8 +504,8 @@ impl ToolMetadata for KeyCapturingSimpleTool {
         Cow::Borrowed("Captures idempotency keys for testing")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;
@@ -542,8 +542,8 @@ impl ToolMetadata for MultiCallTaskTool {
         Cow::Borrowed("Calls a SimpleTool multiple times")
     }
 
-    fn parameters_schema() -> Schema {
-        schema_for!(EchoParams)
+    fn parameters_schema() -> ToolResult<Schema> {
+        Ok(schema_for!(EchoParams))
     }
 
     type LlmParams = EchoParams;

@@ -242,8 +242,8 @@ impl ToolExecutor {
     ///
     /// # Errors
     ///
-    /// Returns an error if a tool's parameter schema fails to serialize.
-    pub async fn tool_definitions(&self) -> Result<Vec<Tool>, serde_json::Error> {
+    /// Returns an error if a tool's parameter schema generation or serialization fails.
+    pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
         let registry = self.registry.read().await;
         registry.to_tensorzero_tools()
     }
