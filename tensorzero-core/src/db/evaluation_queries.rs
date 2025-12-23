@@ -151,8 +151,10 @@ pub trait EvaluationQueries {
     /// * `inference_table_name` - Either "ChatInference" or "JsonInference"
     /// * `datapoint_table_name` - Either "ChatInferenceDatapoint" or "JsonInferenceDatapoint"
     /// * `metric_names` - The metric names to filter feedback by
-    /// * `limit` - Maximum number of datapoints to return
-    /// * `offset` - Number of datapoints to skip
+    /// * `datapoint_id` - Optional datapoint ID to filter by. When provided, pagination is ignored
+    ///   and all results for that datapoint are returned.
+    /// * `limit` - Maximum number of datapoints to return (ignored if datapoint_id is provided)
+    /// * `offset` - Number of datapoints to skip (ignored if datapoint_id is provided)
     #[expect(clippy::too_many_arguments)]
     async fn get_evaluation_results(
         &self,
@@ -161,6 +163,7 @@ pub trait EvaluationQueries {
         inference_table_name: &str,
         datapoint_table_name: &str,
         metric_names: &[String],
+        datapoint_id: Option<&Uuid>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationResultRow>, Error>;

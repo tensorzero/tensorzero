@@ -25,6 +25,7 @@ use crate::inference::types::{
     Unknown,
     batch::StartBatchModelInferenceWithMetadata,
     chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
+    role::{ASSISTANT_TEXT_TEMPLATE_VAR, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR},
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -784,12 +785,6 @@ impl Variant for ChatCompletionConfig {
         ))
     }
 }
-
-/// The template variable names used when applying a legacy template with no schema
-/// Only one of these variables is used per template, based on the `TemplateKind`
-pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
-pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
-pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[derive(Copy, Clone, Debug)]
 pub enum TemplateKind {

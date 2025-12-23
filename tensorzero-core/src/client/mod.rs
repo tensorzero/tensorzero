@@ -1095,7 +1095,8 @@ impl Client {
                         None,
                     ))
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(err_to_http)?
+                    .output;
                     match res {
                         InferenceOutput::NonStreaming(response) => {
                             Ok(InferenceOutput::NonStreaming(response))

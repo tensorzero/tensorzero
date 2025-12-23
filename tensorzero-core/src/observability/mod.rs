@@ -1241,8 +1241,8 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
     );
 
     describe_histogram!(
-        "tensorzero_overhead",
-        Unit::Milliseconds,
+        "tensorzero_inference_latency_overhead_seconds",
+        Unit::Seconds,
         "Overhead of TensorZero on HTTP requests"
     );
 

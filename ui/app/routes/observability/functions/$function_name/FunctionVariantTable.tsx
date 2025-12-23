@@ -21,10 +21,10 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
-import type { InferenceStatsByVariant } from "~/types/tensorzero";
+import type { InferenceCountByVariant } from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
 
-type VariantCountsWithMetadata = InferenceStatsByVariant & {
+type VariantCountsWithMetadata = InferenceCountByVariant & {
   type: string;
 };
 

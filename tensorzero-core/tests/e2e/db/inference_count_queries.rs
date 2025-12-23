@@ -1,9 +1,9 @@
-//! E2E tests for inference statistics ClickHouse queries.
+//! E2E tests for inference count ClickHouse queries.
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::inference_stats::{
+use tensorzero_core::db::inference_count::{
     CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, InferenceStatsQueries,
+    CountInferencesWithFeedbackParams, InferenceCountQueries,
 };
 use tensorzero_core::{
     config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
@@ -479,4 +479,59 @@ async fn test_count_feedbacks_for_episode_level_float_metric() {
         count > 0,
         "Should have feedbacks for float metric jaccard_similarity_episode on extract_entities"
     );
+}
+
+/// Test list_functions_with_inference_count returns expected functions
+#[tokio::test]
+async fn test_list_functions_with_inference_count() {
+    let clickhouse = get_clickhouse().await;
+
+    let rows = clickhouse
+        .list_functions_with_inference_count()
+        .await
+        .unwrap();
+
+    // Should return multiple functions
+    assert!(
+        rows.len() >= 2,
+        "Expected at least 2 functions, got {}",
+        rows.len()
+    );
+
+    // write_haiku is a chat function, extract_entities is a json function
+    // Both should be present in the results
+    let write_haiku = rows.iter().find(|r| r.function_name == "write_haiku");
+    let extract_entities = rows.iter().find(|r| r.function_name == "extract_entities");
+
+    // Verify inference_counts are reasonable based on test fixtures
+    let write_haiku = write_haiku.expect("Chat function write_haiku should be present");
+    let extract_entities =
+        extract_entities.expect("Json function extract_entities should be present");
+    assert!(
+        write_haiku.inference_count >= 804,
+        "Expected at least 804 inferences for write_haiku, got {}",
+        write_haiku.inference_count
+    );
+    assert!(
+        extract_entities.inference_count >= 604,
+        "Expected at least 604 inferences for extract_entities, got {}",
+        extract_entities.inference_count
+    );
+
+    // Results should be ordered by last_inference_timestamp DESC
+    for i in 1..rows.len() {
+        assert!(
+            rows[i - 1].last_inference_timestamp >= rows[i].last_inference_timestamp,
+            "Results should be ordered by last_inference_timestamp DESC"
+        );
+    }
+    // Each row should have a positive inference_count
+    for row in &rows {
+        assert!(
+            row.inference_count > 0,
+            "Each function should have at least one inference, {} has inference_count {}",
+            row.function_name,
+            row.inference_count
+        );
+    }
 }

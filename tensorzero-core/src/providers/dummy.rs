@@ -261,7 +261,7 @@ pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
 /// Like `tokio::time::sleep`, but attaches a span that excludes
-/// this time for our `tensorzero_overhead` metric
+/// this time for our `tensorzero_inference_latency_overhead_seconds` metric
 /// We use this to simulate slow HTTP requests (which also have
 /// their latency excluded via `TensorzeroHttpClient`)
 async fn sleep_excluding_latency(duration: Duration) {

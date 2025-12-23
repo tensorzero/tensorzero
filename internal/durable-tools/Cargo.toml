@@ -1,0 +1,31 @@
+[package]
+name = "durable-tools"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+durable-tools-spawn.workspace = true
+durable.workspace = true
+tokio.workspace = true
+async-trait = "0.1"
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+sqlx.workspace = true
+thiserror = "2"
+anyhow = "1"
+uuid.workspace = true
+autopilot-client = { path = "../autopilot-client" }
+chrono.workspace = true
+tensorzero.workspace = true
+url = "2"
+secrecy.workspace = true
+
+tensorzero-core.workspace = true
+
+[dev-dependencies]
+mockall = "0.14"

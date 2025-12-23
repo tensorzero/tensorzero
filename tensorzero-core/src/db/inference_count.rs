@@ -1,4 +1,4 @@
-//! Inference statistics types and trait definitions.
+//! Inference count types and trait definitions.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -69,10 +69,22 @@ pub struct VariantThroughput {
     pub count: u32,
 }
 
-/// Trait for inference statistics queries
+/// Row returned from the list_functions_with_inference_count query.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, PartialEq)]
+#[ts(export)]
+pub struct FunctionInferenceCount {
+    pub function_name: String,
+    /// ISO 8601 timestamp of the most recent inference for this function
+    #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    pub last_inference_timestamp: DateTime<Utc>,
+    /// Total number of inferences for this function
+    pub inference_count: u32,
+}
+
+/// Trait for inference count queries
 #[async_trait]
 #[cfg_attr(test, automock)]
-pub trait InferenceStatsQueries {
+pub trait InferenceCountQueries {
     /// Counts the number of inferences for a function, optionally filtered by variant.
     async fn count_inferences_for_function(
         &self,
@@ -108,4 +120,10 @@ pub trait InferenceStatsQueries {
         &self,
         params: GetFunctionThroughputByVariantParams<'_>,
     ) -> Result<Vec<VariantThroughput>, Error>;
+
+    /// List all functions with their inference counts, ordered by most recent inference.
+    /// Returns the function name, count of inferences, and timestamp of the most recent inference.
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error>;
 }
