@@ -111,9 +111,6 @@ async fn main() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
-    let metrics_handle =
-        observability::setup_metrics().log_err_pretty("Failed to set up metrics")?;
-
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
@@ -152,6 +149,9 @@ async fn main() -> Result<(), ExitCode> {
             )
         }
     };
+
+    let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
+        .log_err_pretty("Failed to set up metrics")?;
 
     if unwritten_config.gateway.debug {
         delayed_log_config
