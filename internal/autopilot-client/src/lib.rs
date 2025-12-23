@@ -48,6 +48,6 @@ pub use types::{
     Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail, ErrorResponse, Event,
     EventPayload, File, InputMessage, InputMessageContent, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, ObjectStoragePointer, RawText, Role, Session,
-    StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCall, ToolCallApproval,
+    StatusUpdate, StreamEventsParams, Template, Text, Thought, ToolCall, ToolCallAuthorization,
     ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, ToolResult, Unknown, UrlFile,
 };
