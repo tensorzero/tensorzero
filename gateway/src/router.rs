@@ -45,7 +45,7 @@ pub fn build_axum_router(
         let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
             unauthenticated_routes: UNAUTHENTICATED_ROUTES,
             auth_cache: app_state.auth_cache.clone(),
-            pool: app_state.postgres_connection_info.get_alpha_pool().cloned(),
+            pool: app_state.postgres_connection_info.get_pool().cloned(),
             error_json: app_state.config.gateway.unstable_error_json,
         });
         router = router.layer(middleware::from_fn_with_state(

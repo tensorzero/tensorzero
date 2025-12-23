@@ -5,32 +5,37 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 */
 
 import { z } from "zod";
+import { BaseTensorZeroClient } from "./base-client";
 import {
   contentBlockChatOutputSchema,
   thoughtContentSchema,
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
-import { GatewayConnectionError, TensorZeroServerError } from "./errors";
 import type {
   CloneDatapointsResponse,
   CountFeedbackByTargetIdResponse,
   CountInferencesRequest,
   CountInferencesResponse,
   CountModelsResponse,
+  CountWorkflowEvaluationRunEpisodesByTaskNameResponse,
+  CountWorkflowEvaluationRunEpisodesResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
   CumulativeFeedbackTimeSeriesPoint,
   DatapointStatsResponse,
+  DemonstrationFeedbackRow,
   EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
   FeedbackRow,
+  FunctionInferenceCount,
   MetricsWithFeedbackResponse,
   Datapoint,
   GetDatapointCountResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
+  GetDemonstrationFeedbackResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
@@ -38,21 +43,24 @@ import type {
   GetModelUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
+  GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
   GetWorkflowEvaluationRunsResponse,
   GetWorkflowEvaluationRunStatisticsResponse,
-  InferenceWithFeedbackStatsResponse,
+  InferenceWithFeedbackCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   GetInferencesRequest,
   GetInferencesResponse,
   GetModelInferencesResponse,
-  InferenceStatsResponse,
+  InferenceCountResponse,
   LatestFeedbackIdByMetricResponse,
   ListDatapointsRequest,
   ListDatasetsResponse,
   ListEvaluationRunsResponse,
+  ListFunctionsWithInferenceCountResponse,
   ListInferencesRequest,
   ListInferenceMetadataResponse,
+  ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
   ListWorkflowEvaluationRunsResponse,
   SearchEvaluationRunsResponse,
   SearchWorkflowEvaluationRunsResponse,
@@ -66,7 +74,11 @@ import type {
   UpdateDatapointsResponse,
   ListEpisodesResponse,
   GetEpisodeInferenceCountResponse,
+  GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
+  GetEvaluationStatisticsResponse,
+  VariantPerformancesResponse,
+  InferenceCountByVariant,
 } from "~/types/tensorzero";
 
 /**
@@ -323,20 +335,7 @@ export interface GetCumulativeFeedbackTimeseriesResponse {
 /**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
-export class TensorZeroClient {
-  private baseUrl: string;
-  private apiKey: string | null;
-
-  /**
-   * @param baseUrl - The base URL of the TensorZero Gateway (e.g. "http://localhost:3000")
-   * @param apiKey - Optional API key for bearer authentication
-   */
-  constructor(baseUrl: string, apiKey?: string | null) {
-    // Remove any trailing slash for consistency.
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.apiKey = apiKey ?? null;
-  }
-
+export class TensorZeroClient extends BaseTensorZeroClient {
   /**
    * Sends feedback for a particular inference or episode.
    * @param request - The feedback request payload.
@@ -382,6 +381,37 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     const body = (await response.json()) as GetFeedbackByTargetIdResponse;
+    return body.feedback;
+  }
+
+  /**
+   * Gets demonstration feedback for a given inference.
+   * @param inferenceId - The inference ID to get demonstration feedback for
+   * @param options - Optional pagination parameters
+   * @returns A promise that resolves with a list of demonstration feedback rows
+   * @throws Error if the request fails
+   */
+  async getDemonstrationFeedback(
+    inferenceId: string,
+    options?: {
+      before?: string;
+      after?: string;
+      limit?: number;
+    },
+  ): Promise<DemonstrationFeedbackRow[]> {
+    const params = new URLSearchParams();
+    if (options?.before) params.set("before", options.before);
+    if (options?.after) params.set("after", options.after);
+    if (options?.limit) params.set("limit", options.limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/internal/feedback/${encodeURIComponent(inferenceId)}/demonstrations${queryString ? `?${queryString}` : ""}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as GetDemonstrationFeedbackResponse;
     return body.feedback;
   }
 
@@ -779,7 +809,7 @@ export class TensorZeroClient {
    * @throws Error if the request fails
    */
   async getUiConfig(): Promise<UiConfig> {
-    const response = await this.fetch("/internal/ui-config", { method: "GET" });
+    const response = await this.fetch("/internal/ui_config", { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
@@ -788,18 +818,18 @@ export class TensorZeroClient {
   }
 
   /**
-   * Fetches inference statistics for a function, optionally filtered by variant or grouped by variant.
-   * @param functionName - The name of the function to get stats for
+   * Fetches inference count for a function, optionally filtered by variant or grouped by variant.
+   * @param functionName - The name of the function to get count for
    * @param options - Optional parameters for filtering or grouping
    * @param options.variantName - Optional variant name to filter by
    * @param options.groupBy - Optional grouping (e.g., "variant" to get counts per variant)
-   * @returns A promise that resolves with the inference stats
+   * @returns A promise that resolves with the inference count
    * @throws Error if the request fails
    */
-  async getInferenceStats(
+  async getInferenceCount(
     functionName: string,
     options?: { variantName?: string; groupBy?: "variant" },
-  ): Promise<InferenceStatsResponse> {
+  ): Promise<InferenceCountResponse> {
     const searchParams = new URLSearchParams();
     if (options?.variantName) {
       searchParams.append("variant_name", options.variantName);
@@ -808,42 +838,76 @@ export class TensorZeroClient {
       searchParams.append("group_by", options.groupBy);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference_count${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as InferenceStatsResponse;
+    return (await response.json()) as InferenceCountResponse;
   }
 
   /**
-   * Fetches feedback statistics for a function and metric.
-   * @param functionName - The name of the function to get stats for
-   * @param metricName - The name of the metric to get stats for (or "demonstration")
+   * Fetches the variants used for a function.
+   * @param functionName - The name of the function to get variants for
+   * @returns A promise that resolves with the variants used for the function
+   * @throws Error if the request fails
+   */
+  async getUsedVariants(functionName: string): Promise<string[]> {
+    const response = await this.getInferenceCount(functionName, {
+      groupBy: "variant",
+    });
+
+    return (response.count_by_variant ?? []).map(
+      (v: InferenceCountByVariant) => v.variant_name,
+    );
+  }
+
+  /**
+   * Lists all functions with their inference counts, ordered by most recent inference.
+   * @returns A promise that resolves with the function inference counts
+   * @throws Error if the request fails
+   */
+  async listFunctionsWithInferenceCount(): Promise<FunctionInferenceCount[]> {
+    const endpoint = `/internal/functions/inference_counts`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as ListFunctionsWithInferenceCountResponse;
+    return body.functions;
+  }
+
+  /**
+   * Fetches feedback counts for a function and metric.
+   * @param functionName - The name of the function to get count for
+   * @param metricName - The name of the metric to get count for (or "demonstration")
    * @param threshold - Optional threshold for float metrics (defaults to 0)
    * @returns A promise that resolves with the feedback and curated inference counts
    * @throws Error if the request fails
    */
-  async getFeedbackStats(
+  async getFeedbackCount(
     functionName: string,
     metricName: string,
     threshold?: number,
-  ): Promise<InferenceWithFeedbackStatsResponse> {
+  ): Promise<InferenceWithFeedbackCountResponse> {
     const searchParams = new URLSearchParams();
     if (threshold !== undefined) {
       searchParams.append("threshold", threshold.toString());
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference-stats/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference_count/${encodeURIComponent(metricName)}${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as InferenceWithFeedbackStatsResponse;
+    return (await response.json()) as InferenceWithFeedbackCountResponse;
   }
 
   /**
@@ -863,7 +927,7 @@ export class TensorZeroClient {
       time_window: timeWindow,
       max_periods: maxPeriods.toString(),
     });
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput-by-variant?${searchParams.toString()}`;
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput_by_variant?${searchParams.toString()}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -897,6 +961,38 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as MetricsWithFeedbackResponse;
+  }
+
+  /**
+   * Fetches variant performance statistics for a function and metric.
+   * @param functionName - The name of the function to get performance stats for
+   * @param metricName - The name of the metric to compute performance for
+   * @param timeWindow - Time granularity for grouping performance data
+   * @param variantName - Optional variant name to filter by
+   * @returns A promise that resolves with variant performance statistics
+   * @throws Error if the request fails
+   */
+  async getVariantPerformances(
+    functionName: string,
+    metricName: string,
+    timeWindow: TimeWindow,
+    variantName?: string,
+  ): Promise<VariantPerformancesResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("metric_name", metricName);
+    searchParams.append("time_window", timeWindow);
+    if (variantName) {
+      searchParams.append("variant_name", variantName);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_performances?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as VariantPerformancesResponse;
   }
 
   /**
@@ -964,7 +1060,7 @@ export class TensorZeroClient {
    * @throws Error if the request fails
    */
   async countEvaluationRuns(): Promise<number> {
-    const response = await this.fetch("/internal/evaluations/run-stats", {
+    const response = await this.fetch("/internal/evaluations/runs/count", {
       method: "GET",
     });
     if (!response.ok) {
@@ -1014,7 +1110,7 @@ export class TensorZeroClient {
     searchParams.append("function_name", functionName);
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/datapoint-count?${queryString}`;
+    const endpoint = `/internal/evaluations/datapoint_count?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1041,7 +1137,7 @@ export class TensorZeroClient {
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/projects${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/internal/workflow_evaluations/projects${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1058,7 +1154,7 @@ export class TensorZeroClient {
    */
   async countWorkflowEvaluationProjects(): Promise<number> {
     const response = await this.fetch(
-      "/internal/workflow-evaluations/projects/count",
+      "/internal/workflow_evaluations/projects/count",
       { method: "GET" },
     );
     if (!response.ok) {
@@ -1095,7 +1191,7 @@ export class TensorZeroClient {
       searchParams.append("q", searchQuery);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/runs/search?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/runs/search?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1130,7 +1226,7 @@ export class TensorZeroClient {
       searchParams.append("project_name", projectName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/list-runs?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/list_runs?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1147,7 +1243,7 @@ export class TensorZeroClient {
    */
   async countWorkflowEvaluationRuns(): Promise<number> {
     const response = await this.fetch(
-      "/internal/workflow-evaluations/runs/count",
+      "/internal/workflow_evaluations/runs/count",
       { method: "GET" },
     );
     if (!response.ok) {
@@ -1175,7 +1271,7 @@ export class TensorZeroClient {
       searchParams.append("project_name", projectName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/get-runs?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/get_runs?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1202,7 +1298,7 @@ export class TensorZeroClient {
       searchParams.append("metric_name", metricName);
     }
     const queryString = searchParams.toString();
-    const endpoint = `/internal/workflow-evaluations/run-statistics?${queryString}`;
+    const endpoint = `/internal/workflow_evaluations/run_statistics?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1210,6 +1306,119 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetWorkflowEvaluationRunStatisticsResponse;
+  }
+
+  /**
+   * Lists workflow evaluation run episodes grouped by task name.
+   *
+   * Returns episodes grouped by task_name. Episodes with NULL task_name are grouped
+   * individually using a generated key based on their episode_id.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @param limit - Maximum number of groups to return (default: 15)
+   * @param offset - Number of groups to skip (default: 0)
+   * @returns A promise that resolves with the grouped episodes response
+   * @throws Error if the request fails
+   */
+  async listWorkflowEvaluationRunEpisodesByTaskName(
+    runIds: string[],
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<ListWorkflowEvaluationRunEpisodesByTaskNameResponse> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow_evaluations/episodes_by_task_name${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListWorkflowEvaluationRunEpisodesByTaskNameResponse;
+  }
+
+  /**
+   * Counts the number of distinct episode groups (by task_name) for the given run IDs.
+   *
+   * Episodes with NULL task_name are counted as individual groups.
+   *
+   * @param runIds - List of run IDs to filter episodes by
+   * @returns A promise that resolves with the count of episode groups
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodeGroupsByTaskName(
+    runIds: string[],
+  ): Promise<number> {
+    const searchParams = new URLSearchParams();
+    if (runIds.length > 0) {
+      searchParams.append("run_ids", runIds.join(","));
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow_evaluations/episodes_by_task_name/count${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesByTaskNameResponse;
+    return body.count;
+  }
+
+  /**
+   * Gets workflow evaluation run episodes with their feedback for a specific run.
+   * @param runId - The run ID to get episodes for
+   * @param limit - Maximum number of episodes to return (default: 15)
+   * @param offset - Offset for pagination (default: 0)
+   * @returns A promise that resolves with the workflow evaluation run episodes response
+   * @throws Error if the request fails
+   */
+  async getWorkflowEvaluationRunEpisodesWithFeedback(
+    runId: string,
+    limit: number = 15,
+    offset: number = 0,
+  ): Promise<GetWorkflowEvaluationRunEpisodesWithFeedbackResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    searchParams.append("limit", limit.toString());
+    searchParams.append("offset", offset.toString());
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow_evaluations/run_episodes?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetWorkflowEvaluationRunEpisodesWithFeedbackResponse;
+  }
+
+  /**
+   * Counts the total number of episodes for a workflow evaluation run.
+   * @param runId - The run ID to count episodes for
+   * @returns A promise that resolves with the count of episodes
+   * @throws Error if the request fails
+   */
+  async countWorkflowEvaluationRunEpisodes(runId: string): Promise<number> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("run_id", runId);
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/workflow_evaluations/run_episodes/count?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body =
+      (await response.json()) as CountWorkflowEvaluationRunEpisodesResponse;
+    return body.count;
   }
 
   /**
@@ -1331,15 +1540,15 @@ export class TensorZeroClient {
   }
 
   /**
-   * Gets inference statistics for a specific episode.
+   * Gets inference counts for a specific episode.
    * @param episode_id - The UUID of the episode
-   * @returns A promise that resolves with the inference stats
+   * @returns A promise that resolves with the inference counts
    * @throws Error if the request fails
    */
   async getEpisodeInferenceCount(
     episode_id: string,
   ): Promise<GetEpisodeInferenceCountResponse> {
-    const endpoint = `/internal/episodes/${episode_id}/inference-count`;
+    const endpoint = `/internal/episodes/${episode_id}/inference_count`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -1410,7 +1619,7 @@ export class TensorZeroClient {
   async getLatestFeedbackIdByMetric(
     targetId: string,
   ): Promise<Record<string, string>> {
-    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest-id-by-metric`;
+    const endpoint = `/internal/feedback/${encodeURIComponent(targetId)}/latest_id_by_metric`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -1494,7 +1703,7 @@ export class TensorZeroClient {
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     searchParams.append("function_name", functionName);
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/run-infos?${queryString}`;
+    const endpoint = `/internal/evaluations/run_infos?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1518,7 +1727,7 @@ export class TensorZeroClient {
     const searchParams = new URLSearchParams();
     searchParams.append("function_name", functionName);
     const queryString = searchParams.toString();
-    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run-infos?${queryString}`;
+    const endpoint = `/internal/evaluations/datapoints/${encodeURIComponent(datapointId)}/run_infos?${queryString}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -1528,66 +1737,78 @@ export class TensorZeroClient {
     return (await response.json()) as GetEvaluationRunInfosResponse;
   }
 
-  private async fetch(
-    path: string,
-    init: {
-      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-      body?: BodyInit;
-      headers?: HeadersInit;
-    },
-  ) {
-    const { method } = init;
-    const url = `${this.baseUrl}${path}`;
+  /**
+   * Gets evaluation statistics (aggregated metrics) for specified evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param functionType - The type of function: "chat" or "json"
+   * @param metricNames - Array of metric names to query
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @returns A promise that resolves with aggregated statistics for each run/metric
+   * @throws Error if the request fails
+   */
+  async getEvaluationStatistics(
+    functionName: string,
+    functionType: "chat" | "json",
+    metricNames: string[],
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("function_type", functionType);
+    searchParams.append("metric_names", metricNames.join(","));
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/statistics?${queryString}`;
 
-    // For methods which expect payloads, always pass a body value even when it
-    // is empty to deal with consistency issues in various runtimes.
-    const expectsPayload =
-      method === "POST" || method === "PUT" || method === "PATCH";
-    const body = init.body || (expectsPayload ? "" : undefined);
-    const headers = new Headers(init.headers);
-    if (!headers.has("content-type")) {
-      headers.set("content-type", "application/json");
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
     }
-
-    // Add bearer auth for all endpoints except /status
-    if (this.apiKey && path !== "/status") {
-      headers.set("authorization", `Bearer ${this.apiKey}`);
-    }
-
-    try {
-      return await fetch(url, { method, headers, body });
-    } catch (error) {
-      // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
-      throw new GatewayConnectionError(error);
-    }
+    return (await response.json()) as GetEvaluationStatisticsResponse;
   }
 
-  private async getErrorText(response: Response): Promise<string> {
-    if (response.bodyUsed) {
-      response = response.clone();
+  /**
+   * Gets paginated evaluation results across one or more evaluation runs.
+   * @param evaluationName - The name of the evaluation
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @param options - Optional parameters for filtering and pagination
+   * @param options.datapointId - Optional datapoint ID to filter results to a specific datapoint
+   * @param options.limit - Maximum number of datapoints to return (default: 100)
+   * @param options.offset - Number of datapoints to skip (default: 0)
+   * @returns A promise that resolves with the evaluation results
+   * @throws Error if the request fails
+   */
+  async getEvaluationResults(
+    evaluationName: string,
+    evaluationRunIds: string[],
+    options: {
+      datapointId?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<GetEvaluationResultsResponse> {
+    const { datapointId, limit = 100, offset = 0 } = options;
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_name", evaluationName);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    if (datapointId) {
+      searchParams.append("datapoint_id", datapointId);
     }
-    const responseText = await response.text();
-    try {
-      const parsed = JSON.parse(responseText);
-      return typeof parsed?.error === "string" ? parsed.error : responseText;
-    } catch {
-      // Invalid JSON; return plain text from response
-      return responseText;
+    if (limit) {
+      searchParams.append("limit", limit.toString());
     }
-  }
+    if (offset) {
+      searchParams.append("offset", offset.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/results?${queryString}`;
 
-  private handleHttpError({
-    message,
-    response,
-  }: {
-    message: string;
-    response: Response;
-  }): never {
-    throw new TensorZeroServerError(message, {
-      // TODO: Ensure that server errors do not leak sensitive information to
-      // the client before exposing the statusText
-      // statusText: response.statusText,
-      status: response.status,
-    });
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationResultsResponse;
   }
 }

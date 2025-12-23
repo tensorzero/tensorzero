@@ -283,7 +283,7 @@ user_schema = "functions/judge_answer/user_schema.json"
 output_schema = "functions/judge_answer/output_schema.json"
 
 [functions.judge_answer.variants."gpt-4.1-mini"]
-type = "experimental_chain_of_thought"
+type = "chat_completion"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"

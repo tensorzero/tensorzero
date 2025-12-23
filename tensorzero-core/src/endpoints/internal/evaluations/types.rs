@@ -101,3 +101,38 @@ pub struct SearchEvaluationRunResult {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
 }
+
+// =============================================================================
+// Get Evaluation Statistics
+// =============================================================================
+
+/// Query parameters for getting evaluation statistics.
+#[derive(Debug, Deserialize)]
+pub struct GetEvaluationStatisticsParams {
+    pub function_name: String,
+    /// Function type: "chat" or "json"
+    pub function_type: String,
+    /// Comma-separated list of metric names
+    pub metric_names: String,
+    /// Comma-separated list of evaluation run IDs
+    pub evaluation_run_ids: String,
+}
+
+/// Response containing evaluation statistics.
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetEvaluationStatisticsResponse {
+    pub statistics: Vec<EvaluationStatistics>,
+}
+
+/// Statistics for a single evaluation run and metric.
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+pub struct EvaluationStatistics {
+    pub evaluation_run_id: Uuid,
+    pub metric_name: String,
+    pub datapoint_count: u32,
+    pub mean_metric: f64,
+    pub ci_lower: Option<f64>,
+    pub ci_upper: Option<f64>,
+}

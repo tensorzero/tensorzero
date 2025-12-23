@@ -9,7 +9,7 @@ use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-/// Handler for `GET /internal/workflow-evaluations/runs/count`
+/// Handler for `GET /internal/workflow_evaluations/runs/count`
 ///
 /// Returns the total count of workflow evaluation runs.
 #[axum::debug_handler(state = AppStateData)]

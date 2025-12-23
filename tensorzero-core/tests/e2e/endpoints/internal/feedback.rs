@@ -5,7 +5,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::endpoints::feedback::internal::{
     CountFeedbackByTargetIdResponse, GetCumulativeFeedbackTimeseriesResponse,
-    GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+    GetDemonstrationFeedbackResponse, GetFeedbackBoundsResponse, GetFeedbackByTargetIdResponse,
+    LatestFeedbackIdByMetricResponse,
 };
 use uuid::Uuid;
 
@@ -85,7 +86,7 @@ async fn test_get_latest_feedback_id_by_metric_with_data() {
 
     // Query latest feedback by metric for the inference
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{inference_id}/latest-id-by-metric"
+        "/internal/feedback/{inference_id}/latest_id_by_metric"
     ));
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -129,7 +130,7 @@ async fn test_get_latest_feedback_id_by_metric_multiple_feedback_same_metric() {
 
     // Query latest feedback by metric
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{inference_id}/latest-id-by-metric"
+        "/internal/feedback/{inference_id}/latest_id_by_metric"
     ));
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -151,7 +152,7 @@ async fn test_get_latest_feedback_id_by_metric_nonexistent_target() {
     // Use a UUID that likely doesn't exist
     let nonexistent_id = Uuid::now_v7();
     let url = get_gateway_endpoint(&format!(
-        "/internal/feedback/{nonexistent_id}/latest-id-by-metric"
+        "/internal/feedback/{nonexistent_id}/latest_id_by_metric"
     ));
 
     let resp = http_client.get(url).send().await.unwrap();
@@ -176,7 +177,7 @@ async fn test_get_latest_feedback_id_by_metric_invalid_uuid() {
     let http_client = Client::new();
 
     // Use an invalid UUID
-    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/latest-id-by-metric");
+    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/latest_id_by_metric");
 
     let resp = http_client.get(url).send().await.unwrap();
 
@@ -635,5 +636,171 @@ async fn test_get_cumulative_feedback_timeseries_invalid_time_window() {
         resp.status(),
         reqwest::StatusCode::BAD_REQUEST,
         "Expected 400 for invalid time_window"
+    );
+}
+
+// ==================== Get Demonstration Feedback By Inference ID Tests ====================
+
+/// Helper function to submit demonstration feedback for an inference
+async fn submit_demonstration_feedback(
+    client: &Client,
+    inference_id: Uuid,
+    value: serde_json::Value,
+) -> Uuid {
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": value,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        response.status().is_success(),
+        "Failed to submit demonstration feedback: {}",
+        response.status()
+    );
+
+    let response_json: serde_json::Value = response.json().await.unwrap();
+    Uuid::parse_str(response_json["feedback_id"].as_str().unwrap()).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_demonstration_feedback_with_data() {
+    let http_client = Client::new();
+
+    // Create an inference
+    let inference_id = create_inference(&http_client, "basic_test").await;
+
+    // Submit demonstration feedback
+    let feedback_id =
+        submit_demonstration_feedback(&http_client, inference_id, json!("This is a demonstration"))
+            .await;
+
+    // Wait for ClickHouse to process
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    // Query demonstration feedback by inference ID
+    let url = get_gateway_endpoint(&format!("/internal/feedback/{inference_id}/demonstrations"));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "get_demonstration_feedback request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetDemonstrationFeedbackResponse = resp.json().await.unwrap();
+
+    // Should have at least one feedback entry
+    assert!(
+        !response.feedback.is_empty(),
+        "Expected to find demonstration feedback entries"
+    );
+
+    // Verify the feedback ID matches
+    assert_eq!(
+        response.feedback[0].id, feedback_id,
+        "Expected feedback ID to match"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_demonstration_feedback_with_pagination() {
+    let http_client = Client::new();
+
+    // Create an inference
+    let inference_id = create_inference(&http_client, "basic_test").await;
+
+    // Submit multiple demonstration feedback entries
+    submit_demonstration_feedback(&http_client, inference_id, json!("Demo 1")).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    submit_demonstration_feedback(&http_client, inference_id, json!("Demo 2")).await;
+
+    // Wait for ClickHouse to process
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    // Query demonstration feedback with limit=1
+    let url = get_gateway_endpoint(&format!(
+        "/internal/feedback/{inference_id}/demonstrations?limit=1"
+    ));
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(resp.status().is_success());
+    let response: GetDemonstrationFeedbackResponse = resp.json().await.unwrap();
+
+    // Should have at most 1 feedback entry
+    assert!(
+        response.feedback.len() <= 1,
+        "Expected at most 1 feedback entry with limit=1"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_demonstration_feedback_nonexistent_target() {
+    let http_client = Client::new();
+
+    // Use a UUID that likely doesn't exist
+    let nonexistent_id = Uuid::now_v7();
+    let url = get_gateway_endpoint(&format!(
+        "/internal/feedback/{nonexistent_id}/demonstrations"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Should return success even for nonexistent target"
+    );
+
+    let response: GetDemonstrationFeedbackResponse = resp.json().await.unwrap();
+
+    // Should return empty list
+    assert!(
+        response.feedback.is_empty(),
+        "Expected empty list for nonexistent target"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_demonstration_feedback_invalid_uuid() {
+    let http_client = Client::new();
+
+    // Use an invalid UUID
+    let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/demonstrations");
+
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 for invalid UUID"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_demonstration_feedback_rejects_both_before_and_after() {
+    let http_client = Client::new();
+
+    let inference_id = Uuid::now_v7();
+    let before_id = Uuid::now_v7();
+    let after_id = Uuid::now_v7();
+
+    // Try to use both before and after
+    let url = get_gateway_endpoint(&format!(
+        "/internal/feedback/{inference_id}/demonstrations?before={before_id}&after={after_id}"
+    ));
+
+    let resp = http_client.get(url).send().await.unwrap();
+
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "Expected 400 when both before and after are specified"
     );
 }

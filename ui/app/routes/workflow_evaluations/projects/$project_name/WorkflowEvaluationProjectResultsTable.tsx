@@ -16,7 +16,6 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { GroupedWorkflowEvaluationRunEpisodeWithFeedback } from "~/utils/clickhouse/workflow_evaluations";
 import type {
   WorkflowEvaluationRun,
   WorkflowEvaluationRunStatistics,
@@ -30,11 +29,14 @@ import {
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
-import type { MetricConfig } from "~/types/tensorzero";
+import type {
+  GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow,
+  MetricConfig,
+} from "~/types/tensorzero";
 
 interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];
-  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedback[][];
+  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow[][];
   evaluation_statistics: Record<string, WorkflowEvaluationRunStatistics[]>;
 }
 
