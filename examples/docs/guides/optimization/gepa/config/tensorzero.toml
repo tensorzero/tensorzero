@@ -1,0 +1,50 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# These metrics are not used by GEPA but can be used for other purposes.
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 EVALUATIONS                                │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.extract_entities_eval]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement]
+type = "llm_judge"
+output_type = "float"
+include = { reference_output = true }
+optimize = "max"
+description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Evaluates: correctness (only proper nouns, no common nouns/numbers/metadata), schema compliance, completeness, verbatim entity extraction (exact spelling/capitalization), and absence of duplicate entities."
+
+[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+json_mode = "strict"
