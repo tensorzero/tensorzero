@@ -165,7 +165,7 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
+    pub(crate) fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
         let name = <T as ToolMetadata>::name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(ToolError::DuplicateToolName(name.into_owned()));
