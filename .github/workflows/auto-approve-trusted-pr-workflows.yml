@@ -23,7 +23,7 @@ jobs:
           echo "Checking for trusted external PRs..."
 
           # Get all open PRs with the 'trusted-external-pr' label
-          prs=$(gh pr list --repo ${{ github.repository }} --state open --label "trusted-external-pr" --json number,headRefName,author --jq '.[] | "\(.number)|\(.headRefName)|\(.author.login)"')
+          prs=$(gh pr list --repo ${{ github.repository }} --state open --label "trusted-external-pr" --json number,headRefName,headRefOid,author --jq '.[] | "\(.number)|\(.headRefName)|\(.headRefOid)|\(.author.login)"')
 
           if [ -z "$prs" ]; then
             echo "No open PRs with 'trusted-external-pr' label found."
@@ -34,45 +34,43 @@ jobs:
           echo "$prs"
 
           # Process each PR
-          while IFS='|' read -r pr_number head_ref author; do
+          while IFS='|' read -r pr_number head_ref head_sha author; do
             echo ""
-            echo "Processing PR #$pr_number (branch: $head_ref, author: $author)"
+            echo "Processing PR #$pr_number (branch: $head_ref, HEAD: $head_sha, author: $author)"
 
-            # Get workflow runs for this PR that are awaiting approval
-            # We look for workflow runs on the head ref that have the 'action_required' status
-            runs=$(HEAD_REF="$head_ref" gh api \
+            # Get the most recent workflow run for this PR's HEAD commit that is awaiting approval
+            # We look for workflow runs on the head ref and head SHA that have the 'action_required' status
+            # Sort by created_at descending and take only the first (most recent) one
+            run_id=$(HEAD_REF="$head_ref" HEAD_SHA="$head_sha" gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "/repos/${{ github.repository }}/actions/runs?event=pull_request&status=action_required&per_page=100" \
-              --jq '.workflow_runs[] | select(.head_branch == env.HEAD_REF) | .id')
+              --jq '[.workflow_runs[] | select(.head_branch == env.HEAD_REF and .head_sha == env.HEAD_SHA)] | sort_by(.created_at) | reverse | .[0].id')
 
-            if [ -z "$runs" ]; then
-              echo "  No workflow runs awaiting approval for PR #$pr_number"
+            if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+              echo "  No workflow runs awaiting approval for PR #$pr_number HEAD commit"
               continue
             fi
 
-            # Approve each workflow run
-            for run_id in $runs; do
-              echo "  Approving workflow run $run_id for PR #$pr_number..."
+            echo "  Approving workflow run $run_id for PR #$pr_number HEAD commit ($head_sha)..."
 
-              # Approve the workflow run
-              response=$(gh api \
-                --method POST \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/repos/${{ github.repository }}/actions/runs/$run_id/approve" 2>&1)
+            # Approve the workflow run
+            response=$(gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${{ github.repository }}/actions/runs/$run_id/approve" 2>&1)
 
-              if [ $? -eq 0 ]; then
-                echo "  ✓ Successfully approved workflow run $run_id"
+            if [ $? -eq 0 ]; then
+              echo "  ✓ Successfully approved workflow run $run_id"
+            else
+              # Check if it's already approved or doesn't need approval
+              if echo "$response" | grep -q "Cannot approve a workflow run that is not awaiting approval"; then
+                echo "  ℹ Workflow run $run_id is already approved or doesn't need approval"
               else
-                # Check if it's already approved or doesn't need approval
-                if echo "$response" | grep -q "Cannot approve a workflow run that is not awaiting approval"; then
-                  echo "  ℹ Workflow run $run_id is already approved or doesn't need approval"
-                else
-                  echo "  ✗ Failed to approve workflow run $run_id: $response"
-                fi
+                echo "  ✗ Failed to approve workflow run $run_id: $response"
               fi
-            done
+            fi
           done <<< "$prs"
 
           echo ""
