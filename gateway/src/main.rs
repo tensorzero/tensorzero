@@ -489,10 +489,8 @@ async fn spawn_autopilot_worker_if_configured(
     let pool = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
-            tracing::debug!(
-                "Autopilot worker not configured: Postgres is required for the durable task queue"
-            );
-            return Ok(None);
+            tracing::error!("TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled.");
+            return Err(ExitCode::from(1));
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]
